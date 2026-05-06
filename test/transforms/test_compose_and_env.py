@@ -89,6 +89,7 @@ from torchrl.testing.mocking_classes import (
     MockBatchedUnLockedEnv,
     MultiKeyCountingEnv,
 )
+from torchrl.testing import CARTPOLE_VERSIONED
 
 
 def test_added_transforms_are_in_eval_mode_trivial():
@@ -1530,8 +1531,6 @@ class TestTensorDictPrimer(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_tensordictprimer_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TensorDictPrimer(Composite({"mykey": Unbounded([2, 4])}, shape=[2])),

@@ -25,6 +25,9 @@ from torchrl.objectives.llm.grpo import (
     MCAdvantage,
 )
 from torchrl.objectives.llm.sft import SFTLoss
+import tensordict
+from tensordict import MetaData
+from torchrl.data.llm.history import _CHAT_TEMPLATES
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -41,8 +44,6 @@ prompts = [
 
 @pytest.fixture(autouse=True, scope="module")
 def set_list_to_stack():
-    import tensordict
-
     with tensordict.set_list_to_stack(True):
         yield
 
@@ -150,9 +151,6 @@ def _mock_data_grpo(vocab_size: int, device: torch.device | str = "cpu") -> Tens
     attention_mask = torch.ones(batch_size, seq_len, dtype=torch.bool, device=device)
 
     # Import Masks to create proper mask structure
-    from tensordict import MetaData
-    from torchrl.modules.llm.policies.common import Masks
-
     masks = Masks(
         all_attention_mask=attention_mask,
         all_assistant_mask=None,  # Will be computed by the wrapper
@@ -561,7 +559,6 @@ class TestSFT:
         assert loss_vals.sum(reduce=True).shape == ()
 
     def test_sft_assistant_only(self, data):
-        from torchrl.data.llm.history import _CHAT_TEMPLATES
         from transformers import AutoTokenizer, OPTConfig, OPTForCausalLM
 
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
@@ -651,8 +648,6 @@ class TestGRPOLossIntegration:
         masking_strategy,
     ):
         """Test GRPOLoss with vLLM generation and transformers loss computation."""
-        from torchrl.objectives.llm.grpo import GRPOLoss
-
         model, tokenizer = transformers_instance
         vllm_model, vllm_tokenizer = vllm_instance
 

@@ -36,6 +36,9 @@ from torchrl.testing import (  # noqa
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.testing.modules import BiasModule
 from torchrl.weight_update import RayModuleTransformScheme
+from torchrl import merge_ray_runtime_env
+from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
+import torch.distributed as dist
 
 
 class TestModuleTransform(TransformBase):
@@ -167,9 +170,6 @@ class TestRayModuleTransform:
     @pytest.fixture(autouse=True, scope="function")
     def start_ray(self):
         import ray
-        from torchrl import merge_ray_runtime_env
-        from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
-
         if ray.is_initialized():
             ray.shutdown()
 
@@ -183,8 +183,6 @@ class TestRayModuleTransform:
 
     @pytest.fixture(autouse=True, scope="function")
     def reset_process_group(self):
-        import torch.distributed as dist
-
         try:
             dist.destroy_process_group()
         except Exception:

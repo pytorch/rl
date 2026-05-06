@@ -15,6 +15,9 @@ import gc
 
 import pytest
 import torch
+import importlib.util
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 
 @pytest.fixture(scope="session", autouse=True)

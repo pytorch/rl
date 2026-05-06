@@ -69,6 +69,10 @@ from torchrl.testing.mocking_classes import (
     MultiAgentCountingEnv,
     NestedCountingEnv,
 )
+from torchrl.testing import CARTPOLE_VERSIONED
+from tensordict.nn import TensorDictModule
+from torchrl.objectives import DQNLoss
+from torchrl.objectives.value import GAE
 
 
 class TestStepCounter(TransformBase):
@@ -104,8 +108,6 @@ class TestStepCounter(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_stepcount_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             StepCounter(max_steps=10),
@@ -1544,10 +1546,6 @@ class TestEndOfLife(TransformBase):
     @pytest.mark.parametrize("eol_key", ["eol_key", ("nested", "eol")])
     @pytest.mark.parametrize("lives_key", ["lives_key", ("nested", "lives")])
     def test_transform_env(self, eol_key, lives_key):
-        from tensordict.nn import TensorDictModule
-        from torchrl.objectives import DQNLoss
-        from torchrl.objectives.value import GAE
-
         with set_gym_backend("gymnasium"):
             env = TransformedEnv(
                 GymEnv(BREAKOUT_VERSIONED()),
@@ -1933,8 +1931,6 @@ class TestTargetReturn(TransformBase):
     @pytest.mark.parametrize("batched_class", [SerialEnv, ParallelEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_targetreturn_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TargetReturn(target_return=10.0, mode="reduce"),

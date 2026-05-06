@@ -9,6 +9,16 @@ import sys
 import tempfile
 
 import pytest
+from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
+from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.testing import PONG_VERSIONED
+from torch.utils.tensorboard import SummaryWriter
+import importlib.util
+
+_has_ale_py = importlib.util.find_spec("ale_py") is not None
+_has_dm_control = importlib.util.find_spec("dm_control") is not None
+_has_dm_env = importlib.util.find_spec("dm_env") is not None
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
 
 @pytest.mark.skipif(
@@ -20,8 +30,6 @@ def test_dm_control():
     import dm_env  # noqa: F401
     from dm_control import suite  # noqa: F401
     from dm_control.suite.wrappers import pixels  # noqa: F401
-    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
-
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
     env.reset()
@@ -33,8 +41,6 @@ def test_dm_control():
 )
 @pytest.mark.skip(reason="Not implemented yet")
 def test_dm_control_pixels():
-    from torchrl.envs.libs.dm_control import DMControlEnv
-
     env = DMControlEnv("cheetah", "run", from_pixels=True)
     env.reset()
 
@@ -55,7 +61,6 @@ def test_gym():
                 f"gym and gymnasium load failed. Gym got error {err}."
             ) from ERROR
 
-    from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
 
     assert _has_gym
     # If gymnasium is installed without the atari extra, ALE won't be registered.
@@ -64,8 +69,6 @@ def test_gym():
         import ale_py  # noqa: F401
     except Exception:  # pragma: no cover
         pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
-    from torchrl.testing import PONG_VERSIONED
-
     try:
         env = GymEnv(PONG_VERSIONED())
     except Exception as err:  # gymnasium.error.NamespaceNotFound and similar
@@ -86,8 +89,6 @@ def test_gym():
 
 
 def test_tb():
-    from torch.utils.tensorboard import SummaryWriter
-
     _has_tb = True
 
     assert _has_tb

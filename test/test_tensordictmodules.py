@@ -58,6 +58,7 @@ from torchrl.modules.utils import get_primers_from_module
 from torchrl.objectives import DDPGLoss
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
+from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
 _has_functorch = False
 try:
@@ -894,7 +895,6 @@ class TestLSTMModule:
         self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
     ):
 
-        from torchrl.envs import InitTracker, TransformedEnv
 
         torch.manual_seed(0)
         num_envs = 3
@@ -1314,8 +1314,6 @@ class TestGRUModule:
     def _test_gru_parallel_env(
         self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
     ):
-        from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
-
         torch.manual_seed(0)
         num_workers = 3
 

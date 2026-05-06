@@ -59,6 +59,7 @@ from torchrl.testing.mocking_classes import (
     CountingEnvWithString,
     NestedCountingEnv,
 )
+import random
 
 
 class TestExcludeTransform(TransformBase):
@@ -1460,8 +1461,6 @@ class TestTokenizer(TransformBase):
         ).all()
 
     def test_transform_env(self):
-        import random
-
         random.seed(0)
         t = Tokenizer(
             in_keys=["string"],

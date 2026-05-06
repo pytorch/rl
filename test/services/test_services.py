@@ -14,6 +14,9 @@ from pathlib import Path
 import pytest
 
 from torchrl._utils import logger
+import os
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -29,8 +32,6 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module", autouse=True)
 def ray_init():
     """Initialize Ray once for the entire test module."""
-    import os
-
     import ray
 
     if ray.is_initialized():

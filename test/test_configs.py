@@ -17,6 +17,43 @@ from torchrl import logger as torchrl_logger
 from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
 from torchrl.modules.models.models import MLP
+from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.data.replay_buffers.samplers import RandomSampler
+from torchrl.data.replay_buffers.storages import TensorStorage
+from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
+from torchrl.data.replay_buffers.storages import ListStorage
+from torchrl.data.replay_buffers.writers import RoundRobinWriter, WriterEnsemble
+from torchrl.data.replay_buffers.writers import TensorDictMaxValueWriter
+from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
+from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
+from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerEnsemble
+from torchrl.data.replay_buffers.samplers import PrioritizedSliceSampler
+from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
+from torchrl.data.replay_buffers.samplers import SliceSampler
+from torchrl.data.replay_buffers.samplers import PrioritizedSampler
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.data.replay_buffers.storages import LazyStackStorage
+from torchrl.data.replay_buffers.storages import ListStorage, StorageEnsemble
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.storages import LazyTensorStorage
+from torchrl.modules import ConvNet
+from tensordict.nn import TensorDictSequential
+from tensordict.nn import TensorDictModule
+from torchrl.modules import TanhModule
+from torchrl.modules import MLP, ValueOperator
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
+from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
+from torchrl.record.loggers import wandb as wandb_logger_module
+from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.record.loggers import trackio as trackio_logger_module
+from torchrl.record.loggers.trackio import TrackioLogger
+from torchrl.trainers.trainers import CountFramesLog
+from torchrl import trainers as trainers_module
+from torchrl.trainers import Trainer
+import subprocess
+import os
 
 # Test if configs can be imported (requires hydra)
 try:
@@ -80,7 +117,6 @@ class TestEnvConfigs:
     @pytest.mark.skipif(not _has_vmas, reason="Vmas is not installed")
     def test_vmas_env_config_instantiation(self):
         from hydra.utils import instantiate
-        from torchrl.envs.libs.vmas import VmasEnv
         from torchrl.trainers.algorithms.configs.envs_libs import VmasEnvConfig
 
         cfg = VmasEnvConfig(scenario="balance", num_envs=1)
@@ -139,8 +175,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import RoundRobinWriter
-
         assert isinstance(writer, RoundRobinWriter)
         assert writer._compilable is True
 
@@ -162,8 +196,6 @@ class TestDataConfigs:
 
         # Test instantiation
         sampler = instantiate(cfg)
-        from torchrl.data.replay_buffers.samplers import RandomSampler
-
         assert isinstance(sampler, RandomSampler)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -180,13 +212,9 @@ class TestDataConfigs:
         assert cfg.compilable is True
 
         # Test instantiation (requires storage parameter)
-        import torch
-
         storage_tensor = torch.zeros(1000, 10)
         cfg.storage = storage_tensor
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import TensorStorage
-
         assert isinstance(storage, TensorStorage)
         assert storage.max_size == 1000
         assert storage.ndim == 2
@@ -213,8 +241,6 @@ class TestDataConfigs:
 
         # Test instantiation
         buffer = instantiate(cfg)
-        from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-
         assert isinstance(buffer, TensorDictReplayBuffer)
         assert buffer._batch_size == 32
 
@@ -231,8 +257,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import ListStorage
-
         assert isinstance(storage, ListStorage)
         assert storage.max_size == 1000
 
@@ -259,8 +283,6 @@ class TestDataConfigs:
 
         # Test instantiation
         buffer = instantiate(cfg)
-        from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
-
         assert isinstance(buffer, ReplayBuffer)
         assert buffer._batch_size == 32
 
@@ -306,8 +328,6 @@ class TestDataConfigs:
         assert cfg.p == [0.5, 0.5]
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.writers import RoundRobinWriter, WriterEnsemble
-
         writer1 = RoundRobinWriter()
         writer2 = RoundRobinWriter()
         writer = WriterEnsemble(writer1, writer2)
@@ -328,8 +348,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import TensorDictMaxValueWriter
-
         assert isinstance(writer, TensorDictMaxValueWriter)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -346,8 +364,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
-
         assert isinstance(writer, TensorDictRoundRobinWriter)
         assert writer._compilable is True
 
@@ -364,8 +380,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
-
         assert isinstance(writer, ImmutableDatasetWriter)
 
     def test_sampler_ensemble_config(self):
@@ -383,8 +397,6 @@ class TestDataConfigs:
         assert cfg.p == [0.5, 0.5]
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerEnsemble
-
         sampler1 = RandomSampler()
         sampler2 = RandomSampler()
         sampler = SamplerEnsemble(sampler1, sampler2, p=[0.5, 0.5])
@@ -432,8 +444,6 @@ class TestDataConfigs:
         assert cfg.reduction == "max"
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import PrioritizedSliceSampler
-
         sampler = PrioritizedSliceSampler(
             num_slices=10,
             max_capacity=1000,
@@ -480,8 +490,6 @@ class TestDataConfigs:
         assert cfg.use_gpu is False
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
-
         sampler = SliceSamplerWithoutReplacement(num_slices=10)
         assert isinstance(sampler, SliceSamplerWithoutReplacement)
         assert sampler.num_slices == 10
@@ -515,8 +523,6 @@ class TestDataConfigs:
         assert cfg.use_gpu is False
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import SliceSampler
-
         sampler = SliceSampler(num_slices=10)
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
@@ -539,8 +545,6 @@ class TestDataConfigs:
 
         # Test instantiation
         sampler = instantiate(cfg)
-        from torchrl.data.replay_buffers.samplers import PrioritizedSampler
-
         assert isinstance(sampler, PrioritizedSampler)
         assert sampler._max_capacity == 1000
         assert sampler._alpha == 0.7
@@ -563,8 +567,6 @@ class TestDataConfigs:
 
         # Test instantiation
         sampler = instantiate(cfg)
-        from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-
         assert isinstance(sampler, SamplerWithoutReplacement)
         assert sampler.drop_last is True
         assert sampler.shuffle is False
@@ -602,8 +604,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import LazyStackStorage
-
         assert isinstance(storage, LazyStackStorage)
         assert storage.max_size == 1000
         assert storage.stack_dim == 1
@@ -624,8 +624,6 @@ class TestDataConfigs:
         assert len(cfg.transforms) == 0
 
         # Test instantiation - use direct instantiation since StorageEnsemble expects *storages
-        from torchrl.data.replay_buffers.storages import ListStorage, StorageEnsemble
-
         storage1 = ListStorage(max_size=100)
         storage2 = ListStorage(max_size=200)
         storage = StorageEnsemble(
@@ -651,8 +649,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-
         assert isinstance(storage, LazyMemmapStorage)
         assert storage.max_size == 1000
         assert storage.ndim == 2
@@ -674,8 +670,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import LazyTensorStorage
-
         assert isinstance(storage, LazyTensorStorage)
         assert storage.max_size == 1000
         assert storage.ndim == 2
@@ -719,11 +713,6 @@ class TestDataConfigs:
         assert cfg.batch_size == 64
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-        from torchrl.data.replay_buffers.samplers import PrioritizedSliceSampler
-        from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-        from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
-
         sampler = PrioritizedSliceSampler(
             num_slices=10, max_capacity=1000, alpha=0.7, beta=0.9
         )
@@ -843,8 +832,6 @@ class TestModuleConfigs:
         assert cfg.device == "cpu"
 
         convnet = instantiate(cfg)
-        from torchrl.modules import ConvNet
-
         assert isinstance(convnet, ConvNet)
         convnet(torch.randn(1, 3, 32, 32))  # Test forward pass
 
@@ -966,12 +953,8 @@ class TestModuleConfigs:
         assert cfg.inplace is None
 
         seq = instantiate(cfg)
-        from tensordict.nn import TensorDictSequential
-
         assert isinstance(seq, TensorDictSequential)
         assert len(seq.module) == 2
-        from tensordict.nn import TensorDictModule
-
         assert all(isinstance(m, TensorDictModule) for m in seq.module)
         assert seq.in_keys == ["observation"]
         assert "action" in seq.out_keys
@@ -1001,8 +984,6 @@ class TestModuleConfigs:
 
         # Test instantiation
         tanh_module = instantiate(cfg)
-        from torchrl.modules import TanhModule
-
         assert isinstance(tanh_module, TanhModule)
         assert tanh_module.in_keys == ["action"]
         assert tanh_module.out_keys == ["action"]
@@ -1026,8 +1007,6 @@ class TestModuleConfigs:
 
         # Test instantiation - this should work now with the new config structure
         value_model = instantiate(cfg)
-        from torchrl.modules import MLP, ValueOperator
-
         assert isinstance(value_model, ValueOperator)
         assert isinstance(value_model.module, MLP)
         assert value_model.module.in_features == 10
@@ -1103,8 +1082,6 @@ class TestModuleConfigs:
         assert cfg.action_key == "action"
 
         module = instantiate(cfg)
-        from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
-
         assert isinstance(module, AdditiveGaussianModule)
         assert module._spec is None
         assert module.action_key == "action"
@@ -1123,11 +1100,6 @@ class TestCollectorsConfig:
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
-        from torchrl.collectors import (
-            AsyncCollector,
-            MultiAsyncCollector,
-            MultiSyncCollector,
-        )
         from torchrl.trainers.algorithms.configs.collectors import (
             AsyncDataCollectorConfig,
             MultiAsyncCollectorConfig,
@@ -1211,11 +1183,6 @@ class TestCollectorsConfig:
         from the environment's action_spec.
         """
         from hydra.utils import instantiate
-        from torchrl.collectors import (
-            AsyncCollector,
-            MultiAsyncCollector,
-            MultiSyncCollector,
-        )
         from torchrl.trainers.algorithms.configs.collectors import (
             AsyncDataCollectorConfig,
             MultiAsyncCollectorConfig,
@@ -1302,7 +1269,6 @@ class TestLossConfigs:
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
         from hydra.utils import instantiate
-        from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             TanhNormalModelConfig,
@@ -1468,8 +1434,6 @@ class TestLoggerConfigs:
     def test_wandb_logger_config_instantiation(self, monkeypatch):
         """Test WandbLoggerConfig instantiation."""
         from hydra.utils import instantiate
-        from torchrl.record.loggers import wandb as wandb_logger_module
-        from torchrl.record.loggers.wandb import WandbLogger
         from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
 
         init_kwargs = {}
@@ -1516,8 +1480,6 @@ class TestLoggerConfigs:
     def test_trackio_logger_config_instantiation(self, monkeypatch):
         """Test TrackioLoggerConfig instantiation."""
         from hydra.utils import instantiate
-        from torchrl.record.loggers import trackio as trackio_logger_module
-        from torchrl.record.loggers.trackio import TrackioLogger
         from torchrl.trainers.algorithms.configs.logging import TrackioLoggerConfig
 
         init_kwargs = {}
@@ -1706,8 +1668,6 @@ class TestTrainerConfigs:
     def test_hook_config(self):
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.hooks import CountFramesLogConfig
-        from torchrl.trainers.trainers import CountFramesLog
-
         cfg = CountFramesLogConfig(frame_skip=2, log_pbar=True)
         assert cfg._target_ == "torchrl.trainers.trainers.CountFramesLog"
         hook = instantiate(cfg)
@@ -1770,8 +1730,6 @@ class TestTrainerConfigs:
     )
     def test_individual_hook_configs(self, config_cls, kwargs, hook_cls):
         from hydra.utils import instantiate
-        from torchrl import trainers as trainers_module
-        from torchrl.trainers import Trainer
         from torchrl.trainers.algorithms import configs as configs_module
 
         cfg = getattr(configs_module, config_cls)(**kwargs)
@@ -1936,9 +1894,6 @@ class TestHydraParsing:
         self, tmpdir, yaml_config, test_script_content, success_message="SUCCESS"
     ):
         """Helper function to run a Hydra test with subprocess approach."""
-        import subprocess
-        import sys
-
         # Create a test script that follows the pattern
         test_script = tmpdir / "test.py"
 
@@ -2246,8 +2201,6 @@ collector:
     @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_trainer_parsing_with_file(self, tmpdir):
         """Test trainer parsing with file config."""
-        import os
-
         os.makedirs(tmpdir / "save", exist_ok=True)
 
         yaml_config = f"""

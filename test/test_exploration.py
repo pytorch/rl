@@ -55,6 +55,10 @@ from torchrl.testing.mocking_classes import (
     CountingEnvCountModule,
     NestedCountingEnv,
 )
+from torchrl.modules.tensordict_module.exploration import set_exploration_modules_spec_from_env
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torchrl.envs import SerialEnv, StepCounter
+from torchrl.modules import ConsistentDropoutModule, get_primers_from_module
 
 
 class TestEGreedy:
@@ -664,11 +668,6 @@ class TestAdditiveGaussian:
 @pytest.mark.parametrize("use_batched_env", [False, True])
 def test_set_exploration_modules_spec_from_env(device, use_batched_env):
     """Test set_exploration_modules_spec_from_env helper configures exploration modules."""
-    from tensordict.nn import TensorDictSequential
-    from torchrl.modules.tensordict_module.exploration import (
-        set_exploration_modules_spec_from_env,
-    )
-
     torch.manual_seed(0)
 
     if use_batched_env:
@@ -935,12 +934,6 @@ class TestConsistentDropout:
         inner_verify_routine(policy_td_seq, env)
 
     def test_consistent_dropout_primer(self):
-        import torch
-
-        from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-        from torchrl.envs import SerialEnv, StepCounter
-        from torchrl.modules import ConsistentDropoutModule, get_primers_from_module
-
         torch.manual_seed(0)
 
         m = Seq(

@@ -32,6 +32,9 @@ from torchrl.testing.mocking_classes import (
     HeterogeneousCountingEnv,
     NestedCountingEnv,
 )
+import importlib.util
+
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
 
 @pytest.mark.filterwarnings("error")

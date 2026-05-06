@@ -16,6 +16,11 @@ import numpy as np
 
 import pytest
 import torch
+from torchrl.envs import ParallelEnv
+from torchrl.testing import MockTransformerModel
+import importlib.util
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"
@@ -165,8 +170,6 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 def maybe_fork_ParallelEnv(request):
-    from torchrl.envs import ParallelEnv
-
     if not IS_OSX and (
         request.config.getoption("--mp_fork")
         or (
@@ -182,8 +185,6 @@ def maybe_fork_ParallelEnv(request):
 @pytest.fixture
 def mock_transformer_model():
     """Fixture that provides a mock transformer model factory."""
-    from torchrl.testing import MockTransformerModel
-
     def _make_model(
         vocab_size: int = 1024, device: torch.device | str | int = "cpu"
     ) -> MockTransformerModel:

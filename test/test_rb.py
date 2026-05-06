@@ -118,6 +118,12 @@ from torchrl.testing import (
     make_tc,
 )
 from torchrl.testing.mocking_classes import CountingEnv
+from torchrl._utils import rl_warnings
+from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
+import subprocess
+import time
+import gc
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None
@@ -2107,8 +2113,6 @@ class TestBuffers:
 
 def test_replay_buffer_set_at_():
     """Tests that set_at_ writes through to storage in-place."""
-    from tensordict import TensorDict
-
     rb = ReplayBuffer(
         storage=LazyTensorStorage(10),
         batch_size=5,
@@ -2125,8 +2129,6 @@ def test_replay_buffer_set_at_():
 
 def test_replay_buffer_set_():
     """Tests that set_ writes through to storage in-place."""
-    from tensordict import TensorDict
-
     rb = ReplayBuffer(
         storage=LazyTensorStorage(10),
         batch_size=5,
@@ -2140,8 +2142,6 @@ def test_replay_buffer_set_():
 
 def test_replay_buffer_update_():
     """Tests that update_ writes through to storage in-place."""
-    from tensordict import TensorDict
-
     rb = ReplayBuffer(
         storage=LazyTensorStorage(10),
         batch_size=5,
@@ -2231,8 +2231,6 @@ def test_storage_save_hook(tmpdir):
 
 @pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
 def test_add_warning():
-    from torchrl._utils import rl_warnings
-
     if not rl_warnings():
         return
     rb = ReplayBuffer(storage=ListStorage(10), batch_size=3)
@@ -3788,8 +3786,6 @@ class TestStalenessAwareSampler:
 
     def _make_buffer_with_versions(self, n_entries=100, version_range=(0, 5)):
         """Create a replay buffer populated with data containing policy_version."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(n_entries),
@@ -3819,8 +3815,6 @@ class TestStalenessAwareSampler:
 
     def test_freshness_weighting(self):
         """Test that fresher entries are sampled more frequently."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(200),
@@ -3864,8 +3858,6 @@ class TestStalenessAwareSampler:
 
     def test_hard_staleness_gate(self):
         """Test that entries beyond max_staleness are never sampled."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=3)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(200),
@@ -3903,8 +3895,6 @@ class TestStalenessAwareSampler:
 
     def test_all_stale_raises(self):
         """Test that an error is raised when all entries exceed max_staleness."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=2)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -3926,8 +3916,6 @@ class TestStalenessAwareSampler:
 
     def test_consumer_version_increment(self):
         """Test consumer version tracking."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler()
         assert sampler.consumer_version == 0
         sampler.increment_consumer_version()
@@ -3937,8 +3925,6 @@ class TestStalenessAwareSampler:
 
     def test_staleness_in_info(self):
         """Test that staleness values are returned in sample info."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -3961,8 +3947,6 @@ class TestStalenessAwareSampler:
 
     def test_missing_version_key_raises(self):
         """Test that a clear error is raised when version key is missing."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler()
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -3980,8 +3964,6 @@ class TestStalenessAwareSampler:
 
     def test_state_dict_roundtrip(self):
         """Test that state_dict/load_state_dict preserves sampler state."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=7)
         sampler.consumer_version = 42
 
@@ -3996,8 +3978,6 @@ class TestStalenessAwareSampler:
 
     def test_no_staleness_limit(self):
         """Test sampling with max_staleness=-1 (no limit)."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -4611,8 +4591,6 @@ class TestRBMultidim:
     def test_rb_multidim_collector(
         self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         torch.manual_seed(0)
         env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
@@ -5421,8 +5399,6 @@ class TestLazyMemmapStorageCleanup:
 
     def test_cleanup_registry(self):
         """Test that storages are registered for cleanup."""
-        from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
-
         storage = LazyMemmapStorage(100, auto_cleanup=True)
         # Check storage is in the registry (avoids race with GC on WeakSet)
         assert storage in _MEMMAP_STORAGE_REGISTRY
@@ -5438,9 +5414,6 @@ class TestLazyMemmapStorageCleanup:
 
     def test_cleanup_subprocess(self, tmpdir):
         """Test that cleanup works correctly in subprocess scenarios."""
-        import subprocess
-        import sys
-
         scratch_dir = str(tmpdir / "subprocess_storage")
 
         # Create a script that creates a storage and exits normally
@@ -5472,10 +5445,6 @@ print("Storage created")
 
     def test_cleanup_signal_interrupt(self, tmpdir):
         """Test that cleanup happens on SIGINT (Ctrl+C)."""
-        import subprocess
-        import sys
-        import time
-
         scratch_dir = str(tmpdir / "signal_storage")
 
         # Create a script that sleeps and can be interrupted
@@ -5544,8 +5513,6 @@ time.sleep(60)  # Will be interrupted
         create_and_delete()
 
         # Force garbage collection
-        import gc
-
         gc.collect()
 
         # Note: __del__ is not guaranteed to run immediately, but the cleanup

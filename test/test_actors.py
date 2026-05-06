@@ -34,6 +34,8 @@ from torchrl.modules.tensordict_module.actors import (
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import NestedCountingEnv
+from tensordict import NonTensorData
+import warnings
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 
@@ -221,8 +223,6 @@ class TestProbabilisticActorGenerator:
 
     def test_generator_td_key_int_writeback(self):
         """Int seed in the input tensordict is treated as a stream-key (JAX-style)."""
-        from tensordict import NonTensorData
-
         a = self._make_actor(generator="rng")
 
         def run(seed, n_steps):
@@ -241,8 +241,6 @@ class TestProbabilisticActorGenerator:
 
     def test_generator_td_key_generator_form(self):
         """A Generator placed in the input tensordict is used in place."""
-        from tensordict import NonTensorData
-
         a = self._make_actor(generator="rng")
         td = TensorDict(obs=torch.zeros(4))
         td["rng"] = NonTensorData(torch.Generator().manual_seed(0))
@@ -787,8 +785,6 @@ class TestQValue:
 
     def test_qvalue_actor_strict_shape_normal_no_warning(self):
         """Test that matching shapes produce no warning even with strict_shape='auto'."""
-        import warnings
-
         action_spec = OneHot(4)
         module = TensorDictModule(
             module=nn.Linear(3, 4), in_keys=("observation",), out_keys=("action_value",)

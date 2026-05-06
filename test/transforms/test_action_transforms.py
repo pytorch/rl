@@ -74,13 +74,14 @@ from torchrl.testing.mocking_classes import (
     EnvWithScalarAction,
     StateLessCountingEnv,
 )
+from torchrl.data import Binary, Categorical
+from torchrl.envs import GymWrapper, TransformedEnv
+from torchrl.envs.transforms import ActionMask
 
 
 class TestActionMask(TransformBase):
     @property
     def _env_class(self):
-        from torchrl.data import Binary, Categorical
-
         class MaskedEnv(EnvBase):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -211,10 +212,6 @@ class TestActionMask(TransformBase):
         """
         import gymnasium as gym
         from gymnasium import spaces
-
-        from torchrl.envs import GymWrapper, TransformedEnv
-        from torchrl.envs.transforms import ActionMask
-        from torchrl.envs.utils import check_env_specs
 
         class MultiDiscreteActionMaskEnv(gym.Env):
             """Minimal environment with MultiDiscrete action space and 2D action mask."""

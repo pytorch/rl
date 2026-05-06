@@ -62,6 +62,7 @@ from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.testing import get_default_devices, retry
 
 from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
+from torchrl.modules.models.recipes.impala import _ConvNetBlock
 
 
 @pytest.fixture
@@ -1685,8 +1686,6 @@ class TestBatchRenorm:
 
 def test_convnetblock_uses_both_resnets():
     """Regression test for https://github.com/pytorch/rl/issues/3519."""
-    from torchrl.modules.models.recipes.impala import _ConvNetBlock
-
     block = _ConvNetBlock(num_ch=16)
     x = torch.randn(2, 3, 8, 8)
     out = block(x).mean()
@@ -1735,8 +1734,6 @@ class TestDiffusionActor:
         assert td["action"].shape == torch.Size([4, 2])
 
     def test_spec_wrapping(self):
-        from torchrl.data.tensor_specs import Bounded
-
         spec = Bounded(low=-1.0, high=1.0, shape=(2,))
         actor = DiffusionActor(action_dim=2, obs_dim=3, num_steps=3, spec=spec)
         assert actor.spec is not None

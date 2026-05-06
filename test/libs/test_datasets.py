@@ -31,6 +31,14 @@ from torchrl.envs.libs.gym import GymWrapper, set_gym_backend
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.testing import retry
+from torchrl.envs import Compose, GrayScale, Resize
+from torchrl.envs import CatTensors, Compose
+import warnings
+from torchrl.envs import Compose, GrayScale, ToTensorImage
+from torchrl.envs import Compose, RenameTransform, Resize, UnsqueezeTransform
+
+_has_ale_py = importlib.util.find_spec("ale_py") is not None
+_has_gymnasium_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
 
 _has_d4rl = importlib.util.find_spec("d4rl") is not None
 _has_sklearn = importlib.util.find_spec("sklearn") is not None
@@ -67,8 +75,6 @@ class TestGenDGRL:
         dataset = GenDGRLExperienceReplay(
             dataset_id, batch_size=32, root=tmpdir / "1", download="force"
         )
-        from torchrl.envs import Compose, GrayScale, Resize
-
         t = Compose(
             Resize(32, in_keys=["observation", ("next", "observation")]),
             GrayScale(in_keys=["observation", ("next", "observation")]),
@@ -132,8 +138,6 @@ class TestD4RL:
             download="force",
             direct_download=True,
         )
-        from torchrl.envs import CatTensors, Compose
-
         t = Compose(
             CatTensors(
                 in_keys=["observation", ("info", "qpos"), ("info", "qvel")],
@@ -608,7 +612,6 @@ class TestMinari:
             download="force",
         )
 
-        from torchrl.envs import CatTensors, Compose
 
         t = Compose(
             CatTensors(
@@ -715,8 +718,6 @@ class TestMinari:
                 os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
 
     def test_correct_categorical_missions(self):
-        import warnings
-
         try:
             exp_replay = MinariExperienceReplay(
                 dataset_id="minigrid/BabyAI-Pickup/optimal-v0",
@@ -815,8 +816,6 @@ class TestVD4RL:
         datasets = VD4RLExperienceReplay.available_datasets
         dataset_id = list(datasets)[4]
         dataset = VD4RLExperienceReplay(dataset_id, batch_size=32, download="force")
-        from torchrl.envs import Compose, GrayScale, ToTensorImage
-
         func = Compose(
             ToTensorImage(in_keys=["pixels", ("next", "pixels")]),
             GrayScale(in_keys=["pixels", ("next", "pixels")]),
@@ -889,8 +888,6 @@ class TestAtariDQN:
 
     @pytest.mark.parametrize("dataset_id", ["Pong/4"])
     def test_atari_preproc(self, dataset_id, tmpdir):
-        from torchrl.envs import Compose, RenameTransform, Resize, UnsqueezeTransform
-
         dataset = AtariDQNExperienceReplay(
             dataset_id,
             slice_len=None,
@@ -1049,8 +1046,6 @@ class TestOpenX:
             num_slices=8,
             slice_len=None,
         )
-        from torchrl.envs import Compose, RenameTransform, Resize
-
         t = Compose(
             Resize(
                 64,

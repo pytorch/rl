@@ -9,6 +9,7 @@ import os
 
 import pytest
 import torch
+from torch import multiprocessing as mp
 
 from _envs_common import _has_gym, IS_OSX, IS_WIN, mp_ctx
 from tensordict import (
@@ -53,6 +54,7 @@ from torchrl.testing.mocking_classes import (
     MockBatchedLockedEnv,
     NestedCountingEnv,
 )
+from torch import multiprocessing as mp
 
 
 class TestParallel:
@@ -1118,8 +1120,6 @@ class TestConcurrentEnvs:
             self.main_penv(6)
             self.main_penv(9)
         else:
-            from torch import multiprocessing as mp
-
             q = mp.Queue(3)
             ps = []
             try:
@@ -1141,8 +1141,6 @@ class TestConcurrentEnvs:
             self.main_collector(6)
             self.main_collector(9)
         else:
-            from torch import multiprocessing as mp
-
             q = mp.Queue(3)
             ps = []
             try:
@@ -1225,8 +1223,6 @@ class TestLibThreading:
 
 @pytest.mark.skipif(IS_WIN, reason="fork not available on windows 10")
 def test_parallel_another_ctx():
-    from torch import multiprocessing as mp
-
     gc.collect()
 
     try:

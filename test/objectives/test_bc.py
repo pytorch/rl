@@ -7,8 +7,10 @@ from __future__ import annotations
 import pytest
 import torch
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl.data.tensor_specs import Bounded
+from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
 from torchrl.modules.tensordict_module.actors import Actor, ProbabilisticActor
 from torchrl.objectives import BCLoss
 
@@ -20,9 +22,6 @@ class TestBCLoss:
         return Actor(module=module, spec=spec)
 
     def _make_stochastic_actor(self, action_dim=2, obs_dim=4):
-        from tensordict.nn import TensorDictModule
-        from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
-
         spec = Bounded(-torch.ones(action_dim), torch.ones(action_dim), (action_dim,))
         net = torch.nn.Sequential(
             torch.nn.Linear(obs_dim, 2 * action_dim),

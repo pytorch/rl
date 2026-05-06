@@ -23,6 +23,8 @@ from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 from torchrl.objectives.utils import _pseudo_vmap
 
 from torchrl.testing import get_default_devices, gym_helpers as _gym_helpers
+from torchrl import _utils
+from torchrl._utils import as_remote
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -522,8 +524,6 @@ class TestProfilingDecorator:
     def test_decorator_is_identity_when_unarmed(self, monkeypatch):
         # Force the decorator's import-time gate to "off" regardless of how the
         # test process was launched, so we can assert the zero-overhead branch.
-        from torchrl import _utils
-
         monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", False)
 
         def fn(x):
@@ -533,8 +533,6 @@ class TestProfilingDecorator:
         assert decorated is fn  # truly identity, no closure
 
     def test_decorator_wraps_when_armed(self, monkeypatch):
-        from torchrl import _utils
-
         monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", True)
         monkeypatch.setattr(_utils, "_PROFILING_ENABLED", True)
 
@@ -547,8 +545,6 @@ class TestProfilingDecorator:
         assert decorated(5) == 6
 
     def test_set_profiling_enabled_warns_when_unarmed(self, monkeypatch):
-        from torchrl import _utils
-
         monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", False)
         monkeypatch.setattr(_utils, "_PROFILING_ENABLED", False)
 
@@ -558,8 +554,6 @@ class TestProfilingDecorator:
         assert _utils._PROFILING_ENABLED is False
 
     def test_set_profiling_enabled_toggles_when_armed(self, monkeypatch):
-        from torchrl import _utils
-
         monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", True)
         monkeypatch.setattr(_utils, "_PROFILING_ENABLED", True)
 
@@ -569,8 +563,6 @@ class TestProfilingDecorator:
         assert _utils._PROFILING_ENABLED is True
 
     def test_maybe_record_function_returns_nullcontext_when_disabled(self, monkeypatch):
-        from torchrl import _utils
-
         monkeypatch.setattr(_utils, "_PROFILING_ENABLED", False)
         ctx = _utils._maybe_record_function("test")
         assert ctx is _utils._NULL_CONTEXT
@@ -588,7 +580,6 @@ class TestProfilingDecorator:
         monkeypatch.setitem(sys.modules, "ray", ray_mock)
         monkeypatch.setenv("TORCHRL_PROFILING", "1")
 
-        from torchrl._utils import as_remote
 
         class Dummy:
             pass
@@ -610,7 +601,6 @@ class TestProfilingDecorator:
         monkeypatch.setitem(sys.modules, "ray", ray_mock)
         monkeypatch.delenv("TORCHRL_PROFILING", raising=False)
 
-        from torchrl._utils import as_remote
 
         class Dummy:
             pass

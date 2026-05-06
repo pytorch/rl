@@ -12,6 +12,14 @@ import pytest
 import torch
 from tensordict import set_list_to_stack, TensorDict
 from torchrl.data.llm import History
+import time
+from torchrl.modules.llm.backends import AsyncSGLang
+from torchrl._utils import logger as torchrl_logger
+from torchrl.modules.llm.backends import AsyncSGLang, RLSGLangEngine
+from torchrl.modules.llm.policies import SGLangWrapper
+from torchrl.modules.llm.policies.common import ChatHistory
+from torchrl.modules.llm.policies.common import Text
+from torchrl.modules.llm.policies.common import Tokens
 
 _has_sglang = importlib.util.find_spec("sglang") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -59,9 +67,7 @@ def sglang_service():
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available")
 
-    import time
 
-    from torchrl.modules.llm.backends import AsyncSGLang
 
     start_time = time.time()
     service = AsyncSGLang.from_pretrained(
@@ -75,8 +81,6 @@ def sglang_service():
     startup_time = time.time() - start_time
 
     # Log startup time for debugging
-    from torchrl._utils import logger as torchrl_logger
-
     torchrl_logger.info(f"SGLang server started in {startup_time:.1f}s")
 
     yield service
@@ -122,8 +126,6 @@ class TestAsyncSGLangIntegration:
 
     def test_connect_to_server(self, sglang_service):
         """Test that AsyncSGLang service is connected and functional."""
-        from torchrl.modules.llm.backends import AsyncSGLang, RLSGLangEngine
-
         assert isinstance(sglang_service, AsyncSGLang)
         assert isinstance(sglang_service, RLSGLangEngine)
 
@@ -243,8 +245,6 @@ class TestSGLangWrapper:
 
     def test_wrapper_creation_from_service(self, sglang_service, tokenizer):
         """Test SGLangWrapper creation from AsyncSGLang service."""
-        from torchrl.modules.llm.policies import SGLangWrapper
-
         wrapper = SGLangWrapper(
             model=sglang_service,
             tokenizer=tokenizer,
@@ -258,9 +258,6 @@ class TestSGLangWrapper:
 
     def test_history_mode(self, sglang_service, tokenizer, sample_history):
         """Test SGLangWrapper with history input mode."""
-        from torchrl.modules.llm.policies import SGLangWrapper
-        from torchrl.modules.llm.policies.common import ChatHistory
-
         wrapper = SGLangWrapper(
             model=sglang_service,
             tokenizer=tokenizer,
@@ -289,9 +286,6 @@ class TestSGLangWrapper:
 
     def test_text_mode(self, sglang_service, tokenizer):
         """Test SGLangWrapper with text input mode."""
-        from torchrl.modules.llm.policies import SGLangWrapper
-        from torchrl.modules.llm.policies.common import Text
-
         wrapper = SGLangWrapper(
             model=sglang_service,
             tokenizer=tokenizer,
@@ -320,9 +314,6 @@ class TestSGLangWrapper:
 
     def test_tokens_mode(self, sglang_service, tokenizer):
         """Test SGLangWrapper with tokens input mode."""
-        from torchrl.modules.llm.policies import SGLangWrapper
-        from torchrl.modules.llm.policies.common import Tokens
-
         wrapper = SGLangWrapper(
             model=sglang_service,
             tokenizer=tokenizer,
@@ -355,9 +346,6 @@ class TestSGLangWrapper:
 
     def test_log_probs(self, sglang_service, tokenizer):
         """Test log probability extraction."""
-        from torchrl.modules.llm.policies import SGLangWrapper
-        from torchrl.modules.llm.policies.common import Text
-
         wrapper = SGLangWrapper(
             model=sglang_service,
             tokenizer=tokenizer,
@@ -385,8 +373,6 @@ class TestSGLangWrapper:
 
     def test_get_new_version(self, sglang_service, tokenizer):
         """Test get_new_version for policy version tracking."""
-        from torchrl.modules.llm.policies import SGLangWrapper
-
         wrapper = SGLangWrapper(
             model=sglang_service,
             tokenizer=tokenizer,

@@ -61,6 +61,8 @@ from torchrl.testing.mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     NestedCountingEnv,
 )
+from torchrl.testing import CARTPOLE_VERSIONED
+from tensordict.nn import TensorDictModule
 
 
 class TestCatFrames(TransformBase):
@@ -210,8 +212,6 @@ class TestCatFrames(TransformBase):
     def test_catframes_batching(
         self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
     ):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         if batched_class is ParallelEnv:
             batched_class = maybe_fork_ParallelEnv
 
@@ -2522,8 +2522,6 @@ class TestTimeMaxPool(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_timemax_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TimeMaxPool(
@@ -2747,8 +2745,6 @@ class TestPermuteTransform(TransformBase):
         )  # DxWxHxC => CxDxHxW
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         out_channels = 4
-        from tensordict.nn import TensorDictModule
-
         model = nn.Sequential(
             trans,
             TensorDictModule(

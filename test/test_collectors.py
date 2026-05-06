@@ -130,6 +130,8 @@ from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
 )
+from pathlib import Path
+from torchrl.collectors._base import _ProfilerHook
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"
@@ -3157,8 +3159,6 @@ class TestPreemptiveThreshold:
 
     def test_multisync_split_trajs_set_seed(self):
         """Test that MultiSyncCollector with split_trajs=True and set_seed works without errors."""
-        from torchrl.testing.mocking_classes import CountingEnv
-
         env_maker = lambda: CountingEnv(max_steps=100)
         policy = RandomPolicy(env_maker().action_spec)
         collector = MultiSyncCollector(
@@ -5610,8 +5610,6 @@ class TestCollectorProfiling:
 
     def test_profile_config_get_save_path(self):
         """Test ProfileConfig.get_save_path method."""
-        from pathlib import Path
-
         # Default path
         config = ProfileConfig(save_path=None)
         path = config.get_save_path(worker_idx=0)
@@ -5770,8 +5768,6 @@ class TestCollectorProfiling:
         """``enable_profile`` should install a ``_ProfilerHook`` as the
         ``post_collect_hook`` and self-stop after ``num_rollouts``.
         """
-        from torchrl.collectors._base import _ProfilerHook
-
         env = ContinuousActionVecMockEnv()
         collector = Collector(
             create_env_fn=lambda: ContinuousActionVecMockEnv(),

@@ -34,6 +34,8 @@ from torchrl.data.llm.utils import RolloutFromModel
 from torchrl.modules.models.llm import GPT2RewardModel
 
 from torchrl.testing import get_default_devices
+from torchrl._utils import print_directory_tree
+from types import SimpleNamespace
 
 HERE = Path(__file__).parent
 
@@ -68,8 +70,6 @@ def tldr_batch_dir(tmp_path_factory):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
         yield dest / Path(dataset_path).stem
-    from torchrl._utils import print_directory_tree
-
     print_directory_tree(dest)
 
 
@@ -400,8 +400,6 @@ def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, 
 
 def test_compute_reward_loss_identical_sequences():
     """Non-regression test for https://github.com/pytorch/rl/issues/3520."""
-    from types import SimpleNamespace
-
     seq_len = 6
     pad_token_id = 50256
     input_ids = torch.tensor([[1, 2, 3, 4, 5, pad_token_id]])

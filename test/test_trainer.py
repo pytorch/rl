@@ -1166,8 +1166,6 @@ class TestOptimizationStepper:
 
     def test_stepper_checkpoint_roundtrip(self, tmp_path):
         """Stepper state survives save/load via Trainer checkpointing."""
-        import os
-
         os.environ["CKPT_BACKEND"] = "torch"
 
         loss_module = _CountingLossModule()

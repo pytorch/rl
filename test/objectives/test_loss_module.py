@@ -36,6 +36,7 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 from torchrl.objectives import ClipPPOLoss, DQNLoss, PPOLoss, SACLoss
+from torchrl.objectives.utils import RANDOM_MODULE_LIST
 from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.utils import _vmap_func, HardUpdate, hold_out_net, SoftUpdate
 from torchrl.objectives.value.advantages import GAE, TD0Estimator
@@ -686,9 +687,7 @@ class TestUtils:
             ...
 
         add_random_module(MyMod)
-        import torchrl.objectives.utils
-
-        assert MyMod in torchrl.objectives.utils.RANDOM_MODULE_LIST
+        assert MyMod in RANDOM_MODULE_LIST
 
     def test_standardization(self):
         t = torch.arange(3 * 4 * 5 * 6, dtype=torch.float32).view(3, 4, 5, 6)

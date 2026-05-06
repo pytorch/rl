@@ -21,6 +21,9 @@ from torchrl.envs.llm.transforms import (
     XMLBlockParser,
 )
 from torchrl.envs.transforms import TransformedEnv
+import importlib.util
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 @pytest.fixture(scope="module")

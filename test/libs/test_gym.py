@@ -54,6 +54,11 @@ from torchrl.testing import (
     PONG_VERSIONED,
     rollout_consistency_assertion,
 )
+import torchrl.envs.libs.utils
+import builtins
+
+_has_gym_super_mario_bros = importlib.util.find_spec("gym_super_mario_bros") is not None
+_has_mo_gymnasium = importlib.util.find_spec("mo_gymnasium") is not None
 
 _has_ale = importlib.util.find_spec("ale_py") is not None
 _has_atari_py = False
@@ -407,8 +412,6 @@ class TestGym:
     @pytest.mark.parametrize("backend", _BACKENDS)
     @pytest.mark.parametrize("numpy", [True, False])
     def test_torchrl_to_gym(self, backend, numpy):
-        from torchrl.envs.libs.gym import gym_backend, set_gym_backend
-
         gb = gym_backend()
         try:
             EnvBase.register_gym(
@@ -1663,8 +1666,6 @@ class TestGym:
 
     def test_is_from_pixels_simple_env(self):
         """Test that _is_from_pixels correctly identifies non-pixel environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a simple environment that doesn't have pixels
         class SimpleEnv:
             def __init__(self):
@@ -1682,8 +1683,6 @@ class TestGym:
 
     def test_is_from_pixels_box_env(self):
         """Test that _is_from_pixels correctly identifies pixel Box environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a pixel-like environment
         class PixelEnv:
             def __init__(self):
@@ -1703,8 +1702,6 @@ class TestGym:
 
     def test_is_from_pixels_dict_env(self):
         """Test that _is_from_pixels correctly identifies Dict environments with pixels."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a Dict environment that has pixels
         class DictPixelEnv:
             def __init__(self):
@@ -1729,8 +1726,6 @@ class TestGym:
 
     def test_is_from_pixels_dict_env_no_pixels(self):
         """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a Dict environment that doesn't have pixels
         class DictNoPixelEnv:
             def __init__(self):
@@ -1834,8 +1829,6 @@ class TestGym:
 
     def test_is_from_pixels_wrapper_env(self):
         """Test that _is_from_pixels correctly identifies wrapped environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a mock environment that simulates being wrapped with a pixel wrapper
         class MockWrappedEnv:
             def __init__(self):
@@ -1848,8 +1841,6 @@ class TestGym:
                 )
 
         # Mock the isinstance check to simulate the wrapper detection
-        import torchrl.envs.libs.utils
-
         original_isinstance = isinstance
 
         def mock_isinstance(obj, cls):
@@ -1858,8 +1849,6 @@ class TestGym:
             return original_isinstance(obj, cls)
 
         # Temporarily patch isinstance
-        import builtins
-
         builtins.isinstance = mock_isinstance
 
         try:

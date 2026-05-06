@@ -63,6 +63,7 @@ from torchrl.testing.mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
+from torchrl.testing import CARTPOLE_VERSIONED
 
 
 class TestBinarizeReward(TransformBase):
@@ -658,8 +659,6 @@ class TestRewardSum(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_rewardsum_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())), RewardSum()
         )

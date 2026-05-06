@@ -49,6 +49,8 @@ from torchrl.testing.dist_utils import (
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
+import torch.distributed as dist
+from torchrl.envs import StepCounter, TransformedEnv
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -666,8 +668,6 @@ class TestRayCollector(DistributedCollectorBase):
     @pytest.fixture(autouse=True, scope="class")
     def start_ray(self):
         import ray
-        from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
-
         # Ensure Ray is initialized with a runtime_env that lets workers import
         # this test module (e.g. `CountingPolicy`), otherwise actor unpickling can
         # fail with "No module named 'test_distributed'".
@@ -684,8 +684,6 @@ class TestRayCollector(DistributedCollectorBase):
 
     @pytest.fixture(autouse=True, scope="function")
     def reset_process_group(self):
-        import torch.distributed as dist
-
         try:
             dist.destroy_process_group()
         except Exception:
@@ -997,8 +995,6 @@ class TestRayTrajsPerBatch:
 
     @pytest.fixture(autouse=True, scope="function")
     def reset_process_group(self):
-        import torch.distributed as dist
-
         try:
             dist.destroy_process_group()
         except Exception:
@@ -1007,8 +1003,6 @@ class TestRayTrajsPerBatch:
 
     def test_ray_trajs_per_batch_replay_buffer_rejects_regular_rb(self):
         """RayCollector rejects a regular ReplayBuffer (must use RayReplayBuffer)."""
-        from torchrl.envs import StepCounter, TransformedEnv
-
         max_steps = 4
         num_trajs = 2
 

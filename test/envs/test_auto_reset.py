@@ -45,6 +45,8 @@ from torchrl.testing.mocking_classes import (
     EnvWithTensorClass,
     Str2StrEnv,
 )
+from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
+from torchrl.envs import TrajCounter
 
 
 class TestAutoReset:
@@ -501,9 +503,6 @@ class TestNonTensorEnv:
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     def test_from_text_rb_slicesampler(self):
         """Dedicated test for replay buffer sampling of trajectories with variable token length"""
-        from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
-        from torchrl.envs import TrajCounter
-
         env = Str2StrEnv()
         env.set_seed(0)
         env = env.append_transform(

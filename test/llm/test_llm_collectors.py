@@ -21,6 +21,10 @@ from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.backends import make_vllm_worker
 from torchrl.testing import DummyStrDataLoader
+import gc
+from torchrl.testing.mocking_classes import CountingEnv
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -48,8 +52,6 @@ class TestLLMCollector:
         yield llm_model
         # Cleanup
         del llm_model
-        import gc
-
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -66,8 +68,6 @@ class TestLLMCollector:
         yield llm_model
         # Cleanup
         del llm_model
-        import gc
-
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -489,8 +489,6 @@ class TestAsyncEnvPoolSpecs:
 
     def test_async_env_pool_with_unbatched_child_envs(self):
         """Test AsyncEnvPool with child envs that have batch_size=()."""
-        from torchrl.testing.mocking_classes import CountingEnv
-
         def env_maker():
             return CountingEnv()
 
@@ -521,8 +519,6 @@ class TestUpdate:
         strict=False,
     )
     def test_vllm_update(self):
-        import gc
-
         import ray
 
         ray.init()

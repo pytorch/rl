@@ -27,6 +27,7 @@ from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.utils import get_logger
 from torchrl.record.loggers.wandb import _has_moviepy, _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
+from torchrl.record.loggers.common import Logger
 
 if _has_tv:
     import torchvision
@@ -819,8 +820,6 @@ class TestRayLogger:
         pass
 
     def test_csv_logger_returns_ray_logger(self):
-        from torchrl.record.loggers.common import Logger
-
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
             assert isinstance(logger, RayLogger)
