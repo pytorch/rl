@@ -776,7 +776,7 @@ class LSTMModule(ModuleBase):
         dtype,
         hidden0_in: torch.Tensor | None = None,
         hidden1_in: torch.Tensor | None = None,
-        splits=None,
+        splits: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
@@ -821,8 +821,12 @@ class LSTMModule(ModuleBase):
                 h_padded = torch.zeros(
                     batch, steps, *h.shape[1:], device=device, dtype=dtype
                 )
-                batch_idx = torch.arange(batch, device=device)
-                h_padded[batch_idx, splits - 1] = h
+                idx = (
+                    (splits - 1)
+                    .view(-1, 1, *([1] * (h.dim() - 1)))
+                    .expand_as(h.unsqueeze(1))
+                )
+                h_padded = h_padded.scatter(1, idx, h.unsqueeze(1))
                 out[i] = h_padded
             else:
                 out[i] = torch.stack(
