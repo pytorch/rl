@@ -4,7 +4,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
+  actions: read
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
@@ -145,17 +145,25 @@ jobs:
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
           python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
-      - name: Publish results
-        continue-on-error: true
-        uses: apbard/pytest-benchmark-commenter@v3
-        env:
-          GIT_WORK_TREE: /__w/rl/rl
+      - name: Upload PR benchmark results
+        if: ${{ always() }}
+        run: |
+          set -euxo pipefail
+          mkdir -p benchmark-results
+          cp "${BASELINE_JSON}" benchmark-results/baseline.json
+          cp "${CONTENDER_JSON}" benchmark-results/contender.json
+          cat > benchmark-results/metadata.json <<EOF
+          {
+            "device": "${{ matrix.device }}",
+            "pr_number": ${{ github.event.pull_request.number }},
+            "base_sha": "${PR_BASE_SHA}",
+            "head_sha": "${PR_HEAD_SHA}",
+            "run_id": "${{ github.run_id }}"
+          }
+          EOF
+      - name: Upload PR benchmark artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          benchmark-file: ${{ env.CONTENDER_JSON }}
-          comparison-benchmark-file: ${{ env.BASELINE_JSON }}
-          benchmark-metrics: 'name,max,mean,ops'
-          comparison-benchmark-metric: 'ops'
-          comparison-higher-is-better: true
-          comparison-threshold: 5
-          benchmark-title: '${{ matrix.device }} Benchmark Tests: PR ${{ env.HEAD_SHA }} vs main ${{ env.BASE_SHA }}'
+          name: ${{ matrix.device }}-benchmark-pr-results
+          path: benchmark-results
