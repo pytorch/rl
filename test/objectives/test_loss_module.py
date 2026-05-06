@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import pytest
 import torch
+import torchrl.objectives.utils
 from _objectives_common import _has_functorch, FUNCTORCH_ERR
 
 from tensordict import TensorDict, TensorDictBase
@@ -37,13 +38,7 @@ from torchrl.modules.tensordict_module.actors import (
 )
 from torchrl.objectives import ClipPPOLoss, DQNLoss, PPOLoss, SACLoss
 from torchrl.objectives.common import add_random_module, LossModule
-from torchrl.objectives.utils import (
-    _vmap_func,
-    HardUpdate,
-    hold_out_net,
-    RANDOM_MODULE_LIST,
-    SoftUpdate,
-)
+from torchrl.objectives.utils import _vmap_func, HardUpdate, hold_out_net, SoftUpdate
 from torchrl.objectives.value.advantages import GAE, TD0Estimator
 from torchrl.objectives.value.functional import _transpose_time, reward2go
 from torchrl.objectives.value.utils import (
@@ -692,7 +687,9 @@ class TestUtils:
             ...
 
         add_random_module(MyMod)
-        assert MyMod in RANDOM_MODULE_LIST
+        # add_random_module rebinds torchrl.objectives.utils.RANDOM_MODULE_LIST
+        # to a new tuple, so the live attribute must be read each time.
+        assert MyMod in torchrl.objectives.utils.RANDOM_MODULE_LIST
 
     def test_standardization(self):
         t = torch.arange(3 * 4 * 5 * 6, dtype=torch.float32).view(3, 4, 5, 6)
