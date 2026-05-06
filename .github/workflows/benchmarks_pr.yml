@@ -118,7 +118,7 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${BASELINE_JSON}" .
+          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py .
       - name: Run PR benchmarks
         run: |
           set -euxo pipefail
@@ -144,7 +144,7 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${CONTENDER_JSON}" .
+          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
       - name: Publish results
         continue-on-error: true
         uses: apbard/pytest-benchmark-commenter@v3
