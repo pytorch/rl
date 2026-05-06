@@ -1054,6 +1054,54 @@ class TestLSTMModule:
 
         assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
 
+    @pytest.mark.parametrize("python_based", [False, True])
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    def test_recurrent_state_at_traj_end(self, python_based, num_layers):
+        # Regression test for https://github.com/pytorch/rl/issues/3711:
+        # in recurrent mode, when a batch contains trajectories of different
+        # lengths, the recurrent_state stored at the end of each trajectory
+        # must be the LSTM hidden state after consuming that trajectory's
+        # last real observation -- not the hidden state after consuming the
+        # padded tail.
+        torch.manual_seed(0)
+        B, T, F, H = 1, 5, 2, 4
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[0, 3] = True  # traj 1: steps 0..2, traj 2: steps 3..4
+        obs = torch.ones(B, T, F)
+        obs[0, 3:] = 2.0
+        data = TensorDict({"obs": obs, "is_init": is_init}, [B, T])
+        lstm_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=num_layers,
+            in_key="obs",
+            out_keys=[
+                "feat",
+                ("next", "recurrent_state_h"),
+                ("next", "recurrent_state_c"),
+            ],
+            python_based=python_based,
+        )
+        with set_recurrent_mode(True), torch.no_grad():
+            out = lstm_module(data)
+        with torch.no_grad():
+            _, (h1, c1) = lstm_module.lstm(obs[:, :3])
+            _, (h2, c2) = lstm_module.lstm(obs[:, 3:])
+        # Stored states have shape [B, T, num_layers, H]; expected per-layer
+        # final states have shape [num_layers, 1, H] (batch dim collapsed).
+        torch.testing.assert_close(
+            out["next", "recurrent_state_h"][0, 2], h1.squeeze(1)
+        )
+        torch.testing.assert_close(
+            out["next", "recurrent_state_c"][0, 2], c1.squeeze(1)
+        )
+        torch.testing.assert_close(
+            out["next", "recurrent_state_h"][0, 4], h2.squeeze(1)
+        )
+        torch.testing.assert_close(
+            out["next", "recurrent_state_c"][0, 4], c2.squeeze(1)
+        )
+
 
 class TestGRUModule:
     def test_errs(self):
@@ -1474,6 +1522,36 @@ class TestGRUModule:
                 return training_model(data)
 
         assert vmap(call, (None, 0))(data, params).shape == torch.Size((2, 50, 11))
+
+    @pytest.mark.parametrize("python_based", [False, True])
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    def test_recurrent_state_at_traj_end(self, python_based, num_layers):
+        # Regression test for https://github.com/pytorch/rl/issues/3711 (GRU
+        # twin): same fix as LSTM -- the hidden state at the end of each
+        # trajectory must reflect the trajectory's last real observation, not
+        # the padded tail.
+        torch.manual_seed(0)
+        B, T, F, H = 1, 5, 2, 4
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[0, 3] = True
+        obs = torch.ones(B, T, F)
+        obs[0, 3:] = 2.0
+        data = TensorDict({"obs": obs, "is_init": is_init}, [B, T])
+        gru_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=num_layers,
+            in_key="obs",
+            out_keys=["feat", ("next", "recurrent_state")],
+            python_based=python_based,
+        )
+        with set_recurrent_mode(True), torch.no_grad():
+            out = gru_module(data)
+        with torch.no_grad():
+            _, h1 = gru_module.gru(obs[:, :3])
+            _, h2 = gru_module.gru(obs[:, 3:])
+        torch.testing.assert_close(out["next", "recurrent_state"][0, 2], h1.squeeze(1))
+        torch.testing.assert_close(out["next", "recurrent_state"][0, 4], h2.squeeze(1))
 
 
 def test_safe_specs():

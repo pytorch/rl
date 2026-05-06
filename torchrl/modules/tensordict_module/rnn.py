@@ -20,6 +20,28 @@ from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
 
 
+def _place_at_traj_end(
+    h: torch.Tensor, splits: torch.Tensor, steps: int
+) -> torch.Tensor:
+    """Scatter per-trajectory hidden states onto a zero-padded time grid.
+
+    Given ``h`` of shape ``[N, *F]``, returns a tensor of shape
+    ``[N, steps, *F]`` whose row ``i`` is zero everywhere except at index
+    ``splits[i] - 1`` along dim 1, where it holds ``h[i]``. Out-of-place
+    ``scatter`` is used so the call is compatible with :func:`torch.vmap`.
+    """
+    h_padded = torch.zeros(
+        h.shape[0], steps, *h.shape[1:], device=h.device, dtype=h.dtype
+    )
+    idx = (
+        (splits - 1)
+        .long()
+        .view(-1, 1, *([1] * (h.dim() - 1)))
+        .expand_as(h.unsqueeze(1))
+    )
+    return h_padded.scatter(1, idx, h.unsqueeze(1))
+
+
 class LSTMCell(RNNCellBase):
     r"""A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
@@ -807,27 +829,57 @@ class LSTMModule(ModuleBase):
             _hidden1_in.transpose(-3, -2).contiguous(),
         )
 
-        y, hidden = self.lstm(input, hidden)
+        if splits is None:
+            y, hidden = self.lstm(input, hidden)
+        elif isinstance(self.lstm, nn.LSTM):
+            # Variable-length trajectories: pack so the LSTM does not consume
+            # padding zeros, and h_n/c_n reflect the state after the last real
+            # step of each trajectory rather than after the padded tail.
+            lengths = splits.detach().to(device="cpu", dtype=torch.long)
+            packed = nn.utils.rnn.pack_padded_sequence(
+                input, lengths, batch_first=True, enforce_sorted=False
+            )
+            packed_y, hidden = self.lstm(packed, hidden)
+            y, _ = nn.utils.rnn.pad_packed_sequence(
+                packed_y, batch_first=True, total_length=steps
+            )
+        else:
+            # python-based custom LSTM does not accept PackedSequence; fall back
+            # to a per-trajectory loop to keep h_n/c_n free of padding influence.
+            y_chunks, h_n_chunks, c_n_chunks = [], [], []
+            for i in range(batch):
+                length = int(splits[i].item())
+                x_i = input[i : i + 1, :length]
+                h_i = hidden[0][:, i : i + 1].contiguous()
+                c_i = hidden[1][:, i : i + 1].contiguous()
+                y_i, (h_n_i, c_n_i) = self.lstm(x_i, (h_i, c_i))
+                if length < steps:
+                    pad = torch.zeros(
+                        1,
+                        steps - length,
+                        y_i.shape[-1],
+                        device=device,
+                        dtype=y_i.dtype,
+                    )
+                    y_i = torch.cat([y_i, pad], dim=1)
+                y_chunks.append(y_i)
+                h_n_chunks.append(h_n_i)
+                c_n_chunks.append(c_n_i)
+            y = torch.cat(y_chunks, dim=0)
+            hidden = (
+                torch.cat(h_n_chunks, dim=1),
+                torch.cat(c_n_chunks, dim=1),
+            )
+
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = tuple(_h.transpose(0, 1) for _h in hidden)
 
         out = [y, *hidden]
-        # Place hidden states at the true end of each trajectory (splits[i]-1)
-        # so that _inv_pad_sequence (which keeps first splits[i] positions) retains them.
+        # Place hidden states so that _inv_pad_sequence (which keeps the first
+        # splits[i] positions of each row) retains them.
         for i in range(1, 3):
             if splits is not None:
-                # hidden[i] is [batch, num_layers, H] — place at splits[i]-1 per row
-                h = out[i]
-                h_padded = torch.zeros(
-                    batch, steps, *h.shape[1:], device=device, dtype=dtype
-                )
-                idx = (
-                    (splits - 1)
-                    .view(-1, 1, *([1] * (h.dim() - 1)))
-                    .expand_as(h.unsqueeze(1))
-                )
-                h_padded = h_padded.scatter(1, idx, h.unsqueeze(1))
-                out[i] = h_padded
+                out[i] = _place_at_traj_end(out[i], splits, steps)
             else:
                 out[i] = torch.stack(
                     [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
@@ -1549,13 +1601,10 @@ class GRUModule(ModuleBase):
         batch, steps = value.shape[:2]
         device = value.device
         dtype = value.dtype
-        # packed sequences do not help to get the accurate last hidden values
-        # if splits is not None:
-        #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if not self.recurrent_mode and is_init.any() and hidden is not None:
             is_init_expand = expand_as_right(is_init, hidden)
             hidden = torch.where(is_init_expand, 0, hidden)
-        val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
+        val, hidden = self._gru(value, batch, steps, device, dtype, hidden, splits)
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
@@ -1576,6 +1625,7 @@ class GRUModule(ModuleBase):
         device,
         dtype,
         hidden_in: torch.Tensor | None = None,
+        splits: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
@@ -1595,15 +1645,50 @@ class GRUModule(ModuleBase):
         _hidden_in = hidden_in[:, 0]
         hidden = _hidden_in.transpose(-3, -2).contiguous()
 
-        y, hidden = self.gru(input, hidden)
+        if splits is None:
+            y, hidden = self.gru(input, hidden)
+        elif isinstance(self.gru, nn.GRU):
+            # See _lstm for rationale.
+            lengths = splits.detach().to(device="cpu", dtype=torch.long)
+            packed = nn.utils.rnn.pack_padded_sequence(
+                input, lengths, batch_first=True, enforce_sorted=False
+            )
+            packed_y, hidden = self.gru(packed, hidden)
+            y, _ = nn.utils.rnn.pad_packed_sequence(
+                packed_y, batch_first=True, total_length=steps
+            )
+        else:
+            y_chunks, h_n_chunks = [], []
+            for i in range(batch):
+                length = int(splits[i].item())
+                x_i = input[i : i + 1, :length]
+                h_i = hidden[:, i : i + 1].contiguous()
+                y_i, h_n_i = self.gru(x_i, h_i)
+                if length < steps:
+                    pad = torch.zeros(
+                        1,
+                        steps - length,
+                        y_i.shape[-1],
+                        device=device,
+                        dtype=y_i.dtype,
+                    )
+                    y_i = torch.cat([y_i, pad], dim=1)
+                y_chunks.append(y_i)
+                h_n_chunks.append(h_n_i)
+            y = torch.cat(y_chunks, dim=0)
+            hidden = torch.cat(h_n_chunks, dim=1)
+
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = hidden.transpose(0, 1)
 
-        # we pad the hidden states with zero to make tensordict happy
-        hidden = torch.stack(
-            [torch.zeros_like(hidden) for _ in range(steps - 1)] + [hidden],
-            1,
-        )
+        if splits is not None:
+            hidden = _place_at_traj_end(hidden, splits, steps)
+        else:
+            # we pad the hidden states with zero to make tensordict happy
+            hidden = torch.stack(
+                [torch.zeros_like(hidden) for _ in range(steps - 1)] + [hidden],
+                1,
+            )
         out = [y, hidden]
         return tuple(out)
 
