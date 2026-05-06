@@ -21,6 +21,7 @@ from torchrl.envs import (
     Compose,
     EnvCreator,
     InitTracker,
+    ParallelEnv,
     SerialEnv,
     TensorDictPrimer,
     TransformedEnv,
@@ -58,7 +59,6 @@ from torchrl.modules.utils import get_primers_from_module
 from torchrl.objectives import DDPGLoss
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
-from torchrl.envs import InitTracker, ParallelEnv, TransformedEnv
 
 _has_functorch = False
 try:
@@ -894,7 +894,6 @@ class TestLSTMModule:
     def _test_lstm_parallel_env(
         self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
     ):
-
 
         torch.manual_seed(0)
         num_envs = 3

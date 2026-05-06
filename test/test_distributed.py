@@ -21,6 +21,7 @@ from functools import partial
 import pytest
 
 import torch
+import torch.distributed as dist
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
@@ -42,6 +43,7 @@ from torchrl.data import (
     RoundRobinWriter,
     SamplerWithoutReplacement,
 )
+from torchrl.envs import StepCounter, TransformedEnv
 from torchrl.modules import RandomPolicy
 from torchrl.testing.dist_utils import (
     assert_no_new_python_processes,
@@ -49,8 +51,6 @@ from torchrl.testing.dist_utils import (
 )
 
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv, CountingEnv
-import torch.distributed as dist
-from torchrl.envs import StepCounter, TransformedEnv
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -668,6 +668,7 @@ class TestRayCollector(DistributedCollectorBase):
     @pytest.fixture(autouse=True, scope="class")
     def start_ray(self):
         import ray
+
         # Ensure Ray is initialized with a runtime_env that lets workers import
         # this test module (e.g. `CountingPolicy`), otherwise actor unpickling can
         # fail with "No module named 'test_distributed'".

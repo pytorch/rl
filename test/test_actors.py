@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import warnings
 
 import pytest
 import torch
-from tensordict import TensorDict
+from tensordict import NonTensorData, TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
@@ -34,8 +35,6 @@ from torchrl.modules.tensordict_module.actors import (
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import NestedCountingEnv
-from tensordict import NonTensorData
-import warnings
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 

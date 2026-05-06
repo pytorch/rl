@@ -8,6 +8,7 @@ import argparse
 import gc
 import importlib.util
 import random
+import socket
 import time
 from abc import ABC, abstractmethod
 
@@ -16,7 +17,6 @@ import torch
 from torchrl._utils import _DTYPE_TO_STR_DTYPE, _STR_DTYPE_TO_DTYPE, logger
 from torchrl.modules.llm.backends import AsyncVLLM
 from torchrl.modules.llm.policies import vLLMWrapper
-import socket
 
 # Check for dependencies
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -66,7 +66,6 @@ else:
 if _has_vllm and _has_transformers:
     from torchrl.collectors.llm.weight_update.vllm_v2 import vLLMUpdaterV2
     from torchrl.modules.llm.backends import (
-        AsyncVLLM,
         LocalLLMWrapper,
         make_vllm_worker,
         RayLLMWorker,

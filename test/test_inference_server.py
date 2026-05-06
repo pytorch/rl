@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import multiprocessing as mp
 import threading
 import time
 
@@ -26,7 +27,6 @@ from torchrl.modules.inference_server import (
     ThreadingTransport,
 )
 from torchrl.modules.inference_server._monarch import MonarchTransport
-import multiprocessing as mp
 
 _has_ray = True
 try:
@@ -399,6 +399,7 @@ class TestMPTransport:
     @pytest.mark.slow
     def test_mp_exception_propagates(self):
         """Model exceptions propagate through MPTransport."""
+
         def bad_model(td):
             raise ValueError("mp model error")
 

@@ -12,10 +12,12 @@ import importlib.util
 import pytest
 import torch
 from torchrl._utils import logger
-from torchrl.weight_update.llm import SGLangWeightSyncScheme
-from torchrl.weight_update.llm import SGLangCollectiveTransport, SGLangWeightSyncScheme
-from torchrl.weight_update.llm import SGLangWeightSender, SGLangWeightSyncScheme
-from torchrl.weight_update.llm import get_sglang_model_metadata
+from torchrl.weight_update.llm import (
+    get_sglang_model_metadata,
+    SGLangCollectiveTransport,
+    SGLangWeightSender,
+    SGLangWeightSyncScheme,
+)
 
 # Check for dependencies
 _has_sglang = importlib.util.find_spec("sglang") is not None

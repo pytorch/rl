@@ -7,53 +7,58 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
+import subprocess
 import sys
 
 import pytest
 import torch
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
-from torchrl import logger as torchrl_logger
-
-from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
-from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
-from torchrl.modules.models.models import MLP
-from torchrl.envs.libs.vmas import VmasEnv
-from torchrl.data.replay_buffers.writers import RoundRobinWriter
-from torchrl.data.replay_buffers.samplers import RandomSampler
-from torchrl.data.replay_buffers.storages import TensorStorage
-from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-from torchrl.data.replay_buffers.storages import ListStorage
-from torchrl.data.replay_buffers.writers import RoundRobinWriter, WriterEnsemble
-from torchrl.data.replay_buffers.writers import TensorDictMaxValueWriter
-from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
-from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
-from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerEnsemble
-from torchrl.data.replay_buffers.samplers import PrioritizedSliceSampler
-from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
-from torchrl.data.replay_buffers.samplers import SliceSampler
-from torchrl.data.replay_buffers.samplers import PrioritizedSampler
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.replay_buffers.storages import LazyStackStorage
-from torchrl.data.replay_buffers.storages import ListStorage, StorageEnsemble
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.modules import ConvNet
-from tensordict.nn import TensorDictSequential
-from tensordict.nn import TensorDictModule
-from torchrl.modules import TanhModule
-from torchrl.modules import MLP, ValueOperator
-from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+from torchrl import logger as torchrl_logger, trainers as trainers_module
 from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
+
+from torchrl.data.replay_buffers.replay_buffers import (
+    ReplayBuffer,
+    TensorDictReplayBuffer,
+)
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    PrioritizedSliceSampler,
+    RandomSampler,
+    SamplerEnsemble,
+    SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.storages import (
+    LazyMemmapStorage,
+    LazyStackStorage,
+    LazyTensorStorage,
+    ListStorage,
+    StorageEnsemble,
+    TensorStorage,
+)
+from torchrl.data.replay_buffers.writers import (
+    ImmutableDatasetWriter,
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+    TensorDictRoundRobinWriter,
+    WriterEnsemble,
+)
+from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
+from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.modules import ConvNet, MLP, TanhModule, ValueOperator
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
-from torchrl.record.loggers import wandb as wandb_logger_module
-from torchrl.record.loggers.wandb import WandbLogger
-from torchrl.record.loggers import trackio as trackio_logger_module
+from torchrl.record.loggers import (
+    trackio as trackio_logger_module,
+    wandb as wandb_logger_module,
+)
 from torchrl.record.loggers.trackio import TrackioLogger
-from torchrl.trainers.trainers import CountFramesLog
-from torchrl import trainers as trainers_module
+from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.trainers import Trainer
-import subprocess
-import os
+from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
@@ -1668,6 +1673,7 @@ class TestTrainerConfigs:
     def test_hook_config(self):
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.hooks import CountFramesLogConfig
+
         cfg = CountFramesLogConfig(frame_skip=2, log_pbar=True)
         assert cfg._target_ == "torchrl.trainers.trainers.CountFramesLog"
         hook = instantiate(cfg)

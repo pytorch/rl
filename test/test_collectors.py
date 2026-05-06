@@ -14,6 +14,7 @@ import sys
 import time
 import traceback
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -52,6 +53,7 @@ from torchrl.collectors import (
     ProfileConfig,
     WeightUpdaterBase,
 )
+from torchrl.collectors._base import _ProfilerHook
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
 from torchrl.collectors.distributed.ray import _has_ray, RayCollector
@@ -130,8 +132,6 @@ from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
     SharedMemWeightSyncScheme,
 )
-from pathlib import Path
-from torchrl.collectors._base import _ProfilerHook
 
 # torch.set_default_dtype(torch.double)
 IS_WINDOWS = sys.platform == "win32"

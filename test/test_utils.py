@@ -17,14 +17,13 @@ import torch
 
 import torchrl.envs.libs.gym as _gym_lib
 from packaging import version
-from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
+from torchrl import _utils
+from torchrl._utils import _rng_decorator, as_remote, get_binary_env_var, implement_for
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
 from torchrl.objectives.utils import _pseudo_vmap
 
 from torchrl.testing import get_default_devices, gym_helpers as _gym_helpers
-from torchrl import _utils
-from torchrl._utils import as_remote
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
@@ -580,7 +579,6 @@ class TestProfilingDecorator:
         monkeypatch.setitem(sys.modules, "ray", ray_mock)
         monkeypatch.setenv("TORCHRL_PROFILING", "1")
 
-
         class Dummy:
             pass
 
@@ -600,7 +598,6 @@ class TestProfilingDecorator:
         ray_mock.remote = fake_remote
         monkeypatch.setitem(sys.modules, "ray", ray_mock)
         monkeypatch.delenv("TORCHRL_PROFILING", raising=False)
-
 
         class Dummy:
             pass

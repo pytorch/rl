@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import builtins
+
 import functools
 import gc
 import importlib.util
@@ -12,6 +14,7 @@ from contextlib import nullcontext
 import numpy as np
 import pytest
 import torch
+import torchrl.envs.libs.utils
 from packaging import version
 from tensordict import assert_allclose_td, TensorDict
 
@@ -54,8 +57,6 @@ from torchrl.testing import (
     PONG_VERSIONED,
     rollout_consistency_assertion,
 )
-import torchrl.envs.libs.utils
-import builtins
 
 _has_gym_super_mario_bros = importlib.util.find_spec("gym_super_mario_bros") is not None
 _has_mo_gymnasium = importlib.util.find_spec("mo_gymnasium") is not None

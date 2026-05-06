@@ -14,12 +14,15 @@ import time
 from functools import partial
 
 import pytest
+import tensordict
 import torch
 
 from tensordict import lazy_stack, set_list_to_stack, TensorDict
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.collectors.llm.base import LLMCollector
 from torchrl.data.llm.history import History
+from torchrl.envs import AsyncEnvPool
 from torchrl.envs.llm import (
     ChatEnv,
     GSM8KEnv,
@@ -27,21 +30,19 @@ from torchrl.envs.llm import (
     make_gsm8k_env,
     RetrieveKL,
 )
+from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
+from torchrl.envs.llm.reward.countdown import CountdownRewardParser
+from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
+from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
+from torchrl.envs.llm.reward.math import MATHRewardParser
+from torchrl.envs.llm.transforms import (
+    AddThinkingPrompt,
+    MCPToolTransform,
+    PythonInterpreter,
+)
+from torchrl.envs.llm.transforms.tools import SimpleToolTransform
 
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
-import tensordict
-from torchrl.envs.llm.reward.gsm8k import GSM8KRewardParser
-from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
-from torchrl.envs.llm.reward.math import MATHRewardParser
-from torchrl.envs.llm.reward.countdown import CountdownRewardParser
-from torchrl.envs.llm.reward.ifeval._scorer import IFEvalScoreData, IfEvalScorer
-from torchrl.envs.llm.transforms import PythonInterpreter
-from torchrl.envs.llm.transforms.tools import SimpleToolTransform
-from torchrl.envs import AsyncEnvPool
-from torchrl.envs.llm.transforms import MCPToolTransform
-from torchrl.envs.llm.transforms import AddThinkingPrompt
-from torchrl.envs.llm import IFEvalEnv
-from torchrl.collectors.llm.base import LLMCollector
 
 _has_ray = importlib.util.find_spec("ray") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -1316,6 +1317,7 @@ class TestChatEnvIntegration:
     def test_chat_env_integration_ifeval(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
+
         envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
         policy = vLLMWrapper(
@@ -1368,6 +1370,7 @@ class TestChatEnvIntegration:
     def test_chat_env_integration_gsm8k(self, compute_reward, pad_output, input_mode):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
+
         envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
         policy = vLLMWrapper(
@@ -1420,6 +1423,7 @@ class TestChatEnvIntegration:
     ):
         """Test that the wrapper works correctly with the ChatEnv."""
         import vllm.envs as envs
+
         envs.VLLM_HOST_IP = "0.0.0.0" or "127.0.0.1"
 
         vllm_model, vllm_tokenizer = vllm_instance

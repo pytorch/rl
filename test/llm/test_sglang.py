@@ -7,19 +7,16 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import time
 
 import pytest
 import torch
 from tensordict import set_list_to_stack, TensorDict
-from torchrl.data.llm import History
-import time
-from torchrl.modules.llm.backends import AsyncSGLang
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data.llm import History
 from torchrl.modules.llm.backends import AsyncSGLang, RLSGLangEngine
 from torchrl.modules.llm.policies import SGLangWrapper
-from torchrl.modules.llm.policies.common import ChatHistory
-from torchrl.modules.llm.policies.common import Text
-from torchrl.modules.llm.policies.common import Tokens
+from torchrl.modules.llm.policies.common import ChatHistory, Text, Tokens
 
 _has_sglang = importlib.util.find_spec("sglang") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
@@ -66,8 +63,6 @@ def sglang_service():
         pytest.skip("sglang not available")
     if not torch.cuda.is_available():
         pytest.skip("CUDA not available")
-
-
 
     start_time = time.time()
     service = AsyncSGLang.from_pretrained(

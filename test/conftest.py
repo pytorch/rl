@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import functools
+
+import importlib.util
 import os
 import random
 import sys
@@ -16,10 +18,10 @@ import numpy as np
 
 import pytest
 import torch
-from torchrl.envs import ParallelEnv
-from torchrl.testing import MockTransformerModel
-import importlib.util
 
+# Note: torchrl is imported lazily inside fixtures because this conftest must
+# load even when torchrl is not installed (see test/test_setup.py and the
+# test-setup-minimal CI job).
 _has_transformers = importlib.util.find_spec("transformers") is not None
 
 CALL_TIMES = defaultdict(float)
@@ -170,6 +172,8 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 def maybe_fork_ParallelEnv(request):
+    from torchrl.envs import ParallelEnv
+
     if not IS_OSX and (
         request.config.getoption("--mp_fork")
         or (
@@ -185,6 +189,8 @@ def maybe_fork_ParallelEnv(request):
 @pytest.fixture
 def mock_transformer_model():
     """Fixture that provides a mock transformer model factory."""
+    from torchrl.testing import MockTransformerModel
+
     def _make_model(
         vocab_size: int = 1024, device: torch.device | str | int = "cpu"
     ) -> MockTransformerModel:

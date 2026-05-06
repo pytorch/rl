@@ -18,7 +18,7 @@ from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
-from torchrl.record.loggers.common import _has_torchcodec, _has_tv
+from torchrl.record.loggers.common import _has_torchcodec, _has_tv, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.ray import RayLogger
@@ -27,7 +27,6 @@ from torchrl.record.loggers.trackio import _has_trackio, TrackioLogger
 from torchrl.record.loggers.utils import get_logger
 from torchrl.record.loggers.wandb import _has_moviepy, _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
-from torchrl.record.loggers.common import Logger
 
 if _has_tv:
     import torchvision

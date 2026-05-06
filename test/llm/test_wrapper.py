@@ -17,10 +17,12 @@ import pytest
 import torch
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
+from torchrl import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
+from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
@@ -35,8 +37,6 @@ from torchrl.modules.llm.policies.vllm_wrapper import (
     _RequestOutput_tc,
     vLLMWrapper,
 )
-from torchrl import logger as torchrl_logger
-from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -3102,6 +3102,7 @@ class TestActorSharing:
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
+
         # Initialize Ray if not already done
         if not ray.is_initialized():
             ray.init()

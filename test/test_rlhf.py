@@ -8,6 +8,7 @@ import argparse
 import zipfile
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -21,6 +22,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModule
+from torchrl._utils import print_directory_tree
 from torchrl.data.llm import TensorDictTokenizer
 from torchrl.data.llm.dataset import (
     _has_datasets,
@@ -34,8 +36,6 @@ from torchrl.data.llm.utils import RolloutFromModel
 from torchrl.modules.models.llm import GPT2RewardModel
 
 from torchrl.testing import get_default_devices
-from torchrl._utils import print_directory_tree
-from types import SimpleNamespace
 
 HERE = Path(__file__).parent
 

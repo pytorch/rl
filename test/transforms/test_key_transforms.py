@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import random
+
 from functools import partial
 
 import numpy as np
@@ -59,7 +61,6 @@ from torchrl.testing.mocking_classes import (
     CountingEnvWithString,
     NestedCountingEnv,
 )
-import random
 
 
 class TestExcludeTransform(TransformBase):

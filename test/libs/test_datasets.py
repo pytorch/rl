@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import time
+import warnings
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -26,16 +27,20 @@ from torchrl.data.datasets.openx import OpenXExperienceReplay
 from torchrl.data.datasets.roboset import RobosetExperienceReplay
 from torchrl.data.datasets.vd4rl import VD4RLExperienceReplay
 from torchrl.data.utils import CloudpickleWrapper
-from torchrl.envs import Compose, DoubleToFloat, RenameTransform
+from torchrl.envs import (
+    CatTensors,
+    Compose,
+    DoubleToFloat,
+    GrayScale,
+    RenameTransform,
+    Resize,
+    ToTensorImage,
+    UnsqueezeTransform,
+)
 from torchrl.envs.libs.gym import GymWrapper, set_gym_backend
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.testing import retry
-from torchrl.envs import Compose, GrayScale, Resize
-from torchrl.envs import CatTensors, Compose
-import warnings
-from torchrl.envs import Compose, GrayScale, ToTensorImage
-from torchrl.envs import Compose, RenameTransform, Resize, UnsqueezeTransform
 
 _has_ale_py = importlib.util.find_spec("ale_py") is not None
 _has_gymnasium_robotics = importlib.util.find_spec("gymnasium_robotics") is not None
@@ -611,7 +616,6 @@ class TestMinari:
             split_trajs=False,
             download="force",
         )
-
 
         t = Compose(
             CatTensors(

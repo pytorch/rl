@@ -11,6 +11,7 @@ import torch
 
 from _transforms_common import _has_ale, TransformBase
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 from tensordict.utils import assert_allclose_td
 from torch import nn, Tensor
 from torchrl._utils import prod
@@ -45,6 +46,7 @@ from torchrl.envs.utils import check_env_specs, step_mdp
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -61,8 +63,6 @@ from torchrl.testing.mocking_classes import (
     DiscreteActionConvMockEnvNumpy,
     NestedCountingEnv,
 )
-from torchrl.testing import CARTPOLE_VERSIONED
-from tensordict.nn import TensorDictModule
 
 
 class TestCatFrames(TransformBase):

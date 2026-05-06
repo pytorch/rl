@@ -11,9 +11,13 @@ from unittest import mock
 
 import pytest
 import torch
-from tensordict import is_tensor_collection, LazyStackedTensorDict
+import torch.nn as nn
+from tensordict import is_tensor_collection, LazyStackedTensorDict, TensorDict
+from tensordict.nn import TensorDictModule
 
 from torchrl._utils import logger as torchrl_logger
+from torchrl.collectors.distributed import RayEvalWorker
+from torchrl.envs import GymEnv, StepCounter, TransformedEnv
 from torchrl.envs.libs.gym import set_gym_backend
 from torchrl.envs.libs.openspiel import _has_pyspiel, OpenSpielEnv, OpenSpielWrapper
 from torchrl.envs.libs.procgen import ProcgenEnv, ProcgenWrapper
@@ -25,11 +29,6 @@ from torchrl.envs.libs.unity_mlagents import (
 )
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType
 from torchrl.testing import retry
-import torch.nn as nn
-from tensordict import TensorDict
-from tensordict.nn import TensorDictModule
-from torchrl.collectors.distributed import RayEvalWorker
-from torchrl.envs import GymEnv, StepCounter, TransformedEnv
 
 _has_mlagents_envs = importlib.util.find_spec("mlagents_envs") is not None
 
@@ -364,6 +363,7 @@ class TestRayEvalWorker:
 
     def test_ray_eval_worker_basic(self):
         """Test submit/poll cycle with a simple environment."""
+
         def make_env():
             return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))
 
@@ -401,6 +401,7 @@ class TestRayEvalWorker:
 
     def test_ray_eval_worker_from_name(self):
         """Test that from_name can reconnect to a named actor."""
+
         def make_env():
             return TransformedEnv(GymEnv("Pendulum-v1"), StepCounter(10))
 

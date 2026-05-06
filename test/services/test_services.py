@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 
 # Import from mocking_classes which is a proper module
 import sys
@@ -14,7 +15,6 @@ from pathlib import Path
 import pytest
 
 from torchrl._utils import logger
-import os
 
 _has_ray = importlib.util.find_spec("ray") is not None
 

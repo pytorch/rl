@@ -28,6 +28,8 @@ from tensordict.nn import WrapModule
 from torch import nn
 
 from torchrl.data import (
+    Binary,
+    Categorical,
     Composite,
     LazyTensorStorage,
     NonTensor,
@@ -43,6 +45,7 @@ from torchrl.envs import (
     ConditionalSkip,
     DiscreteActionProjection,
     EnvBase,
+    GymWrapper,
     MultiAction,
     ParallelEnv,
     SerialEnv,
@@ -74,9 +77,6 @@ from torchrl.testing.mocking_classes import (
     EnvWithScalarAction,
     StateLessCountingEnv,
 )
-from torchrl.data import Binary, Categorical
-from torchrl.envs import GymWrapper, TransformedEnv
-from torchrl.envs.transforms import ActionMask
 
 
 class TestActionMask(TransformBase):

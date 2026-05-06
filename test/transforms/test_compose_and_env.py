@@ -74,6 +74,7 @@ from torchrl.modules.utils import get_primers_from_module
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -89,7 +90,6 @@ from torchrl.testing.mocking_classes import (
     MockBatchedUnLockedEnv,
     MultiKeyCountingEnv,
 )
-from torchrl.testing import CARTPOLE_VERSIONED
 
 
 def test_added_transforms_are_in_eval_mode_trivial():

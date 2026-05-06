@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import importlib.util
 
 import time
@@ -21,7 +22,6 @@ from torchrl.envs.llm.chat import ChatEnv
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.backends import make_vllm_worker
 from torchrl.testing import DummyStrDataLoader
-import gc
 from torchrl.testing.mocking_classes import CountingEnv
 
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -489,6 +489,7 @@ class TestAsyncEnvPoolSpecs:
 
     def test_async_env_pool_with_unbatched_child_envs(self):
         """Test AsyncEnvPool with child envs that have batch_size=()."""
+
         def env_maker():
             return CountingEnv()
 

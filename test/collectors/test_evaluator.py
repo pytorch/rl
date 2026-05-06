@@ -17,10 +17,9 @@ from torchrl.collectors import Evaluator
 from torchrl.collectors._evaluator import _freeze_vecnorm, _wrap_env_factory_frozen
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.transforms import RewardSum, StepCounter, VecNormV2
+from torchrl.envs.transforms import Compose, RewardSum, StepCounter, VecNormV2
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
-from torchrl.envs.transforms import Compose
 
 
 def _make_env():

@@ -48,6 +48,7 @@ from torchrl.envs.utils import check_env_specs
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -63,7 +64,6 @@ from torchrl.testing.mocking_classes import (
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
 )
-from torchrl.testing import CARTPOLE_VERSIONED
 
 
 class TestBinarizeReward(TransformBase):

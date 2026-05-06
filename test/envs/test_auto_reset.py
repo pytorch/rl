@@ -23,8 +23,9 @@ from tensordict import (
 )
 
 from torchrl import set_auto_unwrap_transformed_env
+from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
 from torchrl.data.tensor_specs import NonTensor
-from torchrl.envs import CatFrames, ParallelEnv, SerialEnv
+from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import (
@@ -45,8 +46,6 @@ from torchrl.testing.mocking_classes import (
     EnvWithTensorClass,
     Str2StrEnv,
 )
-from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
-from torchrl.envs import TrajCounter
 
 
 class TestAutoReset:

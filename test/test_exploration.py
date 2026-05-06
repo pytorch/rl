@@ -15,16 +15,22 @@ import torch
 from scipy.stats import ttest_1samp
 from tensordict import TensorDict
 
-from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
+from tensordict.nn import (
+    InteractionType,
+    TensorDictModule,
+    TensorDictModule as Mod,
+    TensorDictSequential,
+    TensorDictSequential as Seq,
+)
 from torch import nn
 from torchrl._utils import _replace_last
 
 from torchrl.collectors import Collector
 from torchrl.data import Bounded, Categorical, Composite, OneHot
-from torchrl.envs import SerialEnv
+from torchrl.envs import SerialEnv, StepCounter
 from torchrl.envs.transforms.transforms import gSDENoise, InitTracker, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import SafeModule, SafeSequential
+from torchrl.modules import get_primers_from_module, SafeModule, SafeSequential
 from torchrl.modules.distributions import (
     IndependentNormal,
     NormalParamExtractor,
@@ -47,6 +53,7 @@ from torchrl.modules.tensordict_module.exploration import (
     EGreedyModule,
     EGreedyWrapper,
     OrnsteinUhlenbeckProcessModule,
+    set_exploration_modules_spec_from_env,
 )
 
 from torchrl.testing import get_default_devices
@@ -55,10 +62,6 @@ from torchrl.testing.mocking_classes import (
     CountingEnvCountModule,
     NestedCountingEnv,
 )
-from torchrl.modules.tensordict_module.exploration import set_exploration_modules_spec_from_env
-from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-from torchrl.envs import SerialEnv, StepCounter
-from torchrl.modules import ConsistentDropoutModule, get_primers_from_module
 
 
 class TestEGreedy:

@@ -9,14 +9,16 @@ from functools import partial
 import pytest
 
 import torch
+import torch.distributed as dist
 
 from _transforms_common import _has_ray, TransformBase
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torch import nn
-from torchrl import logger as torchrl_logger
+from torchrl import logger as torchrl_logger, merge_ray_runtime_env
 
 from torchrl.collectors import Collector
+from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
 from torchrl.data import ReplayBuffer
 from torchrl.envs import Compose, SerialEnv, TransformedEnv
 from torchrl.envs.transforms import ModuleTransform
@@ -36,9 +38,6 @@ from torchrl.testing import (  # noqa
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.testing.modules import BiasModule
 from torchrl.weight_update import RayModuleTransformScheme
-from torchrl import merge_ray_runtime_env
-from torchrl.collectors.distributed.ray import DEFAULT_RAY_INIT_CONFIG
-import torch.distributed as dist
 
 
 class TestModuleTransform(TransformBase):
@@ -170,6 +169,7 @@ class TestRayModuleTransform:
     @pytest.fixture(autouse=True, scope="function")
     def start_ray(self):
         import ray
+
         if ray.is_initialized():
             ray.shutdown()
 

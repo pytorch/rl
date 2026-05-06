@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import gc
+import importlib.util
 import os
 
 import numpy as np
@@ -14,12 +15,15 @@ from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.envs import SerialEnv
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
+from torchrl.envs.libs.jax_utils import (
+    _ndarray_to_tensor,
+    _tensor_to_ndarray,
+    _tree_flatten,
+)
 from torchrl.envs.utils import check_env_specs
 from torchrl.testing import get_available_devices
-from torchrl.envs.libs.jax_utils import _ndarray_to_tensor, _tensor_to_ndarray, _tree_flatten
-from torchrl.envs.batched_envs import ParallelEnv
-import importlib.util
 
 _has_jax = importlib.util.find_spec("jax") is not None
 _has_psutil = importlib.util.find_spec("psutil") is not None
@@ -120,6 +124,7 @@ class TestBrax:
     def test_brax_consistency(self, envname, batch_size, requires_grad, device):
         import jax
         import jax.numpy as jnp
+
         env = BraxEnv(
             envname, batch_size=batch_size, requires_grad=requires_grad, device=device
         )

@@ -7,13 +7,16 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+import gc
 import importlib
 import os
 import pickle
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
+import time
 from functools import partial
 from pathlib import Path
 from unittest import mock
@@ -36,7 +39,7 @@ from tensordict import (
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
-from torchrl._utils import _replace_last, logger as torchrl_logger
+from torchrl._utils import _replace_last, logger as torchrl_logger, rl_warnings
 from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -62,6 +65,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StalenessAwareSampler,
 )
 from torchrl.data.replay_buffers.scheduler import (
     LinearScheduler,
@@ -70,6 +74,7 @@ from torchrl.data.replay_buffers.scheduler import (
 )
 
 from torchrl.data.replay_buffers.storages import (
+    _MEMMAP_STORAGE_REGISTRY,
     LazyMemmapStorage,
     LazyStackStorage,
     LazyTensorStorage,
@@ -118,12 +123,6 @@ from torchrl.testing import (
     make_tc,
 )
 from torchrl.testing.mocking_classes import CountingEnv
-from torchrl._utils import rl_warnings
-from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
-import subprocess
-import time
-import gc
 
 OLD_TORCH = parse(torch.__version__) < parse("2.0.0")
 _has_tv = importlib.util.find_spec("torchvision") is not None

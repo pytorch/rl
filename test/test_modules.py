@@ -55,6 +55,7 @@ from torchrl.modules.models.model_based import (
     RSSMRollout,
 )
 from torchrl.modules.models.multiagent import MultiAgentNetBase
+from torchrl.modules.models.recipes.impala import _ConvNetBlock
 from torchrl.modules.models.utils import SquashDims
 from torchrl.modules.planners.mppi import MPPIPlanner
 from torchrl.objectives.value import TDLambdaEstimator
@@ -62,7 +63,6 @@ from torchrl.objectives.value import TDLambdaEstimator
 from torchrl.testing import get_default_devices, retry
 
 from torchrl.testing.mocking_classes import MockBatchedUnLockedEnv
-from torchrl.modules.models.recipes.impala import _ConvNetBlock
 
 
 @pytest.fixture

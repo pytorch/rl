@@ -11,6 +11,7 @@ import torch
 
 from _transforms_common import _has_ale, _has_gymnasium, TransformBase
 from tensordict import TensorDict, TensorDictBase
+from tensordict.nn import TensorDictModule
 from torch import nn
 
 from torchrl.collectors import MultiSyncCollector
@@ -48,9 +49,12 @@ from torchrl.envs.libs.gym import _has_gym, GymEnv, set_gym_backend
 from torchrl.envs.transforms.transforms import FORWARD_NOT_IMPLEMENTED
 from torchrl.envs.utils import check_env_specs, step_mdp
 from torchrl.modules import GRUModule, LSTMModule
+from torchrl.objectives import DQNLoss
+from torchrl.objectives.value import GAE
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -69,10 +73,6 @@ from torchrl.testing.mocking_classes import (
     MultiAgentCountingEnv,
     NestedCountingEnv,
 )
-from torchrl.testing import CARTPOLE_VERSIONED
-from tensordict.nn import TensorDictModule
-from torchrl.objectives import DQNLoss
-from torchrl.objectives.value import GAE
 
 
 class TestStepCounter(TransformBase):

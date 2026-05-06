@@ -36,9 +36,14 @@ from torchrl.modules.tensordict_module.actors import (
     ValueOperator,
 )
 from torchrl.objectives import ClipPPOLoss, DQNLoss, PPOLoss, SACLoss
-from torchrl.objectives.utils import RANDOM_MODULE_LIST
 from torchrl.objectives.common import add_random_module, LossModule
-from torchrl.objectives.utils import _vmap_func, HardUpdate, hold_out_net, SoftUpdate
+from torchrl.objectives.utils import (
+    _vmap_func,
+    HardUpdate,
+    hold_out_net,
+    RANDOM_MODULE_LIST,
+    SoftUpdate,
+)
 from torchrl.objectives.value.advantages import GAE, TD0Estimator
 from torchrl.objectives.value.functional import _transpose_time, reward2go
 from torchrl.objectives.value.utils import (

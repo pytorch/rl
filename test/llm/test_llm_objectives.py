@@ -9,11 +9,13 @@ import importlib.util
 
 import numpy as np
 import pytest
+import tensordict
 import torch
 
-from tensordict import lazy_stack, TensorDict
+from tensordict import lazy_stack, MetaData, TensorDict
 from torchrl._utils import logger
 from torchrl.data import History, LazyStackStorage, ReplayBuffer
+from torchrl.data.llm.history import _CHAT_TEMPLATES
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
@@ -25,9 +27,6 @@ from torchrl.objectives.llm.grpo import (
     MCAdvantage,
 )
 from torchrl.objectives.llm.sft import SFTLoss
-import tensordict
-from tensordict import MetaData
-from torchrl.data.llm.history import _CHAT_TEMPLATES
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None

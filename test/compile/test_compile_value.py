@@ -9,6 +9,9 @@ import sys
 
 import pytest
 import torch
+from tensordict.nn import TensorDictModule
+from torch import nn
+from torchrl.objectives.value.advantages import TDLambdaEstimator
 
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -16,9 +19,6 @@ from torchrl.objectives.value.functional import (
     vec_generalized_advantage_estimate,
     vec_td_lambda_return_estimate,
 )
-from tensordict.nn import TensorDictModule
-from torch import nn
-from torchrl.objectives.value.advantages import TDLambdaEstimator
 
 IS_WINDOWS = sys.platform == "win32"
 

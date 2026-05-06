@@ -8,8 +8,8 @@ import importlib.util
 
 import pytest
 import torch
-from torchrl.modules.llm.backends import AsyncVLLM
 from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.modules.llm.backends import AsyncVLLM
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 
 _has_vllm = importlib.util.find_spec("vllm") is not None

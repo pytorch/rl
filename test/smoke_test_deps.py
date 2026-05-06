@@ -5,15 +5,15 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 import tempfile
 
 import pytest
+from torch.utils.tensorboard import SummaryWriter
 from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.testing import PONG_VERSIONED
-from torch.utils.tensorboard import SummaryWriter
-import importlib.util
 
 _has_ale_py = importlib.util.find_spec("ale_py") is not None
 _has_dm_control = importlib.util.find_spec("dm_control") is not None
@@ -30,6 +30,7 @@ def test_dm_control():
     import dm_env  # noqa: F401
     from dm_control import suite  # noqa: F401
     from dm_control.suite.wrappers import pixels  # noqa: F401
+
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
     env.reset()
@@ -60,7 +61,6 @@ def test_gym():
             raise ImportError(
                 f"gym and gymnasium load failed. Gym got error {err}."
             ) from ERROR
-
 
     assert _has_gym
     # If gymnasium is installed without the atari extra, ALE won't be registered.

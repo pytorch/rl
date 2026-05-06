@@ -9,7 +9,6 @@ import os
 
 import pytest
 import torch
-from torch import multiprocessing as mp
 
 from _envs_common import _has_gym, IS_OSX, IS_WIN, mp_ctx
 from tensordict import (
@@ -19,7 +18,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.nn import TensorDictModuleBase
-from torch import nn
+from torch import multiprocessing as mp, nn
 
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import Collector, MultiSyncCollector
@@ -54,7 +53,6 @@ from torchrl.testing.mocking_classes import (
     MockBatchedLockedEnv,
     NestedCountingEnv,
 )
-from torch import multiprocessing as mp
 
 
 class TestParallel:

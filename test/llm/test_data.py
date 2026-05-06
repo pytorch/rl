@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import re
+import uuid
 from collections.abc import Mapping
 
 import pytest
@@ -25,12 +27,10 @@ from torchrl.data.llm.history import (
     _CHAT_TEMPLATES,
     _CUSTOM_INVERSE_PARSERS,
     _CUSTOM_MODEL_FAMILY_KEYWORDS,
+    add_chat_template,
     ContentBase,
 )
 from torchrl.data.llm.topk import TopKRewardSelector
-import re
-import uuid
-from torchrl.data.llm.history import add_chat_template, History
 from torchrl.modules.llm.policies.common import _extract_responses_from_full_histories
 
 _has_transformers = importlib.util.find_spec("transformers")
