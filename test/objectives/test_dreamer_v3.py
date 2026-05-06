@@ -523,8 +523,18 @@ class TestDreamerV3(LossModuleTestBase):  # type: ignore[misc]
             state_grid.sum(-1), torch.ones(B, self.num_cats, device=device), atol=1e-5
         )
 
-        # Straight-through: gradients must flow back through logits to belief/obs
-        state.sum().backward()
+        # Straight-through: gradients must flow back through logits to belief/obs.
+        # NOTE: ``state.sum()`` is mathematically constant w.r.t. the logits — every
+        # row of the softmax inside the STE sums to 1, so any sum-reduction over
+        # the full ``state`` has zero gradient through softmax (uniform incoming
+        # gradient cancels exactly in the softmax Jacobian). Whether the resulting
+        # belief/obs grads are exactly 0.0 or a tiny float-roundoff residue depends
+        # on the runtime — leading to flakiness across Python/torch versions.
+        # Use random per-element weights so the gradient signal through softmax
+        # is non-degenerate.
+        torch.manual_seed(0)
+        weights = torch.randn_like(state)
+        (state * weights).sum().backward()
         assert belief.grad is not None and belief.grad.abs().sum() > 0
         assert obs_embed.grad is not None and obs_embed.grad.abs().sum() > 0
 
