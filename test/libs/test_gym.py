@@ -4,8 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import builtins
-
 import functools
 import gc
 import importlib.util
@@ -14,7 +12,6 @@ from contextlib import nullcontext
 import numpy as np
 import pytest
 import torch
-import torchrl.envs.libs.utils
 from packaging import version
 from tensordict import assert_allclose_td, TensorDict
 
@@ -1830,6 +1827,10 @@ class TestGym:
 
     def test_is_from_pixels_wrapper_env(self):
         """Test that _is_from_pixels correctly identifies wrapped environments."""
+        import builtins
+
+        import torchrl.envs.libs.utils
+
         # Test with a mock environment that simulates being wrapped with a pixel wrapper
         class MockWrappedEnv:
             def __init__(self):
