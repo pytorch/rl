@@ -745,7 +745,7 @@ class LSTMModule(ModuleBase):
         dtype = value.dtype
 
         val, hidden0, hidden1 = self._lstm(
-            value, batch, steps, device, dtype, hidden0, hidden1
+            value, batch, steps, device, dtype, hidden0, hidden1, splits,
         )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden0)
@@ -769,6 +769,7 @@ class LSTMModule(ModuleBase):
         dtype,
         hidden0_in: torch.Tensor | None = None,
         hidden1_in: torch.Tensor | None = None,
+        splits=None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
@@ -804,12 +805,21 @@ class LSTMModule(ModuleBase):
         hidden = tuple(_h.transpose(0, 1) for _h in hidden)
 
         out = [y, *hidden]
-        # we pad the hidden states with zero to make tensordict happy
+        # Place hidden states at the true end of each trajectory (splits[i]-1)
+        # so that _inv_pad_sequence (which keeps first splits[i] positions) retains them.
         for i in range(1, 3):
-            out[i] = torch.stack(
-                [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
-                1,
-            )
+            if splits is not None:
+                # hidden[i] is [batch, num_layers, H] — place at splits[i]-1 per row
+                h = out[i]
+                h_padded = torch.zeros(batch, steps, *h.shape[1:], device=device, dtype=dtype)
+                batch_idx = torch.arange(batch, device=device)
+                h_padded[batch_idx, splits - 1] = h
+                out[i] = h_padded
+            else:
+                out[i] = torch.stack(
+                    [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
+                    1,
+                )
         return tuple(out)
 
 
