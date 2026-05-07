@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+
 import json
 
 import pytest
@@ -21,6 +23,8 @@ from torchrl.envs.llm.transforms import (
     XMLBlockParser,
 )
 from torchrl.envs.transforms import TransformedEnv
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 
 @pytest.fixture(scope="module")

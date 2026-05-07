@@ -20,6 +20,28 @@ from torchrl._utils import _ContextManager, _DecoratorContextManager
 from torchrl.data.tensor_specs import Unbounded
 
 
+def _place_at_traj_end(
+    h: torch.Tensor, splits: torch.Tensor, steps: int
+) -> torch.Tensor:
+    """Scatter per-trajectory hidden states onto a zero-padded time grid.
+
+    Given ``h`` of shape ``[N, *F]``, returns a tensor of shape
+    ``[N, steps, *F]`` whose row ``i`` is zero everywhere except at index
+    ``splits[i] - 1`` along dim 1, where it holds ``h[i]``. Out-of-place
+    ``scatter`` is used so the call is compatible with :func:`torch.vmap`.
+    """
+    h_padded = torch.zeros(
+        h.shape[0], steps, *h.shape[1:], device=h.device, dtype=h.dtype
+    )
+    idx = (
+        (splits - 1)
+        .long()
+        .view(-1, 1, *([1] * (h.dim() - 1)))
+        .expand_as(h.unsqueeze(1))
+    )
+    return h_padded.scatter(1, idx, h.unsqueeze(1))
+
+
 class LSTMCell(RNNCellBase):
     r"""A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.
 
@@ -178,6 +200,8 @@ class LSTM(LSTMBase):
 
     __doc__ += nn.LSTM.__doc__
 
+    use_scan: bool = False
+
     def __init__(
         self,
         input_size: int,
@@ -190,6 +214,7 @@ class LSTM(LSTMBase):
         proj_size: int = 0,
         device=None,
         dtype=None,
+        use_scan: bool = False,
     ) -> None:
 
         if bidirectional is True:
@@ -209,6 +234,11 @@ class LSTM(LSTMBase):
             device=device,
             dtype=dtype,
         )
+        # Opt-in prototype: replace the python time loop with
+        # ``torch._higher_order_ops.scan``. Requires :func:`torch.compile`
+        # to capture the scan; eager use will fail. Dropout is not supported
+        # on this path. See :meth:`_lstm_scan`.
+        self.use_scan = use_scan
 
     @staticmethod
     def _lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -228,7 +258,10 @@ class LSTM(LSTMBase):
 
         return hy, cy
 
-    def _lstm(self, x, hx):
+    def _lstm(self, x, hx, mask=None):
+
+        if self.use_scan:
+            return self._lstm_scan(x, hx, mask)
 
         h_t, c_t = hx
         h_t, c_t = h_t.unbind(0), c_t.unbind(0)
@@ -250,9 +283,15 @@ class LSTM(LSTMBase):
                 bias_ihs.append(None)
                 bias_hhs.append(None)
 
-        for x_t in x.unbind(int(self.batch_first)):
+        time_dim = int(self.batch_first)
+        x_unbound = x.unbind(time_dim)
+        if mask is not None:
+            mask_unbound = mask.unbind(time_dim)
+
+        for t, x_t in enumerate(x_unbound):
             h_t_out = []
             c_t_out = []
+            m_t = mask_unbound[t].unsqueeze(-1) if mask is not None else None
 
             for layer, (
                 weight_ih,
@@ -263,26 +302,98 @@ class LSTM(LSTMBase):
                 _c_t,
             ) in enumerate(zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs, h_t, c_t)):
                 # Run cell
-                _h_t, _c_t = self._lstm_cell(
+                h_new, c_new = self._lstm_cell(
                     x_t, _h_t, _c_t, weight_ih, bias_ih, weight_hh, bias_hh
                 )
-                h_t_out.append(_h_t)
-                c_t_out.append(_c_t)
+                if m_t is not None:
+                    # Freeze hidden/cell state for batch entries whose
+                    # trajectory has already ended at this time step. The cell
+                    # is still evaluated for the full batch (wasteful but
+                    # vmap/compile-friendly); only the carry is masked.
+                    h_new = torch.where(m_t, h_new, _h_t)
+                    c_new = torch.where(m_t, c_new, _c_t)
+                h_t_out.append(h_new)
+                c_t_out.append(c_new)
 
                 # Apply dropout if in training mode
                 if layer < self.num_layers - 1 and self.dropout:
-                    x_t = F.dropout(_h_t, p=self.dropout, training=self.training)
+                    x_t = F.dropout(h_new, p=self.dropout, training=self.training)
                 else:  # No dropout after the last layer
-                    x_t = _h_t
+                    x_t = h_new
             h_t = h_t_out
             c_t = c_t_out
             outputs.append(x_t)
 
-        outputs = torch.stack(outputs, dim=int(self.batch_first))
+        outputs = torch.stack(outputs, dim=time_dim)
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def _lstm_scan(self, x, hx, mask=None):
+        """Prototype scan-based time loop. Must be called inside ``torch.compile``.
+
+        ``torch._higher_order_ops.scan`` is a prototype feature; this path is
+        opt-in via ``LSTM(..., use_scan=True)`` and replaces the python
+        ``for`` loop over time. Dropout is not supported here.
+        """
+        from torch._higher_order_ops import scan
+
+        if self.dropout:
+            raise NotImplementedError(
+                "LSTM(use_scan=True) does not support dropout yet."
+            )
+
+        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+        for weights in self._all_weights:
+            weight_ihs.append(getattr(self, weights[0]))
+            weight_hhs.append(getattr(self, weights[1]))
+            bias_ihs.append(getattr(self, weights[2]) if self.bias else None)
+            bias_hhs.append(getattr(self, weights[3]) if self.bias else None)
+
+        # scan iterates along dim 0; permute to time-first if needed.
+        if self.batch_first:
+            x = x.transpose(0, 1)
+            if mask is not None:
+                mask = mask.transpose(0, 1)
+        if mask is None:
+            mask = torch.ones(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
+
+        num_layers = self.num_layers
+
+        def step(carry, inputs):
+            h_layers, c_layers = carry  # each [num_layers, B, H]
+            x_t, m_t = inputs
+            m_t = m_t.unsqueeze(-1)
+            new_h, new_c = [], []
+            h_unbound = h_layers.unbind(0)
+            c_unbound = c_layers.unbind(0)
+            for layer in range(num_layers):
+                h_prev = h_unbound[layer]
+                c_prev = c_unbound[layer]
+                h_new, c_new = self._lstm_cell(
+                    x_t,
+                    h_prev,
+                    c_prev,
+                    weight_ihs[layer],
+                    bias_ihs[layer],
+                    weight_hhs[layer],
+                    bias_hhs[layer],
+                )
+                h_new = torch.where(m_t, h_new, h_prev)
+                c_new = torch.where(m_t, c_new, c_prev)
+                new_h.append(h_new)
+                new_c.append(c_new)
+                x_t = h_new
+            new_h = torch.stack(new_h, 0).clone()
+            new_c = torch.stack(new_c, 0).clone()
+            return (new_h, new_c), x_t.clone()
+
+        h0, c0 = hx
+        (h_final, c_final), outputs = scan(step, (h0, c0), (x, mask), dim=0)
+        if self.batch_first:
+            outputs = outputs.transpose(0, 1)
+        return outputs, (h_final, c_final)
+
+    def forward(self, input, hx=None, mask=None):  # noqa: F811
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
         if input.dim() != 3:
             raise ValueError(
@@ -305,7 +416,7 @@ class LSTM(LSTMBase):
                 device=input.device,
             )
             hx = (h_zeros, c_zeros)
-        return self._lstm(input, hx)
+        return self._lstm(input, hx, mask)
 
 
 class LSTMModule(ModuleBase):
@@ -745,7 +856,14 @@ class LSTMModule(ModuleBase):
         dtype = value.dtype
 
         val, hidden0, hidden1 = self._lstm(
-            value, batch, steps, device, dtype, hidden0, hidden1
+            value,
+            batch,
+            steps,
+            device,
+            dtype,
+            hidden0,
+            hidden1,
+            splits,
         )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden0)
@@ -769,6 +887,7 @@ class LSTMModule(ModuleBase):
         dtype,
         hidden0_in: torch.Tensor | None = None,
         hidden1_in: torch.Tensor | None = None,
+        splits: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
@@ -799,17 +918,43 @@ class LSTMModule(ModuleBase):
             _hidden1_in.transpose(-3, -2).contiguous(),
         )
 
-        y, hidden = self.lstm(input, hidden)
+        if splits is None:
+            y, hidden = self.lstm(input, hidden)
+        elif isinstance(self.lstm, nn.LSTM):
+            # Variable-length trajectories: pack so the LSTM does not consume
+            # padding zeros, and h_n/c_n reflect the state after the last real
+            # step of each trajectory rather than after the padded tail.
+            lengths = splits.detach().to(device="cpu", dtype=torch.long)
+            packed = nn.utils.rnn.pack_padded_sequence(
+                input, lengths, batch_first=True, enforce_sorted=False
+            )
+            packed_y, hidden = self.lstm(packed, hidden)
+            y, _ = nn.utils.rnn.pad_packed_sequence(
+                packed_y, batch_first=True, total_length=steps
+            )
+        else:
+            # python-based custom LSTM does not accept PackedSequence. Run the
+            # full padded batch through it but pass a per-step active mask so
+            # the cell freezes h/c for batch entries whose trajectory has
+            # already ended (wasteful compute on the padded tail, but the
+            # batch dimension stays vectorised -- vmap/compile-friendly).
+            mask = torch.arange(steps, device=device).unsqueeze(0) < splits.unsqueeze(1)
+            y, hidden = self.lstm(input, hidden, mask=mask)
+
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = tuple(_h.transpose(0, 1) for _h in hidden)
 
         out = [y, *hidden]
-        # we pad the hidden states with zero to make tensordict happy
+        # Place hidden states so that _inv_pad_sequence (which keeps the first
+        # splits[i] positions of each row) retains them.
         for i in range(1, 3):
-            out[i] = torch.stack(
-                [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
-                1,
-            )
+            if splits is not None:
+                out[i] = _place_at_traj_end(out[i], splits, steps)
+            else:
+                out[i] = torch.stack(
+                    [torch.zeros_like(out[i]) for _ in range(steps - 1)] + [out[i]],
+                    1,
+                )
         return tuple(out)
 
 
@@ -962,6 +1107,8 @@ class GRU(GRUBase):
 
     __doc__ += nn.GRU.__doc__
 
+    use_scan: bool = False
+
     def __init__(
         self,
         input_size: int,
@@ -973,6 +1120,7 @@ class GRU(GRUBase):
         bidirectional: bool = False,
         device=None,
         dtype=None,
+        use_scan: bool = False,
     ) -> None:
 
         if bidirectional:
@@ -991,6 +1139,8 @@ class GRU(GRUBase):
             device=device,
             dtype=dtype,
         )
+        # Opt-in prototype: see :meth:`_gru_scan` and :class:`LSTM`.
+        self.use_scan = use_scan
 
     @staticmethod
     def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -1010,12 +1160,17 @@ class GRU(GRUBase):
 
         return hy
 
-    def _gru(self, x, hx):
+    def _gru(self, x, hx, mask=None):
+
+        if self.use_scan:
+            return self._gru_scan(x, hx, mask)
 
         if not self.batch_first:
             x = x.permute(
                 1, 0, 2
             )  # Change (seq_len, batch, features) to (batch, seq_len, features)
+            if mask is not None:
+                mask = mask.permute(1, 0)
 
         bs, seq_len, input_size = x.size()
         h_t = list(hx.unbind(0))
@@ -1038,17 +1193,25 @@ class GRU(GRUBase):
                 bias_hh.append(None)
 
         outputs = []
+        mask_unbound = mask.unbind(1) if mask is not None else None
 
-        for x_t in x.unbind(1):
+        for t, x_t in enumerate(x.unbind(1)):
+            m_t = mask_unbound[t].unsqueeze(-1) if mask_unbound is not None else None
             for layer in range(self.num_layers):
-                h_t[layer] = self._gru_cell(
+                h_prev = h_t[layer]
+                h_new = self._gru_cell(
                     x_t,
-                    h_t[layer],
+                    h_prev,
                     weight_ih[layer],
                     bias_ih[layer],
                     weight_hh[layer],
                     bias_hh[layer],
                 )
+                if m_t is not None:
+                    # Freeze hidden state for batch entries whose trajectory
+                    # has already ended (see _lstm for rationale).
+                    h_new = torch.where(m_t, h_new, h_prev)
+                h_t[layer] = h_new
 
                 # Apply dropout if in training mode and not the last layer
                 if layer < self.num_layers - 1 and self.dropout:
@@ -1066,7 +1229,60 @@ class GRU(GRUBase):
 
         return outputs, torch.stack(h_t, 0)
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def _gru_scan(self, x, hx, mask=None):
+        """Prototype scan-based time loop. See :meth:`LSTM._lstm_scan`."""
+        from torch._higher_order_ops import scan
+
+        if self.dropout:
+            raise NotImplementedError(
+                "GRU(use_scan=True) does not support dropout yet."
+            )
+
+        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+        for layer in range(self.num_layers):
+            weights = self._all_weights[layer]
+            weight_ihs.append(getattr(self, weights[0]))
+            weight_hhs.append(getattr(self, weights[1]))
+            bias_ihs.append(getattr(self, weights[2]) if self.bias else None)
+            bias_hhs.append(getattr(self, weights[3]) if self.bias else None)
+
+        if self.batch_first:
+            x = x.transpose(0, 1)
+            if mask is not None:
+                mask = mask.transpose(0, 1)
+        if mask is None:
+            mask = torch.ones(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
+
+        num_layers = self.num_layers
+
+        def step(carry, inputs):
+            h_layers = carry  # [num_layers, B, H]
+            x_t, m_t = inputs
+            m_t = m_t.unsqueeze(-1)
+            new_h = []
+            h_unbound = h_layers.unbind(0)
+            for layer in range(num_layers):
+                h_prev = h_unbound[layer]
+                h_new = self._gru_cell(
+                    x_t,
+                    h_prev,
+                    weight_ihs[layer],
+                    bias_ihs[layer],
+                    weight_hhs[layer],
+                    bias_hhs[layer],
+                )
+                h_new = torch.where(m_t, h_new, h_prev)
+                new_h.append(h_new)
+                x_t = h_new
+            new_h = torch.stack(new_h, 0).clone()
+            return new_h, x_t.clone()
+
+        h_final, outputs = scan(step, hx, (x, mask), dim=0)
+        if self.batch_first:
+            outputs = outputs.transpose(0, 1)
+        return outputs, h_final
+
+    def forward(self, input, hx=None, mask=None):  # noqa: F811
         if input.dim() != 3:
             raise ValueError(
                 f"GRU: Expected input to be 3D, got {input.dim()}D instead"
@@ -1086,7 +1302,7 @@ class GRU(GRUBase):
             )
 
         self.check_forward_args(input, hx, batch_sizes=None)
-        result = self._gru(input, hx)
+        result = self._gru(input, hx, mask)
 
         output = result[0]
         hidden = result[1]
@@ -1526,13 +1742,10 @@ class GRUModule(ModuleBase):
         batch, steps = value.shape[:2]
         device = value.device
         dtype = value.dtype
-        # packed sequences do not help to get the accurate last hidden values
-        # if splits is not None:
-        #     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)
         if not self.recurrent_mode and is_init.any() and hidden is not None:
             is_init_expand = expand_as_right(is_init, hidden)
             hidden = torch.where(is_init_expand, 0, hidden)
-        val, hidden = self._gru(value, batch, steps, device, dtype, hidden)
+        val, hidden = self._gru(value, batch, steps, device, dtype, hidden, splits)
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
@@ -1553,6 +1766,7 @@ class GRUModule(ModuleBase):
         device,
         dtype,
         hidden_in: torch.Tensor | None = None,
+        splits: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
@@ -1572,15 +1786,33 @@ class GRUModule(ModuleBase):
         _hidden_in = hidden_in[:, 0]
         hidden = _hidden_in.transpose(-3, -2).contiguous()
 
-        y, hidden = self.gru(input, hidden)
+        if splits is None:
+            y, hidden = self.gru(input, hidden)
+        elif isinstance(self.gru, nn.GRU):
+            # See LSTMModule._lstm for rationale.
+            lengths = splits.detach().to(device="cpu", dtype=torch.long)
+            packed = nn.utils.rnn.pack_padded_sequence(
+                input, lengths, batch_first=True, enforce_sorted=False
+            )
+            packed_y, hidden = self.gru(packed, hidden)
+            y, _ = nn.utils.rnn.pad_packed_sequence(
+                packed_y, batch_first=True, total_length=steps
+            )
+        else:
+            mask = torch.arange(steps, device=device).unsqueeze(0) < splits.unsqueeze(1)
+            y, hidden = self.gru(input, hidden, mask=mask)
+
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = hidden.transpose(0, 1)
 
-        # we pad the hidden states with zero to make tensordict happy
-        hidden = torch.stack(
-            [torch.zeros_like(hidden) for _ in range(steps - 1)] + [hidden],
-            1,
-        )
+        if splits is not None:
+            hidden = _place_at_traj_end(hidden, splits, steps)
+        else:
+            # we pad the hidden states with zero to make tensordict happy
+            hidden = torch.stack(
+                [torch.zeros_like(hidden) for _ in range(steps - 1)] + [hidden],
+                1,
+            )
         out = [y, hidden]
         return tuple(out)
 

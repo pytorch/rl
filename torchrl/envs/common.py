@@ -28,6 +28,7 @@ from tensordict.utils import is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     _replace_last,
     implement_for,
     prod,
@@ -260,6 +261,7 @@ class _EnvPostInit(abc.ABCMeta):
         spec_locked = kwargs.pop("spec_locked", True)
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
+        policy = kwargs.pop("policy", None)
         instance: EnvBase = super().__call__(*args, **kwargs)
         if "_cache" not in instance.__dict__:
             instance._cache = {}
@@ -284,9 +286,17 @@ class _EnvPostInit(abc.ABCMeta):
                 AutoResetTransform,
             )
 
-            return AutoResetEnv(
+            instance = AutoResetEnv(
                 instance, AutoResetTransform(replace=auto_reset_replace)
             )
+            if policy is not None:
+                # Local import: torchrl.modules imports torchrl.envs at module import time.
+                from torchrl.modules.utils.utils import (
+                    _maybe_append_env_transforms_from_module,
+                )
+
+                instance = _maybe_append_env_transforms_from_module(instance, policy)
+            return instance
 
         done_keys = set(instance.full_done_spec.keys(True, True))
         obs_keys = set(instance.full_observation_spec.keys(True, True))
@@ -308,6 +318,13 @@ class _EnvPostInit(abc.ABCMeta):
                     f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
                 )
             total_set = total_set.union(keyset)
+        if policy is not None:
+            # Local import: torchrl.modules imports torchrl.envs at module import time.
+            from torchrl.modules.utils.utils import (
+                _maybe_append_env_transforms_from_module,
+            )
+
+            instance = _maybe_append_env_transforms_from_module(instance, policy)
         return instance
 
 
@@ -327,6 +344,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
             be done after a call to :meth:`reset` is made. Defaults to ``False``.
+        policy (torch.nn.Module, optional): a policy module used to infer and
+            append any environment transforms it needs, such as
+            :class:`~torchrl.envs.transforms.InitTracker` and recurrent-state
+            :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms.
+            This returns a :class:`~torchrl.envs.TransformedEnv` when transforms
+            are added.
+
+            .. note:: The auto-wrapping is achieved by the `EnvBase` metaclass.
+                It does not appear in the `__init__` method of subclasses
+                (:class:`~torchrl.envs.GymEnv`,
+                :class:`~torchrl.envs.DMControlEnv`, custom subclasses, etc.)
+                but is supported on every one of them, and is included in the
+                keyword arguments here strictly for type-hinting purposes.
+
+            .. seealso:: :ref:`Auto-wrapping recurrent transforms via the
+                policy= argument <Environment-policy-arg>`.
         spec_locked (bool, optional): if ``True``, the specs are locked and can only be
             modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
 
@@ -2194,6 +2227,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result.update(next_tensordict.exclude(*keys).filter_empty_())
         return result
 
+    @_maybe_record_function_decorator("EnvBase.step")
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -2961,6 +2995,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         raise NotImplementedError
 
+    @_maybe_record_function_decorator("EnvBase.reset")
     def reset(
         self,
         tensordict: TensorDictBase | None = None,
@@ -3212,6 +3247,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _has_dynamic_specs(self) -> bool:
         return _has_dynamic_specs(self.specs)
 
+    @_maybe_record_function_decorator("EnvBase.rollout")
     def rollout(
         self,
         max_steps: int,
@@ -3779,6 +3815,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return tensordicts
 
+    @_maybe_record_function_decorator("EnvBase.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:

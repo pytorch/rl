@@ -12,15 +12,18 @@ import pytest
 import torch
 import torch.distributed as dist
 import torchrl.testing.env_helper
+from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
+from torch import multiprocessing as mp
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import Collector, Evaluator
 from torchrl.collectors.distributed import RayCollector
-from torchrl.data import LazyMemmapStorage, ReplayBuffer
+from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import StepCounter
+from torchrl.envs import InitTracker, StepCounter, TransformedEnv
 from torchrl.envs.utils import check_env_specs
+from torchrl.modules import LSTMModule, MLP
 from torchrl.testing import get_default_devices
 from torchrl.testing.env_helper import (
     _isaac_app_launcher_init,
@@ -100,8 +103,6 @@ class TestIsaacGym:
             raise err
 
     def test_env(self, task, num_envs, device, from_pixels):
-        from torch import multiprocessing as mp
-
         q = mp.Queue(1)
         self._run_on_proc(q, task, num_envs, device, from_pixels)
         proc = mp.Process(
@@ -181,7 +182,6 @@ class TestIsaacLab:
     @pytest.fixture(scope="function")
     def clean_ray(self):
         import ray
-        import torch.distributed as dist
 
         # Clean up any existing process group from previous tests
         if dist.is_initialized():
@@ -200,8 +200,6 @@ class TestIsaacLab:
     @pytest.mark.parametrize("use_rb", [False, True], ids=["rb_false", "rb_true"])
     @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
     def test_isaaclab_ray_collector(self, env, use_rb, clean_ray, num_collectors):
-        from torchrl.data import RayReplayBuffer
-
         # Create replay buffer if requested
         replay_buffer = None
         if use_rb:
@@ -285,8 +283,6 @@ class TestIsaacLab:
     @pytest.mark.skipif(not _has_ray, reason="Ray not found")
     @pytest.mark.parametrize("num_collectors", [1, 4], ids=["1_col", "4_col"])
     def test_isaaclab_ray_collector_start(self, env, clean_ray, num_collectors):
-        from torchrl.data import LazyTensorStorage, RayReplayBuffer
-
         rb = RayReplayBuffer(
             storage=partial(LazyTensorStorage, 100_000, ndim=2),
             ray_init_config={"num_cpus": 4},
@@ -331,11 +327,6 @@ class TestIsaacLab:
         This test verifies that TensorDictPrimer correctly expands hidden state specs
         to match the environment's batch size when using vectorized environments like IsaacLab.
         """
-        from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-
-        from torchrl.envs import InitTracker, TransformedEnv
-        from torchrl.modules import LSTMModule, MLP
-
         # Create a fresh env with InitTracker (required for LSTM)
         test_env = TransformedEnv(env, InitTracker())
 

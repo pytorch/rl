@@ -1887,8 +1887,6 @@ class TestDiscreteSAC(LossModuleTestBase):
     @pytest.mark.parametrize("target_entropy_weight", [0.5, 0.98])
     def test_discrete_sac_target_entropy_auto(self, action_dim, target_entropy_weight):
         """Regression test for target_entropy='auto' in DiscreteSACLoss."""
-        import numpy as np
-
         torch.manual_seed(self.seed)
         actor = self._create_mock_actor(action_dim=action_dim)
         qvalue = self._create_mock_qvalue(action_dim=action_dim)

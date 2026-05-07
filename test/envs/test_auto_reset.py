@@ -23,8 +23,9 @@ from tensordict import (
 )
 
 from torchrl import set_auto_unwrap_transformed_env
+from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
 from torchrl.data.tensor_specs import NonTensor
-from torchrl.envs import CatFrames, ParallelEnv, SerialEnv
+from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import (
@@ -501,9 +502,6 @@ class TestNonTensorEnv:
     @pytest.mark.skipif(not _has_transformers, reason="transformers required")
     def test_from_text_rb_slicesampler(self):
         """Dedicated test for replay buffer sampling of trajectories with variable token length"""
-        from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
-        from torchrl.envs import TrajCounter
-
         env = Str2StrEnv()
         env.set_seed(0)
         env = env.append_transform(

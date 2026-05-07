@@ -67,6 +67,65 @@ an environment with :attr:`env.batch_size` ``== torch.Size([4])`` should have
 an :attr:`env.action_spec` with shape :class:`torch.Size` ``([4, action_size])``.
 This is helpful when preallocation tensors, checking shape consistency etc.
 
+.. _Environment-policy-arg:
+
+Auto-wrapping recurrent transforms via the ``policy=`` argument
+---------------------------------------------------------------
+
+Every concrete :class:`~torchrl.envs.EnvBase` subclass — :class:`~torchrl.envs.GymEnv`,
+:class:`~torchrl.envs.DMControlEnv`, custom subclasses, etc. — inherits a
+``policy`` keyword argument on its constructor. When provided, the
+:class:`~torchrl.envs.EnvBase` metaclass post-init hook walks the policy
+looking for recurrent submodules (anything implementing
+``make_tensordict_primer()``, e.g. :class:`~torchrl.modules.LSTMModule`,
+:class:`~torchrl.modules.GRUModule`) and appends what's missing to the env:
+
+* an :class:`~torchrl.envs.transforms.InitTracker` (so ``is_init`` is written
+  at every reset) if one is not already present in the env's
+  ``full_observation_spec``;
+* one :class:`~torchrl.envs.transforms.TensorDictPrimer` per recurrent
+  submodule, providing the hidden-state primers the policy needs.
+
+The hook is idempotent and *spec-based* — it asks the env's
+``full_observation_spec`` / ``full_state_spec`` what's already there, so it
+works correctly even when transforms live inside child envs of a
+:class:`~torchrl.envs.SerialEnv` or :class:`~torchrl.envs.ParallelEnv`.
+
+Because the argument is injected by the metaclass, **it does not appear in
+subclass** ``__init__`` **signatures** (just like ``spec_locked`` and
+``auto_reset``). It is documented on :class:`~torchrl.envs.EnvBase` and works
+identically on every subclass. Pass it like any other keyword:
+
+.. code-block:: python
+
+    from torchrl.envs import GymEnv
+    from torchrl.modules import GRUModule
+
+    gru = GRUModule(input_size=4, hidden_size=8, num_layers=1,
+                    in_keys=["observation", "recurrent_state", "is_init"],
+                    out_keys=["features", ("next", "recurrent_state")])
+    # Single call: env now has InitTracker + TensorDictPrimer for the GRU.
+    env = GymEnv("CartPole-v1", policy=gru)
+
+The same auto-wrap helper is applied a second time by
+:class:`~torchrl.collectors.SyncDataCollector` when an env is passed to it,
+so users who construct a bare env first and only later hand it to a
+collector with a recurrent policy still get the right transforms wired up.
+Because the helper is idempotent, going through both paths does not produce
+duplicates.
+
+Limitations:
+
+* If a custom :class:`~torchrl.envs.transforms.InitTracker` was attached
+  with a renamed ``init_key``, the helper won't recognise it and may add a
+  duplicate. Pass the same custom ``init_key`` (matched by leaf name in
+  multi-agent setups) to avoid this, or wire transforms manually.
+* Policy factories — ``Callable[[], Callable]`` objects — cannot be
+  inspected without instantiation, so auto-wrapping is skipped for them.
+  Either build the policy once and pass it via ``policy=``, or attach
+  transforms manually with
+  :func:`~torchrl.modules.utils.get_env_transforms_from_module`.
+
 Env methods
 -----------
 
@@ -139,10 +198,14 @@ function.
 
 .. note::
 
-  The `torchrl.collectors.utils.split_trajectories` function can be used to
-  slice adjacent trajectories. It relies on a ``"traj_ids"`` entry in the
-  input tensordict, or to the junction of ``"done"`` and ``"truncated"`` key
-  if the ``"traj_ids"`` is missing.
+  The :func:`~torchrl.collectors.utils.split_trajectories` function can be
+  used to slice adjacent trajectories. It relies on a ``"traj_ids"`` entry
+  in the input tensordict, or on the junction of ``"done"`` and
+  ``"truncated"`` if ``"traj_ids"`` is missing. The function emits an
+  ``[N_traj, T_max]`` zero-padded tensordict + ``mask``; for new code
+  prefer the contiguous 1-D layout and
+  :class:`~torchrl.data.replay_buffers.SliceSampler` instead — see
+  :ref:`Data layout: contiguous trajectories <data-layout>`.
 
 
 .. note::

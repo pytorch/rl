@@ -37,6 +37,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _get_default_mp_start_method,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     logger as torchrl_logger,
     rl_warnings,
     timeit,
@@ -1246,6 +1247,7 @@ class SerialEnv(BatchedEnvBase):
         return seed
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
         if kwargs is not list_of_kwargs[0] and kwargs:
@@ -1364,6 +1366,7 @@ class SerialEnv(BatchedEnvBase):
         return out
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._step")
     def _step(
         self,
         tensordict: TensorDict,
@@ -1901,6 +1904,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
@@ -2249,6 +2253,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self._use_buffers:
             return self._step_no_buffers(tensordict)
@@ -2459,6 +2464,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
 
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)

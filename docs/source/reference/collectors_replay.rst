@@ -3,6 +3,16 @@
 Collectors and Replay Buffers
 =============================
 
+.. seealso::
+
+    For the conceptual story behind the patterns on this page —
+    contiguous 1-D trajectories, the boundary keys (``is_init``,
+    ``done``, ``terminated``, ``truncated``), the limits of
+    ``ndim>=2`` storages with multi-process collectors, and why
+    :func:`~torchrl.collectors.utils.split_trajectories` is no longer
+    recommended — see :ref:`Data layout: contiguous trajectories
+    <data-layout>`.
+
 Collectors and replay buffers interoperability
 ----------------------------------------------
 

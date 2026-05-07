@@ -394,26 +394,43 @@ class timeit:
         cls.erase()
 
 
-# Global flag to enable detailed profiling instrumentation.
-# When False (default), _maybe_record_function returns nullcontext() immediately
-# to avoid overhead in hot code paths.
-_PROFILING_ENABLED = False
+# Profiling instrumentation is gated by the TORCHRL_PROFILING env var, read
+# once at import time. When unset, `_maybe_record_function_decorator` returns
+# an identity decorator with zero per-call overhead, so instrumentation can be
+# sprinkled across hot paths (collectors, envs, modules) without penalty in
+# production. When set to "1", the instrumentation is armed and can still be
+# toggled at runtime via :func:`set_profiling_enabled` for dynamic control
+# during a session (e.g. enabling profiling only around a specific iteration).
+_PROFILING_ALLOWED = os.environ.get("TORCHRL_PROFILING", "0") == "1"
+_PROFILING_ENABLED = _PROFILING_ALLOWED
 
 # Singleton nullcontext to avoid repeated object creation
 _NULL_CONTEXT = nullcontext()
 
 
 def set_profiling_enabled(enabled: bool) -> None:
-    """Enable or disable detailed profiling instrumentation.
+    """Enable or disable detailed profiling instrumentation at runtime.
 
-    When disabled (default), `_maybe_record_function` and `_maybe_timeit`
-    return immediately with minimal overhead. Enable only when actively
-    profiling to avoid performance regression.
+    Profiling must first be armed at import time by setting the
+    ``TORCHRL_PROFILING=1`` environment variable before importing torchrl.
+    When the env var is unset, decorators added via
+    :func:`_maybe_record_function_decorator` are pure identity functions and
+    cannot be toggled on after the fact — calling this with ``enabled=True``
+    in that case emits a warning and is a no-op.
 
     Args:
         enabled: If True, enable profiling instrumentation.
     """
     global _PROFILING_ENABLED
+    if enabled and not _PROFILING_ALLOWED:
+        warnings.warn(
+            "set_profiling_enabled(True) called but TORCHRL_PROFILING=1 was "
+            "not set before importing torchrl. Decorated functions are pure "
+            "identities and cannot be toggled on at runtime. Set the env var "
+            "before import and retry.",
+            stacklevel=2,
+        )
+        return
     _PROFILING_ENABLED = enabled
 
 
@@ -431,8 +448,9 @@ def _maybe_timeit(name):
 def _maybe_record_function(name):
     """Return record_function context if profiling enabled and not compiling.
 
-    When _PROFILING_ENABLED is False (default), returns immediately with
-    minimal overhead to avoid performance regression in hot code paths.
+    When profiling was not armed via ``TORCHRL_PROFILING=1`` at import, or was
+    disabled at runtime via :func:`set_profiling_enabled`, returns a shared
+    nullcontext with minimal overhead.
     """
     if not _PROFILING_ENABLED:
         return _NULL_CONTEXT
@@ -443,13 +461,21 @@ def _maybe_record_function(name):
 
 
 def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable]:
-    """Decorator version of :func:`_maybe_record_function`.
+    """Decorator form of :func:`_maybe_record_function`.
 
-    This is preferred over sprinkling many context managers in hot code paths,
-    as it reduces Python overhead while keeping a useful profiler structure.
+    Prefer this over sprinkling context managers in hot code paths: when
+    ``TORCHRL_PROFILING=1`` is not set at import time, the returned decorator
+    is a pure identity (``lambda f: f``) with zero per-call overhead. This
+    makes it safe to decorate collectors, envs, and modules methods for a
+    ready-to-ship profiler infrastructure.
 
-    When _PROFILING_ENABLED is False (default), the decorator is a no-op.
+    When the env var is set, the decorator wraps the function in a
+    ``record_function`` context, gated by the runtime
+    :func:`set_profiling_enabled` flag so the profiler timeline can be scoped
+    to specific regions of interest.
     """
+    if not _PROFILING_ALLOWED:
+        return _identity_decorator
 
     def decorator(fn: Callable) -> Callable:
         @wraps(fn)
@@ -462,6 +488,11 @@ def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable
         return wrapped
 
     return decorator
+
+
+def _identity_decorator(fn: Callable) -> Callable:
+    """Shared identity decorator used when profiling is not armed."""
+    return fn
 
 
 def _check_for_faulty_process(processes):
@@ -1363,6 +1394,23 @@ def as_remote(cls, remote_config: dict[str, Any] | None = None):
 
     if remote_config is None:
         remote_config = {}
+    else:
+        remote_config = dict(remote_config)
+
+    # Propagate TORCHRL_PROFILING to the remote actor so ``_maybe_record_function_decorator``
+    # is armed inside it. We must ensure the env var is set in the actor's process before
+    # torchrl is imported there — the decorator captures ``_PROFILING_ALLOWED`` at import.
+    profiling = os.environ.get("TORCHRL_PROFILING")
+    if profiling:
+        runtime_env = remote_config.get("runtime_env") or {}
+        if not isinstance(runtime_env, dict):
+            runtime_env = dict(runtime_env)
+        env_vars = runtime_env.get("env_vars") or {}
+        if not isinstance(env_vars, dict):
+            env_vars = dict(env_vars)
+        env_vars.setdefault("TORCHRL_PROFILING", profiling)
+        runtime_env["env_vars"] = env_vars
+        remote_config["runtime_env"] = runtime_env
 
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
@@ -1471,7 +1519,7 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
         runtime_env["env_vars"] = dict(runtime_env["env_vars"])
 
     # Auto-propagate common env vars to Ray workers
-    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME"):
+    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME", "TORCHRL_PROFILING"):
         val = os.environ.get(key)
         if val and key not in runtime_env["env_vars"]:
             runtime_env["env_vars"][key] = val

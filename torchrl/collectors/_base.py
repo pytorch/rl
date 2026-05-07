@@ -137,6 +137,82 @@ class ProfileConfig:
         return worker_idx in self.workers
 
 
+class _ProfilerHook:
+    """A ``post_collect_hook`` callable that drives a ``torch.profiler.profile``.
+
+    The hook owns a profiler in the process where it lives — the main process
+    for a single :class:`Collector`, each worker process for a multi-collector,
+    each remote actor for a Ray collector. It starts the profiler lazily on the
+    first call, steps once per rollout, and auto-stops + exports after
+    ``config.num_rollouts`` rollouts.
+
+    Pickling — the hook is a plain Python object and travels through
+    :class:`~torchrl.data.utils.CloudpickleWrapper` when pushed to mp workers.
+    The :class:`torch.profiler.profile` instance is built lazily inside the
+    target process so it never needs to cross a pickle boundary itself.
+    """
+
+    def __init__(self, config: ProfileConfig, worker_idx: int = 0):
+        self.config = config
+        self.worker_idx = worker_idx
+        self._profiler = None
+        self._rollout_count = 0
+        self._stopped = False
+
+    def _build_profiler(self) -> Any | None:
+        active = self.config.num_rollouts - self.config.warmup_rollouts
+        schedule = torch.profiler.schedule(
+            skip_first=self.config.warmup_rollouts,
+            wait=0,
+            warmup=0,
+            active=active,
+            repeat=1,
+        )
+        activities = self.config.get_activities()
+        if not activities:
+            return None
+        if self.config.on_trace_ready is not None:
+            on_trace_ready = self.config.on_trace_ready
+        else:
+            save_path = self.config.get_save_path(self.worker_idx)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            from torchrl import logger as torchrl_logger
+
+            def on_trace_ready(prof, _path=save_path, _idx=self.worker_idx):
+                prof.export_chrome_trace(str(_path))
+                torchrl_logger.info(f"Profiler [worker {_idx}]: trace saved to {_path}")
+
+        return torch.profiler.profile(
+            activities=activities,
+            schedule=schedule,
+            on_trace_ready=on_trace_ready,
+            record_shapes=self.config.record_shapes,
+            profile_memory=self.config.profile_memory,
+            with_stack=self.config.with_stack,
+            with_flops=self.config.with_flops,
+        )
+
+    def __call__(self, batch: TensorDictBase | None = None) -> None:
+        if self._stopped:
+            return
+        if self._profiler is None:
+            self._profiler = self._build_profiler()
+            if self._profiler is None:
+                self._stopped = True
+                return
+            self._profiler.start()
+        self._profiler.step()
+        self._rollout_count += 1
+        if self._rollout_count >= self.config.num_rollouts:
+            self.stop()
+
+    def stop(self) -> None:
+        """Stop the underlying profiler (idempotent)."""
+        if self._profiler is not None and not self._stopped:
+            self._profiler.stop()
+            self._stopped = True
+
+
 class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors.
 
@@ -278,6 +354,17 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         self._post_collect_hook = hook
 
+    def set_post_collect_hook(
+        self, hook: Callable[[TensorDictBase], None] | None
+    ) -> None:
+        """Method form of the ``post_collect_hook`` setter.
+
+        Exposed because Ray actor handles can call methods (`actor.method.remote(...)`)
+        but cannot directly invoke property setters. Keeping the actual setter
+        for in-process use and this method for remote-actor use.
+        """
+        self.post_collect_hook = hook
+
     def enable_profile(
         self,
         *,
@@ -361,7 +448,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if activities is None:
             activities = ["cpu", "cuda"]
 
-        self._profile_config = ProfileConfig(
+        config = ProfileConfig(
             workers=workers,
             num_rollouts=num_rollouts,
             warmup_rollouts=warmup_rollouts,
@@ -373,6 +460,41 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             with_flops=with_flops,
             on_trace_ready=on_trace_ready,
         )
+        self._profile_config = config
+        self._install_profile_hooks(config)
+
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install the per-process profiler hook.
+
+        Default implementation handles the single-process :class:`Collector`
+        by saving the current ``post_collect_hook`` and replacing it with a
+        :class:`_ProfilerHook`. Multi-process / Ray collectors override this
+        to fan out per-worker hooks (each worker gets its own ``worker_idx``).
+        """
+        self._saved_post_collect_hook = self._post_collect_hook
+        self.post_collect_hook = _ProfilerHook(config, worker_idx=0)
+
+    def disable_profile(self) -> None:
+        """Stop any in-flight profiler and restore the prior ``post_collect_hook``.
+
+        Safe to call when profiling was never enabled (becomes a no-op). When
+        the profiler was already self-stopped after ``num_rollouts``, this just
+        clears the hook and restores any user-set ``post_collect_hook``.
+        """
+        if self._profile_config is None:
+            return
+        try:
+            self._uninstall_profile_hooks(self._profile_config)
+        finally:
+            self._profile_config = None
+
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Single-process default uninstall: stop hook locally and restore."""
+        hook = self._post_collect_hook
+        if isinstance(hook, _ProfilerHook):
+            hook.stop()
+        self._post_collect_hook = getattr(self, "_saved_post_collect_hook", None)
+        self._saved_post_collect_hook = None
 
     @property
     def profile_config(self) -> ProfileConfig | None:

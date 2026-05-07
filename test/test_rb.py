@@ -7,13 +7,17 @@ from __future__ import annotations
 import argparse
 import contextlib
 import functools
+import gc
 import importlib
 import os
 import pickle
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
+import time
+import warnings
 from functools import partial
 from pathlib import Path
 from unittest import mock
@@ -36,7 +40,7 @@ from tensordict import (
 from torch import multiprocessing as mp
 from torch.utils._pytree import tree_flatten, tree_map
 
-from torchrl._utils import _replace_last, logger as torchrl_logger
+from torchrl._utils import _replace_last, logger as torchrl_logger, rl_warnings
 from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import (
@@ -62,6 +66,7 @@ from torchrl.data.replay_buffers.samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StalenessAwareSampler,
 )
 from torchrl.data.replay_buffers.scheduler import (
     LinearScheduler,
@@ -70,6 +75,7 @@ from torchrl.data.replay_buffers.scheduler import (
 )
 
 from torchrl.data.replay_buffers.storages import (
+    _MEMMAP_STORAGE_REGISTRY,
     LazyMemmapStorage,
     LazyStackStorage,
     LazyTensorStorage,
@@ -109,7 +115,7 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
-from torchrl.modules import RandomPolicy
+from torchrl.modules import GRUModule, RandomPolicy, set_recurrent_mode
 
 from torchrl.testing import (
     capture_log_records,
@@ -2107,8 +2113,6 @@ class TestBuffers:
 
 def test_replay_buffer_set_at_():
     """Tests that set_at_ writes through to storage in-place."""
-    from tensordict import TensorDict
-
     rb = ReplayBuffer(
         storage=LazyTensorStorage(10),
         batch_size=5,
@@ -2125,8 +2129,6 @@ def test_replay_buffer_set_at_():
 
 def test_replay_buffer_set_():
     """Tests that set_ writes through to storage in-place."""
-    from tensordict import TensorDict
-
     rb = ReplayBuffer(
         storage=LazyTensorStorage(10),
         batch_size=5,
@@ -2140,8 +2142,6 @@ def test_replay_buffer_set_():
 
 def test_replay_buffer_update_():
     """Tests that update_ writes through to storage in-place."""
-    from tensordict import TensorDict
-
     rb = ReplayBuffer(
         storage=LazyTensorStorage(10),
         batch_size=5,
@@ -2231,8 +2231,6 @@ def test_storage_save_hook(tmpdir):
 
 @pytest.mark.skipif(not torchrl._utils.RL_WARNINGS, reason="RL_WARNINGS is not set")
 def test_add_warning():
-    from torchrl._utils import rl_warnings
-
     if not rl_warnings():
         return
     rb = ReplayBuffer(storage=ListStorage(10), batch_size=3)
@@ -2756,6 +2754,27 @@ class TestMultiProc:
         assert (rb["a"][:9] == 2).all()
         q0.put("finish")
 
+    @staticmethod
+    def async_prb_worker(rb, worker_id, q):
+        td = TensorDict(
+            {
+                "obs": torch.full((4, 1), worker_id, dtype=torch.float32),
+                "prio": {"td_error": torch.linspace(0.1, 1.0, 4) + worker_id},
+            },
+            [4],
+        )
+        rb.extend(td)
+        q.put("finish")
+
+    @staticmethod
+    def async_generic_prb_worker(rb, worker_id, q):
+        data = TensorDict(
+            {"obs": torch.full((4, 1), worker_id, dtype=torch.float32)},
+            [4],
+        )
+        rb.extend(data)
+        q.put("finish")
+
     def exec_multiproc_rb(
         self,
         storage_type=LazyMemmapStorage,
@@ -2810,6 +2829,78 @@ class TestMultiProc:
             self.exec_multiproc_rb(
                 sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
             )
+
+    def test_async_prioritized_rb_multiproc_writes(self):
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.5,
+            priority_key=("prio", "td_error"),
+            storage=LazyMemmapStorage(32, shared_init=True),
+            batch_size=4,
+            shared=True,
+            sync=False,
+        )
+        q = mp.Queue()
+        processes = []
+        for worker_id in range(2):
+            proc = mp.Process(
+                target=self.async_prb_worker,
+                args=(rb, worker_id, q),
+            )
+            processes.append(proc)
+            proc.start()
+
+        for proc in processes:
+            proc.join()
+            assert proc.exitcode == 0
+            assert q.get(timeout=5) == "finish"
+
+        assert rb.write_count == 8
+        sample = rb.sample()
+        assert rb._prioritized_sampler_write_count == 8
+        assert sample["obs"].shape == (4, 1)
+        assert "priority_weight" in sample.keys()
+        assert "index" in sample.keys()
+
+        sample["prio", "td_error"] = torch.ones(sample.shape) * 10
+        rb.update_tensordict_priority(sample)
+        assert rb.prioritized_sampler._max_priority[0] is not None
+
+    def test_async_generic_prioritized_rb_multiproc_writes(self):
+        rb = PrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.5,
+            storage=LazyMemmapStorage(32),
+            batch_size=4,
+            sync=False,
+        )
+        rb.extend(TensorDict({"obs": torch.zeros((1, 1))}, [1]))
+        rb.empty()
+        rb.share(True)
+        q = mp.Queue()
+        processes = []
+        for worker_id in range(2):
+            proc = mp.Process(
+                target=self.async_generic_prb_worker,
+                args=(rb, worker_id, q),
+            )
+            processes.append(proc)
+            proc.start()
+
+        for proc in processes:
+            proc.join()
+            assert proc.exitcode == 0
+            assert q.get(timeout=5) == "finish"
+
+        assert rb.write_count == 8
+        sample, info = rb.sample(return_info=True)
+        assert rb._prioritized_sampler_write_count == 8
+        assert sample["obs"].shape == (4, 1)
+        assert "priority_weight" in info
+        assert "index" in info
+
+        rb.update_priority(info["index"], torch.ones(4) * 10)
+        assert rb.prioritized_sampler._max_priority[0] is not None
 
     def test_error_noninit(self):
         # list storage cannot be shared
@@ -3301,6 +3392,446 @@ class TestSamplers:
             else:
                 assert len(sample["traj"].unique()) == 1
 
+    # ------------------------------------------------------------------
+    # traj_key auto-detection tests
+    # ------------------------------------------------------------------
+
+    def test_slice_sampler_auto_traj_key_collector_ids(self):
+        """Auto-detection should prefer ("collector", "traj_ids") over "episode"."""
+        torch.manual_seed(0)
+        # Build data with both keys present; sampler should pick collector key
+        # and warn that this changes the pre-0.13 default.
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                ("collector", "traj_ids"): traj_ids,
+                "episode": torch.zeros(8, dtype=torch.int),  # wrong, should be ignored
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2),
+            batch_size=6,
+        )
+        rb.extend(data)
+        # Force resolution — with both keys present we must see a FutureWarning.
+        with pytest.warns(FutureWarning, match="auto-detected"):
+            sample = rb.sample()
+        assert rb.sampler.traj_key == ("collector", "traj_ids")
+        assert rb.sampler._fetch_traj is True
+        assert rb.sampler._traj_key_auto is False
+        # Each slice should come from a single trajectory
+        sample_reshaped = sample.reshape(2, 3)
+        for i in range(2):
+            traj_vals = sample_reshaped[i][("collector", "traj_ids")]
+            assert traj_vals.unique().numel() == 1
+
+    def test_slice_sampler_auto_traj_key_no_warning_single_key(self):
+        """No FutureWarning when only one of the two candidate keys is present."""
+        torch.manual_seed(0)
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                ("collector", "traj_ids"): traj_ids,
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2),
+            batch_size=6,
+        )
+        rb.extend(data)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            rb.sample()
+        assert rb.sampler.traj_key == ("collector", "traj_ids")
+
+    def test_slice_sampler_auto_traj_key_episode(self):
+        """Auto-detection falls back to 'episode' when collector key is absent."""
+        torch.manual_seed(0)
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                "episode": traj_ids,
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2),
+            batch_size=6,
+        )
+        rb.extend(data)
+        rb.sample()
+        assert rb.sampler.traj_key == "episode"
+        assert rb.sampler._fetch_traj is True
+
+    def test_slice_sampler_auto_traj_key_fallback_to_done(self):
+        """Auto-detection falls back to end_key reconstruction when no traj key."""
+        torch.manual_seed(0)
+        done = torch.zeros(9, 1, dtype=torch.bool)
+        done[[2, 5, 8]] = True
+        data = TensorDict(
+            {
+                ("next", "done"): done,
+                ("next", "truncated"): done,
+                ("next", "terminated"): done,
+                "obs": torch.arange(9).float(),
+            },
+            batch_size=[9],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(9),
+            sampler=SliceSampler(num_slices=3),
+            batch_size=9,
+        )
+        rb.extend(data)
+        rb.sample()
+        assert rb.sampler._fetch_traj is False
+
+    def test_slice_sampler_explicit_traj_key_no_auto(self):
+        """Explicit traj_key should bypass auto-detection entirely."""
+        torch.manual_seed(0)
+        traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
+        data = TensorDict(
+            {
+                "my_traj": traj_ids,
+                ("collector", "traj_ids"): torch.zeros(8, dtype=torch.int),
+                "obs": torch.arange(8).float(),
+            },
+            batch_size=[8],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(8),
+            sampler=SliceSampler(num_slices=2, traj_key="my_traj"),
+            batch_size=6,
+        )
+        rb.extend(data)
+        rb.sample()
+        assert rb.sampler.traj_key == "my_traj"
+        assert getattr(rb.sampler, "_traj_key_auto", False) is False
+
+    # ------------------------------------------------------------------
+    # mask / lengths tests (strict_length=False)
+    # ------------------------------------------------------------------
+
+    def _make_rb_with_short_trajs(self, traj_lengths, slice_len, num_slices):
+        """Helper: build a TensorDictReplayBuffer with trajectories of given lengths."""
+        parts = []
+        for t_id, length in enumerate(traj_lengths):
+            is_init = torch.zeros(length, 1, dtype=torch.bool)
+            is_init[0] = True  # episode reset at the first step of each trajectory
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), t_id, dtype=torch.int),
+                        "obs": torch.arange(length).float(),
+                        "is_init": is_init,
+                    },
+                    batch_size=[length],
+                )
+            )
+        data = torch.cat(parts)
+        total = sum(traj_lengths)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(total),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                traj_key="traj",
+                strict_length=False,
+                pad_output=True,
+            ),
+            batch_size=num_slices * slice_len,
+        )
+        rb.extend(data)
+        return rb
+
+    def test_slice_sampler_mask_present_when_short_trajs(self):
+        """mask appears in output when short trajectories force padding."""
+        torch.manual_seed(0)
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[3, 6, 2], slice_len=5, num_slices=3
+        )
+        sample = rb.sample()
+        assert ("collector", "mask") in sample.keys(True)
+
+    def test_slice_sampler_mask_shape_dtype(self):
+        """mask is bool with shape [B*T] (matches batch shape, no trailing 1)."""
+        torch.manual_seed(0)
+        B, T = 4, 6
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[2, 5, 3, 4], slice_len=T, num_slices=B
+        )
+        sample = rb.sample()
+        mask = sample[("collector", "mask")]
+        assert mask.shape == torch.Size([B * T])
+        assert mask.dtype == torch.bool
+        # mask must match the leading batch dim so trainer code can index
+        # batch[batch.get(("collector", "mask"))] without broadcasting tricks.
+        assert mask.shape[0] == sample.batch_size[0]
+
+    def test_slice_sampler_mask_correctness(self):
+        """mask rows are contiguous: True prefix followed by False suffix."""
+        torch.manual_seed(0)
+        B, T = 6, 8
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[3, 8, 2, 7, 1, 5], slice_len=T, num_slices=B
+        )
+        for _ in range(20):
+            sample = rb.sample()
+            mask = sample[("collector", "mask")].reshape(B, T)
+            # derive lengths from the mask itself
+            lengths = mask.sum(-1)  # [B]
+            for i in range(B):
+                length = lengths[i].item()
+                assert length >= 1
+                assert length <= T
+                assert mask[
+                    i, :length
+                ].all(), f"slice {i}: first {length} steps should be True"
+                assert not mask[
+                    i, length:
+                ].any(), f"slice {i}: steps after {length} should be False"
+
+    def test_slice_sampler_mask_padded_obs_is_valid(self):
+        """Padded positions repeat the last real index — obs values must be finite."""
+        torch.manual_seed(0)
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[2, 6, 3], slice_len=5, num_slices=3
+        )
+        sample = rb.sample()
+        assert torch.isfinite(sample["obs"]).all()
+
+    def test_slice_sampler_strict_length_no_mask(self):
+        """With pad_output=False, no mask is emitted regardless of strict_length."""
+        torch.manual_seed(0)
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [torch.zeros(6, dtype=torch.int), torch.ones(6, dtype=torch.int)]
+                ),
+                "obs": torch.arange(12).float(),
+            },
+            batch_size=[12],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(12),
+            sampler=SliceSampler(
+                slice_len=4, traj_key="traj", strict_length=True, pad_output=False
+            ),
+            batch_size=8,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        assert ("collector", "mask") not in sample.keys(True)
+
+    def test_slice_sampler_pad_output_strict_length_raises(self):
+        """pad_output=True + strict_length=True is rejected at construction."""
+        with pytest.raises(ValueError, match="pad_output=True is incompatible"):
+            SliceSampler(
+                slice_len=4, traj_key="traj", strict_length=True, pad_output=True
+            )
+
+    def test_slice_sampler_pad_output_marks_slice_starts(self):
+        """pad_output=True writes is_init=True at every slice start.
+
+        This is what lets a recurrent policy in `set_recurrent_mode("recurrent")`
+        consume the flat [B*T] sample directly: the RNN splits on `is_init`
+        and uses each slice's stored hidden state at position 0.
+        """
+        torch.manual_seed(0)
+        B, T = 4, 8
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[3, 8, 2, 7, 1, 5], slice_len=T, num_slices=B
+        )
+        for _ in range(10):
+            sample = rb.sample()
+            is_init = sample["is_init"].reshape(B, T)
+            # Position 0 of every slice must be True regardless of where the
+            # slice landed within its source trajectory.
+            assert is_init[:, 0].all(), "every slice must start with is_init=True"
+
+    def test_slice_sampler_marks_slice_starts_no_pad(self):
+        """Default (no pad_output) flow: is_init=True at every slice start.
+
+        This is the workflow most users will hit: trajectories are written
+        end-to-end into the buffer, the sampler returns concatenated
+        variable-length slices, and the RNN splits on `is_init`. No mask, no
+        padding involved.
+        """
+        torch.manual_seed(0)
+        traj_lengths = [3, 8, 2, 7, 5]
+        parts = []
+        for t_id, length in enumerate(traj_lengths):
+            init = torch.zeros(length, 1, dtype=torch.bool)
+            init[0] = True
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), t_id, dtype=torch.int),
+                        "is_init": init,
+                    },
+                    batch_size=[length],
+                )
+            )
+        data = torch.cat(parts)
+        B = 4
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(data.numel()),
+            sampler=SliceSampler(num_slices=B, traj_key="traj", strict_length=False),
+            batch_size=B * 6,
+        )
+        rb.extend(data)
+        for _ in range(10):
+            sample = rb.sample()
+            assert "is_init" in sample.keys(True)
+            is_init = sample["is_init"].squeeze(-1)
+            trunc = sample[("next", "truncated")].squeeze(-1)
+            # Slice 0 always starts at position 0.
+            assert is_init[0].item(), "first slice must start with is_init=True"
+            # Every position right after a truncated flag must be is_init=True
+            # (next slice's start). The last truncated marks the end of the
+            # batch; nothing follows it.
+            slice_ends = trunc.nonzero().squeeze(-1).tolist()
+            for end in slice_ends[:-1]:
+                assert is_init[
+                    end + 1
+                ].item(), f"slice starting at index {end + 1} missing is_init=True"
+
+    def test_slice_sampler_pad_output_no_is_init_no_marker(self):
+        """Without is_init in the storage we don't introduce one out of thin air."""
+        torch.manual_seed(0)
+        # Build a buffer *without* is_init.
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [
+                        torch.full((3,), 0, dtype=torch.int),
+                        torch.full((6,), 1, dtype=torch.int),
+                        torch.full((2,), 2, dtype=torch.int),
+                    ]
+                ),
+                "obs": torch.arange(11).float(),
+            },
+            batch_size=[11],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(11),
+            sampler=SliceSampler(
+                slice_len=5, traj_key="traj", strict_length=False, pad_output=True
+            ),
+            batch_size=15,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        # is_init must not appear if it wasn't in the storage
+        assert "is_init" not in sample.keys(True)
+
+    def test_slice_sampler_flat_sample_matches_batched_recurrent_module(self):
+        """A flat padded sample must match an explicit [B, T] recurrent call."""
+        torch.manual_seed(0)
+        B, T = 4, 5
+        input_size, hidden_size = 3, 7
+        parts = []
+        for traj_id, length in enumerate([11, 9, 10, 12]):
+            is_init = torch.zeros(length, 1, dtype=torch.bool)
+            is_init[0] = True
+            parts.append(
+                TensorDict(
+                    {
+                        "traj": torch.full((length,), traj_id, dtype=torch.int),
+                        "embed": torch.randn(length, input_size),
+                        "recurrent_state": torch.randn(length, 1, hidden_size),
+                        "is_init": is_init,
+                    },
+                    batch_size=[length],
+                )
+            )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(sum(part.shape[0] for part in parts)),
+            sampler=SliceSampler(
+                slice_len=T,
+                traj_key="traj",
+                strict_length=False,
+                pad_output=True,
+            ),
+            batch_size=B * T,
+        )
+        rb.extend(torch.cat(parts))
+        sample = rb.sample()
+        assert sample["is_init"].reshape(B, T)[:, 0].all()
+
+        gru = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=1,
+            in_keys=["embed", "recurrent_state", "is_init"],
+            out_keys=["features", ("next", "recurrent_state")],
+        )
+        with set_recurrent_mode("recurrent"):
+            flat_out = gru(sample.clone())
+            batched_out = gru(sample.clone().reshape(B, T))
+
+        torch.testing.assert_close(
+            flat_out["features"].reshape(B, T, hidden_size), batched_out["features"]
+        )
+        torch.testing.assert_close(
+            flat_out[("next", "recurrent_state")].reshape(B, T, 1, hidden_size),
+            batched_out[("next", "recurrent_state")],
+        )
+
+    def test_slice_sampler_mask_all_long_trajs_no_mask(self):
+        """When all trajs >= slice_len, pad_output=True still emits no mask (nothing to pad)."""
+        torch.manual_seed(0)
+        data = TensorDict(
+            {
+                "traj": torch.cat(
+                    [torch.zeros(8, dtype=torch.int), torch.ones(8, dtype=torch.int)]
+                ),
+                "obs": torch.arange(16).float(),
+            },
+            batch_size=[16],
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(16),
+            sampler=SliceSampler(
+                slice_len=4, traj_key="traj", strict_length=False, pad_output=True
+            ),
+            batch_size=8,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        # No short trajectories → no padding needed → no mask emitted
+        assert ("collector", "mask") not in sample.keys(True)
+
+    def test_slice_sampler_truncated_marks_last_real_step(self):
+        """truncated flag should sit at the last *real* timestep, not the padded end."""
+        torch.manual_seed(0)
+        B, T = 4, 6
+        rb = self._make_rb_with_short_trajs(
+            traj_lengths=[2, 5, 3, 4], slice_len=T, num_slices=B
+        )
+        sample = rb.sample()
+        mask = sample[("collector", "mask")].reshape(B, T)
+        lengths = mask.sum(-1)  # [B] — derived from mask
+        trunc = sample[("next", "truncated")].reshape(B, T)
+        for i in range(B):
+            length = lengths[i].item()
+            # truncated should be True exactly at position length-1
+            assert trunc[
+                i, length - 1
+            ].item(), f"slice {i}: truncated missing at last real step"
+            # no truncated flag in padded region
+            if length < T:
+                assert not trunc[
+                    i, length:
+                ].any(), f"slice {i}: spurious truncated in padding"
+
     @pytest.mark.parametrize("ndim", [1, 2])
     @pytest.mark.parametrize("strict_length", [True, False])
     @pytest.mark.parametrize("circ", [False, True])
@@ -3788,8 +4319,6 @@ class TestStalenessAwareSampler:
 
     def _make_buffer_with_versions(self, n_entries=100, version_range=(0, 5)):
         """Create a replay buffer populated with data containing policy_version."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(n_entries),
@@ -3819,8 +4348,6 @@ class TestStalenessAwareSampler:
 
     def test_freshness_weighting(self):
         """Test that fresher entries are sampled more frequently."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(200),
@@ -3864,8 +4391,6 @@ class TestStalenessAwareSampler:
 
     def test_hard_staleness_gate(self):
         """Test that entries beyond max_staleness are never sampled."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=3)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(200),
@@ -3903,8 +4428,6 @@ class TestStalenessAwareSampler:
 
     def test_all_stale_raises(self):
         """Test that an error is raised when all entries exceed max_staleness."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=2)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -3926,8 +4449,6 @@ class TestStalenessAwareSampler:
 
     def test_consumer_version_increment(self):
         """Test consumer version tracking."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler()
         assert sampler.consumer_version == 0
         sampler.increment_consumer_version()
@@ -3937,8 +4458,6 @@ class TestStalenessAwareSampler:
 
     def test_staleness_in_info(self):
         """Test that staleness values are returned in sample info."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -3961,8 +4480,6 @@ class TestStalenessAwareSampler:
 
     def test_missing_version_key_raises(self):
         """Test that a clear error is raised when version key is missing."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler()
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -3980,8 +4497,6 @@ class TestStalenessAwareSampler:
 
     def test_state_dict_roundtrip(self):
         """Test that state_dict/load_state_dict preserves sampler state."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=7)
         sampler.consumer_version = 42
 
@@ -3996,8 +4511,6 @@ class TestStalenessAwareSampler:
 
     def test_no_staleness_limit(self):
         """Test sampling with max_staleness=-1 (no limit)."""
-        from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
-
         sampler = StalenessAwareSampler(max_staleness=-1)
         rb = TensorDictReplayBuffer(
             storage=LazyTensorStorage(50),
@@ -4611,8 +5124,6 @@ class TestRBMultidim:
     def test_rb_multidim_collector(
         self, rbtype, storage_cls, writer_cls, sampler_cls, transform, env_device
     ):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         torch.manual_seed(0)
         env = SerialEnv(2, lambda: GymEnv(CARTPOLE_VERSIONED()), device=env_device)
         env.set_seed(0)
@@ -5421,8 +5932,6 @@ class TestLazyMemmapStorageCleanup:
 
     def test_cleanup_registry(self):
         """Test that storages are registered for cleanup."""
-        from torchrl.data.replay_buffers.storages import _MEMMAP_STORAGE_REGISTRY
-
         storage = LazyMemmapStorage(100, auto_cleanup=True)
         # Check storage is in the registry (avoids race with GC on WeakSet)
         assert storage in _MEMMAP_STORAGE_REGISTRY
@@ -5438,9 +5947,6 @@ class TestLazyMemmapStorageCleanup:
 
     def test_cleanup_subprocess(self, tmpdir):
         """Test that cleanup works correctly in subprocess scenarios."""
-        import subprocess
-        import sys
-
         scratch_dir = str(tmpdir / "subprocess_storage")
 
         # Create a script that creates a storage and exits normally
@@ -5472,10 +5978,6 @@ print("Storage created")
 
     def test_cleanup_signal_interrupt(self, tmpdir):
         """Test that cleanup happens on SIGINT (Ctrl+C)."""
-        import subprocess
-        import sys
-        import time
-
         scratch_dir = str(tmpdir / "signal_storage")
 
         # Create a script that sleeps and can be interrupted
@@ -5544,8 +6046,6 @@ time.sleep(60)  # Will be interrupted
         create_and_delete()
 
         # Force garbage collection
-        import gc
-
         gc.collect()
 
         # Note: __del__ is not guaranteed to run immediately, but the cleanup

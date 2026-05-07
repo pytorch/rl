@@ -10,6 +10,7 @@ from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.modules.models import ACTModel
+from torchrl.modules.models.act import _sinusoidal_pos_enc
 from torchrl.objectives import ACTLoss
 
 
@@ -179,8 +180,6 @@ class TestACTModel:
         torch.testing.assert_close(a_src, a_dst)
 
     def test_sinusoidal_pos_enc_rejects_odd_dim(self):
-        from torchrl.modules.models.act import _sinusoidal_pos_enc
-
         with pytest.raises(ValueError, match="even"):
             _sinusoidal_pos_enc(4, 7)
 

@@ -18,12 +18,14 @@ from torchrl import compile_with_warmup
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function,
+    _maybe_record_function_decorator,
     _replace_last,
     accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector, ProfileConfig
+from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
 from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
@@ -42,118 +44,9 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
+from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
-
-
-class _CollectorProfiler:
-    """Helper class for profiling collector rollouts in single-process mode.
-
-    Manages the PyTorch profiler lifecycle for the Collector class.
-    """
-
-    def __init__(self, profile_config: ProfileConfig):
-        self.config = profile_config
-        self.rollout_count = 0
-        self._profiler = None
-        self._stopped = False
-        self._active = False
-
-        # Set up profiler schedule
-        active_rollouts = self.config.num_rollouts - self.config.warmup_rollouts
-        profiler_schedule = torch.profiler.schedule(
-            skip_first=self.config.warmup_rollouts,
-            wait=0,
-            warmup=0,
-            active=active_rollouts,
-            repeat=1,
-        )
-
-        # Get activities
-        activities = self.config.get_activities()
-        if not activities:
-            return
-
-        # Determine trace handler
-        if self.config.on_trace_ready is not None:
-            on_trace_ready = self.config.on_trace_ready
-        else:
-            save_path = self.config.get_save_path(
-                0
-            )  # Use worker_idx 0 for single-process
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-
-            from torchrl import logger as torchrl_logger
-
-            def on_trace_ready(prof, save_path=save_path):
-                prof.export_chrome_trace(str(save_path))
-                torchrl_logger.info(f"Collector: Profiling trace saved to {save_path}")
-
-        self._profiler = torch.profiler.profile(
-            activities=activities,
-            schedule=profiler_schedule,
-            on_trace_ready=on_trace_ready,
-            record_shapes=self.config.record_shapes,
-            profile_memory=self.config.profile_memory,
-            with_stack=self.config.with_stack,
-            with_flops=self.config.with_flops,
-        )
-        self._active = True
-
-    def start(self) -> None:
-        """Start the profiler."""
-        from torchrl import logger as torchrl_logger
-
-        if self._profiler is not None and not self._stopped:
-            self._profiler.start()
-            torchrl_logger.info(
-                f"Collector: Profiling started. "
-                f"Will profile rollouts {self.config.warmup_rollouts} to {self.config.num_rollouts - 1}."
-            )
-
-    def step(self) -> bool:
-        """Step the profiler after a rollout.
-
-        Returns:
-            True if profiling is complete.
-        """
-        if self._profiler is None or self._stopped:
-            return False
-
-        self.rollout_count += 1
-        self._profiler.step()
-
-        # Check if profiling is complete
-        if self.rollout_count >= self.config.num_rollouts:
-            self.stop()
-            return True
-
-        return False
-
-    def stop(self) -> None:
-        """Stop the profiler and export trace."""
-        from torchrl import logger as torchrl_logger
-
-        if self._profiler is not None and not self._stopped:
-            self._profiler.stop()
-            self._stopped = True
-            torchrl_logger.info(
-                f"Collector: Profiling complete after {self.rollout_count} rollouts."
-            )
-
-    @property
-    def is_active(self) -> bool:
-        """Check if profiling is active."""
-        return self._active and not self._stopped
-
-    @contextlib.contextmanager
-    def profile_rollout(self):
-        """Context manager for profiling a single rollout."""
-        if self._profiler is not None and not self._stopped:
-            with torch.profiler.record_function("collector_rollout"):
-                yield
-        else:
-            yield
 
 
 def _cuda_sync_if_initialized():
@@ -330,6 +223,24 @@ class Collector(BaseCollector):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        auto_register_policy_transforms (bool, optional): if ``True``, the
+            collector inspects the policy for recurrent submodules
+            (:class:`~torchrl.modules.LSTMModule`,
+            :class:`~torchrl.modules.GRUModule`, anything implementing
+            ``make_tensordict_primer()``) and appends the matching
+            :class:`~torchrl.envs.transforms.InitTracker` and
+            :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms to
+            the env if the env's specs don't already provide them. The check
+            is spec-based and idempotent, so passing an env that was already
+            wrapped via :class:`~torchrl.envs.EnvBase`'s ``policy=``
+            constructor argument is safe. If ``False``, the collector never
+            modifies the env. Defaults to ``None`` through v0.14, which
+            preserves the pre-0.13 behavior (no auto-registration) but emits
+            a :class:`FutureWarning` if the env was missing transforms the
+            policy needed. The default flips to ``True`` in v0.15.
+
+            .. seealso:: :ref:`Auto-wrapping recurrent transforms via the
+                policy= argument <Environment-policy-arg>`.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.
@@ -450,6 +361,7 @@ class Collector(BaseCollector):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
         **kwargs,
@@ -457,6 +369,7 @@ class Collector(BaseCollector):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
@@ -493,6 +406,9 @@ class Collector(BaseCollector):
 
         # Set up policy version tracking
         self._setup_policy_version_tracking(track_policy_version)
+
+        # Set up recurrent policy environment transforms
+        self.env = self._maybe_setup_policy_env_transforms(self.env, policy)
 
         # Set up replay buffer
         self._setup_replay_buffer(
@@ -555,6 +471,19 @@ class Collector(BaseCollector):
         # Set split trajectories option
         if split_trajs is None:
             split_trajs = False
+        elif split_trajs:
+            warnings.warn(
+                "split_trajs=True produces a (N_traj, T_max) zero-padded "
+                "tensordict with a 'mask' key. For sequence training, prefer "
+                "the contiguous-trajectory layout: pass a replay_buffer to "
+                "the collector and sample with "
+                ":class:`~torchrl.data.SliceSampler` (variable-length slices, "
+                "no padding, no mask). See "
+                ":ref:`Data layout: contiguous trajectories <data-layout>` "
+                "in the docs. This advisory will become a "
+                "DeprecationWarning in a future release.",
+                stacklevel=2,
+            )
         self.split_trajs = split_trajs
         self._exclude_private_keys = True
 
@@ -592,6 +521,46 @@ class Collector(BaseCollector):
                         f"on environment of type {type(create_env_fn)}."
                     )
                 env.update_kwargs(create_env_kwargs)
+        return env
+
+    def _maybe_setup_policy_env_transforms(
+        self,
+        env: EnvBase,
+        policy: TensorDictModule | Callable,
+    ) -> EnvBase:
+        """Attach env transforms required by the policy if absent.
+
+        Gated by the ``auto_register_policy_transforms`` constructor flag:
+
+        * ``True``  → spec-based detection + idempotent append.
+        * ``False`` → no-op (silent).
+        * ``None``  (default through v0.14) → no-op, but emit a
+          :class:`FutureWarning` if the env was missing transforms the policy
+          needs. Default flips to ``True`` in v0.15.
+        """
+        flag = self._auto_register_policy_transforms
+        if flag is True:
+            return _maybe_append_env_transforms_from_module(env, policy)
+        if flag is False:
+            return env
+        # flag is None — preserve the pre-0.13 behavior but warn that this
+        # will change in v0.15.
+        from torchrl.modules.utils.utils import _compute_missing_env_transforms
+
+        missing = _compute_missing_env_transforms(env, policy)
+        if missing:
+            missing_names = ", ".join(type(t).__name__ for t in missing)
+            warnings.warn(
+                f"The env passed to {type(self).__name__} is missing "
+                f"transforms required by the policy ({missing_names}). "
+                "From torchrl v0.15 the collector will append them "
+                "automatically. To enable that behavior now (and silence "
+                "this warning), pass `auto_register_policy_transforms=True`. "
+                "To opt out permanently, pass "
+                "`auto_register_policy_transforms=False`.",
+                FutureWarning,
+                stacklevel=3,
+            )
         return env
 
     def _init_policy(
@@ -1262,6 +1231,7 @@ class Collector(BaseCollector):
         return super().next()
 
     # for RPC
+    @_maybe_record_function_decorator("Collector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -1384,13 +1354,6 @@ class Collector(BaseCollector):
             streams = []
             events = []
 
-        # Set up profiler if configured
-        profiler = None
-        if self._profile_config is not None:
-            profiler = _CollectorProfiler(self._profile_config)
-            if profiler.is_active:
-                profiler.start()
-
         with contextlib.ExitStack() as stack:
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
@@ -1398,19 +1361,7 @@ class Collector(BaseCollector):
             while self._frames < self.total_frames:
                 self._iter += 1
 
-                # Use profiler context if profiling is active
-                profile_ctx = (
-                    profiler.profile_rollout()
-                    if profiler is not None and profiler.is_active
-                    else contextlib.nullcontext()
-                )
-
-                with profile_ctx:
-                    tensordict_out = self.rollout()
-
-                # Step the profiler after each rollout
-                if profiler is not None and profiler.is_active:
-                    profiler.step()
+                tensordict_out = self.rollout()
 
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
@@ -1447,10 +1398,6 @@ class Collector(BaseCollector):
                     if self.post_collect_hook is not None:
                         self.post_collect_hook(tensordict_out)
                     yield tensordict_out
-
-        # Stop profiler if it hasn't been stopped yet
-        if profiler is not None and profiler.is_active:
-            profiler.stop()
 
     def start(self):
         """Starts the collector in a separate thread for asynchronous data collection.
@@ -1611,6 +1558,7 @@ class Collector(BaseCollector):
             self._carrier.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
+    @_maybe_record_function_decorator("Collector.rollout")
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
@@ -1673,7 +1621,8 @@ class Collector(BaseCollector):
                     # we still do the assignment for security
                     if self.compiled_policy:
                         cudagraph_mark_step_begin()
-                    policy_output = self._wrapped_policy(policy_input)
+                    with _maybe_record_function("Collector.policy"):
+                        policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
                         policy_output = policy_output.clone()
                     if self._carrier is not policy_output:

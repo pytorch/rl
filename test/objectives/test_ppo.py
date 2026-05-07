@@ -2560,14 +2560,24 @@ class TestReinforce(LossModuleTestBase):
                 value_net.parameters(),
                 retain_graph=True,
             )
-            with pytest.raises(RuntimeError, match="One of the "):
+            with pytest.raises(
+                RuntimeError,
+                # torch < nightly 2026-05-05: "One of the differentiated Tensors appears to not have been used in the graph"
+                # torch >= nightly 2026-05-05 (pytorch/pytorch#181917): "The differentiated Tensor at index N appears to not have been used in the graph"
+                match=r"One of the differentiated Tensors|differentiated Tensor at index",
+            ):
                 autograd.grad(
                     loss_td.get("loss_actor"),
                     value_net.parameters(),
                     retain_graph=True,
                     allow_unused=False,
                 )
-            with pytest.raises(RuntimeError, match="One of the "):
+            with pytest.raises(
+                RuntimeError,
+                # torch < nightly 2026-05-05: "One of the differentiated Tensors appears to not have been used in the graph"
+                # torch >= nightly 2026-05-05 (pytorch/pytorch#181917): "The differentiated Tensor at index N appears to not have been used in the graph"
+                match=r"One of the differentiated Tensors|differentiated Tensor at index",
+            ):
                 autograd.grad(
                     loss_td.get("loss_value"),
                     actor_net.parameters(),

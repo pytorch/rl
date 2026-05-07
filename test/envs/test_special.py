@@ -837,8 +837,6 @@ class TestMPSDeviceCasting:
         assert result["flag"].dtype == torch.bool
 
     def test_has_float64_leaf(self):
-        from torchrl.data import Unbounded
-
         spec_f64 = Composite(
             obs=Unbounded(shape=(3,), dtype=torch.float64, device="cpu")
         )

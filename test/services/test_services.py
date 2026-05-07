@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 
 # Import from mocking_classes which is a proper module
 import sys
@@ -14,6 +15,8 @@ from pathlib import Path
 import pytest
 
 from torchrl._utils import logger
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -29,8 +32,6 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module", autouse=True)
 def ray_init():
     """Initialize Ray once for the entire test module."""
-    import os
-
     import ray
 
     if ray.is_initialized():

@@ -14,6 +14,7 @@ from tensordict.nn import TensorDictModuleBase
 from torchrl import logger as torchrl_logger
 from torchrl._utils import (
     _check_for_faulty_process,
+    _maybe_record_function_decorator,
     accept_remote_rref_udf_invocation,
     RL_WARNINGS,
 )
@@ -176,6 +177,7 @@ class MultiSyncCollector(MultiCollector):
         return super().load_state_dict(state_dict)
 
     # for RPC
+    @_maybe_record_function_decorator("MultiSyncCollector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,

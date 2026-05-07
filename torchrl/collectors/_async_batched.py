@@ -13,7 +13,7 @@ from typing import Literal
 import torch
 from tensordict import lazy_stack, TensorDictBase
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
 from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
@@ -375,6 +375,7 @@ class AsyncBatchedCollector(BaseCollector):
                 "A collector worker thread raised an exception."
             ) from item
 
+    @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_frames")
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
@@ -402,6 +403,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         return lazy_stack(transitions)
 
+    @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_yield_trajs")
     def _rollout_yield_trajs(self) -> TensorDictBase:
         """Drain transitions until a complete trajectory is available."""
         rq = self._result_queue

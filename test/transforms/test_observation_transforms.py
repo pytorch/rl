@@ -11,6 +11,7 @@ import torch
 
 from _transforms_common import _has_ale, TransformBase
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 from tensordict.utils import assert_allclose_td
 from torch import nn, Tensor
 from torchrl._utils import prod
@@ -45,6 +46,7 @@ from torchrl.envs.utils import check_env_specs, step_mdp
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -210,8 +212,6 @@ class TestCatFrames(TransformBase):
     def test_catframes_batching(
         self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
     ):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         if batched_class is ParallelEnv:
             batched_class = maybe_fork_ParallelEnv
 
@@ -2522,8 +2522,6 @@ class TestTimeMaxPool(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_timemax_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TimeMaxPool(
@@ -2747,8 +2745,6 @@ class TestPermuteTransform(TransformBase):
         )  # DxWxHxC => CxDxHxW
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         out_channels = 4
-        from tensordict.nn import TensorDictModule
-
         model = nn.Sequential(
             trans,
             TensorDictModule(

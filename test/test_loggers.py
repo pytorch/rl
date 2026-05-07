@@ -18,7 +18,7 @@ from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
-from torchrl.record.loggers.common import _has_torchcodec, _has_tv
+from torchrl.record.loggers.common import _has_torchcodec, _has_tv, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.ray import RayLogger
@@ -819,8 +819,6 @@ class TestRayLogger:
         pass
 
     def test_csv_logger_returns_ray_logger(self):
-        from torchrl.record.loggers.common import Logger
-
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
             assert isinstance(logger, RayLogger)

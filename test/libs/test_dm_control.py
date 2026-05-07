@@ -22,6 +22,8 @@ from torchrl.envs.utils import check_env_specs, ExplorationType
 from torchrl.modules import RandomPolicy
 from torchrl.testing import HALFCHEETAH_VERSIONED, PONG_VERSIONED
 
+_has_dm_control = importlib.util.find_spec("dm_control") is not None
+
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 IS_OSX = __import__("sys").platform == "darwin"
 

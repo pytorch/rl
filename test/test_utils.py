@@ -17,7 +17,8 @@ import torch
 
 import torchrl.envs.libs.gym as _gym_lib
 from packaging import version
-from torchrl._utils import _rng_decorator, get_binary_env_var, implement_for
+from torchrl import _utils
+from torchrl._utils import _rng_decorator, as_remote, get_binary_env_var, implement_for
 from torchrl.envs.libs.gym import gym_backend, GymWrapper, set_gym_backend
 
 from torchrl.objectives.utils import _pseudo_vmap
@@ -514,6 +515,95 @@ def test_vmap_in_out_dims(in_dim, out_dim):
     # Assert the results are as expected
     assert torch.allclose(actual_result, expected_result)
     assert torch.allclose(pseudo_actual_result, expected_result)
+
+
+class TestProfilingDecorator:
+    """Tests for the TORCHRL_PROFILING-gated profiling decorator."""
+
+    def test_decorator_is_identity_when_unarmed(self, monkeypatch):
+        # Force the decorator's import-time gate to "off" regardless of how the
+        # test process was launched, so we can assert the zero-overhead branch.
+        monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", False)
+
+        def fn(x):
+            return x + 1
+
+        decorated = _utils._maybe_record_function_decorator("test")(fn)
+        assert decorated is fn  # truly identity, no closure
+
+    def test_decorator_wraps_when_armed(self, monkeypatch):
+        monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", True)
+        monkeypatch.setattr(_utils, "_PROFILING_ENABLED", True)
+
+        def fn(x):
+            return x + 1
+
+        decorated = _utils._maybe_record_function_decorator("test")(fn)
+        assert decorated is not fn
+        assert decorated.__wrapped__ is fn  # functools.wraps preserves
+        assert decorated(5) == 6
+
+    def test_set_profiling_enabled_warns_when_unarmed(self, monkeypatch):
+        monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", False)
+        monkeypatch.setattr(_utils, "_PROFILING_ENABLED", False)
+
+        with pytest.warns(UserWarning, match="TORCHRL_PROFILING=1 was"):
+            _utils.set_profiling_enabled(True)
+        # Must remain off — the warning is a no-op gate, not a soft enable.
+        assert _utils._PROFILING_ENABLED is False
+
+    def test_set_profiling_enabled_toggles_when_armed(self, monkeypatch):
+        monkeypatch.setattr(_utils, "_PROFILING_ALLOWED", True)
+        monkeypatch.setattr(_utils, "_PROFILING_ENABLED", True)
+
+        _utils.set_profiling_enabled(False)
+        assert _utils._PROFILING_ENABLED is False
+        _utils.set_profiling_enabled(True)
+        assert _utils._PROFILING_ENABLED is True
+
+    def test_maybe_record_function_returns_nullcontext_when_disabled(self, monkeypatch):
+        monkeypatch.setattr(_utils, "_PROFILING_ENABLED", False)
+        ctx = _utils._maybe_record_function("test")
+        assert ctx is _utils._NULL_CONTEXT
+
+    def test_as_remote_propagates_torchrl_profiling(self, monkeypatch):
+        # Mock the ray module so we can capture what `ray.remote` was called with.
+        ray_mock = mock.MagicMock()
+        captured = {}
+
+        def fake_remote(**kwargs):
+            captured.update(kwargs)
+            return lambda cls: cls
+
+        ray_mock.remote = fake_remote
+        monkeypatch.setitem(sys.modules, "ray", ray_mock)
+        monkeypatch.setenv("TORCHRL_PROFILING", "1")
+
+        class Dummy:
+            pass
+
+        as_remote.__func__(Dummy, remote_config={"num_cpus": 1})
+        env_vars = captured["runtime_env"]["env_vars"]
+        assert env_vars["TORCHRL_PROFILING"] == "1"
+        assert captured["num_cpus"] == 1
+
+    def test_as_remote_no_op_when_torchrl_profiling_unset(self, monkeypatch):
+        ray_mock = mock.MagicMock()
+        captured = {}
+
+        def fake_remote(**kwargs):
+            captured.update(kwargs)
+            return lambda cls: cls
+
+        ray_mock.remote = fake_remote
+        monkeypatch.setitem(sys.modules, "ray", ray_mock)
+        monkeypatch.delenv("TORCHRL_PROFILING", raising=False)
+
+        class Dummy:
+            pass
+
+        as_remote.__func__(Dummy, remote_config={"num_cpus": 1})
+        assert "runtime_env" not in captured
 
 
 if __name__ == "__main__":

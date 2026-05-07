@@ -17,7 +17,7 @@ from torchrl.collectors import Evaluator
 from torchrl.collectors._evaluator import _freeze_vecnorm, _wrap_env_factory_frozen
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.transforms import RewardSum, StepCounter, VecNormV2
+from torchrl.envs.transforms import Compose, RewardSum, StepCounter, VecNormV2
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -1012,8 +1012,6 @@ class TestEvaluatorVecNormFreeze:
 
     def test_freeze_vecnorm_nested(self):
         """_freeze_vecnorm handles nested Compose transforms."""
-        from torchrl.envs.transforms import Compose
-
         base = ContinuousActionVecMockEnv()
         vecnorm = VecNormV2(in_keys=["observation"], out_keys=["observation"])
         env = TransformedEnv(base, Compose(StepCounter(), vecnorm))

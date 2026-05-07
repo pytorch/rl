@@ -62,7 +62,7 @@ jobs:
         # ============================================
         echo "::group::Install TensorDict"
         # Docker image has PyTorch 2.5.1+cu124 pre-installed
-        python -m pip install tensordict --quiet
+        python -m pip install git+https://github.com/pytorch/tensordict.git --quiet
         echo "::endgroup::"
 
         # ============================================
