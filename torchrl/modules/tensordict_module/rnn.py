@@ -250,7 +250,7 @@ class LSTM(LSTMBase):
 
         return hy, cy
 
-    def _lstm(self, x, hx):
+    def _lstm(self, x, hx, mask=None):
 
         h_t, c_t = hx
         h_t, c_t = h_t.unbind(0), c_t.unbind(0)
@@ -272,9 +272,15 @@ class LSTM(LSTMBase):
                 bias_ihs.append(None)
                 bias_hhs.append(None)
 
-        for x_t in x.unbind(int(self.batch_first)):
+        time_dim = int(self.batch_first)
+        x_unbound = x.unbind(time_dim)
+        if mask is not None:
+            mask_unbound = mask.unbind(time_dim)
+
+        for t, x_t in enumerate(x_unbound):
             h_t_out = []
             c_t_out = []
+            m_t = mask_unbound[t].unsqueeze(-1) if mask is not None else None
 
             for layer, (
                 weight_ih,
@@ -285,26 +291,33 @@ class LSTM(LSTMBase):
                 _c_t,
             ) in enumerate(zip(weight_ihs, bias_ihs, weight_hhs, bias_hhs, h_t, c_t)):
                 # Run cell
-                _h_t, _c_t = self._lstm_cell(
+                h_new, c_new = self._lstm_cell(
                     x_t, _h_t, _c_t, weight_ih, bias_ih, weight_hh, bias_hh
                 )
-                h_t_out.append(_h_t)
-                c_t_out.append(_c_t)
+                if m_t is not None:
+                    # Freeze hidden/cell state for batch entries whose
+                    # trajectory has already ended at this time step. The cell
+                    # is still evaluated for the full batch (wasteful but
+                    # vmap/compile-friendly); only the carry is masked.
+                    h_new = torch.where(m_t, h_new, _h_t)
+                    c_new = torch.where(m_t, c_new, _c_t)
+                h_t_out.append(h_new)
+                c_t_out.append(c_new)
 
                 # Apply dropout if in training mode
                 if layer < self.num_layers - 1 and self.dropout:
-                    x_t = F.dropout(_h_t, p=self.dropout, training=self.training)
+                    x_t = F.dropout(h_new, p=self.dropout, training=self.training)
                 else:  # No dropout after the last layer
-                    x_t = _h_t
+                    x_t = h_new
             h_t = h_t_out
             c_t = c_t_out
             outputs.append(x_t)
 
-        outputs = torch.stack(outputs, dim=int(self.batch_first))
+        outputs = torch.stack(outputs, dim=time_dim)
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def forward(self, input, hx=None, mask=None):  # noqa: F811
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
         if input.dim() != 3:
             raise ValueError(
@@ -327,7 +340,7 @@ class LSTM(LSTMBase):
                 device=input.device,
             )
             hx = (h_zeros, c_zeros)
-        return self._lstm(input, hx)
+        return self._lstm(input, hx, mask)
 
 
 class LSTMModule(ModuleBase):
@@ -844,32 +857,13 @@ class LSTMModule(ModuleBase):
                 packed_y, batch_first=True, total_length=steps
             )
         else:
-            # python-based custom LSTM does not accept PackedSequence; fall back
-            # to a per-trajectory loop to keep h_n/c_n free of padding influence.
-            y_chunks, h_n_chunks, c_n_chunks = [], [], []
-            for i in range(batch):
-                length = int(splits[i].item())
-                x_i = input[i : i + 1, :length]
-                h_i = hidden[0][:, i : i + 1].contiguous()
-                c_i = hidden[1][:, i : i + 1].contiguous()
-                y_i, (h_n_i, c_n_i) = self.lstm(x_i, (h_i, c_i))
-                if length < steps:
-                    pad = torch.zeros(
-                        1,
-                        steps - length,
-                        y_i.shape[-1],
-                        device=device,
-                        dtype=y_i.dtype,
-                    )
-                    y_i = torch.cat([y_i, pad], dim=1)
-                y_chunks.append(y_i)
-                h_n_chunks.append(h_n_i)
-                c_n_chunks.append(c_n_i)
-            y = torch.cat(y_chunks, dim=0)
-            hidden = (
-                torch.cat(h_n_chunks, dim=1),
-                torch.cat(c_n_chunks, dim=1),
-            )
+            # python-based custom LSTM does not accept PackedSequence. Run the
+            # full padded batch through it but pass a per-step active mask so
+            # the cell freezes h/c for batch entries whose trajectory has
+            # already ended (wasteful compute on the padded tail, but the
+            # batch dimension stays vectorised -- vmap/compile-friendly).
+            mask = torch.arange(steps, device=device).unsqueeze(0) < splits.unsqueeze(1)
+            y, hidden = self.lstm(input, hidden, mask=mask)
 
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = tuple(_h.transpose(0, 1) for _h in hidden)
@@ -1085,12 +1079,14 @@ class GRU(GRUBase):
 
         return hy
 
-    def _gru(self, x, hx):
+    def _gru(self, x, hx, mask=None):
 
         if not self.batch_first:
             x = x.permute(
                 1, 0, 2
             )  # Change (seq_len, batch, features) to (batch, seq_len, features)
+            if mask is not None:
+                mask = mask.permute(1, 0)
 
         bs, seq_len, input_size = x.size()
         h_t = list(hx.unbind(0))
@@ -1113,17 +1109,25 @@ class GRU(GRUBase):
                 bias_hh.append(None)
 
         outputs = []
+        mask_unbound = mask.unbind(1) if mask is not None else None
 
-        for x_t in x.unbind(1):
+        for t, x_t in enumerate(x.unbind(1)):
+            m_t = mask_unbound[t].unsqueeze(-1) if mask_unbound is not None else None
             for layer in range(self.num_layers):
-                h_t[layer] = self._gru_cell(
+                h_prev = h_t[layer]
+                h_new = self._gru_cell(
                     x_t,
-                    h_t[layer],
+                    h_prev,
                     weight_ih[layer],
                     bias_ih[layer],
                     weight_hh[layer],
                     bias_hh[layer],
                 )
+                if m_t is not None:
+                    # Freeze hidden state for batch entries whose trajectory
+                    # has already ended (see _lstm for rationale).
+                    h_new = torch.where(m_t, h_new, h_prev)
+                h_t[layer] = h_new
 
                 # Apply dropout if in training mode and not the last layer
                 if layer < self.num_layers - 1 and self.dropout:
@@ -1141,7 +1145,7 @@ class GRU(GRUBase):
 
         return outputs, torch.stack(h_t, 0)
 
-    def forward(self, input, hx=None):  # noqa: F811
+    def forward(self, input, hx=None, mask=None):  # noqa: F811
         if input.dim() != 3:
             raise ValueError(
                 f"GRU: Expected input to be 3D, got {input.dim()}D instead"
@@ -1161,7 +1165,7 @@ class GRU(GRUBase):
             )
 
         self.check_forward_args(input, hx, batch_sizes=None)
-        result = self._gru(input, hx)
+        result = self._gru(input, hx, mask)
 
         output = result[0]
         hidden = result[1]
@@ -1648,7 +1652,7 @@ class GRUModule(ModuleBase):
         if splits is None:
             y, hidden = self.gru(input, hidden)
         elif isinstance(self.gru, nn.GRU):
-            # See _lstm for rationale.
+            # See LSTMModule._lstm for rationale.
             lengths = splits.detach().to(device="cpu", dtype=torch.long)
             packed = nn.utils.rnn.pack_padded_sequence(
                 input, lengths, batch_first=True, enforce_sorted=False
@@ -1658,25 +1662,8 @@ class GRUModule(ModuleBase):
                 packed_y, batch_first=True, total_length=steps
             )
         else:
-            y_chunks, h_n_chunks = [], []
-            for i in range(batch):
-                length = int(splits[i].item())
-                x_i = input[i : i + 1, :length]
-                h_i = hidden[:, i : i + 1].contiguous()
-                y_i, h_n_i = self.gru(x_i, h_i)
-                if length < steps:
-                    pad = torch.zeros(
-                        1,
-                        steps - length,
-                        y_i.shape[-1],
-                        device=device,
-                        dtype=y_i.dtype,
-                    )
-                    y_i = torch.cat([y_i, pad], dim=1)
-                y_chunks.append(y_i)
-                h_n_chunks.append(h_n_i)
-            y = torch.cat(y_chunks, dim=0)
-            hidden = torch.cat(h_n_chunks, dim=1)
+            mask = torch.arange(steps, device=device).unsqueeze(0) < splits.unsqueeze(1)
+            y, hidden = self.gru(input, hidden, mask=mask)
 
         # dim 0 in hidden is num_layers, but that will conflict with tensordict
         hidden = hidden.transpose(0, 1)
