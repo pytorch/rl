@@ -551,6 +551,15 @@ For environments running directly on CUDA (<a class="reference external" href="h
 or <a class="reference external" href="https://github.com/haosulab/ManiSkill/">ManiSkills</a>) cuda synchronization may cause unexpected
 crashes.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>auto_register_policy_transforms</strong> (<em>bool</em><em>, </em><em>optional</em>) – forwarded to each
+worker <a class="reference internal" href="torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a>. When <code class="docutils literal notranslate"><span class="pre">True</span></code>,
+workers append <a class="reference internal" href="torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> and
+recurrent-state <a class="reference internal" href="torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a>
+transforms to their envs if the env specs don’t already provide
+them. <code class="docutils literal notranslate"><span class="pre">False</span></code> disables it; <code class="docutils literal notranslate"><span class="pre">None</span></code> (default through v0.14)
+preserves pre-0.13 behavior and emits a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">FutureWarning</span></code> when wrapping would have been needed.
+Default flips to <code class="docutils literal notranslate"><span class="pre">True</span></code> in v0.15.</p></li>
 <li><p><strong>weight_updater</strong> (<a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><em>WeightUpdaterBase</em></a><em> or </em><em>constructor</em><em>, </em><em>optional</em>) – An instance of <a class="reference internal" href="torchrl.collectors.WeightUpdaterBase.html#torchrl.collectors.WeightUpdaterBase" title="torchrl.collectors.WeightUpdaterBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightUpdaterBase</span></code></a>
 or its subclass, responsible for updating the policy weights on remote inference workers.
 If not provided, a <a class="reference internal" href="torchrl.collectors.MultiProcessedWeightUpdater.html#torchrl.collectors.MultiProcessedWeightUpdater" title="torchrl.collectors.MultiProcessedWeightUpdater"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiProcessedWeightUpdater</span></code></a> will be used by default,
@@ -658,12 +667,83 @@ useful for calling methods on weight sync schemes from the sender side.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiAsyncCollector.disable_profile">
+<span class="sig-name descname"><span class="pre">disable_profile</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.MultiAsyncCollector.disable_profile" title="Link to this definition">¶</a></dt>
+<dd><p>Stop any in-flight profiler and restore the prior <code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code>.</p>
+<p>Safe to call when profiling was never enabled (becomes a no-op). When
+the profiler was already self-stopped after <code class="docutils literal notranslate"><span class="pre">num_rollouts</span></code>, this just
+clears the hook and restores any user-set <code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiAsyncCollector.enable_profile">
-<span class="sig-name descname"><span class="pre">enable_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.MultiAsyncCollector.enable_profile" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">enable_profile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_rollouts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">warmup_rollouts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activities</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">record_shapes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">profile_memory</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_stack</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">with_flops</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_trace_ready</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.MultiAsyncCollector.enable_profile" title="Link to this definition">¶</a></dt>
 <dd><p>Enable profiling for collector worker rollouts.</p>
-<p>For multi-process collectors, this sends the profile configuration
-to the specified workers. Must be called before iteration starts.</p>
-<p>See <a class="reference internal" href="torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.enable_profile" title="torchrl.collectors.BaseCollector.enable_profile"><code class="xref py py-meth docutils literal notranslate"><span class="pre">BaseCollector.enable_profile()</span></code></a> for full documentation.</p>
+<p>This method configures the collector to profile rollouts using PyTorch’s
+profiler. For multi-process collectors, profiling happens in the worker
+processes. For single-process collectors (Collector), profiling happens
+in the main process.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>workers</strong> – List of worker indices to profile. Defaults to [0].
+For single-process collectors, this is ignored.</p></li>
+<li><p><strong>num_rollouts</strong> – Total number of rollouts to run the profiler for
+(including warmup). Profiling stops after this many rollouts.
+Defaults to 3.</p></li>
+<li><p><strong>warmup_rollouts</strong> – Number of rollouts to skip before starting actual
+profiling. Useful for JIT/compile warmup. The profiler runs
+but discards data during warmup. Defaults to 1.</p></li>
+<li><p><strong>save_path</strong> – Path to save the profiling trace. Supports {worker_idx}
+placeholder for worker-specific files. If None, traces are
+saved to “./collector_profile_{worker_idx}.json”.</p></li>
+<li><p><strong>activities</strong> – List of profiler activities (“cpu”, “cuda”).
+Defaults to [“cpu”, “cuda”].</p></li>
+<li><p><strong>record_shapes</strong> – Whether to record tensor shapes. Defaults to True.</p></li>
+<li><p><strong>profile_memory</strong> – Whether to profile memory usage. Defaults to False.</p></li>
+<li><p><strong>with_stack</strong> – Whether to record Python stack traces. Defaults to True.</p></li>
+<li><p><strong>with_flops</strong> – Whether to compute FLOPS. Defaults to False.</p></li>
+<li><p><strong>on_trace_ready</strong> – Optional callback when trace is ready. If None,
+traces are exported to Chrome trace format at save_path.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>RuntimeError</strong> – If called after iteration has started.</p></li>
+<li><p><strong>ValueError</strong> – If num_rollouts &lt;= warmup_rollouts.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">MultiSyncCollector</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span> <span class="o">=</span> <span class="n">MultiSyncCollector</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">create_env_fn</span><span class="o">=</span><span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">total_frames</span><span class="o">=</span><span class="mi">100000</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">enable_profile</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">workers</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+<span class="gp">... </span>    <span class="n">num_rollouts</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">warmup_rollouts</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+<span class="gp">... </span>    <span class="n">save_path</span><span class="o">=</span><span class="s2">&quot;./traces/worker_</span><span class="si">{worker_idx}</span><span class="s2">.json&quot;</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># Worker 0 will be profiled for rollouts 2, 3, 4</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">collector</span><span class="p">:</span>
+<span class="gp">... </span>    <span class="n">train</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>Profiling adds overhead, so only profile specific workers</p></li>
+<li><p>The trace file can be viewed in Chrome’s trace viewer
+(chrome://tracing) or with PyTorch’s TensorBoard plugin</p></li>
+<li><p>For multi-process collectors, this must be called BEFORE
+iteration starts as it needs to configure workers</p></li>
+</ul>
+</div>
 </dd></dl>
 
 <dl class="py method">
@@ -939,6 +1019,15 @@ to be reset. If None, all environments are reset.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.collectors.MultiAsyncCollector.set_post_collect_hook">
+<span class="sig-name descname"><span class="pre">set_post_collect_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.12)"><span class="pre">TensorDictBase</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.collectors.MultiAsyncCollector.set_post_collect_hook" title="Link to this definition">¶</a></dt>
+<dd><p>Method form of the <code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code> setter.</p>
+<p>Exposed because Ray actor handles can call methods (<cite>actor.method.remote(…)</cite>)
+but cannot directly invoke property setters. Keeping the actual setter
+for in-process use and this method for remote-actor use.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.collectors.MultiAsyncCollector.set_seed">
 <span class="sig-name descname"><span class="pre">set_seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">static_seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="../../_modules/torchrl/collectors/_multi_async.html#MultiAsyncCollector.set_seed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.collectors.MultiAsyncCollector.set_seed" title="Link to this definition">¶</a></dt>
 <dd><p>Sets the seeds of the environments stored in the DataCollector.</p>
@@ -1209,6 +1298,7 @@ the weight update logic for specific use cases.</p>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector</span></code></a><ul>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.async_shutdown"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.async_shutdown()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.cascade_execute"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.cascade_execute()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.disable_profile"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.disable_profile()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.enable_profile"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.enable_profile()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.get_cached_weights"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.get_cached_weights()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.get_distant_attr"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.get_distant_attr()</span></code></a></li>
@@ -1230,6 +1320,7 @@ the weight update logic for specific use cases.</p>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.receive_weights"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.receive_weights()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.register_scheme_receiver"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.register_scheme_receiver()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.reset"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.reset()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.set_post_collect_hook"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.set_post_collect_hook()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.set_seed"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.set_seed()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.shutdown"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.shutdown()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.collectors.MultiAsyncCollector.start"><code class="docutils literal notranslate"><span class="pre">MultiAsyncCollector.start()</span></code></a></li>

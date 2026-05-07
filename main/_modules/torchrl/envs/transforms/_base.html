@@ -265,7 +265,11 @@
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
 <span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">auto_unwrap_transformed_env</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_maybe_record_function_decorator</span><span class="p">,</span>
+    <span class="n">auto_unwrap_transformed_env</span><span class="p">,</span>
+    <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">TensorSpec</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvPostInit</span><span class="p">,</span> <span class="n">_maybe_unlock</span><span class="p">,</span> <span class="n">EnvBase</span>
@@ -1442,6 +1446,7 @@
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">rand_action</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
 
 
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;TransformedEnv._step&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
         <span class="c1"># No need to clone here because inv does it already</span>
         <span class="c1"># tensordict = tensordict.clone(False)</span>
@@ -1525,6 +1530,7 @@
     <span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;This method is not used in transformed envs.&quot;&quot;&quot;</span>
 
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;TransformedEnv._reset&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># We must avoid modifying the original tensordict so a shallow copy is necessary.</span>

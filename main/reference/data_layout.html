@@ -1,0 +1,948 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Data layout: contiguous trajectories &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="torchrl.envs package" href="envs.html" />
+    <link rel="prev" title="UnboundedDiscrete" href="generated/torchrl.data.UnboundedDiscrete.html" /> 
+
+  
+  <script src="../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../versions.html"><span style="font-size:110%">main (0.12.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/evaluator.html">Using the Evaluator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="index.html">API Reference</a> &gt;</li>
+        
+      <li>Data layout: contiguous trajectories</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+            
+            <a href="../_sources/reference/data_layout.rst.txt" rel="nofollow"><img src="../_static/images/view-page-source-icon.svg"></a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <section id="data-layout-contiguous-trajectories">
+<span id="data-layout"></span><h1>Data layout: contiguous trajectories<a class="headerlink" href="#data-layout-contiguous-trajectories" title="Link to this heading">¶</a></h1>
+<p>This page describes how trajectory data is laid out across TorchRL’s
+collectors, replay buffers, and recurrent modules — and explains why the
+<strong>default and recommended</strong> layout is a single, flat 1-D tensordict in
+which trajectories are concatenated end-to-end and their boundaries are
+recovered from the per-step <code class="docutils literal notranslate"><span class="pre">is_init</span></code> / <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> /
+<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;truncated&quot;)</span></code> / <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;terminated&quot;)</span></code> markers, <strong>not</strong>
+from a fixed <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T]</span></code> shape with a padding mask.</p>
+<p>Two main patterns coexist in TorchRL:</p>
+<ul class="simple">
+<li><p><strong>Padded ``[B, T]`` tensordict + mask.</strong> Every batch has a fixed time
+dimension; short trajectories are padded with garbage and a boolean
+<code class="docutils literal notranslate"><span class="pre">mask</span></code> flags real vs padded steps. Every downstream consumer (loss,
+advantage estimator, normalizer) must mask-out the padded entries. This
+is the layout produced by
+<a class="reference internal" href="generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a>,
+<a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a> with <code class="docutils literal notranslate"><span class="pre">split_trajs=True</span></code>,
+and <a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> with
+<code class="docutils literal notranslate"><span class="pre">pad_output=True</span></code>. It is <strong>discouraged for new code</strong> — see
+<span class="xref std std-ref">data-layout-padded-discouraged</span> below.</p></li>
+<li><p><strong>Concatenated 1-D tensordict.</strong> A single flat tensordict where
+trajectories sit next to each other and their boundaries are encoded
+by per-step markers (<code class="docutils literal notranslate"><span class="pre">is_init</span></code> at the first step of each
+trajectory / slice, <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> at the last). No padding, no
+mask, no wasted FLOPs. Every TorchRL primitive that needs to know about
+trajectory structure (recurrent modules under
+<code class="xref py py-func docutils literal notranslate"><span class="pre">set_recurrent_mode()</span></code>,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>, value estimators in
+<code class="docutils literal notranslate"><span class="pre">single_call=True</span></code> mode) consumes this layout natively.</p></li>
+</ul>
+<p>The rest of this page walks through the building blocks.</p>
+<section id="trajectory-boundary-keys">
+<h2>Trajectory boundary keys<a class="headerlink" href="#trajectory-boundary-keys" title="Link to this heading">¶</a></h2>
+<p id="data-layout-boundary-keys">Four per-step boolean keys jointly describe a trajectory:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">is_init</span></code></dt><dd><p><em>Marks the first step of a trajectory or slice.</em> Written by
+<a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> at every reset, and
+additionally written by
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> at the start of every
+sampled slice (OR-ed with whatever <code class="docutils literal notranslate"><span class="pre">InitTracker</span></code> already produced, so
+real episode resets that fall <em>inside</em> a slice are preserved). This is
+the key recurrent modules
+(<a class="reference internal" href="generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a>,
+<a class="reference internal" href="generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRUModule</span></code></a>) split on under
+<code class="xref py py-func docutils literal notranslate"><span class="pre">set_recurrent_mode()</span></code> <code class="docutils literal notranslate"><span class="pre">(&quot;recurrent&quot;)</span></code>: each
+<code class="docutils literal notranslate"><span class="pre">is_init=True</span></code> position resets the hidden state to whatever was stored
+at that index, letting the RNN process a flat batch of concatenated
+trajectories as if it had been called recursively on each one.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code></dt><dd><p><em>Marks the last step of a trajectory.</em> The union of <code class="docutils literal notranslate"><span class="pre">terminated</span></code> and
+<code class="docutils literal notranslate"><span class="pre">truncated</span></code> (TorchRL’s
+<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> metaclass guarantees both are flanked
+with their dual). Used by collectors to decide when to reset, by
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> to reconstruct trajectory boundaries
+when no <code class="docutils literal notranslate"><span class="pre">traj_ids</span></code> key is available, and by
+<a class="reference internal" href="generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> (legacy).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;terminated&quot;)</span></code></dt><dd><p><em>Trajectory ended because the MDP says so</em> (goal reached, agent
+died, etc.). The bootstrap value of the next state is <strong>zero</strong>.
+Value estimators rely on this to decide whether to bootstrap.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;truncated&quot;)</span></code></dt><dd><p><em>Trajectory ended because a time limit (or other external clock)
+cut it off.</em> The bootstrap value of the next state is the predicted
+value, <strong>not</strong> zero. Conflating <code class="docutils literal notranslate"><span class="pre">truncated</span></code> and <code class="docutils literal notranslate"><span class="pre">terminated</span></code> is a
+classic source of value-estimation bugs.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;traj_ids&quot;)</span></code></dt><dd><p><em>Optional integer per-step trajectory identifier.</em> Written by every
+<a class="reference internal" href="generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector" title="torchrl.collectors.BaseCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollector</span></code></a> subclass. When present,
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> uses this directly instead of
+reconstructing boundaries from <code class="docutils literal notranslate"><span class="pre">done</span></code>. Auto-detected on the first
+sample call when no <code class="docutils literal notranslate"><span class="pre">traj_key</span></code> is passed at construction.</p>
+</dd>
+</dl>
+<p>The “1-D contiguous” layout uses these keys <em>exclusively</em> — no shape-based
+padding, no mask. Every primitive in TorchRL that needs to know where
+trajectories start and stop reads them.</p>
+</section>
+<section id="the-replay-buffer-ndim-arg-and-why-it-doesn-t-multi-process-well">
+<h2>The replay buffer <code class="docutils literal notranslate"><span class="pre">ndim</span></code> arg and why it doesn’t multi-process well<a class="headerlink" href="#the-replay-buffer-ndim-arg-and-why-it-doesn-t-multi-process-well" title="Link to this heading">¶</a></h2>
+<p id="data-layout-storage-ndim"><a class="reference internal" href="generated/torchrl.data.replay_buffers.LazyTensorStorage.html#torchrl.data.replay_buffers.LazyTensorStorage" title="torchrl.data.replay_buffers.LazyTensorStorage"><code class="xref py py-class docutils literal notranslate"><span class="pre">LazyTensorStorage</span></code></a> (and friends)
+accepts an <code class="docutils literal notranslate"><span class="pre">ndim</span></code> argument that tells the storage how many dimensions to
+preserve when extending. The natural mapping is:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ndim=1</span></code> (default) — flat 1-D buffer; <code class="docutils literal notranslate"><span class="pre">extend(td_of_shape_[N])</span></code> writes
+<code class="docutils literal notranslate"><span class="pre">N</span></code> rows.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ndim=2</span></code> — buffer of shape <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">T]</span></code>; <code class="docutils literal notranslate"><span class="pre">extend(td_of_shape_[B,</span> <span class="pre">T])</span></code>
+writes <code class="docutils literal notranslate"><span class="pre">B</span></code> rows of <code class="docutils literal notranslate"><span class="pre">T</span></code> consecutive frames each. Useful when the
+collector itself produces <code class="docutils literal notranslate"><span class="pre">[num_envs,</span> <span class="pre">frames_per_env]</span></code> batches (e.g.
+<a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a> rollouts), because that lets the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> infer one trajectory per row without
+scanning <code class="docutils literal notranslate"><span class="pre">done</span></code> keys.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ndim=3</span></code> and beyond — when both an outer worker dim and an env dim
+exist, e.g. <code class="docutils literal notranslate"><span class="pre">MultiSyncCollector([ParallelEnv(2,</span> <span class="pre">…)]</span> <span class="pre">*</span> <span class="pre">4,</span> <span class="pre">…)</span></code>.</p></li>
+</ul>
+<p>It looks attractive: the buffer stores its data in the same shape the
+collector produces, no reshape needed.</p>
+<p><strong>It runs into trouble with multi-process collectors that share a single
+storage.</strong> With <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> every <code class="docutils literal notranslate"><span class="pre">extend</span></code> call commits one row’s
+worth of frames along the time axis, and that row is implicitly assumed to
+be a contiguous run of frames from a single env. When several worker
+processes write into the same storage concurrently — e.g.
+<a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a> <code class="docutils literal notranslate"><span class="pre">(sync=False)</span></code>,
+<a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code></a>, an external pool of
+producers, or any cluster setup where a learner aggregates batches from
+many actors — the inter-worker write order is uncontrolled. Without
+boundary markers, a given row of the <code class="docutils literal notranslate"><span class="pre">[N,</span> <span class="pre">T]</span></code> storage can stitch
+together frames from a worker’s two consecutive but unrelated episodes
+(or from different workers if a postprocessing step rearranges the extend
+order), and a <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> drawing whole rows would
+silently span them.</p>
+<p>Two existing knobs mitigate this without giving up <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code>:</p>
+<ul>
+<li><p><strong>``Collector(set_truncated=True)``.</strong> Marks the last frame of every
+collected batch as <code class="docutils literal notranslate"><span class="pre">truncated</span></code> (and therefore <code class="docutils literal notranslate"><span class="pre">done</span></code>). With this on,
+the boundary keys <em>do</em> delimit each row, so a sampler that respects
+<code class="docutils literal notranslate"><span class="pre">done</span></code> / <code class="docutils literal notranslate"><span class="pre">truncated</span></code> no longer spans batch boundaries. The cost is
+that every batch boundary becomes an <em>artificial</em> trajectory cut: it
+shortens the effective length of the trajectories the buffer can serve,
+and downstream value estimators see truncations that did not actually
+happen in the env (so they bootstrap where they shouldn’t have had to).
+Useful when the alternative is wrong, but pure overhead in the cases
+where complete-trajectory writes are an option.</p></li>
+<li><p><strong>One buffer per worker, glued by a</strong>
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code>. Each member
+storage is written by exactly one worker, so its write order is
+deterministic and <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> is sound for that member. The ensemble
+samples uniformly across members at training time:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">MultiCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">ReplayBufferEnsemble</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">SliceSampler</span>
+
+<span class="n">num_workers</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">buffers</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+        <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">ndim</span><span class="o">=</span><span class="mi">2</span><span class="p">),</span>     <span class="c1"># one row = one rollout</span>
+        <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">num_slices</span><span class="o">=</span><span class="mi">4</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_workers</span><span class="p">)</span>
+<span class="p">]</span>
+<span class="n">rb</span> <span class="o">=</span> <span class="n">ReplayBufferEnsemble</span><span class="p">(</span>
+    <span class="o">*</span><span class="n">buffers</span><span class="p">,</span> <span class="n">sample_from_all</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">MultiCollector</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_workers</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>                              <span class="c1"># see note below</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Routing each worker’s writes to <em>its own</em> member buffer requires
+an indexed-extend hook the parent <code class="docutils literal notranslate"><span class="pre">ReplayBufferEnsemble</span></code> does not
+provide out of the box. The pattern is sketched here for the
+<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> shape; if you go this route you will likely either
+build a thin per-worker collector (each owning its buffer) or wire
+a custom <code class="docutils literal notranslate"><span class="pre">post_collect_hook</span></code> that dispatches to the right member.</p>
+</div>
+</li>
+</ul>
+<p>The simpler default is to keep <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">=</span> <span class="pre">1</span></code> and rely on the boundary keys
+above to recover trajectory structure — see
+<span class="xref std std-ref">data-layout-buffer-to-collector</span> below.</p>
+<p>Concretely, <code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> is straightforward for:</p>
+<ul class="simple">
+<li><p>Single-process <a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a> with a batched
+env (one process writes; the env dim is stable).</p></li>
+<li><p>Synchronous <a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a> <code class="docutils literal notranslate"><span class="pre">(sync=True)</span></code>
+with <code class="docutils literal notranslate"><span class="pre">cat_results=&quot;stack&quot;</span></code>, which delivers one <code class="docutils literal notranslate"><span class="pre">[num_workers,</span> <span class="pre">T]</span></code>
+batch at a time <em>atomically</em>.</p></li>
+</ul>
+<p>It needs the <code class="docutils literal notranslate"><span class="pre">set_truncated</span></code> or ensemble mitigation above for:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector" title="torchrl.collectors.MultiCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiCollector</span></code></a> <code class="docutils literal notranslate"><span class="pre">(sync=False)</span></code>.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector" title="torchrl.collectors.distributed.RayCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">RayCollector</span></code></a>,
+<a class="reference internal" href="generated/torchrl.collectors.distributed.DistributedSyncCollector.html#torchrl.collectors.distributed.DistributedSyncCollector" title="torchrl.collectors.distributed.DistributedSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedSyncCollector</span></code></a>,
+RPC-based collectors.</p></li>
+<li><p>Any setup where multiple producers <code class="docutils literal notranslate"><span class="pre">extend</span></code> the same shared storage
+with no synchronisation guarantee.</p></li>
+</ul>
+</section>
+<section id="the-buffer-to-collector-handoff-complete-trajectory-writes">
+<h2>The buffer-to-collector handoff: complete-trajectory writes<a class="headerlink" href="#the-buffer-to-collector-handoff-complete-trajectory-writes" title="Link to this heading">¶</a></h2>
+<p id="data-layout-buffer-to-collector">The clean solution to the multi-process ordering problem is to make every
+<code class="docutils literal notranslate"><span class="pre">extend</span></code> call a <strong>complete, well-formed trajectory</strong> rather than a
+fixed-frame batch. Then the ordering of those extends across workers
+becomes irrelevant: each row of the 1-D storage is a self-contained
+episode segment, and any slice sampled from it is correct by construction.</p>
+<p>This is what passing the buffer directly to the collector and setting
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> does:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="n">MultiCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">SliceSampler</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
+
+<span class="n">rb</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100_000</span><span class="p">),</span>         <span class="c1"># ndim=1 — the only safe choice</span>
+    <span class="n">sampler</span><span class="o">=</span><span class="n">SliceSampler</span><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="mi">32</span><span class="p">),</span>         <span class="c1"># auto-detects (&quot;collector&quot;, &quot;traj_ids&quot;)</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span> <span class="o">=</span> <span class="n">MultiCollector</span><span class="p">(</span>
+    <span class="p">[</span><span class="n">make_env</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">,</span>
+    <span class="n">replay_buffer</span><span class="o">=</span><span class="n">rb</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">trajs_per_batch</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>    <span class="c1"># each worker writes COMPLETE trajectories only</span>
+    <span class="n">sync</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">collector</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">train_steps</span><span class="p">):</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>    <span class="c1"># variable-length contiguous slices, no leaks</span>
+    <span class="c1"># ...</span>
+</pre></div>
+</div>
+<p>How the buffer is actually populated when <code class="docutils literal notranslate"><span class="pre">replay_buffer=</span></code> is passed:</p>
+<ul class="simple">
+<li><p>In a multi-process collector, <strong>each worker process calls
+``rb.extend(…)`` directly on the shared storage</strong> — the parent does
+not aggregate batches and re-extend.</p></li>
+<li><p>This is true in both <code class="docutils literal notranslate"><span class="pre">sync=True</span></code> and <code class="docutils literal notranslate"><span class="pre">sync=False</span></code> mode. The
+<code class="docutils literal notranslate"><span class="pre">sync=</span></code> flag controls <em>iteration delivery</em> (whether <code class="docutils literal notranslate"><span class="pre">for</span> <span class="pre">data</span> <span class="pre">in</span>
+<span class="pre">collector</span></code> blocks for all workers vs first-come), not how the buffer
+is populated.</p></li>
+<li><p>Consequently the inter-worker write order on the shared buffer is
+uncontrolled in both modes — it is the same condition that makes
+<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">&gt;=</span> <span class="pre">2</span></code> shared storages unsafe (see
+<span class="xref std std-ref">data-layout-storage-ndim</span>).</p></li>
+</ul>
+<p>What <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> adds is a guarantee on the <em>contents</em> of each
+extend: with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch=N</span></code>, every <code class="docutils literal notranslate"><span class="pre">rb.extend</span></code> call commits one
+or more <strong>complete trajectories</strong> (last step has
+<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span> <span class="pre">==</span> <span class="pre">True</span></code>). The buffer never sees a partial episode,
+so even when worker A’s flush interleaves with worker B’s, the resulting
+storage is just a concatenation of complete episodes. No intra-episode
+boundary ever sits at a worker-handoff seam, and the
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>’s boundary detection works on a flat
+<code class="docutils literal notranslate"><span class="pre">ndim</span> <span class="pre">=</span> <span class="pre">1</span></code> buffer regardless of write order.</p>
+<p>If complete-trajectory writes are not an option (e.g. very long episodes,
+where waiting for <code class="docutils literal notranslate"><span class="pre">done</span></code> is impractical), <code class="docutils literal notranslate"><span class="pre">set_truncated=True</span></code>
+provides a lighter mitigation by inserting an artificial <code class="docutils literal notranslate"><span class="pre">truncated</span></code>
+at every batch boundary — see
+<a class="reference internal" href="collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">Complete trajectory collection with trajs_per_batch</span></a> for the trade-offs.</p>
+<p>See <a class="reference internal" href="collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">Complete trajectory collection with trajs_per_batch</span></a> for the full <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> API
+and the synchronous-iteration pattern.</p>
+</section>
+<section id="slicesampler-variable-length-contiguous-slices">
+<h2>SliceSampler: variable-length contiguous slices<a class="headerlink" href="#slicesampler-variable-length-contiguous-slices" title="Link to this heading">¶</a></h2>
+<p id="data-layout-slice-sampler"><a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> consumes a flat 1-D
+buffer and emits <strong>a flat 1-D batch of concatenated slices</strong>. It does not
+reshape to <code class="docutils literal notranslate"><span class="pre">[num_slices,</span> <span class="pre">slice_len]</span></code>; it concatenates slices end-to-end
+along the only batch dim and writes <code class="docutils literal notranslate"><span class="pre">is_init=True</span></code> at the first step of
+each slice (OR-ed with any pre-existing <code class="docutils literal notranslate"><span class="pre">is_init</span></code> from
+<a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a>).</p>
+<p>Defaults that match the recommended layout:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">strict_length=False</span></code> — short trajectories are kept and produce
+shorter slices; the resulting batch can be smaller than
+<code class="docutils literal notranslate"><span class="pre">num_slices</span> <span class="pre">*</span> <span class="pre">slice_len</span></code>. <em>This is a feature, not a defect.</em></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pad_output=False</span></code> (default) — no padding, no <code class="docutils literal notranslate"><span class="pre">mask</span></code> key.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">traj_key</span></code> not specified — the sampler probes the storage on the
+first sample call and prefers <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;traj_ids&quot;)</span></code> over
+<code class="docutils literal notranslate"><span class="pre">&quot;episode&quot;</span></code>, falling back to reconstructing trajectory boundaries
+from <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> if neither key is present.</p></li>
+</ul>
+<p>The flat 1-D output plugs directly into a recurrent policy under
+<code class="xref py py-func docutils literal notranslate"><span class="pre">set_recurrent_mode()</span></code> <code class="docutils literal notranslate"><span class="pre">(&quot;recurrent&quot;)</span></code>: the
+RNN splits on <code class="docutils literal notranslate"><span class="pre">is_init</span></code>, treats each slice as an independent
+sub-trajectory, and uses each slice’s stored hidden state at position 0
+as its initial hidden state. The output is identical (bitwise) to what a
+manually-reshaped <code class="docutils literal notranslate"><span class="pre">[num_slices,</span> <span class="pre">slice_len]</span></code> call would produce.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers</span> <span class="kn">import</span> <span class="n">SliceSampler</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">set_recurrent_mode</span>
+
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">SliceSampler</span><span class="p">(</span><span class="n">num_slices</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">slice_len</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">strict_length</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">rb</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">100_000</span><span class="p">),</span>
+                            <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">128</span><span class="p">)</span>
+<span class="c1"># ... extend rb from a collector ...</span>
+<span class="n">sample</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>              <span class="c1"># shape [&lt;= 128]</span>
+<span class="k">with</span> <span class="n">set_recurrent_mode</span><span class="p">(</span><span class="s2">&quot;recurrent&quot;</span><span class="p">):</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">recurrent_policy</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>  <span class="c1"># consumes the flat sample directly</span>
+</pre></div>
+</div>
+<p id="data-layout-padded-discouraged"><code class="docutils literal notranslate"><span class="pre">pad_output=True</span></code> is available as an escape hatch for code that
+genuinely cannot accept a ragged batch (a custom op that requires a fixed
+time dimension before a manual reshape, for instance). It pads short
+slices by <em>duplicating their last real timestep</em> and emits a 1-D bool
+<code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;mask&quot;)</span></code> of length <code class="docutils literal notranslate"><span class="pre">B</span> <span class="pre">*</span> <span class="pre">T</span></code> flagging real vs padded
+positions. <strong>This is discouraged for new code.</strong> All TorchRL-provided
+primitives consume the unpadded layout natively, so padding is pure
+overhead and adds a key the caller has to remember to honour everywhere.</p>
+</section>
+<section id="auto-discoverability-for-recurrent-policies">
+<h2>Auto-discoverability for recurrent policies<a class="headerlink" href="#auto-discoverability-for-recurrent-policies" title="Link to this heading">¶</a></h2>
+<p id="data-layout-rnn-auto">A recurrent policy needs two things from its env that a vanilla env does
+not provide: a per-step <code class="docutils literal notranslate"><span class="pre">is_init</span></code> marker (so the RNN knows where
+trajectories start) and a hidden-state placeholder in the env’s reset
+output (so the policy can read a sensible initial state on step 0).
+TorchRL wires both up automatically. There are two equivalent entry
+points; either is fine:</p>
+<ol class="arabic">
+<li><p><strong>Pass ``policy=`` to the env constructor.</strong> The
+<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> metaclass post-init hook walks the
+policy looking for recurrent submodules (anything implementing
+<code class="docutils literal notranslate"><span class="pre">make_tensordict_primer()</span></code>) and appends an
+<a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> plus the matching
+<a class="reference internal" href="generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> to the env when
+the env’s specs don’t already provide them.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">GRUModule</span>
+
+<span class="n">gru</span> <span class="o">=</span> <span class="n">GRUModule</span><span class="p">(</span><span class="n">input_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">hidden_size</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">num_layers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;recurrent_state&quot;</span><span class="p">,</span> <span class="s2">&quot;is_init&quot;</span><span class="p">],</span>
+                <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;recurrent_state&quot;</span><span class="p">)])</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">gru</span><span class="p">)</span>   <span class="c1"># InitTracker + primer attached</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>Pass a bare env to the collector.</strong> When
+<a class="reference internal" href="generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a> (or any subclass) is constructed
+with <code class="docutils literal notranslate"><span class="pre">auto_register_policy_transforms=True</span></code>, it runs the same
+spec-based detection and appends what’s missing. The check is
+idempotent, so combining the env hook with the collector hook is a
+no-op (no double-wrapping).</p></li>
+</ol>
+<p>The detection reads the env’s <code class="docutils literal notranslate"><span class="pre">full_observation_spec</span></code> and
+<code class="docutils literal notranslate"><span class="pre">full_state_spec</span></code>, so it sees through
+<a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a> / <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>
+where transforms live in child envs. Limitations and the v0.15 default
+flip are documented in the
+<a class="reference internal" href="envs_api.html#environment-policy-arg"><span class="std std-ref">policy= argument page</span></a>.</p>
+<p>Net effect: a recurrent training pipeline rarely needs to touch
+<code class="docutils literal notranslate"><span class="pre">InitTracker</span></code> or <code class="docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code> by hand. The user wires the
+policy, hands it to the env or collector, and the boundary keys + hidden
+state the rest of the stack expects are all in place.</p>
+</section>
+<section id="legacy-split-trajectories">
+<h2>Legacy: <code class="docutils literal notranslate"><span class="pre">split_trajectories</span></code><a class="headerlink" href="#legacy-split-trajectories" title="Link to this heading">¶</a></h2>
+<p id="data-layout-split-trajectories"><a class="reference internal" href="generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> and the
+<code class="docutils literal notranslate"><span class="pre">split_trajs=True</span></code> collector kwarg implement the older, padded layout:
+they take a tensordict that contains multiple trajectories (delineated by
+<code class="docutils literal notranslate"><span class="pre">done</span></code> or <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;traj_ids&quot;)</span></code>) and produce an
+<code class="docutils literal notranslate"><span class="pre">[N_traj,</span> <span class="pre">T_max]</span></code> zero-padded tensordict with a boolean <code class="docutils literal notranslate"><span class="pre">mask</span></code> entry.</p>
+<p>Aside from the padding+mask cost shared with every padded layout
+(<span class="xref std std-ref">data-layout-padded-discouraged</span>), this introduces a more subtle
+problem: it <strong>bakes collector hyperparameters into the data shape</strong>. A
+trajectory that spans the boundary between two collected batches gets
+cut at the batch boundary — the part before is artificially marked
+<code class="docutils literal notranslate"><span class="pre">truncated</span></code> / <code class="docutils literal notranslate"><span class="pre">done</span></code>, the part after is artificially marked
+<code class="docutils literal notranslate"><span class="pre">is_init</span></code>. Downstream code then sees boundary signals that do not
+reflect real env transitions, and changing <code class="docutils literal notranslate"><span class="pre">frames_per_batch</span></code> silently
+changes the trajectory shape the trainer consumes (effective lengths,
+number of returns, where value bootstraps land). The contiguous 1-D
+layout sidesteps this entirely: trajectory boundaries come exclusively
+from the env’s own <code class="docutils literal notranslate"><span class="pre">done</span></code> signal.</p>
+<p>This is <strong>discouraged for new code</strong>. <code class="docutils literal notranslate"><span class="pre">split_trajs=True</span></code> will emit an
+advisory warning and is scheduled for full deprecation in a future
+release. The recommended replacement is to keep the collector output
+flat (<code class="docutils literal notranslate"><span class="pre">split_trajs=False</span></code>, the default) and:</p>
+<ul class="simple">
+<li><p>If you need to draw sub-sequences for training, write the data into a
+buffer with a <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>.</p></li>
+<li><p>If you need per-trajectory aggregates (returns, lengths) for logging,
+group by <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;traj_ids&quot;)</span></code> directly on the flat tensor.</p></li>
+<li><p>If you need a ragged <code class="docutils literal notranslate"><span class="pre">[N_traj,</span> <span class="pre">T_var]</span></code> view for a custom op, prefer
+<code class="docutils literal notranslate"><span class="pre">tensordict.split</span></code> on a <code class="docutils literal notranslate"><span class="pre">done</span></code> boundary or
+<code class="docutils literal notranslate"><span class="pre">split_trajectories(...,</span> <span class="pre">as_nested=True)</span></code> (no zero-padding, no mask)
+rather than the padded form.</p></li>
+</ul>
+</section>
+<section id="see-also">
+<h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="collectors_replay.html"><span class="doc">Collectors and Replay Buffers</span></a> — concrete <code class="docutils literal notranslate"><span class="pre">ndim</span></code> patterns and the full
+<code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> API.</p></li>
+<li><p><a class="reference internal" href="envs_api.html#environment-policy-arg"><span class="std std-ref">Auto-wrapping recurrent transforms</span></a> —
+the <code class="docutils literal notranslate"><span class="pre">policy=</span></code> env argument and the collector-side equivalent.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> — reference for the
+sampler used throughout this page.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a>,
+<a class="reference internal" href="generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRUModule</span></code></a>,
+<code class="xref py py-func docutils literal notranslate"><span class="pre">set_recurrent_mode()</span></code> — the recurrent modules
+that consume the contiguous-trajectory layout natively.</p></li>
+</ul>
+</section>
+</section>
+
+
+             </article>
+             
+            </div>
+            <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="envs.html" class="btn btn-neutral float-right" title="torchrl.envs package" accesskey="n" rel="next">Next <img src="../_static/images/chevron-right-orange.svg" class="next-page"></a>
+      
+      
+        <a href="generated/torchrl.data.UnboundedDiscrete.html" class="btn btn-neutral" title="UnboundedDiscrete" accesskey="p" rel="prev"><img src="../_static/images/chevron-right-orange.svg" class="previous-page"> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              <ul>
+<li><a class="reference internal" href="#">Data layout: contiguous trajectories</a><ul>
+<li><a class="reference internal" href="#trajectory-boundary-keys">Trajectory boundary keys</a></li>
+<li><a class="reference internal" href="#the-replay-buffer-ndim-arg-and-why-it-doesn-t-multi-process-well">The replay buffer <code class="docutils literal notranslate"><span class="pre">ndim</span></code> arg and why it doesn’t multi-process well</a></li>
+<li><a class="reference internal" href="#the-buffer-to-collector-handoff-complete-trajectory-writes">The buffer-to-collector handoff: complete-trajectory writes</a></li>
+<li><a class="reference internal" href="#slicesampler-variable-length-contiguous-slices">SliceSampler: variable-length contiguous slices</a></li>
+<li><a class="reference internal" href="#auto-discoverability-for-recurrent-policies">Auto-discoverability for recurrent policies</a></li>
+<li><a class="reference internal" href="#legacy-split-trajectories">Legacy: <code class="docutils literal notranslate"><span class="pre">split_trajectories</span></code></a></li>
+<li><a class="reference internal" href="#see-also">See also</a></li>
+</ul>
+</li>
+</ul>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../_static/doctools.js"></script>
+      <script type="text/javascript" src="../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../_static/sg-tags.js"></script>
+      <script type="text/javascript" src="../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>

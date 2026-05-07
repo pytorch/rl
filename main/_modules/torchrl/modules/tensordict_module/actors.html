@@ -469,6 +469,17 @@
 <span class="sd">        n_empirical_estimate (int, optional): keyword-only argument.</span>
 <span class="sd">            Number of samples to compute the empirical</span>
 <span class="sd">            mean when it is not available. Defaults to 1000.</span>
+<span class="sd">        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.</span>
+<span class="sd">            Routes sampling through an explicit RNG instead of the global PyTorch RNG.</span>
+<span class="sd">            Accepts a :class:`torch.Generator` (used in place, advances across calls),</span>
+<span class="sd">            an :class:`int` (shorthand for ``Generator().manual_seed(int)``), or a</span>
+<span class="sd">            :class:`NestedKey` to fetch the generator from the input tensordict on every</span>
+<span class="sd">            call (the value can be a ``Generator`` or a scalar int / Tensor used as a</span>
+<span class="sd">            JAX-style stream-key with a ``next_seed`` written back). Defaults to ``None``,</span>
+<span class="sd">            in which case the global RNG is used. Useful when the agent&#39;s RNG stream must</span>
+<span class="sd">            be isolated from the environment&#39;s — see Patterson et al.,</span>
+<span class="sd">            &quot;Empirical Design in Reinforcement Learning&quot; (`arXiv:2304.01315</span>
+<span class="sd">            &lt;https://arxiv.org/abs/2304.01315&gt;`_).</span>
 
 <span class="sd">    Examples:</span>
 <span class="sd">        &gt;&gt;&gt; import torch</span>

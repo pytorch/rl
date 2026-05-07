@@ -6,6 +6,7 @@ API Reference
 
     collectors
     data
+    data_layout
     envs
     llms
     modules
@@ -14,3 +15,4 @@ API Reference
     trainers
     utils
     config
+    profiling

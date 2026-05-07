@@ -254,7 +254,7 @@
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">lazy_stack</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_maybe_record_function_decorator</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
 <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">AsyncEnvPool</span><span class="p">,</span> <span class="n">EnvBase</span>
 <span class="kn">from</span> <span class="nn">torchrl.modules.inference_server</span> <span class="kn">import</span> <span class="n">InferenceServer</span><span class="p">,</span> <span class="n">ThreadingTransport</span>
@@ -618,6 +618,7 @@
                 <span class="s2">&quot;A collector worker thread raised an exception.&quot;</span>
             <span class="p">)</span> <span class="kn">from</span> <span class="nn">item</span>
 
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;AsyncBatchedCollector._rollout_frames&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_rollout_frames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Drain ``frames_per_batch`` transitions from the workers.&quot;&quot;&quot;</span>
         <span class="n">rq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span>
@@ -645,6 +646,7 @@
 
         <span class="k">return</span> <span class="n">lazy_stack</span><span class="p">(</span><span class="n">transitions</span><span class="p">)</span>
 
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;AsyncBatchedCollector._rollout_yield_trajs&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">_rollout_yield_trajs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Drain transitions until a complete trajectory is available.&quot;&quot;&quot;</span>
         <span class="n">rq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_result_queue</span>

@@ -378,6 +378,82 @@
         <span class="k">return</span> <span class="n">worker_idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">workers</span>
 
 
+<span class="k">class</span> <span class="nc">_ProfilerHook</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A ``post_collect_hook`` callable that drives a ``torch.profiler.profile``.</span>
+
+<span class="sd">    The hook owns a profiler in the process where it lives — the main process</span>
+<span class="sd">    for a single :class:`Collector`, each worker process for a multi-collector,</span>
+<span class="sd">    each remote actor for a Ray collector. It starts the profiler lazily on the</span>
+<span class="sd">    first call, steps once per rollout, and auto-stops + exports after</span>
+<span class="sd">    ``config.num_rollouts`` rollouts.</span>
+
+<span class="sd">    Pickling — the hook is a plain Python object and travels through</span>
+<span class="sd">    :class:`~torchrl.data.utils.CloudpickleWrapper` when pushed to mp workers.</span>
+<span class="sd">    The :class:`torch.profiler.profile` instance is built lazily inside the</span>
+<span class="sd">    target process so it never needs to cross a pickle boundary itself.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">,</span> <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rollout_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">_build_profiler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">active</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span>
+        <span class="n">schedule</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">schedule</span><span class="p">(</span>
+            <span class="n">skip_first</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="p">,</span>
+            <span class="n">wait</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">warmup</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">active</span><span class="o">=</span><span class="n">active</span><span class="p">,</span>
+            <span class="n">repeat</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">activities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get_activities</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">activities</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">on_trace_ready</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">on_trace_ready</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">on_trace_ready</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">save_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get_save_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span><span class="p">)</span>
+            <span class="n">save_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+            <span class="k">def</span> <span class="nf">on_trace_ready</span><span class="p">(</span><span class="n">prof</span><span class="p">,</span> <span class="n">_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">,</span> <span class="n">_idx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span><span class="p">):</span>
+                <span class="n">prof</span><span class="o">.</span><span class="n">export_chrome_trace</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">_path</span><span class="p">))</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Profiler [worker </span><span class="si">{</span><span class="n">_idx</span><span class="si">}</span><span class="s2">]: trace saved to </span><span class="si">{</span><span class="n">_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">profile</span><span class="p">(</span>
+            <span class="n">activities</span><span class="o">=</span><span class="n">activities</span><span class="p">,</span>
+            <span class="n">schedule</span><span class="o">=</span><span class="n">schedule</span><span class="p">,</span>
+            <span class="n">on_trace_ready</span><span class="o">=</span><span class="n">on_trace_ready</span><span class="p">,</span>
+            <span class="n">record_shapes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">record_shapes</span><span class="p">,</span>
+            <span class="n">profile_memory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">profile_memory</span><span class="p">,</span>
+            <span class="n">with_stack</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">with_stack</span><span class="p">,</span>
+            <span class="n">with_flops</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">with_flops</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_profiler</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">return</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rollout_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rollout_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the underlying profiler (idempotent).&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
+
+
 <div class="viewcode-block" id="BaseCollector">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector">[docs]</a>
 <span class="k">class</span> <span class="nc">BaseCollector</span><span class="p">(</span><span class="n">IterableDataset</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span><span class="p">):</span>
@@ -521,6 +597,20 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span> <span class="o">=</span> <span class="n">hook</span>
 
+<div class="viewcode-block" id="BaseCollector.set_post_collect_hook">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.set_post_collect_hook">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_post_collect_hook</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Method form of the ``post_collect_hook`` setter.</span>
+
+<span class="sd">        Exposed because Ray actor handles can call methods (`actor.method.remote(...)`)</span>
+<span class="sd">        but cannot directly invoke property setters. Keeping the actual setter</span>
+<span class="sd">        for in-process use and this method for remote-actor use.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span> <span class="o">=</span> <span class="n">hook</span></div>
+
+
 <div class="viewcode-block" id="BaseCollector.enable_profile">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.enable_profile">[docs]</a>
     <span class="k">def</span> <span class="nf">enable_profile</span><span class="p">(</span>
@@ -606,7 +696,7 @@
         <span class="k">if</span> <span class="n">activities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">activities</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="s2">&quot;cuda&quot;</span><span class="p">]</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="o">=</span> <span class="n">ProfileConfig</span><span class="p">(</span>
+        <span class="n">config</span> <span class="o">=</span> <span class="n">ProfileConfig</span><span class="p">(</span>
             <span class="n">workers</span><span class="o">=</span><span class="n">workers</span><span class="p">,</span>
             <span class="n">num_rollouts</span><span class="o">=</span><span class="n">num_rollouts</span><span class="p">,</span>
             <span class="n">warmup_rollouts</span><span class="o">=</span><span class="n">warmup_rollouts</span><span class="p">,</span>
@@ -617,8 +707,46 @@
             <span class="n">with_stack</span><span class="o">=</span><span class="n">with_stack</span><span class="p">,</span>
             <span class="n">with_flops</span><span class="o">=</span><span class="n">with_flops</span><span class="p">,</span>
             <span class="n">on_trace_ready</span><span class="o">=</span><span class="n">on_trace_ready</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="o">=</span> <span class="n">config</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_install_profile_hooks</span><span class="p">(</span><span class="n">config</span><span class="p">)</span></div>
 
+
+    <span class="k">def</span> <span class="nf">_install_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Install the per-process profiler hook.</span>
+
+<span class="sd">        Default implementation handles the single-process :class:`Collector`</span>
+<span class="sd">        by saving the current ``post_collect_hook`` and replacing it with a</span>
+<span class="sd">        :class:`_ProfilerHook`. Multi-process / Ray collectors override this</span>
+<span class="sd">        to fan out per-worker hooks (each worker gets its own ``worker_idx``).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_saved_post_collect_hook</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span> <span class="o">=</span> <span class="n">_ProfilerHook</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">worker_idx</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<div class="viewcode-block" id="BaseCollector.disable_profile">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.BaseCollector.html#torchrl.collectors.BaseCollector.disable_profile">[docs]</a>
+    <span class="k">def</span> <span class="nf">disable_profile</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop any in-flight profiler and restore the prior ``post_collect_hook``.</span>
+
+<span class="sd">        Safe to call when profiling was never enabled (becomes a no-op). When</span>
+<span class="sd">        the profiler was already self-stopped after ``num_rollouts``, this just</span>
+<span class="sd">        clears the hook and restores any user-set ``post_collect_hook``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_uninstall_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_uninstall_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Single-process default uninstall: stop hook locally and restore.&quot;&quot;&quot;</span>
+        <span class="n">hook</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hook</span><span class="p">,</span> <span class="n">_ProfilerHook</span><span class="p">):</span>
+            <span class="n">hook</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_post_collect_hook</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_saved_post_collect_hook&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_saved_post_collect_hook</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">profile_config</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>

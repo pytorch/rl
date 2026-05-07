@@ -255,6 +255,7 @@
 <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
 <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_check_for_faulty_process</span><span class="p">,</span>
+    <span class="n">_maybe_record_function_decorator</span><span class="p">,</span>
     <span class="n">accept_remote_rref_udf_invocation</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
 <span class="p">)</span>
@@ -433,6 +434,7 @@
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="MultiSyncCollector.update_policy_weights_">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector.update_policy_weights_">[docs]</a>
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;MultiSyncCollector.update_policy_weights_&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>

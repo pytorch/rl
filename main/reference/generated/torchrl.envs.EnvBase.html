@@ -270,6 +270,27 @@ tensordicts the environment reads and writes. Defaults to an empty batch-size.</
 at every reset and every step. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, an environment can
 be done after a call to <a class="reference internal" href="torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset" title="torchrl.envs.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> is made. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>policy</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><em>torch.nn.Module</em></a><em>, </em><em>optional</em>) – <p>a policy module used to infer and
+append any environment transforms it needs, such as
+<a class="reference internal" href="torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> and recurrent-state
+<a class="reference internal" href="torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> transforms.
+This returns a <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> when transforms
+are added.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The auto-wrapping is achieved by the <cite>EnvBase</cite> metaclass.
+It does not appear in the <cite>__init__</cite> method of subclasses
+(<a class="reference internal" href="torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a>,
+<a class="reference internal" href="torchrl.envs.DMControlEnv.html#torchrl.envs.DMControlEnv" title="torchrl.envs.DMControlEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">DMControlEnv</span></code></a>, custom subclasses, etc.)
+but is supported on every one of them, and is included in the
+keyword arguments here strictly for type-hinting purposes.</p>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="../envs_api.html#environment-policy-arg"><span class="std std-ref">Auto-wrapping recurrent transforms via the
+policy= argument</span></a>.</p>
+</div>
+</p></li>
 <li><p><strong>spec_locked</strong> (<em>bool</em><em>, </em><em>optional</em>) – <p>if <code class="docutils literal notranslate"><span class="pre">True</span></code>, the specs are locked and can only be
 modified if <a class="reference internal" href="#torchrl.envs.EnvBase.set_spec_lock_" title="torchrl.envs.EnvBase.set_spec_lock_"><code class="xref py py-meth docutils literal notranslate"><span class="pre">set_spec_lock_()</span></code></a> is called.</p>
 <div class="admonition note">

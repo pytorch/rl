@@ -258,7 +258,7 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">from</span> <span class="nn">pyvers</span> <span class="kn">import</span> <span class="n">implement_for</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">MemoryMappedTensor</span><span class="p">,</span> <span class="n">TensorDict</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">is_tensor_collection</span><span class="p">,</span> <span class="n">MemoryMappedTensor</span><span class="p">,</span> <span class="n">TensorDict</span>
 <span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
 <span class="kn">from</span> <span class="nn">torch.utils._pytree</span> <span class="kn">import</span> <span class="n">tree_map</span>
 <span class="kn">from</span> <span class="nn">torchrl._extension</span> <span class="kn">import</span> <span class="n">EXTENSION_WARNING</span>
@@ -1479,6 +1479,25 @@
 <span class="sd">            Be mindful that this can result in effective `batch_size`  shorter</span>
 <span class="sd">            than the one asked for! Trajectories can be split using</span>
 <span class="sd">            :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.</span>
+<span class="sd">        pad_output (bool, optional): **discouraged. Prefer the default</span>
+<span class="sd">            (``False``).** When ``True`` (and ``strict_length=False``),</span>
+<span class="sd">            short trajectories are padded by *duplicating their last real</span>
+<span class="sd">            timestep* up to ``slice_len`` so the output&#39;s ``B * T`` is a</span>
+<span class="sd">            fixed product. The output is still a 1D batch of shape</span>
+<span class="sd">            ``[B * T]`` — the sample is not reshaped to ``[B, T]``. A 1D</span>
+<span class="sd">            boolean mask of shape ``[B * T]`` is written to</span>
+<span class="sd">            ``(&quot;collector&quot;, &quot;mask&quot;)`` flagging real (``True``) vs</span>
+<span class="sd">            duplicated-last-step (``False``) positions. TorchRL&#39;s primitives</span>
+<span class="sd">            (recurrent modules under</span>
+<span class="sd">            :func:`~torchrl.modules.set_recurrent_mode`, mask-aware loss</span>
+<span class="sd">            modules, ``split_trajectories``, etc.) are all designed to</span>
+<span class="sd">            consume concatenated variable-length slices directly via the</span>
+<span class="sd">            ``is_init`` / ``truncated`` markers the sampler already emits,</span>
+<span class="sd">            so padding is a niche escape hatch for downstream code that</span>
+<span class="sd">            genuinely cannot accept a ragged batch (e.g. a custom op that</span>
+<span class="sd">            requires a fixed time dimension before a manual reshape).</span>
+<span class="sd">            Combining ``pad_output=True`` with ``strict_length=True`` raises</span>
+<span class="sd">            :class:`ValueError`. Defaults to ``False``.</span>
 <span class="sd">        compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of</span>
 <span class="sd">            the :meth:`~sample` method will be compiled with :func:`~torch.compile`.</span>
 <span class="sd">            Keyword arguments can also be passed to torch.compile with this arg.</span>
@@ -1699,6 +1718,7 @@
         <span class="n">cache_values</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">truncated_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">),</span>
         <span class="n">strict_length</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">pad_output</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="nb">compile</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">span</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">use_gpu</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -1711,6 +1731,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cache_values</span> <span class="o">=</span> <span class="n">cache_values</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">strict_length</span> <span class="o">=</span> <span class="n">strict_length</span>
+        <span class="k">if</span> <span class="n">pad_output</span> <span class="ow">and</span> <span class="n">strict_length</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;pad_output=True is incompatible with strict_length=True: &quot;</span>
+                <span class="s2">&quot;padding only happens when short trajectories are kept, which &quot;</span>
+                <span class="s2">&quot;requires strict_length=False.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span> <span class="o">=</span> <span class="n">pad_output</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">use_gpu</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">use_gpu</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_gpu_device</span> <span class="o">=</span> <span class="p">(</span>
@@ -1759,14 +1786,19 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">traj_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_traj_key_auto</span> <span class="o">=</span> <span class="kc">False</span>
             <span class="k">elif</span> <span class="n">end_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_traj_key_auto</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Neither provided: auto-detect from storage on first sample call.</span>
+                <span class="c1"># Prefer (&quot;collector&quot;, &quot;traj_ids&quot;) (written by collectors) over &quot;episode&quot;.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_traj_key_auto</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">if</span> <span class="n">end_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">end_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">traj_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">traj_key</span> <span class="o">=</span> <span class="s2">&quot;episode&quot;</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">end_key</span> <span class="o">=</span> <span class="n">end_key</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span> <span class="o">=</span> <span class="n">traj_key</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span> <span class="o">=</span> <span class="n">traj_key</span>  <span class="c1"># may be None when _traj_key_auto=True</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">num_slices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">^</span> <span class="p">(</span><span class="n">slice_len</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
@@ -1812,7 +1844,8 @@
             <span class="sa">f</span><span class="s2">&quot;end_key=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">end_key</span><span class="si">}</span><span class="s2">, &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;traj_key=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span><span class="si">}</span><span class="s2">, &quot;</span>
             <span class="sa">f</span><span class="s2">&quot;truncated_key=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">truncated_key</span><span class="si">}</span><span class="s2">, &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;strict_length=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">strict_length</span><span class="si">}</span><span class="s2">)&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;strict_length=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">strict_length</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;pad_output=</span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;pad_output&#39;</span><span class="p">,</span><span class="w"> </span><span class="kc">False</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
         <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_find_start_stop_traj</span><span class="p">(</span>
@@ -1961,9 +1994,80 @@
         <span class="n">result</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">result</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">%</span> <span class="n">storage_length</span>
         <span class="k">return</span> <span class="n">result</span>
 
+    <span class="k">def</span> <span class="nf">_resolve_traj_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Auto-detect traj_key from storage on first sample call.</span>
+
+<span class="sd">        Probes for ``(&quot;collector&quot;, &quot;traj_ids&quot;)`` first (written by TorchRL</span>
+<span class="sd">        collectors), then falls back to ``&quot;episode&quot;``, then to ``end_key``</span>
+<span class="sd">        reconstruction. Schema is read from ``storage._storage`` keys when</span>
+<span class="sd">        possible to avoid materialising any data.</span>
+
+<span class="sd">        Note: this method runs *once* per sampler lifetime (the</span>
+<span class="sd">        ``_traj_key_auto`` flag is cleared on the first call). If the storage</span>
+<span class="sd">        schema changes after the first sample call — e.g. data with a different</span>
+<span class="sd">        traj key is added later — the resolved key won&#39;t be updated. In</span>
+<span class="sd">        practice this only matters if the user is mixing storages, which is</span>
+<span class="sd">        unusual.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_traj_key_auto</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Cheap path: read the schema from the underlying TensorDict without</span>
+        <span class="c1"># fetching any data.</span>
+        <span class="n">underlying</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;_storage&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">underlying</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">underlying</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                <span class="n">keys</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Fallback: read one row. May be costly for remote storages.</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">sample</span> <span class="o">=</span> <span class="n">storage</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">IndexError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+                <span class="n">sample</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">sample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">sample</span><span class="p">,</span> <span class="s2">&quot;keys&quot;</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">sample</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+                <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                    <span class="n">keys</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Could not introspect schema: fall back to end_key reconstruction.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">return</span>
+
+        <span class="n">has_collector</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">)</span> <span class="ow">in</span> <span class="n">keys</span>
+        <span class="n">has_episode</span> <span class="o">=</span> <span class="s2">&quot;episode&quot;</span> <span class="ow">in</span> <span class="n">keys</span>
+        <span class="k">if</span> <span class="n">has_collector</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">has_episode</span><span class="p">:</span>
+                <span class="c1"># BC change: pre-0.13 the default was traj_key=&quot;episode&quot; so a</span>
+                <span class="c1"># storage carrying both keys would have used &quot;episode&quot;. From</span>
+                <span class="c1"># 0.13 onwards we prefer (&quot;collector&quot;, &quot;traj_ids&quot;). Warn so</span>
+                <span class="c1"># users who relied on the old default can pin it explicitly.</span>
+                <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                    <span class="s2">&quot;SliceSampler auto-detected both (&#39;collector&#39;, &#39;traj_ids&#39;) &quot;</span>
+                    <span class="s2">&quot;and &#39;episode&#39; in the storage and is now using the former. &quot;</span>
+                    <span class="s2">&quot;Prior to v0.13 the default was &#39;episode&#39;. To silence this &quot;</span>
+                    <span class="s2">&quot;warning, pass traj_key=... explicitly.&quot;</span><span class="p">,</span>
+                    <span class="ne">FutureWarning</span><span class="p">,</span>
+                    <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">has_episode</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span> <span class="o">=</span> <span class="s2">&quot;episode&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">return</span>
+        <span class="c1"># Neither traj key found: reconstruct from end_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="k">def</span> <span class="nf">_get_stop_and_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cache_values</span> <span class="ow">and</span> <span class="s2">&quot;stop-and-length&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cache</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop-and-length&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_traj_key_auto&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_traj_key</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_traj</span><span class="p">:</span>
             <span class="c1"># We first try with the traj_key</span>
@@ -2084,6 +2188,7 @@
                 <span class="n">maxval</span><span class="p">,</span> <span class="p">(</span><span class="n">num_slices</span><span class="p">,),</span> <span class="n">device</span><span class="o">=</span><span class="n">lengths</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rng</span>
             <span class="p">)</span>
 
+        <span class="n">_target_seq_length</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="p">(</span><span class="n">lengths</span> <span class="o">&lt;</span> <span class="n">seq_length</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">strict_length</span><span class="p">:</span>
                 <span class="n">idx</span> <span class="o">=</span> <span class="n">lengths</span> <span class="o">&gt;=</span> <span class="n">seq_length</span>
@@ -2129,12 +2234,14 @@
                     <span class="n">num_slices</span> <span class="o">=</span> <span class="n">traj_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
                 <span class="c1"># make seq_length a tensor with values clamped by lengths</span>
+                <span class="n">_target_seq_length</span> <span class="o">=</span> <span class="n">seq_length</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pad_output</span> <span class="k">else</span> <span class="kc">None</span>
                 <span class="n">seq_length</span> <span class="o">=</span> <span class="n">lengths</span><span class="p">[</span><span class="n">traj_idx</span><span class="p">]</span><span class="o">.</span><span class="n">clamp_max</span><span class="p">(</span><span class="n">seq_length</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">traj_idx</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">traj_idx</span> <span class="o">=</span> <span class="n">get_traj_idx</span><span class="p">(</span><span class="n">lengths</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">num_slices</span> <span class="o">=</span> <span class="n">traj_idx</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">_target_seq_length</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_index</span><span class="p">(</span>
             <span class="n">lengths</span><span class="o">=</span><span class="n">lengths</span><span class="p">,</span>
             <span class="n">start_idx</span><span class="o">=</span><span class="n">start_idx</span><span class="p">,</span>
@@ -2143,6 +2250,7 @@
             <span class="n">seq_length</span><span class="o">=</span><span class="n">seq_length</span><span class="p">,</span>
             <span class="n">storage_length</span><span class="o">=</span><span class="n">storage_length</span><span class="p">,</span>
             <span class="n">traj_idx</span><span class="o">=</span><span class="n">traj_idx</span><span class="p">,</span>
+            <span class="n">target_seq_length</span><span class="o">=</span><span class="n">_target_seq_length</span><span class="p">,</span>
             <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -2156,6 +2264,7 @@
         <span class="n">storage_length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">traj_idx</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
+        <span class="n">target_seq_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">storage</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
         <span class="c1"># end_point is the last possible index for start</span>
@@ -2212,7 +2321,46 @@
             <span class="p">],</span>
             <span class="mi">1</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensor_slices_from_startend</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="n">starts</span><span class="p">,</span> <span class="n">storage_length</span><span class="p">)</span>
+
+        <span class="c1"># When strict_length=False produced variable per-slice lengths, pad all</span>
+        <span class="c1"># slices to target_seq_length and emit a boolean mask so callers can</span>
+        <span class="c1"># distinguish real timesteps from padded ones.</span>
+        <span class="k">if</span> <span class="n">target_seq_length</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="n">target_seq_length</span>
+            <span class="n">n_extra_dims</span> <span class="o">=</span> <span class="n">starts</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span>
+
+            <span class="c1"># time offsets: [T, n_extra_dims+1] — only the first dim advances</span>
+            <span class="n">time_offsets</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                <span class="n">T</span><span class="p">,</span> <span class="n">n_extra_dims</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">starts</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">starts</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="p">)</span>
+            <span class="n">time_offsets</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                <span class="n">T</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">starts</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">starts</span><span class="o">.</span><span class="n">dtype</span>
+            <span class="p">)</span>
+
+            <span class="c1"># full index before masking: [B, T, n_extra_dims+1]</span>
+            <span class="n">index_full</span> <span class="o">=</span> <span class="n">starts</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">time_offsets</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># real_mask[i, t] == True iff timestep t is a real (non-padded) step</span>
+            <span class="n">arange</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">seq_length</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">real_mask</span> <span class="o">=</span> <span class="n">arange</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">seq_length</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B, T]</span>
+
+            <span class="c1"># padded positions repeat the last real index so storage access is safe</span>
+            <span class="n">last_valid</span> <span class="o">=</span> <span class="n">starts</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">last_valid</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">starts</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">seq_length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">index_full</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">real_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="n">index_full</span><span class="p">,</span>
+                <span class="n">last_valid</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">index_full</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="n">index_full</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">index_full</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">%</span> <span class="n">storage_length</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">index_full</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_extra_dims</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">mask_flat</span> <span class="o">=</span> <span class="n">real_mask</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># [B*T]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tensor_slices_from_startend</span><span class="p">(</span>
+                <span class="n">seq_length</span><span class="p">,</span> <span class="n">starts</span><span class="p">,</span> <span class="n">storage_length</span>
+            <span class="p">)</span>
+            <span class="n">mask_flat</span> <span class="o">=</span> <span class="kc">None</span>
+
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">truncated_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">truncated_key</span>
             <span class="n">done_key</span> <span class="o">=</span> <span class="n">_replace_last</span><span class="p">(</span><span class="n">truncated_key</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">)</span>
@@ -2221,7 +2369,14 @@
             <span class="n">truncated</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
                 <span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">index</span><span class="o">.</span><span class="n">device</span>
             <span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">target_seq_length</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="c1"># mark the last *real* timestep of each slice as truncated</span>
+                <span class="n">T</span> <span class="o">=</span> <span class="n">target_seq_length</span>
+                <span class="n">trunc_positions</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                    <span class="n">num_slices</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">seq_length</span><span class="o">.</span><span class="n">device</span>
+                <span class="p">)</span> <span class="o">*</span> <span class="n">T</span> <span class="o">+</span> <span class="p">(</span><span class="n">seq_length</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="n">truncated</span><span class="p">[</span><span class="n">trunc_positions</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
                 <span class="n">truncated</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">num_slices</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">truncated</span><span class="p">[</span><span class="n">seq_length</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
@@ -2235,13 +2390,80 @@
             <span class="n">terminated</span> <span class="o">=</span> <span class="n">st_index</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">terminated_key</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">terminated</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">terminated</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">truncated</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">index</span><span class="p">,</span> <span class="p">{</span>
+            <span class="n">info</span> <span class="o">=</span> <span class="p">{</span>
                 <span class="n">truncated_key</span><span class="p">:</span> <span class="n">truncated</span><span class="p">,</span>
                 <span class="n">done_key</span><span class="p">:</span> <span class="n">done</span><span class="p">,</span>
                 <span class="n">terminated_key</span><span class="p">:</span> <span class="n">terminated</span><span class="p">,</span>
             <span class="p">}</span>
+            <span class="k">if</span> <span class="n">mask_flat</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">info</span><span class="p">[(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">mask_flat</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_emit_init_marker</span><span class="p">(</span>
+                <span class="n">info</span><span class="p">,</span> <span class="n">st_index</span><span class="p">,</span> <span class="n">num_slices</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">,</span> <span class="n">target_seq_length</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">index</span><span class="p">,</span> <span class="n">info</span>
         <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">index</span><span class="p">,</span> <span class="p">{}</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">mask_flat</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">info</span><span class="p">[(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;mask&quot;</span><span class="p">)]</span> <span class="o">=</span> <span class="n">mask_flat</span>
+        <span class="c1"># Fetch st_index lazily so the marker logic can OR with existing</span>
+        <span class="c1"># is_init. Cheap because index is already computed.</span>
+        <span class="n">st_index</span> <span class="o">=</span> <span class="n">storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_emit_init_marker</span><span class="p">(</span>
+            <span class="n">info</span><span class="p">,</span> <span class="n">st_index</span><span class="p">,</span> <span class="n">num_slices</span><span class="p">,</span> <span class="n">seq_length</span><span class="p">,</span> <span class="n">target_seq_length</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">index</span><span class="p">,</span> <span class="n">info</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_emit_init_marker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">st_index</span><span class="p">,</span>
+        <span class="n">num_slices</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">seq_length</span><span class="p">,</span>
+        <span class="n">target_seq_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mark every slice start with ``is_init=True``.</span>
+
+<span class="sd">        Recurrent modules (:class:`~torchrl.modules.LSTMModule`,</span>
+<span class="sd">        :class:`~torchrl.modules.GRUModule`) under</span>
+<span class="sd">        :func:`~torchrl.modules.set_recurrent_mode` ``(&quot;recurrent&quot;)`` split a</span>
+<span class="sd">        flat sequence on ``is_init`` and use the stored hidden state at each</span>
+<span class="sd">        split as the initial state. By marking the first timestep of every</span>
+<span class="sd">        slice we let the user pass the concatenated flat sample straight to a</span>
+<span class="sd">        recurrent policy: the RNN sees the slices as independent</span>
+<span class="sd">        sub-trajectories and uses each slice&#39;s stored ``recurrent_state[0]``</span>
+<span class="sd">        as its initial hidden state.</span>
+
+<span class="sd">        We OR our markers with the storage&#39;s existing ``is_init`` so episode</span>
+<span class="sd">        resets that fall *inside* a slice are preserved. If the storage</span>
+<span class="sd">        doesn&#39;t carry an ``is_init`` field (no :class:`InitTracker`), we don&#39;t</span>
+<span class="sd">        introduce one — we&#39;d be lying about real resets we can&#39;t see.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">existing_is_init</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">st_index</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;is_init&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">st_index</span><span class="p">,</span> <span class="s2">&quot;get&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">existing_is_init</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">init_marker</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">existing_is_init</span><span class="p">)</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">init_marker</span><span class="o">.</span><span class="n">device</span>
+        <span class="k">if</span> <span class="n">target_seq_length</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># pad_output path: every slice is target_seq_length long.</span>
+            <span class="n">slice_starts</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_slices</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+                <span class="o">*</span> <span class="n">target_seq_length</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="c1"># Uniform slices (strict_length=True, or strict_length=False with</span>
+            <span class="c1"># all sufficiently-long trajectories).</span>
+            <span class="n">slice_starts</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_slices</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span> <span class="o">*</span> <span class="n">seq_length</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Variable per-slice length: starts are at cumulative offsets,</span>
+            <span class="c1"># i.e. [0, len_0, len_0+len_1, ...].</span>
+            <span class="n">slice_starts</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_slices</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="n">slice_starts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">=</span> <span class="n">seq_length</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="mi">0</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="n">init_marker</span><span class="p">[</span><span class="n">slice_starts</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">info</span><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">init_marker</span> <span class="o">|</span> <span class="n">existing_is_init</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">_used_traj_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>

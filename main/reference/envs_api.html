@@ -305,6 +305,59 @@ an environment with <code class="xref py py-attr docutils literal notranslate"><
 an <code class="xref py py-attr docutils literal notranslate"><span class="pre">env.action_spec</span></code> with shape <a class="reference external" href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">torch.Size</span></code></a> <code class="docutils literal notranslate"><span class="pre">([4,</span> <span class="pre">action_size])</span></code>.
 This is helpful when preallocation tensors, checking shape consistency etc.</p>
 </section>
+<section id="auto-wrapping-recurrent-transforms-via-the-policy-argument">
+<span id="environment-policy-arg"></span><h2>Auto-wrapping recurrent transforms via the <code class="docutils literal notranslate"><span class="pre">policy=</span></code> argument<a class="headerlink" href="#auto-wrapping-recurrent-transforms-via-the-policy-argument" title="Link to this heading">¶</a></h2>
+<p>Every concrete <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> subclass — <a class="reference internal" href="generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">GymEnv</span></code></a>,
+<a class="reference internal" href="generated/torchrl.envs.DMControlEnv.html#torchrl.envs.DMControlEnv" title="torchrl.envs.DMControlEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">DMControlEnv</span></code></a>, custom subclasses, etc. — inherits a
+<code class="docutils literal notranslate"><span class="pre">policy</span></code> keyword argument on its constructor. When provided, the
+<a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> metaclass post-init hook walks the policy
+looking for recurrent submodules (anything implementing
+<code class="docutils literal notranslate"><span class="pre">make_tensordict_primer()</span></code>, e.g. <a class="reference internal" href="generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a>,
+<a class="reference internal" href="generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule" title="torchrl.modules.GRUModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">GRUModule</span></code></a>) and appends what’s missing to the env:</p>
+<ul class="simple">
+<li><p>an <a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> (so <code class="docutils literal notranslate"><span class="pre">is_init</span></code> is written
+at every reset) if one is not already present in the env’s
+<code class="docutils literal notranslate"><span class="pre">full_observation_spec</span></code>;</p></li>
+<li><p>one <a class="reference internal" href="generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> per recurrent
+submodule, providing the hidden-state primers the policy needs.</p></li>
+</ul>
+<p>The hook is idempotent and <em>spec-based</em> — it asks the env’s
+<code class="docutils literal notranslate"><span class="pre">full_observation_spec</span></code> / <code class="docutils literal notranslate"><span class="pre">full_state_spec</span></code> what’s already there, so it
+works correctly even when transforms live inside child envs of a
+<a class="reference internal" href="generated/torchrl.envs.SerialEnv.html#torchrl.envs.SerialEnv" title="torchrl.envs.SerialEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">SerialEnv</span></code></a> or <a class="reference internal" href="generated/torchrl.envs.ParallelEnv.html#torchrl.envs.ParallelEnv" title="torchrl.envs.ParallelEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ParallelEnv</span></code></a>.</p>
+<p>Because the argument is injected by the metaclass, <strong>it does not appear in
+subclass</strong> <code class="docutils literal notranslate"><span class="pre">__init__</span></code> <strong>signatures</strong> (just like <code class="docutils literal notranslate"><span class="pre">spec_locked</span></code> and
+<code class="docutils literal notranslate"><span class="pre">auto_reset</span></code>). It is documented on <a class="reference internal" href="generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> and works
+identically on every subclass. Pass it like any other keyword:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">GymEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">GRUModule</span>
+
+<span class="n">gru</span> <span class="o">=</span> <span class="n">GRUModule</span><span class="p">(</span><span class="n">input_size</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">hidden_size</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">num_layers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;recurrent_state&quot;</span><span class="p">,</span> <span class="s2">&quot;is_init&quot;</span><span class="p">],</span>
+                <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;recurrent_state&quot;</span><span class="p">)])</span>
+<span class="c1"># Single call: env now has InitTracker + TensorDictPrimer for the GRU.</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">GymEnv</span><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <span class="n">policy</span><span class="o">=</span><span class="n">gru</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The same auto-wrap helper is applied a second time by
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code> when an env is passed to it,
+so users who construct a bare env first and only later hand it to a
+collector with a recurrent policy still get the right transforms wired up.
+Because the helper is idempotent, going through both paths does not produce
+duplicates.</p>
+<p>Limitations:</p>
+<ul class="simple">
+<li><p>If a custom <a class="reference internal" href="generated/torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> was attached
+with a renamed <code class="docutils literal notranslate"><span class="pre">init_key</span></code>, the helper won’t recognise it and may add a
+duplicate. Pass the same custom <code class="docutils literal notranslate"><span class="pre">init_key</span></code> (matched by leaf name in
+multi-agent setups) to avoid this, or wire transforms manually.</p></li>
+<li><p>Policy factories — <code class="docutils literal notranslate"><span class="pre">Callable[[],</span> <span class="pre">Callable]</span></code> objects — cannot be
+inspected without instantiation, so auto-wrapping is skipped for them.
+Either build the policy once and pass it via <code class="docutils literal notranslate"><span class="pre">policy=</span></code>, or attach
+transforms manually with
+<code class="xref py py-func docutils literal notranslate"><span class="pre">get_env_transforms_from_module()</span></code>.</p></li>
+</ul>
+</section>
 <section id="env-methods">
 <h2>Env methods<a class="headerlink" href="#env-methods" title="Link to this heading">¶</a></h2>
 <p>With these, the following methods are implemented:</p>
@@ -378,10 +431,14 @@ entry to assess if the environment should be reset.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The <cite>torchrl.collectors.utils.split_trajectories</cite> function can be used to
-slice adjacent trajectories. It relies on a <code class="docutils literal notranslate"><span class="pre">&quot;traj_ids&quot;</span></code> entry in the
-input tensordict, or to the junction of <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> key
-if the <code class="docutils literal notranslate"><span class="pre">&quot;traj_ids&quot;</span></code> is missing.</p>
+<p>The <a class="reference internal" href="generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> function can be
+used to slice adjacent trajectories. It relies on a <code class="docutils literal notranslate"><span class="pre">&quot;traj_ids&quot;</span></code> entry
+in the input tensordict, or on the junction of <code class="docutils literal notranslate"><span class="pre">&quot;done&quot;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&quot;truncated&quot;</span></code> if <code class="docutils literal notranslate"><span class="pre">&quot;traj_ids&quot;</span></code> is missing. The function emits an
+<code class="docutils literal notranslate"><span class="pre">[N_traj,</span> <span class="pre">T_max]</span></code> zero-padded tensordict + <code class="docutils literal notranslate"><span class="pre">mask</span></code>; for new code
+prefer the contiguous 1-D layout and
+<a class="reference internal" href="generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> instead — see
+<a class="reference internal" href="data_layout.html#data-layout"><span class="std std-ref">Data layout: contiguous trajectories</span></a>.</p>
 </div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -519,6 +576,7 @@ provides more information on how to design a custom environment from scratch.</p
               <ul>
 <li><a class="reference internal" href="#">Environment API</a><ul>
 <li><a class="reference internal" href="#env-specs-locks-and-batch-size">Env specs: locks and batch size</a></li>
+<li><a class="reference internal" href="#auto-wrapping-recurrent-transforms-via-the-policy-argument">Auto-wrapping recurrent transforms via the <code class="docutils literal notranslate"><span class="pre">policy=</span></code> argument</a></li>
 <li><a class="reference internal" href="#env-methods">Env methods</a></li>
 <li><a class="reference internal" href="#base-classes">Base classes</a></li>
 <li><a class="reference internal" href="#custom-native-torchrl-environments">Custom native TorchRL environments</a></li>

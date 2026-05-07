@@ -249,6 +249,15 @@
               
   <section id="collectors-and-replay-buffers">
 <h1>Collectors and Replay Buffers<a class="headerlink" href="#collectors-and-replay-buffers" title="Link to this heading">¶</a></h1>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p>For the conceptual story behind the patterns on this page —
+contiguous 1-D trajectories, the boundary keys (<code class="docutils literal notranslate"><span class="pre">is_init</span></code>,
+<code class="docutils literal notranslate"><span class="pre">done</span></code>, <code class="docutils literal notranslate"><span class="pre">terminated</span></code>, <code class="docutils literal notranslate"><span class="pre">truncated</span></code>), the limits of
+<code class="docutils literal notranslate"><span class="pre">ndim&gt;=2</span></code> storages with multi-process collectors, and why
+<a class="reference internal" href="generated/torchrl.collectors.utils.split_trajectories.html#torchrl.collectors.utils.split_trajectories" title="torchrl.collectors.utils.split_trajectories"><code class="xref py py-func docutils literal notranslate"><span class="pre">split_trajectories()</span></code></a> is no longer
+recommended — see <a class="reference internal" href="data_layout.html#data-layout"><span class="std std-ref">Data layout: contiguous trajectories</span></a>.</p>
+</div>
 <section id="collectors-and-replay-buffers-interoperability">
 <h2>Collectors and replay buffers interoperability<a class="headerlink" href="#collectors-and-replay-buffers-interoperability" title="Link to this heading">¶</a></h2>
 <p>In the simplest scenario where single transitions have to be sampled

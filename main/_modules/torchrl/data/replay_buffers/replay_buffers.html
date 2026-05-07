@@ -254,6 +254,7 @@
 <span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span> <span class="nn">concurrent.futures</span> <span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
+<span class="kn">from</span> <span class="nn">multiprocessing.context</span> <span class="kn">import</span> <span class="n">get_spawning_popen</span>
 <span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
@@ -1652,6 +1653,12 @@
 <span class="sd">            priority sampler trees will be stored. Defaults to ``None``, in</span>
 <span class="sd">            which case CUDA storage selects CUDA sampling and CPU storage</span>
 <span class="sd">            selects CPU sampling. Cannot be used together with ``sampler``.</span>
+<span class="sd">        sync (bool, optional): whether the priority sampler is synchronized with</span>
+<span class="sd">            writes. If ``True``, this class uses the standard</span>
+<span class="sd">            :class:`~torchrl.data.PrioritizedSampler` write path. If ``False``,</span>
+<span class="sd">            writer processes use a shareable :class:`~torchrl.data.RandomSampler`</span>
+<span class="sd">            and the learner owns a local priority sampler that catches up from</span>
+<span class="sd">            ``write_count`` before sampling. Defaults to ``True``.</span>
 <span class="sd">        collate_fn (callable, optional): merges a list of samples to form a</span>
 <span class="sd">            mini-batch of Tensor(s)/outputs.  Used when using batched</span>
 <span class="sd">            loading from a map-style dataset. The default value will be decided</span>
@@ -1758,6 +1765,7 @@
         <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">sampler</span><span class="p">:</span> <span class="n">Sampler</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">sampler_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">prefetch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1768,12 +1776,27 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">storage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">storage</span> <span class="o">=</span> <span class="n">ListStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1_000</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span>
+            <span class="n">prioritized_sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span>
                 <span class="n">storage</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">eps</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">sampler_device</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">sampler_device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;sampler_device cannot be passed when sampler is provided.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">prioritized_sampler</span> <span class="o">=</span> <span class="n">sampler</span>
+        <span class="k">if</span> <span class="n">sync</span><span class="p">:</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">prioritized_sampler</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">storage</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> only supports 1-D storages when sync=False, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got storage.ndim=</span><span class="si">{</span><span class="n">storage</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span> <span class="o">=</span> <span class="n">prioritized_sampler</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">RandomSampler</span><span class="p">()</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
             <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
@@ -1784,7 +1807,104 @@
             <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span>
             <span class="n">dim_extend</span><span class="o">=</span><span class="n">dim_extend</span><span class="p">,</span>
             <span class="n">delayed_init</span><span class="o">=</span><span class="n">delayed_init</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">prioritized_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Sampler</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The sampler that owns the priority tree.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span>
+        <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot sample with prioritized replay in a worker process.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler</span>
+
+    <span class="k">def</span> <span class="nf">_catch_up_prioritized_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span>
+        <span class="n">write_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">write_count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">write_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span><span class="p">:</span>
+            <span class="n">sampler</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">write_count</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span>
+        <span class="k">if</span> <span class="n">delta</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">max_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">max_size</span>
+        <span class="k">if</span> <span class="n">delta</span> <span class="o">&gt;=</span> <span class="n">max_size</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span><span class="p">,</span>
+                <span class="n">write_count</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">remainder_</span><span class="p">(</span><span class="n">max_size</span><span class="p">)</span>
+        <span class="n">sampler</span><span class="o">.</span><span class="n">mark_update</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">storage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="n">write_count</span>
+
+    <span class="nd">@pin_memory_output</span>
+    <span class="k">def</span> <span class="nf">_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_sample</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_catch_up_prioritized_sampler</span><span class="p">()</span>
+        <span class="n">is_comp</span> <span class="o">=</span> <span class="n">is_compiling</span><span class="p">()</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">index</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">)</span>
+            <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_storage_index</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">INT_CLASSES</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collate_fn</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">):</span>
+            <span class="n">is_td</span> <span class="o">=</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">with</span> <span class="n">data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">()</span> <span class="k">if</span> <span class="n">is_td</span> <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">(),</span> <span class="n">_set_dispatch_td_nn_modules</span><span class="p">(</span>
+                <span class="n">is_td</span>
+            <span class="p">):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">info</span>
+
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">update_priority</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_extend</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">priority</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transpose</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span>
+                <span class="n">index</span><span class="p">,</span> <span class="n">priority</span><span class="p">,</span> <span class="n">storage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="PrioritizedReplayBuffer.empty">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.PrioritizedReplayBuffer.html#torchrl.data.PrioritizedReplayBuffer.empty">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">empty_write_count</span><span class="o">=</span><span class="n">empty_write_count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">set_rng</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_prioritized_sampler&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">generator</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="ow">and</span> <span class="n">get_spawning_popen</span><span class="p">()</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prioritized_sampler&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span></div>
 
 
 
@@ -2233,7 +2353,7 @@
 <span class="sd">              batch-size in advance) as well as with samplers that have a</span>
 <span class="sd">              ``drop_last`` argument.</span>
 
-<span class="sd">        priority_key (str, optional): the key at which priority is assumed to</span>
+<span class="sd">        priority_key (NestedKey, optional): the key at which priority is assumed to</span>
 <span class="sd">            be stored within TensorDicts added to this ReplayBuffer.</span>
 <span class="sd">            This is to be used when the sampler is of type</span>
 <span class="sd">            :class:`~torchrl.data.PrioritizedSampler`.</span>
@@ -2242,6 +2362,12 @@
 <span class="sd">            priority sampler trees will be stored. Defaults to ``None``, in</span>
 <span class="sd">            which case CUDA storage selects CUDA sampling and CPU storage</span>
 <span class="sd">            selects CPU sampling.</span>
+<span class="sd">        sync (bool, optional): whether the priority sampler is synchronized with</span>
+<span class="sd">            writes. If ``True``, this class uses the standard</span>
+<span class="sd">            :class:`~torchrl.data.PrioritizedSampler` write path. If ``False``,</span>
+<span class="sd">            writer processes use a shareable :class:`~torchrl.data.RandomSampler`</span>
+<span class="sd">            and the learner owns a local priority sampler that catches up from</span>
+<span class="sd">            ``write_count`` before sampling. Defaults to ``True``.</span>
 <span class="sd">        reduction (str, optional): the reduction method for multidimensional</span>
 <span class="sd">            tensordicts (ie stored trajectories). Can be one of &quot;max&quot;, &quot;min&quot;,</span>
 <span class="sd">            &quot;median&quot; or &quot;mean&quot;.</span>
@@ -2347,10 +2473,11 @@
         <span class="o">*</span><span class="p">,</span>
         <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="n">priority_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;td_error&quot;</span><span class="p">,</span>
+        <span class="n">priority_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;td_error&quot;</span><span class="p">,</span>
         <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
         <span class="n">storage</span><span class="p">:</span> <span class="n">Storage</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">sampler_device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sync</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">collate_fn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">prefetch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -2363,7 +2490,10 @@
         <span class="n">compilable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_storage</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">)</span>
-        <span class="n">sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="o">=</span> <span class="n">sync</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">prioritized_sampler</span> <span class="o">=</span> <span class="n">PrioritizedSampler</span><span class="p">(</span>
             <span class="n">storage</span><span class="o">.</span><span class="n">max_size</span><span class="p">,</span>
             <span class="n">alpha</span><span class="p">,</span>
             <span class="n">beta</span><span class="p">,</span>
@@ -2371,6 +2501,16 @@
             <span class="n">reduction</span><span class="o">=</span><span class="n">reduction</span><span class="p">,</span>
             <span class="n">device</span><span class="o">=</span><span class="n">sampler_device</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="n">sync</span><span class="p">:</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">prioritized_sampler</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">storage</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> only supports 1-D storages when sync=False, &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;got storage.ndim=</span><span class="si">{</span><span class="n">storage</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2">.&quot;</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span> <span class="o">=</span> <span class="n">prioritized_sampler</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">RandomSampler</span><span class="p">()</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">priority_key</span><span class="o">=</span><span class="n">priority_key</span><span class="p">,</span>
             <span class="n">storage</span><span class="o">=</span><span class="n">storage</span><span class="p">,</span>
@@ -2384,7 +2524,197 @@
             <span class="n">generator</span><span class="o">=</span><span class="n">generator</span><span class="p">,</span>
             <span class="n">shared</span><span class="o">=</span><span class="n">shared</span><span class="p">,</span>
             <span class="n">compilable</span><span class="o">=</span><span class="n">compilable</span><span class="p">,</span>
-        <span class="p">)</span></div>
+        <span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">prioritized_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PrioritizedSampler</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The sampler that owns the priority tree.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sampler</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span>
+        <span class="k">if</span> <span class="n">sampler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot sample with prioritized replay in a worker process.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">sampler</span>
+
+    <span class="k">def</span> <span class="nf">_catch_up_prioritized_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span>
+        <span class="n">write_count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">write_count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">write_count</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span><span class="p">:</span>
+            <span class="n">sampler</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">delta</span> <span class="o">=</span> <span class="n">write_count</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span>
+        <span class="k">if</span> <span class="n">delta</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">max_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">max_size</span>
+        <span class="k">if</span> <span class="n">delta</span> <span class="o">&gt;=</span> <span class="n">max_size</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span><span class="p">,</span>
+                <span class="n">write_count</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">remainder_</span><span class="p">(</span><span class="n">max_size</span><span class="p">)</span>
+        <span class="n">sampler</span><span class="o">.</span><span class="n">mark_update</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">storage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="n">write_count</span>
+
+<div class="viewcode-block" id="TensorDictPrioritizedReplayBuffer.add">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer.add">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">_set_dispatch_td_nn_modules</span><span class="p">(</span><span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+        <span class="n">index</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_index_in_td</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">index</span></div>
+
+
+<div class="viewcode-block" id="TensorDictPrioritizedReplayBuffer.extend">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer.extend">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">extend</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">update_priority</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">update_priority</span><span class="o">=</span><span class="n">update_priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">update_priority</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">.extend does not support updating priorities &quot;</span>
+                <span class="s2">&quot;from writer processes. Call update_tensordict_priority from the &quot;</span>
+                <span class="s2">&quot;learner process instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> only accepts TensorDictBase subclasses. &quot;</span>
+                <span class="s2">&quot;tensorclasses and other types are not compatible with that class. &quot;</span>
+                <span class="s2">&quot;Please use a regular `ReplayBuffer` instead.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tensordicts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">tensordicts</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">ndim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+        <span class="n">index</span> <span class="o">=</span> <span class="n">ReplayBuffer</span><span class="o">.</span><span class="n">_extend</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordicts</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_index_in_td</span><span class="p">(</span><span class="n">tensordicts</span><span class="p">,</span> <span class="n">index</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">index</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_get_priority_item</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_get_priority_item</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priority_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">sampler</span><span class="o">.</span><span class="n">default_priority</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">priority</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">priority</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">priority</span><span class="p">,</span> <span class="n">sampler</span><span class="o">.</span><span class="n">reduction</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">priority</span> <span class="o">=</span> <span class="n">priority</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Found a priority key of size&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priority_key</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> but expected &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;scalar value&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">priority</span>
+
+    <span class="k">def</span> <span class="nf">_get_priority_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_get_priority_vector</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priority_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span>
+                <span class="n">sampler</span><span class="o">.</span><span class="n">default_priority</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">priority</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">priority</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">priority</span><span class="p">,</span> <span class="n">sampler</span><span class="o">.</span><span class="n">reduction</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@pin_memory_output</span>
+    <span class="k">def</span> <span class="nf">_sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_sample</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_catch_up_prioritized_sampler</span><span class="p">()</span>
+        <span class="n">is_comp</span> <span class="o">=</span> <span class="n">is_compiling</span><span class="p">()</span>
+        <span class="n">nc</span> <span class="o">=</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">is_comp</span> <span class="k">else</span> <span class="n">nc</span><span class="p">,</span>
+        <span class="p">):</span>
+            <span class="n">index</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">)</span>
+            <span class="n">info</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">index</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_storage_index</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">INT_CLASSES</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_collate_fn</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">):</span>
+            <span class="k">with</span> <span class="n">data</span><span class="o">.</span><span class="n">unlock_</span><span class="p">(),</span> <span class="n">_set_dispatch_td_nn_modules</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transform</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">info</span>
+
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">update_priority</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">index</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim_extend</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">priority</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transpose</span><span class="p">(</span><span class="n">priority</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_write_lock</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span>
+                <span class="n">index</span><span class="p">,</span> <span class="n">priority</span><span class="p">,</span> <span class="n">storage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storage</span>
+            <span class="p">)</span>
+
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">update_tensordict_priority</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">update_tensordict_priority</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+            <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_priority_vector</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">priority</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_get_priority_item</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;index&quot;</span><span class="p">)</span>
+        <span class="k">while</span> <span class="n">index</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">priority</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">update_priority</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">priority</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TensorDictPrioritizedReplayBuffer.empty">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.TensorDictPrioritizedReplayBuffer.html#torchrl.data.TensorDictPrioritizedReplayBuffer.empty">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">empty_write_count</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">empty_write_count</span><span class="o">=</span><span class="n">empty_write_count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prioritized_sampler</span><span class="o">.</span><span class="n">_empty</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler_write_count</span> <span class="o">=</span> <span class="mi">0</span></div>
+
+
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">set_rng</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">generator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_rng</span><span class="p">(</span><span class="n">generator</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_prioritized_sampler&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_prioritized_sampler</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">generator</span>
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sync</span> <span class="ow">and</span> <span class="n">get_spawning_popen</span><span class="p">()</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_prioritized_sampler&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span></div>
 
 
 

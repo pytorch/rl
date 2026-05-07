@@ -635,26 +635,43 @@
         <span class="bp">cls</span><span class="o">.</span><span class="n">erase</span><span class="p">()</span>
 
 
-<span class="c1"># Global flag to enable detailed profiling instrumentation.</span>
-<span class="c1"># When False (default), _maybe_record_function returns nullcontext() immediately</span>
-<span class="c1"># to avoid overhead in hot code paths.</span>
-<span class="n">_PROFILING_ENABLED</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="c1"># Profiling instrumentation is gated by the TORCHRL_PROFILING env var, read</span>
+<span class="c1"># once at import time. When unset, `_maybe_record_function_decorator` returns</span>
+<span class="c1"># an identity decorator with zero per-call overhead, so instrumentation can be</span>
+<span class="c1"># sprinkled across hot paths (collectors, envs, modules) without penalty in</span>
+<span class="c1"># production. When set to &quot;1&quot;, the instrumentation is armed and can still be</span>
+<span class="c1"># toggled at runtime via :func:`set_profiling_enabled` for dynamic control</span>
+<span class="c1"># during a session (e.g. enabling profiling only around a specific iteration).</span>
+<span class="n">_PROFILING_ALLOWED</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;TORCHRL_PROFILING&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;1&quot;</span>
+<span class="n">_PROFILING_ENABLED</span> <span class="o">=</span> <span class="n">_PROFILING_ALLOWED</span>
 
 <span class="c1"># Singleton nullcontext to avoid repeated object creation</span>
 <span class="n">_NULL_CONTEXT</span> <span class="o">=</span> <span class="n">nullcontext</span><span class="p">()</span>
 
 
 <span class="k">def</span> <span class="nf">set_profiling_enabled</span><span class="p">(</span><span class="n">enabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enable or disable detailed profiling instrumentation.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Enable or disable detailed profiling instrumentation at runtime.</span>
 
-<span class="sd">    When disabled (default), `_maybe_record_function` and `_maybe_timeit`</span>
-<span class="sd">    return immediately with minimal overhead. Enable only when actively</span>
-<span class="sd">    profiling to avoid performance regression.</span>
+<span class="sd">    Profiling must first be armed at import time by setting the</span>
+<span class="sd">    ``TORCHRL_PROFILING=1`` environment variable before importing torchrl.</span>
+<span class="sd">    When the env var is unset, decorators added via</span>
+<span class="sd">    :func:`_maybe_record_function_decorator` are pure identity functions and</span>
+<span class="sd">    cannot be toggled on after the fact — calling this with ``enabled=True``</span>
+<span class="sd">    in that case emits a warning and is a no-op.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        enabled: If True, enable profiling instrumentation.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">global</span> <span class="n">_PROFILING_ENABLED</span>
+    <span class="k">if</span> <span class="n">enabled</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_PROFILING_ALLOWED</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;set_profiling_enabled(True) called but TORCHRL_PROFILING=1 was &quot;</span>
+            <span class="s2">&quot;not set before importing torchrl. Decorated functions are pure &quot;</span>
+            <span class="s2">&quot;identities and cannot be toggled on at runtime. Set the env var &quot;</span>
+            <span class="s2">&quot;before import and retry.&quot;</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
     <span class="n">_PROFILING_ENABLED</span> <span class="o">=</span> <span class="n">enabled</span>
 
 
@@ -672,8 +689,9 @@
 <span class="k">def</span> <span class="nf">_maybe_record_function</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Return record_function context if profiling enabled and not compiling.</span>
 
-<span class="sd">    When _PROFILING_ENABLED is False (default), returns immediately with</span>
-<span class="sd">    minimal overhead to avoid performance regression in hot code paths.</span>
+<span class="sd">    When profiling was not armed via ``TORCHRL_PROFILING=1`` at import, or was</span>
+<span class="sd">    disabled at runtime via :func:`set_profiling_enabled`, returns a shared</span>
+<span class="sd">    nullcontext with minimal overhead.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">_PROFILING_ENABLED</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_NULL_CONTEXT</span>
@@ -684,13 +702,21 @@
 
 
 <span class="k">def</span> <span class="nf">_maybe_record_function_decorator</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Callable</span><span class="p">],</span> <span class="n">Callable</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator version of :func:`_maybe_record_function`.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decorator form of :func:`_maybe_record_function`.</span>
 
-<span class="sd">    This is preferred over sprinkling many context managers in hot code paths,</span>
-<span class="sd">    as it reduces Python overhead while keeping a useful profiler structure.</span>
+<span class="sd">    Prefer this over sprinkling context managers in hot code paths: when</span>
+<span class="sd">    ``TORCHRL_PROFILING=1`` is not set at import time, the returned decorator</span>
+<span class="sd">    is a pure identity (``lambda f: f``) with zero per-call overhead. This</span>
+<span class="sd">    makes it safe to decorate collectors, envs, and modules methods for a</span>
+<span class="sd">    ready-to-ship profiler infrastructure.</span>
 
-<span class="sd">    When _PROFILING_ENABLED is False (default), the decorator is a no-op.</span>
+<span class="sd">    When the env var is set, the decorator wraps the function in a</span>
+<span class="sd">    ``record_function`` context, gated by the runtime</span>
+<span class="sd">    :func:`set_profiling_enabled` flag so the profiler timeline can be scoped</span>
+<span class="sd">    to specific regions of interest.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_PROFILING_ALLOWED</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_identity_decorator</span>
 
     <span class="k">def</span> <span class="nf">decorator</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
         <span class="nd">@wraps</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
@@ -703,6 +729,11 @@
         <span class="k">return</span> <span class="n">wrapped</span>
 
     <span class="k">return</span> <span class="n">decorator</span>
+
+
+<span class="k">def</span> <span class="nf">_identity_decorator</span><span class="p">(</span><span class="n">fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Shared identity decorator used when profiling is not armed.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">fn</span>
 
 
 <span class="k">def</span> <span class="nf">_check_for_faulty_process</span><span class="p">(</span><span class="n">processes</span><span class="p">):</span>
@@ -1610,6 +1641,23 @@
 
     <span class="k">if</span> <span class="n">remote_config</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">remote_config</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">remote_config</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">remote_config</span><span class="p">)</span>
+
+    <span class="c1"># Propagate TORCHRL_PROFILING to the remote actor so ``_maybe_record_function_decorator``</span>
+    <span class="c1"># is armed inside it. We must ensure the env var is set in the actor&#39;s process before</span>
+    <span class="c1"># torchrl is imported there — the decorator captures ``_PROFILING_ALLOWED`` at import.</span>
+    <span class="n">profiling</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;TORCHRL_PROFILING&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">profiling</span><span class="p">:</span>
+        <span class="n">runtime_env</span> <span class="o">=</span> <span class="n">remote_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;runtime_env&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">runtime_env</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">)</span>
+        <span class="n">env_vars</span> <span class="o">=</span> <span class="n">runtime_env</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;env_vars&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_vars</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">env_vars</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">env_vars</span><span class="p">)</span>
+        <span class="n">env_vars</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;TORCHRL_PROFILING&quot;</span><span class="p">,</span> <span class="n">profiling</span><span class="p">)</span>
+        <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env_vars</span>
+        <span class="n">remote_config</span><span class="p">[</span><span class="s2">&quot;runtime_env&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">runtime_env</span>
 
     <span class="n">remote_collector</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="o">**</span><span class="n">remote_config</span><span class="p">)(</span><span class="bp">cls</span><span class="p">)</span>
     <span class="n">remote_collector</span><span class="o">.</span><span class="n">is_remote</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1718,7 +1766,7 @@
         <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">])</span>
 
     <span class="c1"># Auto-propagate common env vars to Ray workers</span>
-    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;WANDB_API_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;HF_TOKEN&quot;</span><span class="p">,</span> <span class="s2">&quot;HF_HOME&quot;</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;WANDB_API_KEY&quot;</span><span class="p">,</span> <span class="s2">&quot;HF_TOKEN&quot;</span><span class="p">,</span> <span class="s2">&quot;HF_HOME&quot;</span><span class="p">,</span> <span class="s2">&quot;TORCHRL_PROFILING&quot;</span><span class="p">):</span>
         <span class="n">val</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">val</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">]:</span>
             <span class="n">runtime_env</span><span class="p">[</span><span class="s2">&quot;env_vars&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>

@@ -266,7 +266,7 @@
     <span class="n">_set_mp_start_method_if_unset</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">_ProfilerHook</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">ProfileConfig</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors._constants</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_InterruptorManager</span><span class="p">,</span>
     <span class="n">_is_osx</span><span class="p">,</span>
@@ -534,6 +534,15 @@
 <span class="sd">            or `ManiSkills &lt;https://github.com/haosulab/ManiSkill/&gt;`_) cuda synchronization may cause unexpected</span>
 <span class="sd">            crashes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        auto_register_policy_transforms (bool, optional): forwarded to each</span>
+<span class="sd">            worker :class:`~torchrl.collectors.Collector`. When ``True``,</span>
+<span class="sd">            workers append :class:`~torchrl.envs.transforms.InitTracker` and</span>
+<span class="sd">            recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`</span>
+<span class="sd">            transforms to their envs if the env specs don&#39;t already provide</span>
+<span class="sd">            them. ``False`` disables it; ``None`` (default through v0.14)</span>
+<span class="sd">            preserves pre-0.13 behavior and emits a</span>
+<span class="sd">            :class:`FutureWarning` when wrapping would have been needed.</span>
+<span class="sd">            Default flips to ``True`` in v0.15.</span>
 <span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
 <span class="sd">            If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,</span>
@@ -637,12 +646,14 @@
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">auto_register_policy_transforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span> <span class="o">=</span> <span class="n">auto_register_policy_transforms</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">pre_collect_hook</span><span class="o">=</span><span class="n">pre_collect_hook</span><span class="p">,</span>
             <span class="n">post_collect_hook</span><span class="o">=</span><span class="n">post_collect_hook</span><span class="p">,</span>
@@ -1094,6 +1105,19 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                 <span class="s2">&quot;Cannot split trajectories when reset_when_done is False.&quot;</span>
             <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">split_trajs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;split_trajs=True produces a (N_traj, T_max) zero-padded &quot;</span>
+                <span class="s2">&quot;tensordict with a &#39;mask&#39; key. For sequence training, prefer &quot;</span>
+                <span class="s2">&quot;the contiguous-trajectory layout: pass a replay_buffer to &quot;</span>
+                <span class="s2">&quot;the collector and sample with &quot;</span>
+                <span class="s2">&quot;:class:`~torchrl.data.SliceSampler` (variable-length slices, &quot;</span>
+                <span class="s2">&quot;no padding, no mask). See &quot;</span>
+                <span class="s2">&quot;:ref:`Data layout: contiguous trajectories &lt;data-layout&gt;` &quot;</span>
+                <span class="s2">&quot;in the docs. This advisory will become a &quot;</span>
+                <span class="s2">&quot;DeprecationWarning in a future release.&quot;</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
 
     <span class="k">def</span> <span class="nf">_setup_preemptive_threshold</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">preemptive_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1500,9 +1524,9 @@
                     <span class="s2">&quot;weight_sync_schemes&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_sync_schemes</span><span class="p">,</span>
                     <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>  <span class="c1"># Worker index for queue-based weight distribution</span>
                     <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>
-                    <span class="s2">&quot;profile_config&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">,</span>
                     <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span><span class="p">,</span>
                     <span class="s2">&quot;init_fn&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_init_fn</span><span class="p">,</span>
+                    <span class="s2">&quot;auto_register_policy_transforms&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span><span class="p">,</span>
                     <span class="s2">&quot;pre_collect_hook&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_pre_collect_hook</span><span class="p">,</span>
                     <span class="s2">&quot;post_collect_hook&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_post_collect_hook</span><span class="p">,</span>
                 <span class="p">}</span>
@@ -1787,39 +1811,58 @@
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Collector cannot be paused.&quot;</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="MultiCollector.enable_profile">
-<a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector.enable_profile">[docs]</a>
-    <span class="k">def</span> <span class="nf">enable_profile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Enable profiling for collector worker rollouts.</span>
+    <span class="k">def</span> <span class="nf">_install_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Install per-worker :class:`_ProfilerHook` on each selected worker.</span>
 
-<span class="sd">        For multi-process collectors, this sends the profile configuration</span>
-<span class="sd">        to the specified workers. Must be called before iteration starts.</span>
-
-<span class="sd">        See :meth:`BaseCollector.enable_profile` for full documentation.</span>
+<span class="sd">        Each worker gets its own ``_ProfilerHook(config, worker_idx=idx)``</span>
+<span class="sd">        wrapped in :class:`CloudpickleWrapper` and pushed via the existing</span>
+<span class="sd">        ``&quot;setattr&quot;`` pipe message. Workers not in ``config.workers`` are left</span>
+<span class="sd">        untouched.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># First, call parent to validate and set _profile_config</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">enable_profile</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;pipes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;closed&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;MultiCollector workers are not running; call enable_profile() &quot;</span>
+                <span class="s2">&quot;before close()/shutdown().&quot;</span>
+            <span class="p">)</span>
+        <span class="n">_check_for_faulty_process</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">procs</span><span class="p">)</span>
+        <span class="n">targeted</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">workers</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span><span class="p">:</span>
+            <span class="n">hook</span> <span class="o">=</span> <span class="n">CloudpickleWrapper</span><span class="p">(</span><span class="n">_ProfilerHook</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">(((</span><span class="s2">&quot;post_collect_hook&quot;</span><span class="p">,</span> <span class="n">hook</span><span class="p">),</span> <span class="s2">&quot;setattr&quot;</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span><span class="p">:</span>
+            <span class="n">result</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;setattr&quot;</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">: Expected &#39;setattr&#39; ack, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">result</span>
 
-        <span class="c1"># Send profile config to workers that should be profiled</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">,</span> <span class="s2">&quot;enable_profile&quot;</span><span class="p">))</span>
-
-            <span class="c1"># Wait for confirmation from workers</span>
-            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="o">.</span><span class="n">workers</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">poll</span><span class="p">(</span><span class="n">INSTANTIATE_TIMEOUT</span><span class="p">):</span>
-                        <span class="n">_</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">recv</span><span class="p">()</span>
-                        <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;profile_enabled&quot;</span><span class="p">:</span>
-                            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                                <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">: Expected &#39;profile_enabled&#39; message, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span>
-                            <span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="ne">TimeoutError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">: Timed out waiting for profile confirmation.&quot;</span>
-                        <span class="p">)</span></div>
-
+    <span class="k">def</span> <span class="nf">_uninstall_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the per-worker profiler hooks and clear ``post_collect_hook``.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;pipes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;closed&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">targeted</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">workers</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_workers</span><span class="p">]</span>
+        <span class="c1"># Stop the inner profiler — early-stop is harmless if it already auto-stopped.</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+                <span class="p">((</span><span class="s2">&quot;post_collect_hook.fn.stop&quot;</span><span class="p">,</span> <span class="p">(),</span> <span class="p">{}),</span> <span class="s2">&quot;cascade_execute&quot;</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">result</span><span class="p">,</span> <span class="n">msg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">msg</span> <span class="o">!=</span> <span class="s2">&quot;cascade_execute&quot;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Worker </span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">: Expected &#39;cascade_execute&#39; ack, got </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="ne">Exception</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="n">result</span>
+            <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+                <span class="c1"># Swallow per-worker stop errors — we still want to clear the hook below.</span>
+                <span class="k">pass</span>
+        <span class="c1"># Clear the hook on each targeted worker.</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">send</span><span class="p">(((</span><span class="s2">&quot;post_collect_hook&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;setattr&quot;</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_recv_and_check</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pipes</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_set_worker_attr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">attr_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;pipes&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;closed&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>

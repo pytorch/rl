@@ -257,7 +257,7 @@
 <span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
 
 <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">as_remote</span><span class="p">,</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">BaseCollector</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">_ProfilerHook</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">ProfileConfig</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors._constants</span> <span class="kn">import</span> <span class="n">DEFAULT_EXPLORATION_TYPE</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors._multi_async</span> <span class="kn">import</span> <span class="n">MultiAsyncCollector</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors._multi_sync</span> <span class="kn">import</span> <span class="n">MultiSyncCollector</span>
@@ -1177,6 +1177,46 @@
             <span class="p">]</span>
         <span class="p">)</span></div>
 
+
+    <span class="k">def</span> <span class="nf">_install_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Install per-actor :class:`_ProfilerHook` on each selected remote actor.</span>
+
+<span class="sd">        Each actor receives its own ``_ProfilerHook(config, worker_idx=idx)``</span>
+<span class="sd">        through ``set_post_collect_hook`` (a regular method on</span>
+<span class="sd">        :class:`BaseCollector`) — Ray actor handles can call methods but not</span>
+<span class="sd">        property setters directly. Actors not in ``config.workers`` are left</span>
+<span class="sd">        untouched.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">targeted</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">workers</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)]</span>
+        <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_post_collect_hook</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                <span class="n">_ProfilerHook</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">worker_idx</span><span class="o">=</span><span class="n">idx</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span>
+        <span class="p">]</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_uninstall_profile_hooks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the per-actor profiler hooks and clear ``post_collect_hook``.&quot;&quot;&quot;</span>
+        <span class="n">targeted</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">config</span><span class="o">.</span><span class="n">workers</span> <span class="k">if</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">)]</span>
+        <span class="c1"># Best-effort stop — early-stop is harmless if it already auto-stopped.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">cascade_execute</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span>
+                        <span class="s2">&quot;post_collect_hook.stop&quot;</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span>
+                <span class="p">]</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">remote_collectors</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">set_post_collect_hook</span><span class="o">.</span><span class="n">remote</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">targeted</span>
+            <span class="p">]</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="RayCollector.stop_remote_collectors">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.collectors.distributed.RayCollector.html#torchrl.collectors.distributed.RayCollector.stop_remote_collectors">[docs]</a>

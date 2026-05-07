@@ -299,6 +299,8 @@ Use the <code class="docutils literal notranslate"><span class="pre">sync</span>
 <li><p><strong>Trajectory assembly</strong>: Collect complete trajectories with <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> for
 clean <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code> sampling — see <a class="reference internal" href="collectors_replay.html#collectors-replay-trajs"><span class="std std-ref">Complete trajectory collection with trajs_per_batch</span></a></p></li>
 <li><p><strong>Batching strategies</strong>: Multiple ways to organize collected data</p></li>
+<li><p><strong>Profiler-ready</strong>: Set <code class="docutils literal notranslate"><span class="pre">TORCHRL_PROFILING=1</span></code> to emit named ranges on the
+collector, env, and policy hot paths — see <a class="reference internal" href="profiling.html#ref-profiling"><span class="std std-ref">Profiling collectors and envs</span></a></p></li>
 </ul>
 </section>
 <section id="collection-hooks">

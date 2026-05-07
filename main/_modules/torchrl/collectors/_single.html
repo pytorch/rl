@@ -259,12 +259,14 @@
 <span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">_ends_with</span><span class="p">,</span>
     <span class="n">_make_ordinal_device</span><span class="p">,</span>
+    <span class="n">_maybe_record_function</span><span class="p">,</span>
+    <span class="n">_maybe_record_function_decorator</span><span class="p">,</span>
     <span class="n">_replace_last</span><span class="p">,</span>
     <span class="n">accept_remote_rref_udf_invocation</span><span class="p">,</span>
     <span class="n">prod</span><span class="p">,</span>
     <span class="n">RL_WARNINGS</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span><span class="p">,</span> <span class="n">ProfileConfig</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors._base</span> <span class="kn">import</span> <span class="n">_LegacyCollectorMeta</span><span class="p">,</span> <span class="n">BaseCollector</span>
 <span class="kn">from</span> <span class="nn">torchrl.collectors._constants</span> <span class="kn">import</span> <span class="p">(</span>
     <span class="n">cudagraph_mark_step_begin</span><span class="p">,</span>
     <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
@@ -283,118 +285,9 @@
     <span class="n">set_exploration_type</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <span class="n">RandomPolicy</span><span class="p">,</span> <span class="n">set_exploration_modules_spec_from_env</span>
+<span class="kn">from</span> <span class="nn">torchrl.modules.utils.utils</span> <span class="kn">import</span> <span class="n">_maybe_append_env_transforms_from_module</span>
 <span class="kn">from</span> <span class="nn">torchrl.weight_update.utils</span> <span class="kn">import</span> <span class="n">_resolve_model</span>
 <span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightSyncScheme</span>
-
-
-<span class="k">class</span> <span class="nc">_CollectorProfiler</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Helper class for profiling collector rollouts in single-process mode.</span>
-
-<span class="sd">    Manages the PyTorch profiler lifecycle for the Collector class.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">config</span> <span class="o">=</span> <span class="n">profile_config</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="o">=</span> <span class="kc">False</span>
-
-        <span class="c1"># Set up profiler schedule</span>
-        <span class="n">active_rollouts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span>
-        <span class="n">profiler_schedule</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">schedule</span><span class="p">(</span>
-            <span class="n">skip_first</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="p">,</span>
-            <span class="n">wait</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">warmup</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-            <span class="n">active</span><span class="o">=</span><span class="n">active_rollouts</span><span class="p">,</span>
-            <span class="n">repeat</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Get activities</span>
-        <span class="n">activities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get_activities</span><span class="p">()</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">activities</span><span class="p">:</span>
-            <span class="k">return</span>
-
-        <span class="c1"># Determine trace handler</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">on_trace_ready</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">on_trace_ready</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">on_trace_ready</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">save_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">get_save_path</span><span class="p">(</span>
-                <span class="mi">0</span>
-            <span class="p">)</span>  <span class="c1"># Use worker_idx 0 for single-process</span>
-            <span class="n">save_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-            <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-
-            <span class="k">def</span> <span class="nf">on_trace_ready</span><span class="p">(</span><span class="n">prof</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="n">save_path</span><span class="p">):</span>
-                <span class="n">prof</span><span class="o">.</span><span class="n">export_chrome_trace</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">save_path</span><span class="p">))</span>
-                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Collector: Profiling trace saved to </span><span class="si">{</span><span class="n">save_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">profile</span><span class="p">(</span>
-            <span class="n">activities</span><span class="o">=</span><span class="n">activities</span><span class="p">,</span>
-            <span class="n">schedule</span><span class="o">=</span><span class="n">profiler_schedule</span><span class="p">,</span>
-            <span class="n">on_trace_ready</span><span class="o">=</span><span class="n">on_trace_ready</span><span class="p">,</span>
-            <span class="n">record_shapes</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">record_shapes</span><span class="p">,</span>
-            <span class="n">profile_memory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">profile_memory</span><span class="p">,</span>
-            <span class="n">with_stack</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">with_stack</span><span class="p">,</span>
-            <span class="n">with_flops</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">with_flops</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="o">=</span> <span class="kc">True</span>
-
-    <span class="k">def</span> <span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Start the profiler.&quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Collector: Profiling started. &quot;</span>
-                <span class="sa">f</span><span class="s2">&quot;Will profile rollouts </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">warmup_rollouts</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">.&quot;</span>
-            <span class="p">)</span>
-
-    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Step the profiler after a rollout.</span>
-
-<span class="sd">        Returns:</span>
-<span class="sd">            True if profiling is complete.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">+=</span> <span class="mi">1</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-
-        <span class="c1"># Check if profiling is complete</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config</span><span class="o">.</span><span class="n">num_rollouts</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
-            <span class="k">return</span> <span class="kc">True</span>
-
-        <span class="k">return</span> <span class="kc">False</span>
-
-    <span class="k">def</span> <span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Stop the profiler and export trace.&quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">torchrl</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Collector: Profiling complete after </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">rollout_count</span><span class="si">}</span><span class="s2"> rollouts.&quot;</span>
-            <span class="p">)</span>
-
-    <span class="nd">@property</span>
-    <span class="k">def</span> <span class="nf">is_active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if profiling is active.&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span>
-
-    <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
-    <span class="k">def</span> <span class="nf">profile_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Context manager for profiling a single rollout.&quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stopped</span><span class="p">:</span>
-            <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">profiler</span><span class="o">.</span><span class="n">record_function</span><span class="p">(</span><span class="s2">&quot;collector_rollout&quot;</span><span class="p">):</span>
-                <span class="k">yield</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">yield</span>
 
 
 <span class="k">def</span> <span class="nf">_cuda_sync_if_initialized</span><span class="p">():</span>
@@ -573,6 +466,24 @@
 <span class="sd">            or `ManiSkills &lt;https://github.com/haosulab/ManiSkill/&gt;`_) cuda synchronization may cause unexpected</span>
 <span class="sd">            crashes.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        auto_register_policy_transforms (bool, optional): if ``True``, the</span>
+<span class="sd">            collector inspects the policy for recurrent submodules</span>
+<span class="sd">            (:class:`~torchrl.modules.LSTMModule`,</span>
+<span class="sd">            :class:`~torchrl.modules.GRUModule`, anything implementing</span>
+<span class="sd">            ``make_tensordict_primer()``) and appends the matching</span>
+<span class="sd">            :class:`~torchrl.envs.transforms.InitTracker` and</span>
+<span class="sd">            :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms to</span>
+<span class="sd">            the env if the env&#39;s specs don&#39;t already provide them. The check</span>
+<span class="sd">            is spec-based and idempotent, so passing an env that was already</span>
+<span class="sd">            wrapped via :class:`~torchrl.envs.EnvBase`&#39;s ``policy=``</span>
+<span class="sd">            constructor argument is safe. If ``False``, the collector never</span>
+<span class="sd">            modifies the env. Defaults to ``None`` through v0.14, which</span>
+<span class="sd">            preserves the pre-0.13 behavior (no auto-registration) but emits</span>
+<span class="sd">            a :class:`FutureWarning` if the env was missing transforms the</span>
+<span class="sd">            policy needed. The default flips to ``True`` in v0.15.</span>
+
+<span class="sd">            .. seealso:: :ref:`Auto-wrapping recurrent transforms via the</span>
+<span class="sd">                policy= argument &lt;Environment-policy-arg&gt;`.</span>
 <span class="sd">        weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`</span>
 <span class="sd">            or its subclass, responsible for updating the policy weights on remote inference workers.</span>
 <span class="sd">            This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.</span>
@@ -693,6 +604,7 @@
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">auto_register_policy_transforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
@@ -700,6 +612,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span> <span class="o">=</span> <span class="n">auto_register_policy_transforms</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">pre_collect_hook</span><span class="o">=</span><span class="n">pre_collect_hook</span><span class="p">,</span>
             <span class="n">post_collect_hook</span><span class="o">=</span><span class="n">post_collect_hook</span><span class="p">,</span>
@@ -736,6 +649,9 @@
 
         <span class="c1"># Set up policy version tracking</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_policy_version_tracking</span><span class="p">(</span><span class="n">track_policy_version</span><span class="p">)</span>
+
+        <span class="c1"># Set up recurrent policy environment transforms</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_setup_policy_env_transforms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
 
         <span class="c1"># Set up replay buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_replay_buffer</span><span class="p">(</span>
@@ -798,6 +714,19 @@
         <span class="c1"># Set split trajectories option</span>
         <span class="k">if</span> <span class="n">split_trajs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">split_trajs</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">elif</span> <span class="n">split_trajs</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">&quot;split_trajs=True produces a (N_traj, T_max) zero-padded &quot;</span>
+                <span class="s2">&quot;tensordict with a &#39;mask&#39; key. For sequence training, prefer &quot;</span>
+                <span class="s2">&quot;the contiguous-trajectory layout: pass a replay_buffer to &quot;</span>
+                <span class="s2">&quot;the collector and sample with &quot;</span>
+                <span class="s2">&quot;:class:`~torchrl.data.SliceSampler` (variable-length slices, &quot;</span>
+                <span class="s2">&quot;no padding, no mask). See &quot;</span>
+                <span class="s2">&quot;:ref:`Data layout: contiguous trajectories &lt;data-layout&gt;` &quot;</span>
+                <span class="s2">&quot;in the docs. This advisory will become a &quot;</span>
+                <span class="s2">&quot;DeprecationWarning in a future release.&quot;</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_private_keys</span> <span class="o">=</span> <span class="kc">True</span>
 
@@ -835,6 +764,46 @@
                         <span class="sa">f</span><span class="s2">&quot;on environment of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">create_env_fn</span><span class="p">)</span><span class="si">}</span><span class="s2">.&quot;</span>
                     <span class="p">)</span>
                 <span class="n">env</span><span class="o">.</span><span class="n">update_kwargs</span><span class="p">(</span><span class="n">create_env_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">env</span>
+
+    <span class="k">def</span> <span class="nf">_maybe_setup_policy_env_transforms</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">EnvBase</span><span class="p">,</span>
+        <span class="n">policy</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="n">Callable</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EnvBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attach env transforms required by the policy if absent.</span>
+
+<span class="sd">        Gated by the ``auto_register_policy_transforms`` constructor flag:</span>
+
+<span class="sd">        * ``True``  → spec-based detection + idempotent append.</span>
+<span class="sd">        * ``False`` → no-op (silent).</span>
+<span class="sd">        * ``None``  (default through v0.14) → no-op, but emit a</span>
+<span class="sd">          :class:`FutureWarning` if the env was missing transforms the policy</span>
+<span class="sd">          needs. Default flips to ``True`` in v0.15.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">flag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span>
+        <span class="k">if</span> <span class="n">flag</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">_maybe_append_env_transforms_from_module</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">flag</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">env</span>
+        <span class="c1"># flag is None — preserve the pre-0.13 behavior but warn that this</span>
+        <span class="c1"># will change in v0.15.</span>
+        <span class="kn">from</span> <span class="nn">torchrl.modules.utils.utils</span> <span class="kn">import</span> <span class="n">_compute_missing_env_transforms</span>
+
+        <span class="n">missing</span> <span class="o">=</span> <span class="n">_compute_missing_env_transforms</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">policy</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+            <span class="n">missing_names</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">t</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">missing</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The env passed to </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> is missing &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;transforms required by the policy (</span><span class="si">{</span><span class="n">missing_names</span><span class="si">}</span><span class="s2">). &quot;</span>
+                <span class="s2">&quot;From torchrl v0.15 the collector will append them &quot;</span>
+                <span class="s2">&quot;automatically. To enable that behavior now (and silence &quot;</span>
+                <span class="s2">&quot;this warning), pass `auto_register_policy_transforms=True`. &quot;</span>
+                <span class="s2">&quot;To opt out permanently, pass &quot;</span>
+                <span class="s2">&quot;`auto_register_policy_transforms=False`.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">env</span>
 
     <span class="k">def</span> <span class="nf">_init_policy</span><span class="p">(</span>
@@ -1507,6 +1476,7 @@
     <span class="c1"># for RPC</span>
 <div class="viewcode-block" id="Collector.update_policy_weights_">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.update_policy_weights_">[docs]</a>
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;Collector.update_policy_weights_&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">update_policy_weights_</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">policy_or_weights</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">TensorDictModuleBase</span> <span class="o">|</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1635,13 +1605,6 @@
             <span class="n">streams</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">events</span> <span class="o">=</span> <span class="p">[]</span>
 
-        <span class="c1"># Set up profiler if configured</span>
-        <span class="n">profiler</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">profiler</span> <span class="o">=</span> <span class="n">_CollectorProfiler</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_profile_config</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
-                <span class="n">profiler</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-
         <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">ExitStack</span><span class="p">()</span> <span class="k">as</span> <span class="n">stack</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">stream</span> <span class="ow">in</span> <span class="n">streams</span><span class="p">:</span>
                 <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">stream</span><span class="p">(</span><span class="n">stream</span><span class="p">))</span>
@@ -1649,19 +1612,7 @@
             <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_frames</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_iter</span> <span class="o">+=</span> <span class="mi">1</span>
 
-                <span class="c1"># Use profiler context if profiling is active</span>
-                <span class="n">profile_ctx</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">profiler</span><span class="o">.</span><span class="n">profile_rollout</span><span class="p">()</span>
-                    <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span>
-                    <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
-                <span class="p">)</span>
-
-                <span class="k">with</span> <span class="n">profile_ctx</span><span class="p">:</span>
-                    <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">()</span>
-
-                <span class="c1"># Step the profiler after each rollout</span>
-                <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
-                    <span class="n">profiler</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+                <span class="n">tensordict_out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rollout</span><span class="p">()</span>
 
                 <span class="k">if</span> <span class="n">tensordict_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="c1"># if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out</span>
@@ -1697,11 +1648,7 @@
                     <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">post_collect_hook</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">)</span>
-                    <span class="k">yield</span> <span class="n">tensordict_out</span>
-
-        <span class="c1"># Stop profiler if it hasn&#39;t been stopped yet</span>
-        <span class="k">if</span> <span class="n">profiler</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">profiler</span><span class="o">.</span><span class="n">is_active</span><span class="p">:</span>
-            <span class="n">profiler</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span></div>
+                    <span class="k">yield</span> <span class="n">tensordict_out</span></div>
 
 
 <div class="viewcode-block" id="Collector.start">
@@ -1871,6 +1818,7 @@
 <div class="viewcode-block" id="Collector.rollout">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.rollout">[docs]</a>
     <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="nd">@_maybe_record_function_decorator</span><span class="p">(</span><span class="s2">&quot;Collector.rollout&quot;</span><span class="p">)</span>
     <span class="k">def</span> <span class="nf">rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes a rollout in the environment using the provided policy.</span>
 
@@ -1933,7 +1881,8 @@
                     <span class="c1"># we still do the assignment for security</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
                         <span class="n">cudagraph_mark_step_begin</span><span class="p">()</span>
-                    <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
+                    <span class="k">with</span> <span class="n">_maybe_record_function</span><span class="p">(</span><span class="s2">&quot;Collector.policy&quot;</span><span class="p">):</span>
+                        <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
                         <span class="n">policy_output</span> <span class="o">=</span> <span class="n">policy_output</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">policy_output</span><span class="p">:</span>

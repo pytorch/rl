@@ -261,6 +261,28 @@
 <span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Unbounded</span>
 
 
+<span class="k">def</span> <span class="nf">_place_at_traj_end</span><span class="p">(</span>
+    <span class="n">h</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">steps</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scatter per-trajectory hidden states onto a zero-padded time grid.</span>
+
+<span class="sd">    Given ``h`` of shape ``[N, *F]``, returns a tensor of shape</span>
+<span class="sd">    ``[N, steps, *F]`` whose row ``i`` is zero everywhere except at index</span>
+<span class="sd">    ``splits[i] - 1`` along dim 1, where it holds ``h[i]``. Out-of-place</span>
+<span class="sd">    ``scatter`` is used so the call is compatible with :func:`torch.vmap`.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">h_padded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+        <span class="n">h</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">steps</span><span class="p">,</span> <span class="o">*</span><span class="n">h</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">device</span><span class="o">=</span><span class="n">h</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">h</span><span class="o">.</span><span class="n">dtype</span>
+    <span class="p">)</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">splits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+        <span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">h_padded</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+
 <span class="k">class</span> <span class="nc">LSTMCell</span><span class="p">(</span><span class="n">RNNCellBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;A long short-term memory (LSTM) cell that performs the same operation as nn.LSTMCell but is fully coded in Python.</span>
 
@@ -419,6 +441,8 @@
 
     <span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LSTM</span><span class="o">.</span><span class="vm">__doc__</span>
 
+    <span class="n">use_scan</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">input_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -431,6 +455,7 @@
         <span class="n">proj_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_scan</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="k">if</span> <span class="n">bidirectional</span> <span class="ow">is</span> <span class="kc">True</span><span class="p">:</span>
@@ -450,6 +475,11 @@
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="c1"># Opt-in prototype: replace the python time loop with</span>
+        <span class="c1"># ``torch._higher_order_ops.scan``. Requires :func:`torch.compile`</span>
+        <span class="c1"># to capture the scan; eager use will fail. Dropout is not supported</span>
+        <span class="c1"># on this path. See :meth:`_lstm_scan`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_scan</span> <span class="o">=</span> <span class="n">use_scan</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_lstm_cell</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">cx</span><span class="p">,</span> <span class="n">weight_ih</span><span class="p">,</span> <span class="n">bias_ih</span><span class="p">,</span> <span class="n">weight_hh</span><span class="p">,</span> <span class="n">bias_hh</span><span class="p">):</span>
@@ -469,7 +499,10 @@
 
         <span class="k">return</span> <span class="n">hy</span><span class="p">,</span> <span class="n">cy</span>
 
-    <span class="k">def</span> <span class="nf">_lstm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_lstm</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_scan</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_scan</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
 
         <span class="n">h_t</span><span class="p">,</span> <span class="n">c_t</span> <span class="o">=</span> <span class="n">hx</span>
         <span class="n">h_t</span><span class="p">,</span> <span class="n">c_t</span> <span class="o">=</span> <span class="n">h_t</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">c_t</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
@@ -491,9 +524,15 @@
                 <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
                 <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">x_t</span> <span class="ow">in</span> <span class="n">x</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">)):</span>
+        <span class="n">time_dim</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">)</span>
+        <span class="n">x_unbound</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">time_dim</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask_unbound</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="n">time_dim</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">x_t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">x_unbound</span><span class="p">):</span>
             <span class="n">h_t_out</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="n">c_t_out</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">m_t</span> <span class="o">=</span> <span class="n">mask_unbound</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
 
             <span class="k">for</span> <span class="n">layer</span><span class="p">,</span> <span class="p">(</span>
                 <span class="n">weight_ih</span><span class="p">,</span>
@@ -504,26 +543,98 @@
                 <span class="n">_c_t</span><span class="p">,</span>
             <span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">weight_ihs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_hhs</span><span class="p">,</span> <span class="n">h_t</span><span class="p">,</span> <span class="n">c_t</span><span class="p">)):</span>
                 <span class="c1"># Run cell</span>
-                <span class="n">_h_t</span><span class="p">,</span> <span class="n">_c_t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_cell</span><span class="p">(</span>
+                <span class="n">h_new</span><span class="p">,</span> <span class="n">c_new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_cell</span><span class="p">(</span>
                     <span class="n">x_t</span><span class="p">,</span> <span class="n">_h_t</span><span class="p">,</span> <span class="n">_c_t</span><span class="p">,</span> <span class="n">weight_ih</span><span class="p">,</span> <span class="n">bias_ih</span><span class="p">,</span> <span class="n">weight_hh</span><span class="p">,</span> <span class="n">bias_hh</span>
                 <span class="p">)</span>
-                <span class="n">h_t_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_h_t</span><span class="p">)</span>
-                <span class="n">c_t_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_c_t</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">m_t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Freeze hidden/cell state for batch entries whose</span>
+                    <span class="c1"># trajectory has already ended at this time step. The cell</span>
+                    <span class="c1"># is still evaluated for the full batch (wasteful but</span>
+                    <span class="c1"># vmap/compile-friendly); only the carry is masked.</span>
+                    <span class="n">h_new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m_t</span><span class="p">,</span> <span class="n">h_new</span><span class="p">,</span> <span class="n">_h_t</span><span class="p">)</span>
+                    <span class="n">c_new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m_t</span><span class="p">,</span> <span class="n">c_new</span><span class="p">,</span> <span class="n">_c_t</span><span class="p">)</span>
+                <span class="n">h_t_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_new</span><span class="p">)</span>
+                <span class="n">c_t_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c_new</span><span class="p">)</span>
 
                 <span class="c1"># Apply dropout if in training mode</span>
                 <span class="k">if</span> <span class="n">layer</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
-                    <span class="n">x_t</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span><span class="n">_h_t</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">,</span> <span class="n">training</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">)</span>
+                    <span class="n">x_t</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span><span class="n">h_new</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">,</span> <span class="n">training</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>  <span class="c1"># No dropout after the last layer</span>
-                    <span class="n">x_t</span> <span class="o">=</span> <span class="n">_h_t</span>
+                    <span class="n">x_t</span> <span class="o">=</span> <span class="n">h_new</span>
             <span class="n">h_t</span> <span class="o">=</span> <span class="n">h_t_out</span>
             <span class="n">c_t</span> <span class="o">=</span> <span class="n">c_t_out</span>
             <span class="n">outputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">x_t</span><span class="p">)</span>
 
-        <span class="n">outputs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">))</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="n">time_dim</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">h_t_out</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">c_t_out</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span> <span class="nf">_lstm_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prototype scan-based time loop. Must be called inside ``torch.compile``.</span>
+
+<span class="sd">        ``torch._higher_order_ops.scan`` is a prototype feature; this path is</span>
+<span class="sd">        opt-in via ``LSTM(..., use_scan=True)`` and replaces the python</span>
+<span class="sd">        ``for`` loop over time. Dropout is not supported here.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">torch._higher_order_ops</span> <span class="kn">import</span> <span class="n">scan</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;LSTM(use_scan=True) does not support dropout yet.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">weights</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">:</span>
+            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># scan iterates along dim 0; permute to time-first if needed.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">num_layers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span>
+
+        <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="n">carry</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+            <span class="n">h_layers</span><span class="p">,</span> <span class="n">c_layers</span> <span class="o">=</span> <span class="n">carry</span>  <span class="c1"># each [num_layers, B, H]</span>
+            <span class="n">x_t</span><span class="p">,</span> <span class="n">m_t</span> <span class="o">=</span> <span class="n">inputs</span>
+            <span class="n">m_t</span> <span class="o">=</span> <span class="n">m_t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">new_h</span><span class="p">,</span> <span class="n">new_c</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+            <span class="n">h_unbound</span> <span class="o">=</span> <span class="n">h_layers</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">c_unbound</span> <span class="o">=</span> <span class="n">c_layers</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_layers</span><span class="p">):</span>
+                <span class="n">h_prev</span> <span class="o">=</span> <span class="n">h_unbound</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+                <span class="n">c_prev</span> <span class="o">=</span> <span class="n">c_unbound</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+                <span class="n">h_new</span><span class="p">,</span> <span class="n">c_new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_cell</span><span class="p">(</span>
+                    <span class="n">x_t</span><span class="p">,</span>
+                    <span class="n">h_prev</span><span class="p">,</span>
+                    <span class="n">c_prev</span><span class="p">,</span>
+                    <span class="n">weight_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">weight_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="n">h_new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m_t</span><span class="p">,</span> <span class="n">h_new</span><span class="p">,</span> <span class="n">h_prev</span><span class="p">)</span>
+                <span class="n">c_new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m_t</span><span class="p">,</span> <span class="n">c_new</span><span class="p">,</span> <span class="n">c_prev</span><span class="p">)</span>
+                <span class="n">new_h</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_new</span><span class="p">)</span>
+                <span class="n">new_c</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c_new</span><span class="p">)</span>
+                <span class="n">x_t</span> <span class="o">=</span> <span class="n">h_new</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">new_c</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_c</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="n">new_c</span><span class="p">),</span> <span class="n">x_t</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="n">h0</span><span class="p">,</span> <span class="n">c0</span> <span class="o">=</span> <span class="n">hx</span>
+        <span class="p">(</span><span class="n">h_final</span><span class="p">,</span> <span class="n">c_final</span><span class="p">),</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="p">(</span><span class="n">h0</span><span class="p">,</span> <span class="n">c0</span><span class="p">),</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="p">(</span><span class="n">h_final</span><span class="p">,</span> <span class="n">c_final</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="n">real_hidden_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">proj_size</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">proj_size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">hidden_size</span>
         <span class="k">if</span> <span class="nb">input</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -546,7 +657,7 @@
                 <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">hx</span> <span class="o">=</span> <span class="p">(</span><span class="n">h_zeros</span><span class="p">,</span> <span class="n">c_zeros</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="LSTMModule">
@@ -1002,7 +1113,14 @@
         <span class="n">dtype</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span>
 
         <span class="n">val</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm</span><span class="p">(</span>
-            <span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="n">batch</span><span class="p">,</span>
+            <span class="n">steps</span><span class="p">,</span>
+            <span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="p">,</span>
+            <span class="n">hidden0</span><span class="p">,</span>
+            <span class="n">hidden1</span><span class="p">,</span>
+            <span class="n">splits</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">val</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden0</span><span class="p">)</span>
@@ -1027,6 +1145,7 @@
         <span class="n">dtype</span><span class="p">,</span>
         <span class="n">hidden0_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">hidden1_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">steps</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -1057,17 +1176,43 @@
             <span class="n">_hidden1_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
         <span class="p">)</span>
 
-        <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">LSTM</span><span class="p">):</span>
+            <span class="c1"># Variable-length trajectories: pack so the LSTM does not consume</span>
+            <span class="c1"># padding zeros, and h_n/c_n reflect the state after the last real</span>
+            <span class="c1"># step of each trajectory rather than after the padded tail.</span>
+            <span class="n">lengths</span> <span class="o">=</span> <span class="n">splits</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="n">packed</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">rnn</span><span class="o">.</span><span class="n">pack_padded_sequence</span><span class="p">(</span>
+                <span class="nb">input</span><span class="p">,</span> <span class="n">lengths</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">enforce_sorted</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+            <span class="n">packed_y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">(</span><span class="n">packed</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">rnn</span><span class="o">.</span><span class="n">pad_packed_sequence</span><span class="p">(</span>
+                <span class="n">packed_y</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">total_length</span><span class="o">=</span><span class="n">steps</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># python-based custom LSTM does not accept PackedSequence. Run the</span>
+            <span class="c1"># full padded batch through it but pass a per-step active mask so</span>
+            <span class="c1"># the cell freezes h/c for batch entries whose trajectory has</span>
+            <span class="c1"># already ended (wasteful compute on the padded tail, but the</span>
+            <span class="c1"># batch dimension stays vectorised -- vmap/compile-friendly).</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">splits</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+
         <span class="c1"># dim 0 in hidden is num_layers, but that will conflict with tensordict</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_h</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">_h</span> <span class="ow">in</span> <span class="n">hidden</span><span class="p">)</span>
 
         <span class="n">out</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">,</span> <span class="o">*</span><span class="n">hidden</span><span class="p">]</span>
-        <span class="c1"># we pad the hidden states with zero to make tensordict happy</span>
+        <span class="c1"># Place hidden states so that _inv_pad_sequence (which keeps the first</span>
+        <span class="c1"># splits[i] positions of each row) retains them.</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
-            <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
-                <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span>
-                <span class="mi">1</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">_place_at_traj_end</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">splits</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span>
+                    <span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span></div>
 
 
@@ -1221,6 +1366,8 @@
 
     <span class="vm">__doc__</span> <span class="o">+=</span> <span class="n">nn</span><span class="o">.</span><span class="n">GRU</span><span class="o">.</span><span class="vm">__doc__</span>
 
+    <span class="n">use_scan</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">input_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -1232,6 +1379,7 @@
         <span class="n">bidirectional</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">dtype</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">use_scan</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 
         <span class="k">if</span> <span class="n">bidirectional</span><span class="p">:</span>
@@ -1250,6 +1398,8 @@
             <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="c1"># Opt-in prototype: see :meth:`_gru_scan` and :class:`LSTM`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_scan</span> <span class="o">=</span> <span class="n">use_scan</span>
 
     <span class="nd">@staticmethod</span>
     <span class="k">def</span> <span class="nf">_gru_cell</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">weight_ih</span><span class="p">,</span> <span class="n">bias_ih</span><span class="p">,</span> <span class="n">weight_hh</span><span class="p">,</span> <span class="n">bias_hh</span><span class="p">):</span>
@@ -1269,12 +1419,17 @@
 
         <span class="k">return</span> <span class="n">hy</span>
 
-    <span class="k">def</span> <span class="nf">_gru</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">_gru</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_scan</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_scan</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
             <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span>
                 <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span>
             <span class="p">)</span>  <span class="c1"># Change (seq_len, batch, features) to (batch, seq_len, features)</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
         <span class="n">bs</span><span class="p">,</span> <span class="n">seq_len</span><span class="p">,</span> <span class="n">input_size</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">()</span>
         <span class="n">h_t</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">hx</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
@@ -1297,17 +1452,25 @@
                 <span class="n">bias_hh</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
 
         <span class="n">outputs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">mask_unbound</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
 
-        <span class="k">for</span> <span class="n">x_t</span> <span class="ow">in</span> <span class="n">x</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">1</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">x_t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">1</span><span class="p">)):</span>
+            <span class="n">m_t</span> <span class="o">=</span> <span class="n">mask_unbound</span><span class="p">[</span><span class="n">t</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">mask_unbound</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
             <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
-                <span class="n">h_t</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_cell</span><span class="p">(</span>
+                <span class="n">h_prev</span> <span class="o">=</span> <span class="n">h_t</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+                <span class="n">h_new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_cell</span><span class="p">(</span>
                     <span class="n">x_t</span><span class="p">,</span>
-                    <span class="n">h_t</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">h_prev</span><span class="p">,</span>
                     <span class="n">weight_ih</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
                     <span class="n">bias_ih</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
                     <span class="n">weight_hh</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
                     <span class="n">bias_hh</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
                 <span class="p">)</span>
+                <span class="k">if</span> <span class="n">m_t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Freeze hidden state for batch entries whose trajectory</span>
+                    <span class="c1"># has already ended (see _lstm for rationale).</span>
+                    <span class="n">h_new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m_t</span><span class="p">,</span> <span class="n">h_new</span><span class="p">,</span> <span class="n">h_prev</span><span class="p">)</span>
+                <span class="n">h_t</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span> <span class="o">=</span> <span class="n">h_new</span>
 
                 <span class="c1"># Apply dropout if in training mode and not the last layer</span>
                 <span class="k">if</span> <span class="n">layer</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
@@ -1325,7 +1488,60 @@
 
         <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">h_t</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
 
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">def</span> <span class="nf">_gru_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prototype scan-based time loop. See :meth:`LSTM._lstm_scan`.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">torch._higher_order_ops</span> <span class="kn">import</span> <span class="n">scan</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;GRU(use_scan=True) does not support dropout yet.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">num_layers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span>
+
+        <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="n">carry</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+            <span class="n">h_layers</span> <span class="o">=</span> <span class="n">carry</span>  <span class="c1"># [num_layers, B, H]</span>
+            <span class="n">x_t</span><span class="p">,</span> <span class="n">m_t</span> <span class="o">=</span> <span class="n">inputs</span>
+            <span class="n">m_t</span> <span class="o">=</span> <span class="n">m_t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">h_unbound</span> <span class="o">=</span> <span class="n">h_layers</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_layers</span><span class="p">):</span>
+                <span class="n">h_prev</span> <span class="o">=</span> <span class="n">h_unbound</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+                <span class="n">h_new</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_cell</span><span class="p">(</span>
+                    <span class="n">x_t</span><span class="p">,</span>
+                    <span class="n">h_prev</span><span class="p">,</span>
+                    <span class="n">weight_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">weight_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="n">h_new</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m_t</span><span class="p">,</span> <span class="n">h_new</span><span class="p">,</span> <span class="n">h_prev</span><span class="p">)</span>
+                <span class="n">new_h</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_new</span><span class="p">)</span>
+                <span class="n">x_t</span> <span class="o">=</span> <span class="n">h_new</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">new_h</span><span class="p">,</span> <span class="n">x_t</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="n">h_final</span><span class="p">,</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
+            <span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">h_final</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
         <span class="k">if</span> <span class="nb">input</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">&quot;GRU: Expected input to be 3D, got </span><span class="si">{</span><span class="nb">input</span><span class="o">.</span><span class="n">dim</span><span class="p">()</span><span class="si">}</span><span class="s2">D instead&quot;</span>
@@ -1345,7 +1561,7 @@
             <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">check_forward_args</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">batch_sizes</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
 
         <span class="n">output</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
@@ -1801,13 +2017,10 @@
         <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
         <span class="n">device</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">device</span>
         <span class="n">dtype</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">dtype</span>
-        <span class="c1"># packed sequences do not help to get the accurate last hidden values</span>
-        <span class="c1"># if splits is not None:</span>
-        <span class="c1">#     value = torch.nn.utils.rnn.pack_padded_sequence(value, splits, batch_first=True)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">is_init</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="n">hidden</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">is_init_expand</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">is_init</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
             <span class="n">hidden</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
-        <span class="n">val</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+        <span class="n">val</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">splits</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">val</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1829,6 +2042,7 @@
         <span class="n">device</span><span class="p">,</span>
         <span class="n">dtype</span><span class="p">,</span>
         <span class="n">hidden_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">steps</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -1848,15 +2062,33 @@
         <span class="n">_hidden_in</span> <span class="o">=</span> <span class="n">hidden_in</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="n">_hidden_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
 
-        <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">GRU</span><span class="p">):</span>
+            <span class="c1"># See LSTMModule._lstm for rationale.</span>
+            <span class="n">lengths</span> <span class="o">=</span> <span class="n">splits</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+            <span class="n">packed</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">rnn</span><span class="o">.</span><span class="n">pack_padded_sequence</span><span class="p">(</span>
+                <span class="nb">input</span><span class="p">,</span> <span class="n">lengths</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">enforce_sorted</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+            <span class="n">packed_y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">(</span><span class="n">packed</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">rnn</span><span class="o">.</span><span class="n">pad_packed_sequence</span><span class="p">(</span>
+                <span class="n">packed_y</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">total_length</span><span class="o">=</span><span class="n">steps</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">splits</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
+
         <span class="c1"># dim 0 in hidden is num_layers, but that will conflict with tensordict</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="n">hidden</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
-        <span class="c1"># we pad the hidden states with zero to make tensordict happy</span>
-        <span class="n">hidden</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">hidden</span><span class="p">],</span>
-            <span class="mi">1</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">hidden</span> <span class="o">=</span> <span class="n">_place_at_traj_end</span><span class="p">(</span><span class="n">hidden</span><span class="p">,</span> <span class="n">splits</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># we pad the hidden states with zero to make tensordict happy</span>
+            <span class="n">hidden</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">hidden</span><span class="p">],</span>
+                <span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="n">out</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">,</span> <span class="n">hidden</span><span class="p">]</span>
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span></div>
 
