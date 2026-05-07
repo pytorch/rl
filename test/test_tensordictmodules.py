@@ -1102,6 +1102,42 @@ class TestLSTMModule:
             out["next", "recurrent_state_c"][0, 4], c2.squeeze(1)
         )
 
+    def test_lstm_scan_prototype(self):
+        # Opt-in prototype: torch._higher_order_ops.scan-based time loop.
+        # Must be exercised under torch.compile -- scan is unusable in eager.
+        from torchrl.modules.tensordict_module.rnn import LSTM
+
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 2, 5, 3, 4, 2
+        ref = LSTM(input_size=F_in, hidden_size=H, num_layers=L, batch_first=True)
+        scn = LSTM(
+            input_size=F_in,
+            hidden_size=H,
+            num_layers=L,
+            batch_first=True,
+            use_scan=True,
+        )
+        scn.load_state_dict(ref.state_dict())
+
+        x = torch.randn(B, T, F_in)
+        h0 = torch.zeros(L, B, H)
+        c0 = torch.zeros(L, B, H)
+        mask = torch.ones(B, T, dtype=torch.bool)
+        mask[1, 3:] = False  # batch 1 ends at t=3
+
+        with torch.no_grad():
+            y_ref, (hn_ref, cn_ref) = ref(x, (h0, c0), mask=mask)
+
+        @torch.compile(fullgraph=True)
+        def call(x, h0, c0, mask):
+            return scn(x, (h0, c0), mask=mask)
+
+        with torch.no_grad():
+            y_s, (hn_s, cn_s) = call(x, h0, c0, mask)
+        torch.testing.assert_close(y_ref, y_s)
+        torch.testing.assert_close(hn_ref, hn_s)
+        torch.testing.assert_close(cn_ref, cn_s)
+
 
 class TestGRUModule:
     def test_errs(self):
@@ -1552,6 +1588,39 @@ class TestGRUModule:
             _, h2 = gru_module.gru(obs[:, 3:])
         torch.testing.assert_close(out["next", "recurrent_state"][0, 2], h1.squeeze(1))
         torch.testing.assert_close(out["next", "recurrent_state"][0, 4], h2.squeeze(1))
+
+    def test_gru_scan_prototype(self):
+        # Opt-in prototype: see TestLSTMModule.test_lstm_scan_prototype.
+        from torchrl.modules.tensordict_module.rnn import GRU
+
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 2, 5, 3, 4, 2
+        ref = GRU(input_size=F_in, hidden_size=H, num_layers=L, batch_first=True)
+        scn = GRU(
+            input_size=F_in,
+            hidden_size=H,
+            num_layers=L,
+            batch_first=True,
+            use_scan=True,
+        )
+        scn.load_state_dict(ref.state_dict())
+
+        x = torch.randn(B, T, F_in)
+        h0 = torch.zeros(L, B, H)
+        mask = torch.ones(B, T, dtype=torch.bool)
+        mask[1, 3:] = False
+
+        with torch.no_grad():
+            y_ref, hn_ref = ref(x, h0, mask=mask)
+
+        @torch.compile(fullgraph=True)
+        def call(x, h0, mask):
+            return scn(x, h0, mask=mask)
+
+        with torch.no_grad():
+            y_s, hn_s = call(x, h0, mask)
+        torch.testing.assert_close(y_ref, y_s)
+        torch.testing.assert_close(hn_ref, hn_s)
 
 
 def test_safe_specs():

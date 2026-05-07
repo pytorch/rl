@@ -200,6 +200,8 @@ class LSTM(LSTMBase):
 
     __doc__ += nn.LSTM.__doc__
 
+    use_scan: bool = False
+
     def __init__(
         self,
         input_size: int,
@@ -212,6 +214,7 @@ class LSTM(LSTMBase):
         proj_size: int = 0,
         device=None,
         dtype=None,
+        use_scan: bool = False,
     ) -> None:
 
         if bidirectional is True:
@@ -231,6 +234,11 @@ class LSTM(LSTMBase):
             device=device,
             dtype=dtype,
         )
+        # Opt-in prototype: replace the python time loop with
+        # ``torch._higher_order_ops.scan``. Requires :func:`torch.compile`
+        # to capture the scan; eager use will fail. Dropout is not supported
+        # on this path. See :meth:`_lstm_scan`.
+        self.use_scan = use_scan
 
     @staticmethod
     def _lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -251,6 +259,9 @@ class LSTM(LSTMBase):
         return hy, cy
 
     def _lstm(self, x, hx, mask=None):
+
+        if self.use_scan:
+            return self._lstm_scan(x, hx, mask)
 
         h_t, c_t = hx
         h_t, c_t = h_t.unbind(0), c_t.unbind(0)
@@ -316,6 +327,71 @@ class LSTM(LSTMBase):
         outputs = torch.stack(outputs, dim=time_dim)
 
         return outputs, (torch.stack(h_t_out, 0), torch.stack(c_t_out, 0))
+
+    def _lstm_scan(self, x, hx, mask=None):
+        """Prototype scan-based time loop. Must be called inside ``torch.compile``.
+
+        ``torch._higher_order_ops.scan`` is a prototype feature; this path is
+        opt-in via ``LSTM(..., use_scan=True)`` and replaces the python
+        ``for`` loop over time. Dropout is not supported here.
+        """
+        from torch._higher_order_ops import scan
+
+        if self.dropout:
+            raise NotImplementedError(
+                "LSTM(use_scan=True) does not support dropout yet."
+            )
+
+        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+        for weights in self._all_weights:
+            weight_ihs.append(getattr(self, weights[0]))
+            weight_hhs.append(getattr(self, weights[1]))
+            bias_ihs.append(getattr(self, weights[2]) if self.bias else None)
+            bias_hhs.append(getattr(self, weights[3]) if self.bias else None)
+
+        # scan iterates along dim 0; permute to time-first if needed.
+        if self.batch_first:
+            x = x.transpose(0, 1)
+            if mask is not None:
+                mask = mask.transpose(0, 1)
+        if mask is None:
+            mask = torch.ones(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
+
+        num_layers = self.num_layers
+
+        def step(carry, inputs):
+            h_layers, c_layers = carry  # each [num_layers, B, H]
+            x_t, m_t = inputs
+            m_t = m_t.unsqueeze(-1)
+            new_h, new_c = [], []
+            h_unbound = h_layers.unbind(0)
+            c_unbound = c_layers.unbind(0)
+            for layer in range(num_layers):
+                h_prev = h_unbound[layer]
+                c_prev = c_unbound[layer]
+                h_new, c_new = self._lstm_cell(
+                    x_t,
+                    h_prev,
+                    c_prev,
+                    weight_ihs[layer],
+                    bias_ihs[layer],
+                    weight_hhs[layer],
+                    bias_hhs[layer],
+                )
+                h_new = torch.where(m_t, h_new, h_prev)
+                c_new = torch.where(m_t, c_new, c_prev)
+                new_h.append(h_new)
+                new_c.append(c_new)
+                x_t = h_new
+            new_h = torch.stack(new_h, 0).clone()
+            new_c = torch.stack(new_c, 0).clone()
+            return (new_h, new_c), x_t.clone()
+
+        h0, c0 = hx
+        (h_final, c_final), outputs = scan(step, (h0, c0), (x, mask), dim=0)
+        if self.batch_first:
+            outputs = outputs.transpose(0, 1)
+        return outputs, (h_final, c_final)
 
     def forward(self, input, hx=None, mask=None):  # noqa: F811
         real_hidden_size = self.proj_size if self.proj_size > 0 else self.hidden_size
@@ -1031,6 +1107,8 @@ class GRU(GRUBase):
 
     __doc__ += nn.GRU.__doc__
 
+    use_scan: bool = False
+
     def __init__(
         self,
         input_size: int,
@@ -1042,6 +1120,7 @@ class GRU(GRUBase):
         bidirectional: bool = False,
         device=None,
         dtype=None,
+        use_scan: bool = False,
     ) -> None:
 
         if bidirectional:
@@ -1060,6 +1139,8 @@ class GRU(GRUBase):
             device=device,
             dtype=dtype,
         )
+        # Opt-in prototype: see :meth:`_gru_scan` and :class:`LSTM`.
+        self.use_scan = use_scan
 
     @staticmethod
     def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -1080,6 +1161,9 @@ class GRU(GRUBase):
         return hy
 
     def _gru(self, x, hx, mask=None):
+
+        if self.use_scan:
+            return self._gru_scan(x, hx, mask)
 
         if not self.batch_first:
             x = x.permute(
@@ -1144,6 +1228,59 @@ class GRU(GRUBase):
             )  # Change back (batch, seq_len, features) to (seq_len, batch, features)
 
         return outputs, torch.stack(h_t, 0)
+
+    def _gru_scan(self, x, hx, mask=None):
+        """Prototype scan-based time loop. See :meth:`LSTM._lstm_scan`."""
+        from torch._higher_order_ops import scan
+
+        if self.dropout:
+            raise NotImplementedError(
+                "GRU(use_scan=True) does not support dropout yet."
+            )
+
+        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+        for layer in range(self.num_layers):
+            weights = self._all_weights[layer]
+            weight_ihs.append(getattr(self, weights[0]))
+            weight_hhs.append(getattr(self, weights[1]))
+            bias_ihs.append(getattr(self, weights[2]) if self.bias else None)
+            bias_hhs.append(getattr(self, weights[3]) if self.bias else None)
+
+        if self.batch_first:
+            x = x.transpose(0, 1)
+            if mask is not None:
+                mask = mask.transpose(0, 1)
+        if mask is None:
+            mask = torch.ones(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
+
+        num_layers = self.num_layers
+
+        def step(carry, inputs):
+            h_layers = carry  # [num_layers, B, H]
+            x_t, m_t = inputs
+            m_t = m_t.unsqueeze(-1)
+            new_h = []
+            h_unbound = h_layers.unbind(0)
+            for layer in range(num_layers):
+                h_prev = h_unbound[layer]
+                h_new = self._gru_cell(
+                    x_t,
+                    h_prev,
+                    weight_ihs[layer],
+                    bias_ihs[layer],
+                    weight_hhs[layer],
+                    bias_hhs[layer],
+                )
+                h_new = torch.where(m_t, h_new, h_prev)
+                new_h.append(h_new)
+                x_t = h_new
+            new_h = torch.stack(new_h, 0).clone()
+            return new_h, x_t.clone()
+
+        h_final, outputs = scan(step, hx, (x, mask), dim=0)
+        if self.batch_first:
+            outputs = outputs.transpose(0, 1)
+        return outputs, h_final
 
     def forward(self, input, hx=None, mask=None):  # noqa: F811
         if input.dim() != 3:
