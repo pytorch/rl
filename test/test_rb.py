@@ -2754,6 +2754,27 @@ class TestMultiProc:
         assert (rb["a"][:9] == 2).all()
         q0.put("finish")
 
+    @staticmethod
+    def async_prb_worker(rb, worker_id, q):
+        td = TensorDict(
+            {
+                "obs": torch.full((4, 1), worker_id, dtype=torch.float32),
+                "prio": {"td_error": torch.linspace(0.1, 1.0, 4) + worker_id},
+            },
+            [4],
+        )
+        rb.extend(td)
+        q.put("finish")
+
+    @staticmethod
+    def async_generic_prb_worker(rb, worker_id, q):
+        data = TensorDict(
+            {"obs": torch.full((4, 1), worker_id, dtype=torch.float32)},
+            [4],
+        )
+        rb.extend(data)
+        q.put("finish")
+
     def exec_multiproc_rb(
         self,
         storage_type=LazyMemmapStorage,
@@ -2808,6 +2829,78 @@ class TestMultiProc:
             self.exec_multiproc_rb(
                 sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
             )
+
+    def test_async_prioritized_rb_multiproc_writes(self):
+        rb = TensorDictPrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.5,
+            priority_key=("prio", "td_error"),
+            storage=LazyMemmapStorage(32, shared_init=True),
+            batch_size=4,
+            shared=True,
+            sync=False,
+        )
+        q = mp.Queue()
+        processes = []
+        for worker_id in range(2):
+            proc = mp.Process(
+                target=self.async_prb_worker,
+                args=(rb, worker_id, q),
+            )
+            processes.append(proc)
+            proc.start()
+
+        for proc in processes:
+            proc.join()
+            assert proc.exitcode == 0
+            assert q.get(timeout=5) == "finish"
+
+        assert rb.write_count == 8
+        sample = rb.sample()
+        assert rb._prioritized_sampler_write_count == 8
+        assert sample["obs"].shape == (4, 1)
+        assert "priority_weight" in sample.keys()
+        assert "index" in sample.keys()
+
+        sample["prio", "td_error"] = torch.ones(sample.shape) * 10
+        rb.update_tensordict_priority(sample)
+        assert rb.prioritized_sampler._max_priority[0] is not None
+
+    def test_async_generic_prioritized_rb_multiproc_writes(self):
+        rb = PrioritizedReplayBuffer(
+            alpha=0.7,
+            beta=0.5,
+            storage=LazyMemmapStorage(32),
+            batch_size=4,
+            sync=False,
+        )
+        rb.extend(TensorDict({"obs": torch.zeros((1, 1))}, [1]))
+        rb.empty()
+        rb.share(True)
+        q = mp.Queue()
+        processes = []
+        for worker_id in range(2):
+            proc = mp.Process(
+                target=self.async_generic_prb_worker,
+                args=(rb, worker_id, q),
+            )
+            processes.append(proc)
+            proc.start()
+
+        for proc in processes:
+            proc.join()
+            assert proc.exitcode == 0
+            assert q.get(timeout=5) == "finish"
+
+        assert rb.write_count == 8
+        sample, info = rb.sample(return_info=True)
+        assert rb._prioritized_sampler_write_count == 8
+        assert sample["obs"].shape == (4, 1)
+        assert "priority_weight" in info
+        assert "index" in info
+
+        rb.update_priority(info["index"], torch.ones(4) * 10)
+        assert rb.prioritized_sampler._max_priority[0] is not None
 
     def test_error_noninit(self):
         # list storage cannot be shared

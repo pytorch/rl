@@ -13,6 +13,7 @@ import threading
 import warnings
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from multiprocessing.context import get_spawning_popen
 from pathlib import Path
 from typing import Any
 
@@ -1346,6 +1347,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             priority sampler trees will be stored. Defaults to ``None``, in
             which case CUDA storage selects CUDA sampling and CPU storage
             selects CPU sampling. Cannot be used together with ``sampler``.
+        sync (bool, optional): whether the priority sampler is synchronized with
+            writes. If ``True``, this class uses the standard
+            :class:`~torchrl.data.PrioritizedSampler` write path. If ``False``,
+            writer processes use a shareable :class:`~torchrl.data.RandomSampler`
+            and the learner owns a local priority sampler that catches up from
+            ``write_count`` before sampling. Defaults to ``True``.
         collate_fn (callable, optional): merges a list of samples to form a
             mini-batch of Tensor(s)/outputs.  Used when using batched
             loading from a map-style dataset. The default value will be decided
@@ -1452,6 +1459,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         storage: Storage | None = None,
         sampler: Sampler | None = None,
         sampler_device: DEVICE_TYPING | None = None,
+        sync: bool = True,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -1462,12 +1470,27 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     ) -> None:
         if storage is None:
             storage = ListStorage(max_size=1_000)
+        self._sync = sync
+        self._prioritized_sampler = None
+        self._prioritized_sampler_write_count = 0
         if sampler is None:
-            sampler = PrioritizedSampler(
+            prioritized_sampler = PrioritizedSampler(
                 storage.max_size, alpha, beta, eps, dtype, device=sampler_device
             )
         elif sampler_device is not None:
             raise TypeError("sampler_device cannot be passed when sampler is provided.")
+        else:
+            prioritized_sampler = sampler
+        if sync:
+            sampler = prioritized_sampler
+        else:
+            if storage.ndim != 1:
+                raise ValueError(
+                    f"{type(self).__name__} only supports 1-D storages when sync=False, "
+                    f"got storage.ndim={storage.ndim}."
+                )
+            self._prioritized_sampler = prioritized_sampler
+            sampler = RandomSampler()
         super().__init__(
             storage=storage,
             sampler=sampler,
@@ -1479,6 +1502,100 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             dim_extend=dim_extend,
             delayed_init=delayed_init,
         )
+
+    @property
+    def prioritized_sampler(self) -> Sampler:
+        """The sampler that owns the priority tree."""
+        if self._sync:
+            return self._sampler
+        sampler = self._prioritized_sampler
+        if sampler is None:
+            raise RuntimeError(
+                f"{type(self).__name__} cannot sample with prioritized replay in a worker process."
+            )
+        return sampler
+
+    def _catch_up_prioritized_sampler(self) -> None:
+        sampler = self.prioritized_sampler
+        write_count = int(self.write_count)
+        if write_count < self._prioritized_sampler_write_count:
+            sampler._empty()
+            self._prioritized_sampler_write_count = 0
+        delta = write_count - self._prioritized_sampler_write_count
+        if delta <= 0:
+            return
+        max_size = self._storage.max_size
+        if delta >= max_size:
+            index = torch.arange(max_size, dtype=torch.long)
+        else:
+            index = torch.arange(
+                self._prioritized_sampler_write_count,
+                write_count,
+                dtype=torch.long,
+            ).remainder_(max_size)
+        sampler.mark_update(index, storage=self._storage)
+        self._prioritized_sampler_write_count = write_count
+
+    @pin_memory_output
+    def _sample(self, batch_size: int) -> tuple[Any, dict]:
+        if self._sync:
+            return super()._sample(batch_size)
+        self._catch_up_prioritized_sampler()
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with (
+            self._replay_lock if not is_comp else nc,
+            self._write_lock if not is_comp else nc,
+        ):
+            index, info = self.prioritized_sampler.sample(self._storage, batch_size)
+            info["index"] = index
+            data = self._storage.get(_storage_index(index, self._storage))
+        if not isinstance(index, INT_CLASSES):
+            data = self._collate_fn(data)
+        if self._transform is not None and len(self._transform):
+            is_td = is_tensor_collection(data)
+            with data.unlock_() if is_td else contextlib.nullcontext(), _set_dispatch_td_nn_modules(
+                is_td
+            ):
+                data = self._transform(data)
+        return data, info
+
+    @_maybe_delay_init
+    def update_priority(
+        self,
+        index: int | torch.Tensor | tuple[torch.Tensor],
+        priority: int | torch.Tensor,
+    ) -> None:
+        if self._sync:
+            return super().update_priority(index, priority)
+        if isinstance(index, tuple):
+            index = torch.stack(index, -1)
+        priority = torch.as_tensor(priority)
+        if self.dim_extend > 0 and priority.ndim > 1:
+            priority = self._transpose(priority).flatten()
+        with self._replay_lock, self._write_lock:
+            self.prioritized_sampler.update_priority(
+                index, priority, storage=self.storage
+            )
+
+    @_maybe_delay_init
+    def empty(self, empty_write_count: bool = True):
+        super().empty(empty_write_count=empty_write_count)
+        if not self._sync:
+            self.prioritized_sampler._empty()
+            self._prioritized_sampler_write_count = 0
+
+    @_maybe_delay_init
+    def set_rng(self, generator) -> None:
+        super().set_rng(generator)
+        if not self._sync and getattr(self, "_prioritized_sampler", None) is not None:
+            self._prioritized_sampler._rng = generator
+
+    def __getstate__(self) -> dict[str, Any]:
+        state = super().__getstate__()
+        if not self._sync and get_spawning_popen() is not None:
+            state["_prioritized_sampler"] = None
+        return state
 
 
 class TensorDictReplayBuffer(ReplayBuffer):
@@ -1912,7 +2029,7 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
               batch-size in advance) as well as with samplers that have a
               ``drop_last`` argument.
 
-        priority_key (str, optional): the key at which priority is assumed to
+        priority_key (NestedKey, optional): the key at which priority is assumed to
             be stored within TensorDicts added to this ReplayBuffer.
             This is to be used when the sampler is of type
             :class:`~torchrl.data.PrioritizedSampler`.
@@ -1921,6 +2038,12 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             priority sampler trees will be stored. Defaults to ``None``, in
             which case CUDA storage selects CUDA sampling and CPU storage
             selects CPU sampling.
+        sync (bool, optional): whether the priority sampler is synchronized with
+            writes. If ``True``, this class uses the standard
+            :class:`~torchrl.data.PrioritizedSampler` write path. If ``False``,
+            writer processes use a shareable :class:`~torchrl.data.RandomSampler`
+            and the learner owns a local priority sampler that catches up from
+            ``write_count`` before sampling. Defaults to ``True``.
         reduction (str, optional): the reduction method for multidimensional
             tensordicts (ie stored trajectories). Can be one of "max", "min",
             "median" or "mean".
@@ -2026,10 +2149,11 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         *,
         alpha: float,
         beta: float,
-        priority_key: str = "td_error",
+        priority_key: NestedKey = "td_error",
         eps: float = 1e-8,
         storage: Storage | None = None,
         sampler_device: DEVICE_TYPING | None = None,
+        sync: bool = True,
         collate_fn: Callable | None = None,
         pin_memory: bool = False,
         prefetch: int | None = None,
@@ -2042,7 +2166,10 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
         compilable: bool = False,
     ) -> None:
         storage = self._maybe_make_storage(storage, compilable=compilable)
-        sampler = PrioritizedSampler(
+        self._sync = sync
+        self._prioritized_sampler = None
+        self._prioritized_sampler_write_count = 0
+        prioritized_sampler = PrioritizedSampler(
             storage.max_size,
             alpha,
             beta,
@@ -2050,6 +2177,16 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             reduction=reduction,
             device=sampler_device,
         )
+        if sync:
+            sampler = prioritized_sampler
+        else:
+            if storage.ndim != 1:
+                raise ValueError(
+                    f"{type(self).__name__} only supports 1-D storages when sync=False, "
+                    f"got storage.ndim={storage.ndim}."
+                )
+            self._prioritized_sampler = prioritized_sampler
+            sampler = RandomSampler()
         super().__init__(
             priority_key=priority_key,
             storage=storage,
@@ -2064,6 +2201,187 @@ class TensorDictPrioritizedReplayBuffer(TensorDictReplayBuffer):
             shared=shared,
             compilable=compilable,
         )
+
+    @property
+    def prioritized_sampler(self) -> PrioritizedSampler:
+        """The sampler that owns the priority tree."""
+        if self._sync:
+            return self._sampler
+        sampler = self._prioritized_sampler
+        if sampler is None:
+            raise RuntimeError(
+                f"{type(self).__name__} cannot sample with prioritized replay in a worker process."
+            )
+        return sampler
+
+    def _catch_up_prioritized_sampler(self) -> None:
+        sampler = self.prioritized_sampler
+        write_count = int(self.write_count)
+        if write_count < self._prioritized_sampler_write_count:
+            sampler._empty()
+            self._prioritized_sampler_write_count = 0
+        delta = write_count - self._prioritized_sampler_write_count
+        if delta <= 0:
+            return
+        max_size = self._storage.max_size
+        if delta >= max_size:
+            index = torch.arange(max_size, dtype=torch.long)
+        else:
+            index = torch.arange(
+                self._prioritized_sampler_write_count,
+                write_count,
+                dtype=torch.long,
+            ).remainder_(max_size)
+        sampler.mark_update(index, storage=self._storage)
+        self._prioritized_sampler_write_count = write_count
+
+    @_maybe_delay_init
+    def add(self, data: TensorDictBase) -> int:
+        if self._sync:
+            return super().add(data)
+        if self._transform is not None:
+            with _set_dispatch_td_nn_modules(is_tensor_collection(data)):
+                data = self._transform.inv(data)
+        if data is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
+
+        index = ReplayBuffer._add(self, data)
+        if index is not None and is_tensor_collection(data):
+            self._set_index_in_td(data, index)
+        return index
+
+    @_maybe_delay_init
+    def extend(
+        self, tensordicts: TensorDictBase, *, update_priority: bool | None = None
+    ) -> torch.Tensor:
+        if self._sync:
+            return super().extend(tensordicts, update_priority=update_priority)
+        if update_priority:
+            raise RuntimeError(
+                f"{type(self).__name__}.extend does not support updating priorities "
+                "from writer processes. Call update_tensordict_priority from the "
+                "learner process instead."
+            )
+        if not isinstance(tensordicts, TensorDictBase):
+            raise ValueError(
+                f"{self.__class__.__name__} only accepts TensorDictBase subclasses. "
+                "tensorclasses and other types are not compatible with that class. "
+                "Please use a regular `ReplayBuffer` instead."
+            )
+        if self._transform is not None:
+            tensordicts = self._transform.inv(tensordicts)
+        if tensordicts is None:
+            return torch.zeros((0, self._storage.ndim), dtype=torch.long)
+
+        index = ReplayBuffer._extend(self, tensordicts)
+        self._set_index_in_td(tensordicts, index)
+        return index
+
+    def _get_priority_item(self, tensordict: TensorDictBase) -> float:
+        if self._sync:
+            return super()._get_priority_item(tensordict)
+        sampler = self.prioritized_sampler
+        priority = tensordict.get(self.priority_key, None)
+        if priority is None:
+            return sampler.default_priority
+        try:
+            if priority.numel() > 1:
+                priority = _reduce(priority, sampler.reduction)
+            else:
+                priority = priority.item()
+        except ValueError:
+            raise ValueError(
+                f"Found a priority key of size"
+                f" {tensordict.get(self.priority_key).shape} but expected "
+                f"scalar value"
+            )
+        return priority
+
+    def _get_priority_vector(self, tensordict: TensorDictBase) -> torch.Tensor:
+        if self._sync:
+            return super()._get_priority_vector(tensordict)
+        sampler = self.prioritized_sampler
+        priority = tensordict.get(self.priority_key, None)
+        if priority is None:
+            return torch.tensor(
+                sampler.default_priority,
+                dtype=torch.float,
+                device=tensordict.device,
+            ).expand(tensordict.shape[0])
+
+        priority = priority.reshape(priority.shape[0], -1)
+        return _reduce(priority, sampler.reduction, dim=1)
+
+    @pin_memory_output
+    def _sample(self, batch_size: int) -> tuple[Any, dict]:
+        if self._sync:
+            return super()._sample(batch_size)
+        self._catch_up_prioritized_sampler()
+        is_comp = is_compiling()
+        nc = contextlib.nullcontext()
+        with (
+            self._replay_lock if not is_comp else nc,
+            self._write_lock if not is_comp else nc,
+        ):
+            index, info = self.prioritized_sampler.sample(self._storage, batch_size)
+            info["index"] = index
+            data = self._storage.get(_storage_index(index, self._storage))
+        if not isinstance(index, INT_CLASSES):
+            data = self._collate_fn(data)
+        if self._transform is not None and len(self._transform):
+            with data.unlock_(), _set_dispatch_td_nn_modules(True):
+                data = self._transform(data)
+        return data, info
+
+    @_maybe_delay_init
+    def update_priority(
+        self,
+        index: int | torch.Tensor | tuple[torch.Tensor],
+        priority: int | torch.Tensor,
+    ) -> None:
+        if self._sync:
+            return super().update_priority(index, priority)
+        if isinstance(index, tuple):
+            index = torch.stack(index, -1)
+        priority = torch.as_tensor(priority)
+        if self.dim_extend > 0 and priority.ndim > 1:
+            priority = self._transpose(priority).flatten()
+        with self._replay_lock, self._write_lock:
+            self.prioritized_sampler.update_priority(
+                index, priority, storage=self.storage
+            )
+
+    @_maybe_delay_init
+    def update_tensordict_priority(self, data: TensorDictBase) -> None:
+        if self._sync:
+            return super().update_tensordict_priority(data)
+        if data.ndim:
+            priority = self._get_priority_vector(data)
+        else:
+            priority = torch.as_tensor(self._get_priority_item(data))
+        index = data.get("index")
+        while index.shape != priority.shape:
+            index = index[..., 0]
+        return self.update_priority(index, priority)
+
+    @_maybe_delay_init
+    def empty(self, empty_write_count: bool = True):
+        super().empty(empty_write_count=empty_write_count)
+        if not self._sync:
+            self.prioritized_sampler._empty()
+            self._prioritized_sampler_write_count = 0
+
+    @_maybe_delay_init
+    def set_rng(self, generator) -> None:
+        super().set_rng(generator)
+        if not self._sync and getattr(self, "_prioritized_sampler", None) is not None:
+            self._prioritized_sampler._rng = generator
+
+    def __getstate__(self) -> dict[str, Any]:
+        state = super().__getstate__()
+        if not self._sync and get_spawning_popen() is not None:
+            state["_prioritized_sampler"] = None
+        return state
 
 
 @accept_remote_rref_udf_invocation
