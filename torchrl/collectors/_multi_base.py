@@ -464,7 +464,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
-        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up policy and weights
         if trust_policy is None:
@@ -513,6 +512,8 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Store policy and policy_factory - temporary set to make them visible to the receiver
         self.policy = policy
         self.policy_factory = policy_factory
+
+        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
@@ -987,6 +988,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td = self.create_env_fn[0](
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
+            fake_td = self._add_policy_outputs_to_fake_td(fake_td)
             if getattr(self, "_worker_trajs_per_batch", None) is not None:
                 # With trajs_per_batch, workers write flat 1-D timesteps to
                 # the buffer.  Initialise the storage as 1-D so that the
@@ -1003,6 +1005,29 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 # Use extend to avoid time-related transforms to fail
                 self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
+
+    def _add_policy_outputs_to_fake_td(self, fake_td):
+        policy = getattr(self, "policy", None)
+        if policy is None:
+            policy_factory = getattr(self, "policy_factory", None)
+            if policy_factory is not None:
+                policy_factory = next(
+                    (factory for factory in policy_factory if factory is not None),
+                    None,
+                )
+                if policy_factory is not None:
+                    policy = policy_factory()
+        out_keys = getattr(policy, "out_keys", None)
+        if not out_keys:
+            return fake_td
+        with torch.no_grad():
+            policy_output = policy(fake_td.copy())
+        policy_output_keys = policy_output.keys(True, True)
+        for key in out_keys:
+            if key in fake_td.keys(True, True) or key not in policy_output_keys:
+                continue
+            fake_td.set(key, policy_output.get(key))
+        return fake_td
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
