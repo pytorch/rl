@@ -535,15 +535,17 @@ class ReplayBuffer:
     def share(self, shared: bool = True) -> Self:
         self.shared = shared
         if self.shared:
-            storage_device = getattr(self._storage, "device", None)
-            if storage_device is not None and storage_device != "auto":
-                storage_device = torch.device(storage_device)
-                if storage_device.type != "cpu":
-                    raise ValueError(
-                        "shared=True requires storage device='cpu'; got "
-                        f"device={storage_device}. Pass "
-                        "storage=LazyTensorStorage(..., device='cpu')."
-                    )
+            storage = getattr(self, "_storage", self._init_storage)
+            if storage is not None and not callable(storage):
+                storage_device = getattr(storage, "device", None)
+                if storage_device is not None and storage_device != "auto":
+                    storage_device = torch.device(storage_device)
+                    if storage_device.type != "cpu":
+                        raise ValueError(
+                            "shared=True requires storage device='cpu'; got "
+                            f"device={storage_device}. Pass "
+                            "storage=LazyTensorStorage(..., device='cpu')."
+                        )
             self._write_lock = multiprocessing.Lock()
         else:
             self._write_lock = contextlib.nullcontext()

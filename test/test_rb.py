@@ -2851,6 +2851,8 @@ class TestMultiProc:
 
     def test_error_prb(self):
         # PrioritizedSampler cannot be shared
+        if samplers.SumSegmentTreeFp32 is None:
+            pytest.skip("PrioritizedSampler extension is unavailable.")
         with pytest.raises(
             RuntimeError,
             match="cannot be shared between processes.*sync=False",
@@ -2858,6 +2860,12 @@ class TestMultiProc:
             self.exec_multiproc_rb(
                 sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
             )
+
+    def test_prioritized_sampler_shared_error_mentions_sync_false(self, monkeypatch):
+        sampler = PrioritizedSampler.__new__(PrioritizedSampler)
+        monkeypatch.setattr(samplers, "get_spawning_popen", lambda: object())
+        with pytest.raises(RuntimeError, match="sync=False"):
+            sampler.__getstate__()
 
     def test_shared_prefetch_error_mentions_fix(self):
         with pytest.raises(

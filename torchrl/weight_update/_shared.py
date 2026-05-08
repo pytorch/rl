@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -43,8 +41,6 @@ def _log_weight_sync(
     source: TensorDictBase,
     destination: TensorDictBase,
 ) -> None:
-    if not torchrl_logger.isEnabledFor(logging.DEBUG):
-        return
     source_devices, numel, nbytes = _tensor_summary(source)
     destination_devices, _, _ = _tensor_summary(destination)
     torchrl_logger.debug(
