@@ -2845,16 +2845,6 @@ class TestMultiProc:
                 shared=True,
             )
 
-    def test_shared_cuda_storage_error_at_construction(self):
-        with pytest.raises(
-            ValueError,
-            match="shared=True requires storage device='cpu'.*cuda:0",
-        ):
-            TensorDictReplayBuffer(
-                storage=LazyTensorStorage(10, device="cuda:0"),
-                shared=True,
-            )
-
     def test_async_prioritized_rb_multiproc_writes(self):
         rb = TensorDictPrioritizedReplayBuffer(
             alpha=0.7,

@@ -1065,6 +1065,26 @@ class Collector(BaseCollector):
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
+            out_keys = getattr(_policy_to_check, "out_keys", ())
+            missing_out_keys = [
+                key for key in out_keys if key not in self._policy_output_keys
+            ]
+            if missing_out_keys:
+                with torch.no_grad():
+                    policy_input = self._carrier.copy()
+                    if self.policy_device:
+                        policy_input = policy_input.to(self.policy_device)
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
+                    policy_output = self._wrapped_policy(policy_input)
+                policy_output_keys = set(policy_output.keys(True, True))
+                missing_out_keys = [
+                    key for key in missing_out_keys if key in policy_output_keys
+                ]
+                if missing_out_keys:
+                    self._policy_output_keys.update(missing_out_keys)
+                    if make_rollout:
+                        self._final_rollout.update(policy_output.select(*missing_out_keys))
         elif (
             not make_rollout
             and hasattr(
