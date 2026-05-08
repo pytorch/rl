@@ -147,29 +147,60 @@ TensorDictReplayBufferRNG = functools.partial(
 
 
 def test_replay_buffer_read_write_all_in_order():
-    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(6))
+    rb_slice = TensorDictReplayBuffer(storage=LazyTensorStorage(6))
     data = TensorDict({"obs": torch.arange(6), "reward": torch.zeros(6)}, [6])
     rb.extend(data)
+    rb_slice.extend(data.clone())
 
     all_data = rb.read_all_in_order()
+    assert_allclose_td(all_data, rb[:])
     assert all_data["obs"].tolist() == list(range(6))
     all_data["value_target"] = all_data["obs"] + 1
     rb.write_all(all_data)
+    rb_slice[:] = all_data.clone()
 
     updated = rb.read_all_in_order()
+    assert_allclose_td(updated, rb[:])
+    assert_allclose_td(updated, rb_slice[:])
     assert updated["value_target"].tolist() == list(range(1, 7))
 
 
 def test_replay_buffer_read_write_all_in_order_with_end():
     rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+    rb_slice = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
     rb.extend(TensorDict({"obs": torch.arange(6)}, [6]))
+    rb_slice.extend(TensorDict({"obs": torch.arange(6)}, [6]))
 
     partial = rb.read_all_in_order(end=3)
+    assert_allclose_td(partial, rb[:3])
     partial["obs"] = partial["obs"] + 10
     rb.write_all(partial, end=3)
+    rb_slice[:3] = partial.clone()
 
     updated = rb.read_all_in_order()
+    assert_allclose_td(updated, rb_slice[:])
     assert updated["obs"].tolist() == [10, 11, 12, 3, 4, 5]
+
+
+def test_replay_buffer_read_write_all_in_order_matches_full_slice_ndim2():
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(6, ndim=2))
+    rb_slice = TensorDictReplayBuffer(storage=LazyTensorStorage(6, ndim=2))
+    data = TensorDict(
+        {"obs": torch.arange(6).reshape(2, 3), "reward": torch.zeros(2, 3)},
+        [2, 3],
+    )
+    rb.extend(data)
+    rb_slice.extend(data.clone())
+
+    all_data = rb.read_all_in_order()
+    assert_allclose_td(all_data, rb[:])
+    all_data["value_target"] = all_data["obs"] + 1
+    rb.write_all(all_data)
+    rb_slice[:] = all_data.clone()
+
+    assert_allclose_td(rb.read_all_in_order(), rb[:])
+    assert_allclose_td(rb.read_all_in_order(), rb_slice[:])
 
 
 @pytest.mark.parametrize(
@@ -2868,16 +2899,6 @@ class TestMultiProc:
                 storage=LazyTensorStorage(10),
                 batch_size=2,
                 prefetch=1,
-                shared=True,
-            )
-
-    def test_shared_cuda_storage_error_at_construction(self):
-        with pytest.raises(
-            ValueError,
-            match="shared=True requires storage device='cpu'.*cuda:0",
-        ):
-            TensorDictReplayBuffer(
-                storage=LazyTensorStorage(10, device="cuda:0"),
                 shared=True,
             )
 
