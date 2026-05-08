@@ -322,11 +322,21 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             device=self.device,
         )
 
-    def _sample_initial_state(self, n: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def _sample_initial_state(
+        self,
+        n: int,
+        tensordict: TensorDictBase | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Return ``(qpos, qvel)`` for ``n`` envs at reset.
 
         Default: ``qpos0`` plus uniform noise on both ``qpos`` and
-        ``qvel``. Override to e.g. set fixed rotor speeds (satellite).
+        ``qvel``. Override to e.g. set fixed rotor speeds (satellite),
+        or to read user-supplied keys from ``tensordict`` (e.g. a fixed
+        starting attitude provided by a :class:`TensorDictPrimer`).
+
+        ``tensordict`` is the same object passed to :meth:`_reset` and
+        may carry extra keys like ``init_bus_quat`` etc. for environments
+        that support starting-state overrides.
         """
         backend = self._backend
         qpos = backend.qpos0.unsqueeze(0).expand(n, -1).to(self.device).clone()
@@ -437,17 +447,17 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
                 reset_mask = reset_mask.squeeze(-1)
 
         if reset_mask is None:
-            qpos, qvel = self._sample_initial_state(self.num_envs)
+            qpos, qvel = self._sample_initial_state(self.num_envs, tensordict)
             self._backend.reset(qpos, qvel)
             self._step_count.zero_()
-            self._on_reset_all()
+            self._on_reset_all(tensordict)
         else:
             n = int(reset_mask.sum().item())
             if n > 0:
-                qpos, qvel = self._sample_initial_state(n)
+                qpos, qvel = self._sample_initial_state(n, tensordict)
                 self._backend.reset_mask(reset_mask, qpos, qvel)
                 self._step_count[reset_mask] = 0
-                self._on_reset_mask(reset_mask)
+                self._on_reset_mask(reset_mask, tensordict)
 
         state = self._state_td()
         obs = self._build_obs_dict(state)
@@ -466,17 +476,23 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         )
         return out
 
-    def _on_reset_all(self) -> None:
+    def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
         """Hook called after a full backend reset.
 
         Override for per-episode randomization that lives outside the
-        simulator (e.g. sample a new target attitude).
+        simulator (e.g. sample a new target attitude). ``tensordict`` is
+        the same object passed to :meth:`_reset`.
         """
 
-    def _on_reset_mask(self, mask: torch.Tensor) -> None:
+    def _on_reset_mask(
+        self,
+        mask: torch.Tensor,
+        tensordict: TensorDictBase | None = None,
+    ) -> None:
         """Hook for partial reset.
 
-        Override alongside :meth:`_on_reset_all`.
+        Override alongside :meth:`_on_reset_all`. ``tensordict`` is the
+        same object passed to :meth:`_reset`.
         """
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:

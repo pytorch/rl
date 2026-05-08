@@ -42,6 +42,11 @@ def quat_log(q: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
     For ``q = (cos(a/2), sin(a/2) n)`` with axis ``n`` and angle ``a``,
     ``quat_log(q) = a * n``. Range: ``[0, pi]`` in magnitude.
     """
+    q = q / q.norm(dim=-1, keepdim=True).clamp_min(eps)
+    # q and -q encode the same SO(3) rotation. Use the representative
+    # with non-negative scalar part so the log map is the shortest arc.
+    sign = torch.where(q[..., 0:1] < 0, -1.0, 1.0)
+    q = q * sign
     w = q[..., 0:1].clamp(-1.0, 1.0)
     v = q[..., 1:]
     v_norm = v.norm(dim=-1, keepdim=True).clamp_min(eps)
@@ -84,8 +89,14 @@ def cmg_jacobian(
     """CMG output-torque Jacobian over gimbal rates.
 
     For each CMG with gimbal axis ``g_i`` and rotor axis ``r_i(theta_i)``,
-    the contribution to body torque per unit gimbal rate is ``h * (g_i x
-    r_i(theta_i))``. Stacked into a ``(..., 3, N)`` matrix.
+    the rate-of-change of the rotor's angular momentum per unit gimbal
+    rate is ``h * (g_i x r_i(theta_i))``. Stacked into a ``(..., 3, N)``
+    matrix. The torque applied to the *bus* is the Newton's-third-law
+    reaction, ``-h * (g_i x r_i)``; this function returns the
+    rotor-frame quantity because the manipulability metric
+    ``sqrt(det(J J^T))`` -- the only consumer in this module -- is
+    sign-invariant. Callers that care about the body-frame slewing
+    direction must negate the result.
 
     Args:
         gimbal_angles: ``(..., N)`` current gimbal angles in radians.
@@ -95,7 +106,9 @@ def cmg_jacobian(
         h: scalar rotor angular momentum magnitude.
 
     Returns:
-        ``(..., 3, N)`` torque Jacobian.
+        ``(..., 3, N)`` Jacobian whose ``i``-th column is the
+        rotor-momentum-rate per unit ``i``-th gimbal rate. Negate to
+        get the bus torque per unit gimbal rate.
     """
     r = _rodrigues_rotate(gimbal_axes, rotor_axes_ref, gimbal_angles)
     g_expanded = gimbal_axes.expand_as(r)

@@ -25,7 +25,17 @@ from torchrl.envs.custom.mujoco._backends import (
     _has_mujoco,
     _has_mujoco_torch,
 )
+from torchrl.envs.custom.mujoco._math import (
+    cmg_jacobian,
+    pyramid_4cmg_geometry,
+    quat_log,
+    quat_mul,
+    quat_conj,
+    random_unit_quat,
+)
 from torchrl.envs.utils import check_env_specs
+
+from tensordict import TensorDict
 
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
@@ -82,10 +92,16 @@ class TestMujoco:
         check_env_specs(env)
         # action_spec dim = N_GIMBALS, not nu (rotors are held constant).
         assert env.action_spec.shape == torch.Size([n, num_cmgs])
-        # obs = quat_err(3) + bus_omega(3) + gimbal_angles(N) + gimbal_rates(N)
-        assert env.observation_spec["observation"].shape == torch.Size(
-            [n, 6 + 2 * num_cmgs]
-        )
+        # The observation is exposed as named sub-keys so a
+        # CatTensors transform can pack the dynamics-relevant ones into
+        # a single policy input while keeping ``manipulability``
+        # available for logging.
+        obs_spec = env.observation_spec
+        assert obs_spec["quat_err"].shape == torch.Size([n, 3])
+        assert obs_spec["bus_omega"].shape == torch.Size([n, 3])
+        assert obs_spec["gimbal_angles"].shape == torch.Size([n, 2 * num_cmgs])
+        assert obs_spec["gimbal_rates"].shape == torch.Size([n, num_cmgs])
+        assert obs_spec["manipulability"].shape == torch.Size([n, 1])
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     @pytest.mark.parametrize("num_cmgs", [4, 6])
@@ -97,6 +113,450 @@ class TestMujoco:
         env = SatelliteEnv(num_cmgs=num_cmgs, num_envs=n, seed=0, backend=backend)
         td = env.rollout(50)
         assert torch.isfinite(td.get(("next", "reward"))).all()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_satellite_reward_guard_reports_nonfinite_component(self, backend):
+        n = 1 if backend == "mujoco" else 2
+        env = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
+        env.reset()
+        state = env._state_td()
+        action = torch.zeros(
+            env.action_spec.shape, dtype=env.dtype, device=env.device
+        )
+        action[0, 0] = torch.finfo(env.dtype).max
+        with pytest.raises(RuntimeError, match="reward/control_cost"):
+            env._compute_reward(state, action, state)
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_satellite_action_changes_gimbal_state(self, backend):
+        n = 1 if backend == "mujoco" else 2
+        env_zero = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
+        env_one = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
+        td_zero = env_zero.reset()
+        td_one = env_one.reset()
+        zero_action = torch.zeros(
+            env_zero.action_spec.shape, dtype=env_zero.dtype, device=env_zero.device
+        )
+        one_action = torch.ones(
+            env_one.action_spec.shape, dtype=env_one.dtype, device=env_one.device
+        )
+
+        td_zero = env_zero.step(td_zero.set("action", zero_action))["next"]
+        td_one = env_one.step(td_one.set("action", one_action))["next"]
+
+        assert not torch.allclose(
+            td_zero["gimbal_angles"], td_one["gimbal_angles"]
+        )
+
+    def test_quat_log_uses_short_arc(self):
+        q = random_unit_quat((1024,), generator=torch.Generator().manual_seed(0))
+        log_q = quat_log(q)
+        log_neg_q = quat_log(-q)
+        assert torch.allclose(log_q, log_neg_q, atol=1e-5, rtol=1e-5)
+        assert log_q.norm(dim=-1).max() <= torch.pi + 1e-5
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_satellite_gimbal_observation_is_periodic(self, backend):
+        n = 1 if backend == "mujoco" else 2
+        env = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
+        td = env.rollout(1000)
+        gimbal_obs = td["next", "gimbal_angles"]
+        assert torch.isfinite(gimbal_obs).all()
+        assert (gimbal_obs.abs() <= 1.0 + 1e-6).all()
+
+    # ------------------------------------------------------------------
+    # Satellite physics-correctness: specific (state, action) -> (next
+    # state, reward) transitions verified against analytical
+    # predictions. These tests catch bugs that pure spec / finite-value
+    # tests miss (e.g. a wrong gimbal index in the obs builder, an
+    # inverted torque sign, an off-by-one in the reset override).
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _make_sat(backend: str, n: int = 2, **kwargs) -> SatelliteEnv:
+        if backend == "mujoco":
+            n = 1
+        return SatelliteEnv(
+            num_cmgs=4, num_envs=n, seed=0, backend=backend, **kwargs
+        )
+
+    @staticmethod
+    def _bus_quat(env: SatelliteEnv) -> torch.Tensor:
+        return env._backend.qpos[..., 3:7].to(env.dtype).clone()
+
+    @staticmethod
+    def _bus_omega(env: SatelliteEnv) -> torch.Tensor:
+        return env._backend.qvel[..., 3:6].to(env.dtype).clone()
+
+    @staticmethod
+    def _step_with_action(
+        env: SatelliteEnv, action: torch.Tensor, n_steps: int
+    ) -> None:
+        """Drive the env for ``n_steps`` substeps with a fixed ``action``."""
+        td = env.reset() if not getattr(env, "_was_reset", False) else None
+        if td is None:
+            # Re-read current state into a fresh td (without resetting).
+            td = TensorDict(
+                {"action": action}, batch_size=env.batch_size, device=env.device
+            )
+        else:
+            td.set("action", action)
+        for _ in range(n_steps):
+            td = env.step(td)
+            td = td["next"].select(*env.observation_spec.keys())
+            td.set("action", action)
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_zero_action_preserves_orientation(self, backend):
+        """Zero gimbal command + symmetric pyramid CMG cluster (sum of
+        rotor moments == 0 at theta=0) means the bus has zero net
+        torque applied to it. Roll out 200 steps with zero action and
+        confirm the bus quaternion drifts < 1 deg from its initial
+        attitude.
+        """
+        env = self._make_sat(backend, n=2)
+        # Use a non-trivial init_bus_quat so we'd notice if the env
+        # were silently re-initialising every step.
+        init_q = torch.tensor(
+            [[0.7071, 0.0, 0.7071, 0.0], [0.7071, 0.7071, 0.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        env.reset(TensorDict({"init_bus_quat": init_q}, batch_size=env.batch_size))
+        bus0 = self._bus_quat(env)
+
+        zero_action = torch.zeros(
+            env.action_spec.shape, dtype=env.dtype, device=env.device
+        )
+        td = TensorDict({"action": zero_action}, batch_size=env.batch_size)
+        for _ in range(200):
+            td = env.step(td)
+            td = td["next"].select(*env.observation_spec.keys())
+            td.set("action", zero_action)
+
+        bus1 = self._bus_quat(env)
+        # Compare via shortest-arc angle: cos(angle/2) = |<q0, q1>|.
+        cos_half = (bus0 * bus1).sum(dim=-1).abs().clamp(-1.0, 1.0)
+        angle_deg = (2.0 * torch.acos(cos_half)).rad2deg()
+        assert angle_deg.max().item() < 1.0, (
+            f"Bus drifted {angle_deg.tolist()} deg under zero action; "
+            "expected < 1 deg from rotor-induced numerical noise alone."
+        )
+        # Bus angular velocity should also stay near zero.
+        omega = self._bus_omega(env).norm(dim=-1)
+        assert omega.max().item() < 0.05, (
+            f"Bus omega = {omega.tolist()} rad/s under zero action; "
+            "the satellite should be inertially still."
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_init_bus_quat_is_honored(self, backend):
+        """``reset({"init_bus_quat": q})`` must place ``qpos[..., 3:7]``
+        at ``q`` (post-normalization) and propagate to the
+        ``quat_err`` observation according to ``q_err = q^-1 * target``.
+        """
+        env = self._make_sat(backend, n=2)
+        init_q = torch.tensor(
+            [[0.7071, 0.0, 0.0, 0.7071], [0.6, 0.0, 0.8, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        target_q = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": init_q, "target_quat": target_q},
+                batch_size=env.batch_size,
+            )
+        )
+        # Backend stored the (normalized) init quat verbatim.
+        init_q_norm = init_q / init_q.norm(dim=-1, keepdim=True)
+        torch.testing.assert_close(
+            self._bus_quat(env), init_q_norm, rtol=1e-4, atol=1e-4
+        )
+        # quat_err observation = quat_log(init^-1 * target).
+        target_q_norm = target_q / target_q.norm(dim=-1, keepdim=True)
+        expected_qerr = quat_log(quat_mul(quat_conj(init_q_norm), target_q_norm))
+        torch.testing.assert_close(
+            td["quat_err"], expected_qerr, rtol=1e-4, atol=1e-4
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_quat_err_is_zero_at_target(self, backend):
+        """Setting ``init_bus_quat == target_quat`` makes the
+        observation ``quat_err`` start at zero (within reset noise)."""
+        env = self._make_sat(backend, n=2)
+        q = torch.tensor(
+            [[0.5, 0.5, 0.5, 0.5], [1.0, 0.0, 0.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": q, "target_quat": q},
+                batch_size=env.batch_size,
+            )
+        )
+        # Reset noise is RESET_NOISE_SCALE = 1e-3 on qpos, so quat_err
+        # should be small (a few mrad) but not exactly zero.
+        assert td["quat_err"].abs().max().item() < 5e-2, (
+            f"quat_err = {td['quat_err']} when init == target; expected near zero."
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_180deg_target_gives_pi_attitude_error(self, backend):
+        """A 180-deg rotation about an axis is the maximum SO(3)
+        distance. ``||quat_log(q_err)||`` should equal ``pi`` (within
+        reset noise)."""
+        env = self._make_sat(backend, n=2)
+        identity = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        # 180 deg about +x and 180 deg about +y respectively.
+        target = torch.tensor(
+            [[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": identity, "target_quat": target},
+                batch_size=env.batch_size,
+            )
+        )
+        att_err = td["quat_err"].norm(dim=-1)
+        assert torch.allclose(
+            att_err, torch.full_like(att_err, torch.pi), atol=1e-2
+        ), f"||quat_err|| = {att_err.tolist()}, expected ~pi"
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_gimbal_action_torques_bus(self, backend):
+        """Driving CMG #1 alone with action=+1 produces a bus torque
+        whose direction is **opposite** to the column of
+        :func:`cmg_jacobian` for that CMG.
+
+        Why opposite: ``cmg_jacobian`` returns ``h * (g_i x r_i)`` per
+        unit gimbal rate. By Newton's third law that's the torque on
+        the *rotor* (whose angular momentum is rotating with the
+        gimbal), and the *bus* sees the reaction torque
+        ``-h * (g_i x r_i)``. The manipulability metric used in the
+        reward (``sqrt(det(J J^T))``) is sign-invariant so the env
+        reward is unaffected, but the body-frame slewing direction
+        flips. This test pins the sign convention so a future
+        refactor can't silently invert it.
+        """
+        env = self._make_sat(backend, n=2, action_scale=3.0)
+        identity = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]] * env.num_envs,
+            dtype=env.dtype,
+            device=env.device,
+        )
+        env.reset(TensorDict({"init_bus_quat": identity}, batch_size=env.batch_size))
+
+        action = torch.zeros(
+            env.action_spec.shape, dtype=env.dtype, device=env.device
+        )
+        action[..., 0] = 1.0  # only CMG 1
+        td = TensorDict({"action": action}, batch_size=env.batch_size)
+        for _ in range(20):
+            td = env.step(td)
+            td = td["next"].select(*env.observation_spec.keys())
+            td.set("action", action)
+
+        omega = self._bus_omega(env)
+        # Predicted torque on the BUS = -h * (g_1 x r_1(0)).
+        g, r0 = pyramid_4cmg_geometry(device=env.device, dtype=env.dtype)
+        jac = cmg_jacobian(
+            torch.zeros(1, 4, device=env.device, dtype=env.dtype),
+            g,
+            r0,
+            float(env.ROTOR_SPEED),
+        ).squeeze(0)
+        bus_torque_dir = -jac[:, 0]  # reaction on the bus
+        # Bus omega should align with the (sign of) bus_torque_dir on
+        # the axes where the predicted torque is large; the y-axis
+        # contribution is structurally zero for CMG 1 in the pyramid.
+        omega_signs = torch.sign(omega)
+        torque_signs = torch.sign(bus_torque_dir).unsqueeze(0).expand_as(omega)
+        big_axes = bus_torque_dir.abs() > 0.1
+        match = omega_signs[..., big_axes] == torque_signs[..., big_axes]
+        assert match.all(), (
+            f"Bus omega = {omega.tolist()} does not match expected reaction "
+            f"sign pattern -cmg_jacobian[:, 0] = {bus_torque_dir.tolist()}."
+        )
+        # Magnitude must actually grow (not just numerical noise).
+        assert omega.norm(dim=-1).min().item() > 0.05, (
+            f"|bus_omega| = {omega.norm(dim=-1).tolist()} rad/s after 20 "
+            "steps of saturated CMG-1 command; expected the bus to slew."
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_reward_at_zero_error_is_baseline(self, backend):
+        """With ``init_bus_quat == target_quat`` and zero action, the
+        reward should equal the singularity baseline:
+
+            r ~= -singularity_weight / (manip / rotor_h^3)
+
+        which for the nominal pyramid with ``rotor_h = 100`` is
+        approximately ``-0.5 / 1.0 = -0.5`` per step (control cost is
+        zero, attitude error is at the reset-noise floor).
+        """
+        env = self._make_sat(
+            backend, n=2, action_scale=3.0, singularity_weight=0.5
+        )
+        q = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0], [0.5, 0.5, 0.5, 0.5]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": q, "target_quat": q}, batch_size=env.batch_size
+            )
+        )
+        zero_action = torch.zeros(
+            env.action_spec.shape, dtype=env.dtype, device=env.device
+        )
+        td.set("action", zero_action)
+        td = env.step(td)
+        reward = td["next", "reward"].squeeze(-1)
+        # Allow generous tolerance: reset noise + 1 step of dynamics.
+        assert (reward > -0.7).all() and (reward < -0.3).all(), (
+            f"Reward at zero attitude error = {reward.tolist()}; "
+            "expected ~-0.5 (singularity baseline only)."
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_reward_at_180deg_is_pi_plus_baseline(self, backend):
+        """At a 180-deg attitude error with zero action, the reward
+        should equal ``-pi - singularity_weight/manip_norm`` per step,
+        i.e. about ``-3.64`` for the default weights.
+        """
+        env = self._make_sat(
+            backend, n=2, action_scale=3.0, singularity_weight=0.5
+        )
+        identity = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]] * env.num_envs,
+            dtype=env.dtype,
+            device=env.device,
+        )
+        target = torch.tensor(
+            [[0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": identity, "target_quat": target},
+                batch_size=env.batch_size,
+            )
+        )
+        zero_action = torch.zeros(
+            env.action_spec.shape, dtype=env.dtype, device=env.device
+        )
+        td.set("action", zero_action)
+        td = env.step(td)
+        reward = td["next", "reward"].squeeze(-1)
+        expected = -torch.pi - 0.5
+        # Bus has barely moved in 1 step, so attitude error stays near pi.
+        assert (reward > expected - 0.2).all() and (reward < expected + 0.2).all(), (
+            f"Reward at 180-deg error = {reward.tolist()}; expected ~{expected:.2f}."
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_observation_matches_state(self, backend):
+        """Observation channels are read directly off ``qpos`` /
+        ``qvel`` -- not synthesised. After one non-trivial step:
+
+        * ``bus_omega == qvel[..., 3:6]``
+        * ``gimbal_rates == qvel[..., gimbal_rate_idx]``
+        * ``gimbal_angles == [sin(qpos_gimbals), cos(qpos_gimbals)]``
+        """
+        env = self._make_sat(backend, n=2, action_scale=3.0)
+        env.reset()
+        action = torch.full(
+            env.action_spec.shape, 0.5, dtype=env.dtype, device=env.device
+        )
+        td = TensorDict({"action": action}, batch_size=env.batch_size)
+        for _ in range(10):
+            td = env.step(td)
+            td = td["next"].select(*env.observation_spec.keys())
+            td.set("action", action)
+
+        qpos = env._backend.qpos.to(env.dtype)
+        qvel = env._backend.qvel.to(env.dtype)
+        gimbal_idx = [7 + 2 * i for i in range(env.N_GIMBALS)]
+        gimbal_rate_idx = [6 + 2 * i for i in range(env.N_GIMBALS)]
+
+        torch.testing.assert_close(
+            td["bus_omega"], qvel[..., 3:6], rtol=1e-5, atol=1e-5
+        )
+        torch.testing.assert_close(
+            td["gimbal_rates"],
+            qvel[..., gimbal_rate_idx],
+            rtol=1e-5,
+            atol=1e-5,
+        )
+        # gimbal_angles is concat([sin, cos]) over the gimbal qpos.
+        gimbals = qpos[..., gimbal_idx]
+        expected = torch.cat([gimbals.sin(), gimbals.cos()], dim=-1)
+        torch.testing.assert_close(
+            td["gimbal_angles"], expected, rtol=1e-5, atol=1e-5
+        )
+
+    @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
+    def test_satellite_reset_is_reproducible(self, backend):
+        """Same ``(init_bus_quat, target_quat)`` and same action sequence
+        must produce byte-identical bus quaternion trajectories. This is
+        the determinism guarantee that the eval pipeline relies on
+        (the :class:`TestSetPrimer` replays the same starts every
+        iteration -- if the env is non-deterministic, eval comparisons
+        between iterations are meaningless).
+        """
+        n = 2
+        init_q = torch.tensor(
+            [[0.5, 0.5, 0.5, 0.5], [0.7071, 0.7071, 0.0, 0.0]],
+        )
+        target_q = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        )
+
+        def _trajectory(seed: int) -> torch.Tensor:
+            env = SatelliteEnv(
+                num_cmgs=4,
+                num_envs=n,
+                seed=seed,
+                backend=backend,
+                action_scale=3.0,
+            )
+            env.reset(
+                TensorDict(
+                    {
+                        "init_bus_quat": init_q.to(env.dtype).to(env.device),
+                        "target_quat": target_q.to(env.dtype).to(env.device),
+                    },
+                    batch_size=env.batch_size,
+                )
+            )
+            action = torch.full(
+                env.action_spec.shape, 0.3, dtype=env.dtype, device=env.device
+            )
+            traj = []
+            td = TensorDict({"action": action}, batch_size=env.batch_size)
+            for _ in range(20):
+                td = env.step(td)
+                traj.append(self._bus_quat(env))
+                td = td["next"].select(*env.observation_spec.keys())
+                td.set("action", action)
+            return torch.stack(traj, dim=0)
+
+        # Same (init, target, seed, action) -> identical trajectory.
+        torch.testing.assert_close(_trajectory(0), _trajectory(0))
 
     # ------------------------------------------------------------------
     # Backend dispatch: vmap backends reject num_workers / parallel;

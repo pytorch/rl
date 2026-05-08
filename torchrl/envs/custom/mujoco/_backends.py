@@ -63,6 +63,7 @@ class _PhysicsBackend(abc.ABC):
     qvel0: torch.Tensor
     actuator_lo: torch.Tensor
     actuator_hi: torch.Tensor
+    actuator_ctrllimited: torch.Tensor
 
     def __init__(
         self, xml_string: str, *, num_envs: int, device: torch.device | None
@@ -197,6 +198,9 @@ class _TorchBackend(_PhysicsBackend):
         ar = torch.as_tensor(m_mj.actuator_ctrlrange, device=self.device)
         self.actuator_lo = ar[:, 0].to(self._ctrl_dtype)
         self.actuator_hi = ar[:, 1].to(self._ctrl_dtype)
+        self.actuator_ctrllimited = torch.as_tensor(
+            m_mj.actuator_ctrllimited, device=self.device, dtype=torch.bool
+        )
 
         # Build the batched state and the (compiled) physics step.
         self._dx = self._dx0.expand(self.num_envs).clone()
@@ -222,18 +226,26 @@ class _TorchBackend(_PhysicsBackend):
 
             base = _vmap_one
 
-        # frame_skip is dynamic at call time -- bake the loop into an
-        # outer function so torch.compile sees a stable graph for a fixed
-        # frame_skip per call. The env always passes the same frame_skip.
-        def _multi_step(d, frame_skip: int):
-            for _ in range(frame_skip):
-                d = base(d)
-            return d
-
+        # When ``compile_step`` is set, compile only the per-step fn and
+        # keep the frame_skip loop in Python. Compiling the unrolled loop
+        # blows up the graph (50x more nodes), which sends inductor's
+        # fusion analysis into multi-hour territory on CUDA backends.
         if self._compile_step:
-            self._physics_step = torch.compile(_multi_step, **self._compile_kwargs)
+            base_compiled = torch.compile(base, **self._compile_kwargs)
+
+            def _multi_step(d, frame_skip: int):
+                for _ in range(frame_skip):
+                    d = base_compiled(d)
+                return d
+
         else:
-            self._physics_step = _multi_step
+
+            def _multi_step(d, frame_skip: int):
+                for _ in range(frame_skip):
+                    d = base(d)
+                return d
+
+        self._physics_step = _multi_step
         self._single_env = single
 
     def reset(self, qpos: torch.Tensor, qvel: torch.Tensor) -> None:
@@ -252,12 +264,30 @@ class _TorchBackend(_PhysicsBackend):
         fresh = self._dx0.expand(n).clone()
         fresh.qpos.copy_(qpos.to(self._sim_dtype))
         fresh.qvel.copy_(qvel.to(self._sim_dtype))
-        self._dx[mask] = fresh
+        # Per-leaf masked assignment: tensorclass.__setitem__ iterates
+        # over leaves and chokes on 0-dim entries (e.g. ``nefc``,
+        # ``ncon`` -- scalars shared across all envs and not subject to
+        # masking). Walk the underlying tensordict and copy leaf-by-leaf,
+        # skipping anything that doesn't look batched along the env dim.
+        cur_td = self._dx._tensordict
+        new_td = fresh._tensordict
+        for k, dst in cur_td.items():
+            src = new_td.get(k, default=None)
+            if src is None:
+                continue
+            if dst.ndim == 0 or dst.shape[0] != mask.shape[0]:
+                # 0-dim or non-env-batched leaf; the simulator treats
+                # these as shared, so we leave them alone.
+                continue
+            dst[mask] = src
 
     def step(self, ctrl: torch.Tensor, frame_skip: int) -> None:
         ctrl = ctrl.to(self._ctrl_dtype)
-        # Clamp to actuator range to match mujoco's internal behavior.
-        ctrl = torch.minimum(torch.maximum(ctrl, self.actuator_lo), self.actuator_hi)
+        # Clamp only actuators that MuJoCo marks as ctrl-limited. Unlimited
+        # actuators report a default ctrlrange of [0, 0], which is not an
+        # active range and must not zero out controls.
+        clamped = torch.minimum(torch.maximum(ctrl, self.actuator_lo), self.actuator_hi)
+        ctrl = torch.where(self.actuator_ctrllimited, clamped, ctrl)
         self._dx.update_(ctrl=ctrl)
         if self._single_env:
             stepped = self._physics_step(self._dx[0], frame_skip)
@@ -372,6 +402,9 @@ class _MujocoBackend(_PhysicsBackend):
         )
         self.actuator_lo = ar[:, 0]
         self.actuator_hi = ar[:, 1]
+        self.actuator_ctrllimited = torch.as_tensor(
+            m_mj.actuator_ctrllimited, device=self.device, dtype=torch.bool
+        )
 
     def reset(self, qpos: torch.Tensor, qvel: torch.Tensor) -> None:
         import mujoco
@@ -392,6 +425,7 @@ class _MujocoBackend(_PhysicsBackend):
         import mujoco
 
         clamped = torch.minimum(torch.maximum(ctrl, self.actuator_lo), self.actuator_hi)
+        clamped = torch.where(self.actuator_ctrllimited, clamped, ctrl)
         self._d.ctrl[:] = clamped.detach().cpu().double().numpy()[0]
         for _ in range(frame_skip):
             mujoco.mj_step(self._m, self._d)
@@ -500,6 +534,9 @@ class _MJXBackend(_PhysicsBackend):
         )
         self.actuator_lo = ar[:, 0]
         self.actuator_hi = ar[:, 1]
+        self.actuator_ctrllimited = torch.as_tensor(
+            m_mj.actuator_ctrllimited, device=self.device, dtype=torch.bool
+        )
 
         self._vmap_step = jax.jit(jax.vmap(lambda d: mjx.step(mx, d)))
         self._vmap_forward = jax.jit(jax.vmap(lambda d: mjx.forward(mx, d)))
@@ -560,7 +597,8 @@ class _MJXBackend(_PhysicsBackend):
         self._dx = self._vmap_forward(dx)
 
     def step(self, ctrl: torch.Tensor, frame_skip: int) -> None:
-        ctrl = torch.minimum(torch.maximum(ctrl, self.actuator_lo), self.actuator_hi)
+        clamped = torch.minimum(torch.maximum(ctrl, self.actuator_lo), self.actuator_hi)
+        ctrl = torch.where(self.actuator_ctrllimited, clamped, ctrl)
         ctrl_j = self._torch_to_jax(ctrl)
         self._dx = self._dx.replace(ctrl=ctrl_j)
         for _ in range(frame_skip):
