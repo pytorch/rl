@@ -11,10 +11,13 @@ before importing torch / torchrl.
 
 from __future__ import annotations
 
+# ruff: noqa: E402
+
 import argparse
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 os.environ.setdefault("TORCHRL_PROFILING", "1")
@@ -55,6 +58,16 @@ parser.add_argument(
     "--env-device",
     default="cuda:0",
     help="Device passed to the TorchRL IsaacLabWrapper.",
+)
+parser.add_argument(
+    "--policy-mode",
+    default="rand_action",
+    choices=["rand_action", "fixed_zero", "fixed_random"],
+    help=(
+        "Policy used by the collector. fixed_* modes reuse one precomputed "
+        "action TensorDict so collector plumbing can be profiled separately "
+        "from action sampling."
+    ),
 )
 parser.add_argument(
     "--activities",
@@ -103,6 +116,7 @@ import isaaclab_tasks  # noqa: F401
 import torch
 
 from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
@@ -114,6 +128,28 @@ def make_env(task: str, device: str):
     else:
         env = gym.make(task)
     return IsaacLabWrapper(env, device=torch.device(device))
+
+
+class FixedActionPolicy:
+    def __init__(self, action: TensorDictBase) -> None:
+        self.action = action
+
+    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict.update(self.action)
+
+
+def make_policy(
+    env: IsaacLabWrapper, policy_mode: str
+) -> Callable[[TensorDictBase], TensorDictBase]:
+    if policy_mode == "rand_action":
+        return env.rand_action
+    if policy_mode == "fixed_zero":
+        action = env.full_action_spec.zero()
+    elif policy_mode == "fixed_random":
+        action = env.full_action_spec.rand()
+    else:
+        raise ValueError(f"Unknown policy mode {policy_mode}.")
+    return FixedActionPolicy(action)
 
 
 def main() -> None:
@@ -130,10 +166,12 @@ def main() -> None:
     torchrl_logger.info(f"Creating Isaac Lab env {args_cli.task}.")
     env = make_env(args_cli.task, args_cli.env_device)
     env.set_seed(args_cli.seed)
+    policy = make_policy(env, args_cli.policy_mode)
+    torchrl_logger.info(f"Using collector policy mode {args_cli.policy_mode}.")
 
     collector = Collector(
         env,
-        env.rand_action,
+        policy,
         frames_per_batch=args_cli.frames_per_batch,
         total_frames=-1,
         no_cuda_sync=True,
