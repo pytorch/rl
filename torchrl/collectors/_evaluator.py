@@ -130,13 +130,11 @@ class Evaluator:
       Requires *env* to be a callable and *policy_factory* to be provided.
 
     **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a
-    previous evaluation is still running either raises immediately
-    (``busy_policy="error"``; default) or queues the new request
-    (``busy_policy="queue"``). Use :attr:`pending` to conditionally skip
-    trigger calls::
-
-        if not evaluator.pending:
-            evaluator.trigger_eval(weights, step=step)
+    previous evaluation is still running skips the new request by default
+    (``busy_policy="skip"``), raises immediately
+    (``busy_policy="error"``), or queues the new request
+    (``busy_policy="queue"``). :meth:`trigger_eval` returns ``True`` when a
+    request was accepted and ``False`` when it was skipped.
 
     **Callback thread-safety**: when ``on_result`` is provided, it is
     invoked from the evaluator's async coordination thread after the
@@ -209,10 +207,10 @@ class Evaluator:
             with the same prefixed metric names returned by
             :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.
         busy_policy (str): Behaviour when :meth:`trigger_eval` is called
-            while another async evaluation is still pending. ``"error"``
-            raises immediately (default; recommended). ``"queue"`` enqueues
-            the new request and runs it when the current evaluation
-            finishes.
+            while another async evaluation is still pending. ``"skip"``
+            returns ``False`` without scheduling a new request (default).
+            ``"error"`` raises immediately. ``"queue"`` enqueues the new
+            request and runs it when the current evaluation finishes.
 
             .. warning::
                 With ``busy_policy="queue"``, each queued request stores a
@@ -275,7 +273,7 @@ class Evaluator:
         metrics_fn: Callable[[TensorDictBase], dict[str, float]] | None = None,
         dump_video: bool = True,
         on_result: Callable[[TensorDictBase], None] | None = None,
-        busy_policy: str = "error",
+        busy_policy: str = "skip",
         # Backend selection
         backend: str = "thread",
         # Ray-specific
@@ -291,9 +289,10 @@ class Evaluator:
         self._on_result = on_result
         self._step_counter = 0
         self._dump_video = dump_video
-        if busy_policy not in {"error", "queue"}:
+        if busy_policy not in {"skip", "error", "queue"}:
             raise ValueError(
-                f"Unknown busy_policy {busy_policy!r}. Choose 'error' or 'queue'."
+                f"Unknown busy_policy {busy_policy!r}. Choose 'skip', 'error' "
+                "or 'queue'."
             )
         self._busy_policy = busy_policy
         self._async_lock = threading.Lock()
@@ -414,27 +413,34 @@ class Evaluator:
         step: int | None = None,
         *,
         weights_dict: dict[str, TensorDictBase | nn.Module] | None = None,
-    ) -> None:
+    ) -> bool:
         """Start an async evaluation.
 
         Args:
             weights: Policy weights to load.  See :meth:`evaluate`.
             step: Logging step.  See :meth:`evaluate`.
             weights_dict: Multi-model weights dict.  See :meth:`evaluate`.
+
+        Returns:
+            ``True`` if an evaluation request was scheduled, ``False`` if it
+            was skipped because another request was pending and
+            ``busy_policy="skip"``.
         """
         prepared = self._prepare_weights_dict(weights, weights_dict)
         step = self._next_step(step)
         with self._async_lock:
-            if self._busy_policy == "error" and (
-                self._backend.pending or self._async_requests
-            ):
+            busy = self._backend.pending or self._async_requests
+            if self._busy_policy == "error" and busy:
                 raise RuntimeError(
                     "Evaluation already pending. Wait for completion or set "
-                    "busy_policy='queue'."
+                    "busy_policy='skip' or busy_policy='queue'."
                 )
+            if self._busy_policy == "skip" and busy:
+                return False
             self._async_requests.append((prepared, step))
             self._async_trigger.set()
         self._ensure_async_thread()
+        return True
 
     def poll(self, timeout: float = 0) -> dict[str, Any] | None:
         """Return the latest evaluation result if ready, else ``None``.
@@ -1087,7 +1093,16 @@ class _ThreadEvalBackend(_EvalBackend):
                 continue
 
             weights_dict, step = request
-            metrics = self._run_eval(weights_dict)
+            try:
+                metrics = self._run_eval(weights_dict)
+            except ValueError as err:
+                if self._shutdown_flag and "Queue" in str(err) and "closed" in str(err):
+                    logger.debug(
+                        "Suppressing expected evaluator shutdown queue error",
+                        exc_info=True,
+                    )
+                    break
+                raise
             metrics["_step"] = step
             with self._lock:
                 self._result = metrics

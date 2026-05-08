@@ -341,7 +341,10 @@ class ReplayBuffer:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
         if shared and prefetch:
-            raise ValueError("Cannot share prefetched replay buffers.")
+            raise ValueError(
+                "Cannot share prefetched replay buffers. Pass prefetch=0 or "
+                "shared=False."
+            )
         self.shared = shared
         self.share(self.shared)
 
@@ -532,6 +535,15 @@ class ReplayBuffer:
     def share(self, shared: bool = True) -> Self:
         self.shared = shared
         if self.shared:
+            storage_device = getattr(self._storage, "device", None)
+            if storage_device is not None and storage_device != "auto":
+                storage_device = torch.device(storage_device)
+                if storage_device.type != "cpu":
+                    raise ValueError(
+                        "shared=True requires storage device='cpu'; got "
+                        f"device={storage_device}. Pass "
+                        "storage=LazyTensorStorage(..., device='cpu')."
+                    )
             self._write_lock = multiprocessing.Lock()
         else:
             self._write_lock = contextlib.nullcontext()
@@ -724,6 +736,37 @@ class ReplayBuffer:
             with self._replay_lock:
                 self._storage[index] = value
         return
+
+    @_maybe_delay_init
+    def read_all_in_order(self, end: int | None = None) -> Any:
+        """Read storage contents in physical order.
+
+        Args:
+            end (int, optional): Number of leading storage entries to read.
+                Defaults to ``len(self)``.
+
+        Returns:
+            A storage slice containing entries ``[:end]``.
+        """
+        if end is None:
+            end = len(self)
+        with self._replay_lock:
+            return self._storage[:end]
+
+    @_maybe_delay_init
+    def write_all(self, data: Any, end: int | None = None) -> None:
+        """Write data back to storage in physical order.
+
+        Args:
+            data: Data to write to storage.
+            end (int, optional): Number of leading storage entries to update.
+                Defaults to ``data.shape[0]`` for tensor collections and
+                ``len(data)`` otherwise.
+        """
+        if end is None:
+            end = data.shape[0] if is_tensor_collection(data) else len(data)
+        with self._replay_lock:
+            self._storage[:end] = data
 
     @_maybe_delay_init
     def set_at_(self, key, value, index):

@@ -97,9 +97,12 @@ from torchrl.envs.utils import (
 from torchrl.modules import (
     Actor,
     GRUModule,
+    NormalParamExtractor,
     OrnsteinUhlenbeckProcessModule,
+    ProbabilisticActor,
     RandomPolicy,
     SafeModule,
+    TanhNormal,
 )
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
@@ -6037,6 +6040,18 @@ class TestTrajsPerBatch:
         assert len(complete) == 2
         assert complete[0].shape[0] == 5  # traj 0: 5 steps
 
+    def test_ingest_interleaved_ids_preserves_step_order(self):
+        batch = self._make_batch(
+            traj_ids=[0, 1, 0, 1],
+            done_flags=[False, False, True, True],
+            obs_start=0,
+        )
+        partial, complete = {}, []
+        _traj_ingest(batch, partial, complete)
+        assert len(complete) == 2
+        assert complete[0]["obs"].tolist() == [0.0, 2.0]
+        assert complete[1]["obs"].tolist() == [1.0, 3.0]
+
     def test_ingest_partial_not_promoted(self):
         """Incomplete trajectories stay in partial_trajs."""
         batch = self._make_batch([0, 0, 1, 1], [False, True, False, False])
@@ -6188,6 +6203,34 @@ class TestTrajsPerBatchReplayBuffer:
         return env_fn, policy
 
     @staticmethod
+    def _make_continuous_env_and_probabilistic_policy(max_steps=4):
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            ContinuousActionVecMockEnv(maxstep=max_steps), StepCounter(max_steps)
+        )
+        probe = env_fn()
+        try:
+            obs_dim = probe.observation_spec["observation"].shape[-1]
+            action_dim = probe.action_spec.shape[-1]
+            module = TensorDictModule(
+                nn.Sequential(
+                    nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor()
+                ),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            )
+            policy = ProbabilisticActor(
+                module=module,
+                in_keys=["loc", "scale"],
+                out_keys=["action"],
+                spec=probe.action_spec,
+                distribution_class=TanhNormal,
+                return_log_prob=True,
+            )
+        finally:
+            probe.close(raise_if_closed=False)
+        return env_fn, policy
+
+    @staticmethod
     def _make_batched_env_fn(max_steps=4, num_envs=2):
         """Return a factory that creates a SerialEnv with InitTracker."""
 
@@ -6252,6 +6295,38 @@ class TestTrajsPerBatchReplayBuffer:
         sample = rb.sample(num_trajs)
         assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
         assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_write_batches_replay_buffer_extends(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        extend_sizes = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_sizes.append(td.shape[0])
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+            trajs_per_write=2,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert any(size >= 2 * max_steps for size in extend_sizes)
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_batch_replay_buffer_start_async(self):
@@ -6683,6 +6758,31 @@ class TestTrajsPerBatchReplayBuffer:
 
         assert len(rb) > 0, "replay buffer must be non-empty"
         assert ("collector", "traj_ids") in rb.sample(2).keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_multi_async_probabilistic_actor_writes_log_prob_to_rb(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_continuous_env_and_probabilistic_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn, env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        all_data = rb.storage[: len(rb)]
+        assert "action_log_prob" in all_data.keys(True, True)
         self._assert_rb_trajectories_complete(rb)
 
     # ------------------------------------------------------------------
