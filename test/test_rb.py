@@ -146,6 +146,32 @@ TensorDictReplayBufferRNG = functools.partial(
 )
 
 
+def test_replay_buffer_read_write_all_in_order():
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+    data = TensorDict({"obs": torch.arange(6), "reward": torch.zeros(6)}, [6])
+    rb.extend(data)
+
+    all_data = rb.read_all_in_order()
+    assert all_data["obs"].tolist() == list(range(6))
+    all_data["value_target"] = all_data["obs"] + 1
+    rb.write_all(all_data)
+
+    updated = rb.read_all_in_order()
+    assert updated["value_target"].tolist() == list(range(1, 7))
+
+
+def test_replay_buffer_read_write_all_in_order_with_end():
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+    rb.extend(TensorDict({"obs": torch.arange(6)}, [6]))
+
+    partial = rb.read_all_in_order(end=3)
+    partial["obs"] = partial["obs"] + 10
+    rb.write_all(partial, end=3)
+
+    updated = rb.read_all_in_order()
+    assert updated["obs"].tolist() == [10, 11, 12, 3, 4, 5]
+
+
 @pytest.mark.parametrize(
     "sampler",
     [

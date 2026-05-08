@@ -738,6 +738,37 @@ class ReplayBuffer:
         return
 
     @_maybe_delay_init
+    def read_all_in_order(self, end: int | None = None) -> Any:
+        """Read storage contents in physical order.
+
+        Args:
+            end (int, optional): Number of leading storage entries to read.
+                Defaults to ``len(self)``.
+
+        Returns:
+            A storage slice containing entries ``[:end]``.
+        """
+        if end is None:
+            end = len(self)
+        with self._replay_lock:
+            return self._storage[:end]
+
+    @_maybe_delay_init
+    def write_all(self, data: Any, end: int | None = None) -> None:
+        """Write data back to storage in physical order.
+
+        Args:
+            data: Data to write to storage.
+            end (int, optional): Number of leading storage entries to update.
+                Defaults to ``data.shape[0]`` for tensor collections and
+                ``len(data)`` otherwise.
+        """
+        if end is None:
+            end = data.shape[0] if is_tensor_collection(data) else len(data)
+        with self._replay_lock:
+            self._storage[:end] = data
+
+    @_maybe_delay_init
     def set_at_(self, key, value, index):
         """Sets the value of a key at specified indices in the replay buffer.
 
