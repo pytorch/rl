@@ -146,6 +146,32 @@ TensorDictReplayBufferRNG = functools.partial(
 )
 
 
+def test_replay_buffer_read_write_all_in_order():
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+    data = TensorDict({"obs": torch.arange(6), "reward": torch.zeros(6)}, [6])
+    rb.extend(data)
+
+    all_data = rb.read_all_in_order()
+    assert all_data["obs"].tolist() == list(range(6))
+    all_data["value_target"] = all_data["obs"] + 1
+    rb.write_all(all_data)
+
+    updated = rb.read_all_in_order()
+    assert updated["value_target"].tolist() == list(range(1, 7))
+
+
+def test_replay_buffer_read_write_all_in_order_with_end():
+    rb = TensorDictReplayBuffer(storage=LazyTensorStorage(10))
+    rb.extend(TensorDict({"obs": torch.arange(6)}, [6]))
+
+    partial = rb.read_all_in_order(end=3)
+    partial["obs"] = partial["obs"] + 10
+    rb.write_all(partial, end=3)
+
+    updated = rb.read_all_in_order()
+    assert updated["obs"].tolist() == [10, 11, 12, 3, 4, 5]
+
+
 @pytest.mark.parametrize(
     "sampler",
     [
@@ -2825,9 +2851,34 @@ class TestMultiProc:
 
     def test_error_prb(self):
         # PrioritizedSampler cannot be shared
-        with pytest.raises(RuntimeError, match="cannot be shared between processes"):
+        with pytest.raises(
+            RuntimeError,
+            match="cannot be shared between processes.*sync=False",
+        ):
             self.exec_multiproc_rb(
                 sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
+            )
+
+    def test_shared_prefetch_error_mentions_fix(self):
+        with pytest.raises(
+            ValueError,
+            match="Cannot share prefetched replay buffers.*prefetch=0.*shared=False",
+        ):
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(10),
+                batch_size=2,
+                prefetch=1,
+                shared=True,
+            )
+
+    def test_shared_cuda_storage_error_at_construction(self):
+        with pytest.raises(
+            ValueError,
+            match="shared=True requires storage device='cpu'.*cuda:0",
+        ):
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(10, device="cuda:0"),
+                shared=True,
             )
 
     def test_async_prioritized_rb_multiproc_writes(self):

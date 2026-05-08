@@ -28,6 +28,7 @@ from torchrl.modules.models.models import MLP
 from torchrl.modules.tensordict_module.actors import ProbabilisticActor
 from torchrl.objectives.value.advantages import (
     GAE,
+    TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
     VTrace,
@@ -54,6 +55,55 @@ from torchrl.testing import (  # noqa
 
 
 class TestValues:
+    @pytest.mark.parametrize(
+        "estimator_cls,kwargs",
+        [
+            (TD0Estimator, {"gamma": 0.9}),
+            (TD1Estimator, {"gamma": 0.9}),
+            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.95}),
+            (GAE, {"gamma": 0.9, "lmbda": 0.95}),
+        ],
+    )
+    @pytest.mark.parametrize("shifted", [False, True])
+    def test_value_chunk_size_matches_unchunked(self, estimator_cls, kwargs, shifted):
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(4, 5, 3),
+                "next": {
+                    "obs": torch.randn(4, 5, 3),
+                    "reward": torch.randn(4, 5, 1),
+                    "done": torch.zeros(4, 5, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(4, 5, 1, dtype=torch.bool),
+                },
+            },
+            [4, 5],
+        )
+        td["next", "done"][:, -1] = True
+        td["next", "terminated"][:, -1] = True
+
+        unchunked = estimator_cls(
+            **kwargs,
+            value_network=value_net,
+            shifted=shifted,
+        )
+        chunked = estimator_cls(
+            **kwargs,
+            value_network=value_net,
+            shifted=shifted,
+            value_chunk_size=3,
+        )
+
+        expected = unchunked(td.clone())
+        actual = chunked(td.clone())
+        torch.testing.assert_close(actual["advantage"], expected["advantage"])
+        torch.testing.assert_close(actual["value_target"], expected["value_target"])
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):
 
