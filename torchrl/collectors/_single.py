@@ -1086,7 +1086,9 @@ class Collector(BaseCollector):
                 if missing_out_keys:
                     self._policy_output_keys.update(missing_out_keys)
                     if make_rollout:
-                        self._final_rollout.update(policy_output.select(*missing_out_keys))
+                        self._final_rollout.update(
+                            policy_output.select(*missing_out_keys)
+                        )
         elif (
             not make_rollout
             and hasattr(
