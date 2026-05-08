@@ -1601,7 +1601,8 @@ class Collector(BaseCollector):
             self._final_rollout.fill_(("collector", "traj_ids"), -1)
         else:
             pass
-        tensordicts = []
+        if not self._use_buffers:
+            tensordicts = []
         with set_exploration_type(self.exploration_type):
             for t in range(self.frames_per_batch):
                 if self._should_use_random_frames():
@@ -1695,15 +1696,18 @@ class Collector(BaseCollector):
                         non_blocking = (
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
-                        tensordicts.append(
-                            self._carrier.to(
-                                self.storing_device, non_blocking=non_blocking
-                            )
+                        stored_tensordict = self._carrier.to(
+                            self.storing_device, non_blocking=non_blocking
                         )
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
-                        tensordicts.append(self._carrier)
+                        stored_tensordict = self._carrier
+
+                    if self._use_buffers:
+                        self._copy_to_final_rollout(t, stored_tensordict)
+                    else:
+                        tensordicts.append(stored_tensordict)
 
                 # carry over collector data without messing up devices
                 collector_data = self._carrier.get("collector").copy()
@@ -1723,21 +1727,8 @@ class Collector(BaseCollector):
                         and not self.extend_buffer
                     ):
                         return
-                    result = self._final_rollout
                     if self._use_buffers:
-                        try:
-                            torch.stack(
-                                tensordicts,
-                                self._final_rollout.ndim - 1,
-                                out=self._final_rollout[..., : t + 1],
-                            )
-                        except RuntimeError:
-                            with self._final_rollout.unlock_():
-                                torch.stack(
-                                    tensordicts,
-                                    self._final_rollout.ndim - 1,
-                                    out=self._final_rollout[..., : t + 1],
-                                )
+                        result = self._final_rollout
                     elif (
                         self.replay_buffer is not None
                         and not self._ignore_rb
@@ -1751,20 +1742,6 @@ class Collector(BaseCollector):
             else:
                 if self._use_buffers:
                     result = self._final_rollout
-                    try:
-                        result = torch.stack(
-                            tensordicts,
-                            self._final_rollout.ndim - 1,
-                            out=self._final_rollout,
-                        )
-
-                    except RuntimeError:
-                        with self._final_rollout.unlock_():
-                            result = torch.stack(
-                                tensordicts,
-                                self._final_rollout.ndim - 1,
-                                out=self._final_rollout,
-                            )
                 elif (
                     self.replay_buffer is not None
                     and not self._ignore_rb
@@ -1785,6 +1762,16 @@ class Collector(BaseCollector):
                     result.refine_names(..., "time")
 
         return self._maybe_set_truncated(result)
+
+    def _copy_to_final_rollout(
+        self, time_index: int, tensordict: TensorDictBase
+    ) -> None:
+        storage_index = (slice(None),) * (self._final_rollout.ndim - 1) + (time_index,)
+        try:
+            self._final_rollout[storage_index].copy_(tensordict)
+        except RuntimeError:
+            with self._final_rollout.unlock_():
+                self._final_rollout[storage_index].copy_(tensordict)
 
     def _maybe_set_truncated(self, final_rollout):
         last_step = (slice(None),) * (final_rollout.ndim - 1) + (-1,)
