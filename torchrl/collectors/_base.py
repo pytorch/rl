@@ -288,6 +288,10 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 collector.start()  # workers fill rb with complete trajectories
 
             Defaults to ``None`` (fixed-frame batches).
+        trajs_per_write (int, optional): When ``trajs_per_batch`` is used with
+            a replay buffer, write this many completed trajectories to the
+            buffer per ``extend`` call. Larger values reduce Python overhead
+            for highly batched environments. Defaults to ``1``.
     """
 
     _task = None
@@ -304,6 +308,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
+    trajs_per_write: int = 1
     _pre_collect_hook: Callable[[], None] | None = None
     _post_collect_hook: Callable[[TensorDictBase], None] | None = None
 
@@ -1322,9 +1327,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     # pad-then-unpad round-trip and works with any storage
                     # ndim (variable-length trajectories cannot fill a
                     # fixed second dimension reliably).
+                    trajs_per_write = max(int(getattr(self, "trajs_per_write", 1)), 1)
                     while complete_trajs:
-                        traj = complete_trajs.pop(0)
-                        rb.extend(traj)
+                        trajs = complete_trajs[:trajs_per_write]
+                        del complete_trajs[:trajs_per_write]
+                        if len(trajs) == 1:
+                            rb.extend(trajs[0])
+                        else:
+                            rb.extend(torch.cat(trajs, dim=0))
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:

@@ -341,7 +341,10 @@ class ReplayBuffer:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
         if shared and prefetch:
-            raise ValueError("Cannot share prefetched replay buffers.")
+            raise ValueError(
+                "Cannot share prefetched replay buffers. Pass prefetch=0 or "
+                "shared=False."
+            )
         self.shared = shared
         self.share(self.shared)
 
@@ -532,6 +535,15 @@ class ReplayBuffer:
     def share(self, shared: bool = True) -> Self:
         self.shared = shared
         if self.shared:
+            storage_device = getattr(self._storage, "device", None)
+            if storage_device is not None and storage_device != "auto":
+                storage_device = torch.device(storage_device)
+                if storage_device.type != "cpu":
+                    raise ValueError(
+                        "shared=True requires storage device='cpu'; got "
+                        f"device={storage_device}. Pass "
+                        "storage=LazyTensorStorage(..., device='cpu')."
+                    )
             self._write_lock = multiprocessing.Lock()
         else:
             self._write_lock = contextlib.nullcontext()
