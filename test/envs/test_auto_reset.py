@@ -27,7 +27,7 @@ from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import StepCounter, TransformedEnv
+from torchrl.envs.transforms import InitTracker, StepCounter, TransformedEnv
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
@@ -49,6 +49,21 @@ from torchrl.testing.mocking_classes import (
 
 
 class TestAutoReset:
+    def test_native_auto_reset_step_and_maybe_reset(self):
+        env = TransformedEnv(AutoResettingCountingEnv(3), InitTracker())
+        env._torchrl_native_autoreset = True
+        tensordict = env.reset()
+
+        for _ in range(4):
+            tensordict.update(env.full_action_spec.zero().apply(lambda x: x + 1))
+            tensordict, tensordict_ = env.step_and_maybe_reset(
+                tensordict,
+            )
+
+        assert tensordict["next", "done"].all()
+        assert (tensordict["next", "observation"] == 0).all()
+        assert tensordict_["is_init"].all()
+
     def test_auto_reset(self):
         policy = lambda td: td.set(
             "action", torch.ones((*td.shape, 1), dtype=torch.int64)
