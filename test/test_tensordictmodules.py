@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import sys
 
 import pytest
 import torch
@@ -735,6 +736,15 @@ class TestLSTMModule:
         td = TensorDict({"observation": torch.randn(3)}, [])
         with pytest.raises(KeyError, match="is_init"):
             lstm_module(td)
+        with pytest.raises(ValueError, match="recurrent_backend"):
+            LSTMModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys=["observation", "hidden0", "hidden1"],
+                out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="other",
+            )
 
     @pytest.mark.parametrize("default_val", [False, True, None])
     def test_set_recurrent_mode(self, default_val):
@@ -1102,6 +1112,9 @@ class TestLSTMModule:
             out["next", "recurrent_state_c"][0, 4], c2.squeeze(1)
         )
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
+    )
     def test_lstm_scan_prototype(self):
         # Opt-in prototype: torch._higher_order_ops.scan-based time loop.
         # Must be exercised under torch.compile -- scan is unusable in eager.
@@ -1137,6 +1150,88 @@ class TestLSTMModule:
         torch.testing.assert_close(y_ref, y_s)
         torch.testing.assert_close(hn_ref, hn_s)
         torch.testing.assert_close(cn_ref, cn_s)
+
+    @pytest.mark.parametrize("python_based", [False, True])
+    def test_lstm_module_scan_backend_matches_pad(self, python_based, monkeypatch):
+        torch.manual_seed(0)
+        B, T, F, H, L = 4, 7, 3, 5, 2
+        pad_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
+        )
+        scan_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
+            recurrent_backend="scan",
+        )
+        auto_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            python_based=python_based,
+            recurrent_backend="auto",
+        )
+        scan_module.load_state_dict(pad_module.state_dict())
+        auto_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F)
+        hidden0 = torch.zeros(B, T, L, H)
+        hidden1 = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[1, 5] = True
+        is_init[2, 1] = True
+        reset_shape = (int(is_init.sum()), L, H)
+        hidden0[is_init.squeeze(-1)] = torch.randn(reset_shape)
+        hidden1[is_init.squeeze(-1)] = torch.randn(reset_shape)
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(data.clone())
+            scan_out = scan_module(data.clone())
+            auto_pad_out = auto_module(data.clone())
+
+        torch.testing.assert_close(pad_out["feat"], scan_out["feat"])
+        torch.testing.assert_close(
+            pad_out["next", "hidden0"], scan_out["next", "hidden0"]
+        )
+        torch.testing.assert_close(
+            pad_out["next", "hidden1"], scan_out["next", "hidden1"]
+        )
+        torch.testing.assert_close(pad_out["feat"], auto_pad_out["feat"])
+        torch.testing.assert_close(
+            pad_out["next", "hidden0"], auto_pad_out["next", "hidden0"]
+        )
+        torch.testing.assert_close(
+            pad_out["next", "hidden1"], auto_pad_out["next", "hidden1"]
+        )
+
+        from torchrl.modules.tensordict_module import rnn as rnn_module
+
+        monkeypatch.setattr(rnn_module, "is_compiling", lambda: True)
+        with set_recurrent_mode(True), torch.no_grad():
+            auto_scan_out = auto_module(data.clone())
+        torch.testing.assert_close(scan_out["feat"], auto_scan_out["feat"])
+        torch.testing.assert_close(
+            scan_out["next", "hidden0"], auto_scan_out["next", "hidden0"]
+        )
+        torch.testing.assert_close(
+            scan_out["next", "hidden1"], auto_scan_out["next", "hidden1"]
+        )
 
 
 class TestGRUModule:
@@ -1598,6 +1693,9 @@ class TestGRUModule:
         torch.testing.assert_close(out["next", "recurrent_state"][0, 2], h1.squeeze(1))
         torch.testing.assert_close(out["next", "recurrent_state"][0, 4], h2.squeeze(1))
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
+    )
     def test_gru_scan_prototype(self):
         # Opt-in prototype: see TestLSTMModule.test_lstm_scan_prototype.
         from torchrl.modules.tensordict_module.rnn import GRU
@@ -1632,7 +1730,7 @@ class TestGRUModule:
         torch.testing.assert_close(hn_ref, hn_s)
 
     @pytest.mark.parametrize("python_based", [False, True])
-    def test_gru_module_scan_backend_matches_pad(self, python_based):
+    def test_gru_module_scan_backend_matches_pad(self, python_based, monkeypatch):
         torch.manual_seed(0)
         B, T, F, H, L = 4, 7, 3, 5, 2
         pad_module = GRUModule(
@@ -1652,7 +1750,17 @@ class TestGRUModule:
             python_based=python_based,
             recurrent_backend="scan",
         )
+        auto_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            python_based=python_based,
+            recurrent_backend="auto",
+        )
         scan_module.load_state_dict(pad_module.state_dict())
+        auto_module.load_state_dict(pad_module.state_dict())
 
         obs = torch.randn(B, T, F)
         hidden = torch.zeros(B, T, L, H)
@@ -1670,10 +1778,25 @@ class TestGRUModule:
         with set_recurrent_mode(True), torch.no_grad():
             pad_out = pad_module(data.clone())
             scan_out = scan_module(data.clone())
+            auto_pad_out = auto_module(data.clone())
 
         torch.testing.assert_close(pad_out["feat"], scan_out["feat"])
         torch.testing.assert_close(
             pad_out["next", "hidden"], scan_out["next", "hidden"]
+        )
+        torch.testing.assert_close(pad_out["feat"], auto_pad_out["feat"])
+        torch.testing.assert_close(
+            pad_out["next", "hidden"], auto_pad_out["next", "hidden"]
+        )
+
+        from torchrl.modules.tensordict_module import rnn as rnn_module
+
+        monkeypatch.setattr(rnn_module, "is_compiling", lambda: True)
+        with set_recurrent_mode(True), torch.no_grad():
+            auto_scan_out = auto_module(data.clone())
+        torch.testing.assert_close(scan_out["feat"], auto_scan_out["feat"])
+        torch.testing.assert_close(
+            scan_out["next", "hidden"], auto_scan_out["next", "hidden"]
         )
 
 
