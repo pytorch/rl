@@ -550,12 +550,35 @@ class RayCollector(BaseCollector):
         else:
             self._frames_per_batch_corrected = frames_per_batch
 
+        # When the inner collector is a Multi*Collector built from a
+        # policy_factory (no policy instance), the inner collector's
+        # auto-scheme branch in MultiCollector only handles
+        # isinstance(policy, nn.Module); a remote update_policy_weights_(weights)
+        # would otherwise propagate to the remote node's main process but
+        # never reach its worker subprocesses. Inject a default
+        # SharedMemWeightSyncScheme on the inner collector so the broadcast
+        # actually lands. Only when the user hasn't already supplied one.
+        needs_inner_shared_mem_scheme = (
+            policy is None
+            and any(policy_factory)
+            and collector_class in (MultiSyncCollector, MultiAsyncCollector)
+        )
+
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
             # Don't pass policy_factory if we have a policy - remote collectors need the policy object
             # to be able to apply weight updates
             if policy is None:
                 collector_kwarg["policy_factory"] = policy_factory[i]
+            if (
+                needs_inner_shared_mem_scheme
+                and "weight_sync_schemes" not in collector_kwarg
+            ):
+                from torchrl.weight_update import SharedMemWeightSyncScheme
+
+                collector_kwarg["weight_sync_schemes"] = {
+                    "policy": SharedMemWeightSyncScheme()
+                }
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
