@@ -6175,6 +6175,19 @@ def _make_policy_with_info():
     )
 
 
+class _CountingPolicyWithInfoFactory:
+    def __init__(self, counter, lock, pids):
+        self.counter = counter
+        self.lock = lock
+        self.pids = pids
+
+    def __call__(self):
+        with self.lock:
+            self.counter.value += 1
+            self.pids.append(os.getpid())
+        return _make_policy_with_info()
+
+
 class TestTrajsPerBatchReplayBuffer:
     """Tests for trajs_per_batch + ReplayBuffer integration.
 
@@ -6805,6 +6818,44 @@ class TestTrajsPerBatchReplayBuffer:
         all_data = rb.storage[: len(rb)]
         assert "policy_info" in all_data.keys(True, True)
         self._assert_rb_trajectories_complete(rb)
+
+    def test_multi_async_policy_factory_is_built_only_in_workers(self):
+        max_steps = 4
+        num_trajs = 2
+        num_workers = 2
+        env_fn, _ = self._make_continuous_env_and_policy_with_info(max_steps)
+        manager = torch.multiprocessing.Manager()
+        policy_factory_calls = manager.Value("i", 0)
+        policy_factory_call_lock = manager.Lock()
+        policy_factory_pids = manager.list()
+        policy_factory = _CountingPolicyWithInfoFactory(
+            policy_factory_calls, policy_factory_call_lock, policy_factory_pids
+        )
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn for _ in range(num_workers)],
+            policy_factory=policy_factory,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+            collector.shutdown()
+            assert os.getpid() not in set(policy_factory_pids)
+            assert len(set(policy_factory_pids)) == num_workers
+            assert policy_factory_calls.value == num_workers
+            assert len(rb) > 0, "replay buffer must be non-empty"
+            all_data = rb.storage[: len(rb)]
+            assert "policy_info" in all_data.keys(True, True)
+            self._assert_rb_trajectories_complete(rb)
+        finally:
+            with contextlib.suppress(Exception):
+                collector.shutdown()
+            manager.shutdown()
 
     # ------------------------------------------------------------------
     # Batched env: trajectory completeness (yielded batches, not RB)

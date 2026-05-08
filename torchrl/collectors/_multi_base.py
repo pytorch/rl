@@ -479,33 +479,13 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise TypeError(
                 "Cannot specify both weight_sync_schemes and weight_updater."
             )
-        # Check if policy_factory entries are all the same (replicated from single factory)
-        # vs different factories per worker.
-        has_uniform_policy_factory = any(policy_factory) and all(
-            f is policy_factory[0] for f in policy_factory
-        )
-        has_distinct_policy_factory = (
-            any(policy_factory) and not has_uniform_policy_factory
-        )
         if (
             weight_sync_schemes is not None
             and not weight_sync_schemes
             and weight_updater is None
+            and isinstance(policy, nn.Module)
         ):
-            if isinstance(policy, nn.Module):
-                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
-            elif has_uniform_policy_factory:
-                _probe = policy_factory[0]()
-                if isinstance(_probe, nn.Module):
-                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
-                del _probe
-            elif has_distinct_policy_factory:
-                _probe = next(f() for f in policy_factory if f is not None)
-                if isinstance(_probe, nn.Module):
-                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
-                        per_worker_weights=True
-                    )
-                del _probe
+            weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
@@ -973,6 +953,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
         if not is_init:
             storage = self.replay_buffer._storage
+            if self._should_init_replay_buffer_from_worker(storage):
+                self._enable_replay_buffer_worker_init(storage)
+                self.replay_buffer.share()
+                return
             if self.local_init_rb and getattr(storage, "shared_init", False):
                 # New behavior: storage handles all coordination itself
                 # Nothing to do here - the storage will coordinate during first write
@@ -1006,17 +990,31 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
 
+    def _should_init_replay_buffer_from_worker(self, storage):
+        return (
+            self.local_init_rb
+            and self.policy is None
+            and any(self.policy_factory)
+            and hasattr(storage, "shared_init")
+            and hasattr(storage, "_make_init_directory")
+        )
+
+    @staticmethod
+    def _enable_replay_buffer_worker_init(storage):
+        if getattr(storage, "_compilable", False):
+            raise RuntimeError(
+                "Cannot initialize a compilable replay-buffer storage from "
+                "multi-collector workers."
+            )
+        if getattr(storage, "shared_init", False):
+            return
+        storage.shared_init = True
+        storage._init_lock = mp.Lock()
+        storage._init_event = mp.Event()
+        storage._make_init_directory()
+
     def _add_policy_outputs_to_fake_td(self, fake_td):
         policy = getattr(self, "policy", None)
-        if policy is None:
-            policy_factory = getattr(self, "policy_factory", None)
-            if policy_factory is not None:
-                policy_factory = next(
-                    (factory for factory in policy_factory if factory is not None),
-                    None,
-                )
-                if policy_factory is not None:
-                    policy = policy_factory()
         out_keys = getattr(policy, "out_keys", None)
         if not out_keys:
             return fake_td
