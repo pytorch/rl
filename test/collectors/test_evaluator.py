@@ -201,11 +201,25 @@ class TestEvaluatorAsync:
     def test_busy_policy_error(self):
         env = _make_env()
         policy = _make_policy(env)
-        evaluator = Evaluator(env, policy, max_steps=200)
+        evaluator = Evaluator(env, policy, max_steps=200, busy_policy="error")
         try:
-            evaluator.trigger_eval(step=0)
+            assert evaluator.trigger_eval(step=0)
             with pytest.raises(RuntimeError, match="busy_policy='queue'"):
                 evaluator.trigger_eval(step=1)
+        finally:
+            evaluator.shutdown()
+
+    def test_busy_policy_skip(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=200)
+        try:
+            assert evaluator.trigger_eval(step=0)
+            assert not evaluator.trigger_eval(step=1)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert result["eval/step"] == 0
+            assert evaluator.trigger_eval(step=2)
         finally:
             evaluator.shutdown()
 
@@ -214,8 +228,8 @@ class TestEvaluatorAsync:
         policy = _make_policy(env)
         evaluator = Evaluator(env, policy, max_steps=200, busy_policy="queue")
         try:
-            evaluator.trigger_eval(step=0)
-            evaluator.trigger_eval(step=1)
+            assert evaluator.trigger_eval(step=0)
+            assert evaluator.trigger_eval(step=1)
             result0 = evaluator.wait(timeout=30)
             result1 = evaluator.wait(timeout=30)
             assert result0 is not None

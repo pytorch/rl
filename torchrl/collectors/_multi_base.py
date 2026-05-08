@@ -402,6 +402,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int = 1,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
@@ -410,6 +411,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self.trajs_per_write = trajs_per_write
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -1282,6 +1284,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
                     "trajs_per_batch": self._worker_trajs_per_batch,
+                    "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
                     "pre_collect_hook": self._worker_pre_collect_hook,

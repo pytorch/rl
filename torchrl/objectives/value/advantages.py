@@ -237,6 +237,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_key: NestedKey = None,
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
+        value_chunk_size: int | None = None,
     ):
         super().__init__()
         if device is None:
@@ -247,6 +248,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._tensor_keys = None
         self.differentiable = differentiable
         self.deactivate_vmap = deactivate_vmap
+        self.value_chunk_size = value_chunk_size
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
@@ -442,6 +444,16 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if value_net is None:
             value_net = self.value_network
         in_keys = value_net.in_keys
+
+        def _call_value_net(data_in: TensorDictBase) -> torch.Tensor:
+            chunk_size = self.value_chunk_size
+            if chunk_size is None or data_in.numel() <= chunk_size:
+                return value_net(data_in).get(value_key)
+            values = []
+            for chunk in data_in.split(chunk_size, dim=0):
+                values.append(value_net(chunk).get(value_key))
+            return torch.cat(values, dim=0)
+
         if single_call:
             # We are going to flatten the data, then interleave the last observation of each trajectory in between its
             #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
@@ -509,9 +521,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                     )
                 if params is not None:
                     with params.to_module(value_net):
-                        value_est = value_net(data_in).get(value_key)
+                        value_est = _call_value_net(data_in)
                 else:
-                    value_est = value_net(data_in).get(value_key)
+                    value_est = _call_value_net(data_in)
                 value, value_ = value_est[indices], value_est[indices + 1]
             value = value.view_as(done)
             value_ = value_.view_as(done)
@@ -531,6 +543,13 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 raise ValueError(
                     "params and next_params must be either both provided or not."
                 )
+            elif (
+                params is None
+                and next_params is None
+                and self.value_chunk_size is not None
+            ):
+                value = _call_value_net(data_root)
+                value_ = _call_value_net(data_next)
             elif params is not None:
                 params_stack = torch.stack([params, next_params], 0).contiguous()
                 data_out = _vmap_func(
@@ -545,8 +564,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 data_out = _pseudo_vmap(value_net, (0,), randomness=vmap_randomness)(
                     data_in
                 )
-            value_est = data_out.get(value_key)
-            value, value_ = value_est[0], value_est[1]
+            if self.value_chunk_size is None or params is not None:
+                value_est = data_out.get(value_key)
+                value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)
         data.set(("next", value_key), value_)
         if detach_next:
@@ -594,6 +614,9 @@ class TD0Estimator(ValueEstimatorBase):
             Defaults to ``torch.get_default_device()``.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
 
     """
 
@@ -611,6 +634,7 @@ class TD0Estimator(ValueEstimatorBase):
         skip_existing: bool | None = None,
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
+        value_chunk_size: int | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -622,6 +646,7 @@ class TD0Estimator(ValueEstimatorBase):
             skip_existing=skip_existing,
             device=device,
             deactivate_vmap=deactivate_vmap,
+            value_chunk_size=value_chunk_size,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -815,6 +840,9 @@ class TD1Estimator(ValueEstimatorBase):
             tensordict.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
 
     """
 
@@ -833,6 +861,7 @@ class TD1Estimator(ValueEstimatorBase):
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
+        value_chunk_size: int | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -844,6 +873,7 @@ class TD1Estimator(ValueEstimatorBase):
             skip_existing=skip_existing,
             device=device,
             deactivate_vmap=deactivate_vmap,
+            value_chunk_size=value_chunk_size,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -1043,6 +1073,9 @@ class TDLambdaEstimator(ValueEstimatorBase):
             tensordict.
         deactivate_vmap (bool, optional): whether to deactivate vmap calls and replace them with a plain for loop.
             Defaults to ``False``.
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
 
     """
 
@@ -1063,6 +1096,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
+        value_chunk_size: int | None = None,
     ):
         super().__init__(
             value_network=value_network,
@@ -1074,6 +1108,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             shifted=shifted,
             device=device,
             deactivate_vmap=deactivate_vmap,
+            value_chunk_size=value_chunk_size,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
@@ -1311,6 +1346,9 @@ class GAE(ValueEstimatorBase):
             instead of ``next_value`` to bootstrap truncated episodes.
         deactivate_vmap (bool, optional): if ``True``, no vmap call will be used, and
             vectorized maps will be replaced with simple for loops. Defaults to ``False``.
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
 
     GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1356,6 +1394,7 @@ class GAE(ValueEstimatorBase):
         time_dim: int | None = None,
         auto_reset_env: bool = False,
         deactivate_vmap: bool = False,
+        value_chunk_size: int | None = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -1366,6 +1405,8 @@ class GAE(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
             device=device,
+            deactivate_vmap=deactivate_vmap,
+            value_chunk_size=value_chunk_size,
         )
         self.register_buffer(
             "gamma",
@@ -1685,6 +1726,9 @@ class VTrace(ValueEstimatorBase):
             :meth:`~.value_estimate`.
             Negative dimensions are considered with respect to the input
             tensordict.
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
 
     VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the V-Trace target value.
@@ -1713,6 +1757,7 @@ class VTrace(ValueEstimatorBase):
         shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
+        value_chunk_size: int | None = None,
     ):
         super().__init__(
             shifted=shifted,
@@ -1723,6 +1768,7 @@ class VTrace(ValueEstimatorBase):
             value_key=value_key,
             skip_existing=skip_existing,
             device=device,
+            value_chunk_size=value_chunk_size,
         )
         if not isinstance(gamma, torch.Tensor):
             gamma = torch.tensor(gamma, device=self._device)

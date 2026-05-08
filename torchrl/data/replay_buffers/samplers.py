@@ -693,7 +693,10 @@ class PrioritizedSampler(Sampler):
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
-                f"Samplers of type {type(self)} cannot be shared between processes."
+                f"Samplers of type {type(self)} cannot be shared between processes. "
+                "Use TensorDictPrioritizedReplayBuffer(sync=False) instead: "
+                "the writer process gets a uniform sampler and the learner "
+                "keeps a local prioritized sampler."
             )
         return super().__getstate__()
 
