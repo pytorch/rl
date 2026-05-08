@@ -590,6 +590,22 @@ class TestRandomPolicyLazyInit:
 
 
 class TestCollectorGeneric:
+    def test_collector_without_traj_ids(self):
+        env = CountingEnv(max_steps=3)
+        collector = Collector(
+            env,
+            policy=RandomPolicy(env.action_spec),
+            total_frames=4,
+            frames_per_batch=4,
+            track_traj_ids=False,
+        )
+        try:
+            data = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert "collector" not in data.keys()
+
     @pytest.mark.parametrize("num_env", [1, 2])
     # 1226: for efficiency, we just test vec, not "conv"
     @pytest.mark.parametrize("env_name", ["vec"])

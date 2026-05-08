@@ -14,6 +14,7 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 from torch import nn, Tensor
+from torch._higher_order_ops import scan
 from torch.nn.modules.rnn import RNNCellBase
 
 from torchrl._utils import _ContextManager, _DecoratorContextManager
@@ -1231,8 +1232,6 @@ class GRU(GRUBase):
 
     def _gru_scan(self, x, hx, mask=None):
         """Prototype scan-based time loop. See :meth:`LSTM._lstm_scan`."""
-        from torch._higher_order_ops import scan
-
         if self.dropout:
             raise NotImplementedError(
                 "GRU(use_scan=True) does not support dropout yet."
@@ -1343,6 +1342,10 @@ class GRUModule(ModuleBase):
             GRU layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
         python_based: If ``True``, will use a full Python implementation of the GRU cell. Default: ``False``
+        recurrent_backend: backend used in recurrent mode when trajectories reset
+            in the middle of a batch. ``"pad"`` keeps the existing split/pad
+            strategy. ``"scan"`` uses a scan loop over the time dimension and
+            avoids materializing padded trajectory chunks. Default: ``"pad"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -1463,6 +1466,7 @@ class GRUModule(ModuleBase):
         dropout=0,
         bidirectional=False,
         python_based=False,
+        recurrent_backend: typing.Literal["pad", "scan"] = "pad",
         *,
         in_key=None,
         in_keys=None,
@@ -1473,6 +1477,11 @@ class GRUModule(ModuleBase):
         default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
+        if recurrent_backend not in {"pad", "scan"}:
+            raise ValueError(
+                "recurrent_backend must be one of 'pad' or 'scan'. "
+                f"Got {recurrent_backend}."
+            )
         if gru is not None:
             if not gru.batch_first:
                 raise ValueError("The input gru must have batch_first=True.")
@@ -1542,6 +1551,7 @@ class GRUModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = default_recurrent_mode
+        self.recurrent_backend = recurrent_backend
 
     def make_python_based(self) -> GRUModule:
         """Transforms the GRU layer in its python-based version.
@@ -1719,7 +1729,9 @@ class GRUModule(ModuleBase):
 
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
-        if self.recurrent_mode and is_init[..., 1:].any():
+        has_mid_init = self.recurrent_mode and is_init[..., 1:].any()
+        use_scan = has_mid_init and self.recurrent_backend == "scan"
+        if has_mid_init and not use_scan:
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
             # if we have consecutive trajectories, things get a little more complicated
@@ -1745,7 +1757,16 @@ class GRUModule(ModuleBase):
         if not self.recurrent_mode and is_init.any() and hidden is not None:
             is_init_expand = expand_as_right(is_init, hidden)
             hidden = torch.where(is_init_expand, 0, hidden)
-        val, hidden = self._gru(value, batch, steps, device, dtype, hidden, splits)
+        val, hidden = self._gru(
+            value,
+            batch,
+            steps,
+            device,
+            dtype,
+            hidden,
+            splits,
+            is_init=is_init if use_scan else None,
+        )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
@@ -1767,7 +1788,8 @@ class GRUModule(ModuleBase):
         dtype,
         hidden_in: torch.Tensor | None = None,
         splits: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        is_init: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
@@ -1786,6 +1808,8 @@ class GRUModule(ModuleBase):
         _hidden_in = hidden_in[:, 0]
         hidden = _hidden_in.transpose(-3, -2).contiguous()
 
+        if is_init is not None:
+            return self._gru_scan_with_resets(input, hidden_in, hidden, is_init)
         if splits is None:
             y, hidden = self.gru(input, hidden)
         elif isinstance(self.gru, nn.GRU):
@@ -1815,6 +1839,70 @@ class GRUModule(ModuleBase):
             )
         out = [y, hidden]
         return tuple(out)
+
+    def _gru_scan_with_resets(
+        self,
+        input: torch.Tensor,
+        hidden_in: torch.Tensor,
+        initial_hidden: torch.Tensor,
+        is_init: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.gru.dropout:
+            raise NotImplementedError(
+                "GRUModule(recurrent_backend='scan') does not support dropout yet."
+            )
+
+        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+        for layer in range(self.gru.num_layers):
+            weights = self.gru._all_weights[layer]
+            weight_ihs.append(getattr(self.gru, weights[0]))
+            weight_hhs.append(getattr(self.gru, weights[1]))
+            bias_ihs.append(getattr(self.gru, weights[2]) if self.gru.bias else None)
+            bias_hhs.append(getattr(self.gru, weights[3]) if self.gru.bias else None)
+
+        input = input.transpose(0, 1)
+        is_init = is_init.transpose(0, 1)
+        reset_hidden = hidden_in.transpose(0, 1).transpose(-3, -2).contiguous()
+        num_layers = self.gru.num_layers
+
+        def step(carry, inputs):
+            h_layers = carry
+            x_t, init_t, reset_hidden_t = inputs
+            init_t = init_t.unsqueeze(0).unsqueeze(-1)
+            h_layers = torch.where(init_t, reset_hidden_t, h_layers)
+            h_unbound = h_layers.unbind(0)
+            new_h = []
+            for layer in range(num_layers):
+                h_new = GRU._gru_cell(
+                    x_t,
+                    h_unbound[layer],
+                    weight_ihs[layer],
+                    bias_ihs[layer],
+                    weight_hhs[layer],
+                    bias_hhs[layer],
+                )
+                new_h.append(h_new)
+                x_t = h_new
+            new_h = torch.stack(new_h, 0).clone()
+            hidden_out = new_h.transpose(0, 1).flatten(1).clone()
+            return new_h, (x_t.clone(), hidden_out)
+
+        _, (outputs, hidden_steps) = scan(
+            step, initial_hidden, (input, is_init, reset_hidden), dim=0
+        )
+        outputs = outputs.transpose(0, 1)
+        hidden_steps = hidden_steps.unflatten(
+            -1, (self.gru.num_layers, self.gru.hidden_size)
+        ).transpose(0, 1)
+        end_mask = torch.empty_like(is_init.transpose(0, 1))
+        end_mask[:, :-1] = is_init.transpose(0, 1)[:, 1:]
+        end_mask[:, -1] = True
+        hidden_steps = torch.where(
+            end_mask.unsqueeze(-1).unsqueeze(-1),
+            hidden_steps,
+            torch.zeros_like(hidden_steps),
+        )
+        return outputs, hidden_steps
 
 
 # Recurrent mode manager

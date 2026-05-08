@@ -1213,6 +1213,15 @@ class TestGRUModule:
         td = TensorDict({"observation": torch.randn(3)}, [])
         with pytest.raises(KeyError, match="is_init"):
             gru_module(td)
+        with pytest.raises(ValueError, match="recurrent_backend"):
+            GRUModule(
+                input_size=3,
+                hidden_size=12,
+                batch_first=True,
+                in_keys=["observation", "hidden"],
+                out_keys=["intermediate", ("next", "hidden")],
+                recurrent_backend="other",
+            )
 
     @pytest.mark.parametrize("default_val", [False, True, None])
     def test_set_recurrent_mode(self, default_val):
@@ -1621,6 +1630,51 @@ class TestGRUModule:
             y_s, hn_s = call(x, h0, mask)
         torch.testing.assert_close(y_ref, y_s)
         torch.testing.assert_close(hn_ref, hn_s)
+
+    @pytest.mark.parametrize("python_based", [False, True])
+    def test_gru_module_scan_backend_matches_pad(self, python_based):
+        torch.manual_seed(0)
+        B, T, F, H, L = 4, 7, 3, 5, 2
+        pad_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            python_based=python_based,
+        )
+        scan_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            python_based=python_based,
+            recurrent_backend="scan",
+        )
+        scan_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F)
+        hidden = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[1, 5] = True
+        is_init[2, 1] = True
+        hidden[is_init.squeeze(-1)] = torch.randn(is_init.sum(), L, H)
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init},
+            [B, T],
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(data.clone())
+            scan_out = scan_module(data.clone())
+
+        torch.testing.assert_close(pad_out["feat"], scan_out["feat"])
+        torch.testing.assert_close(
+            pad_out["next", "hidden"], scan_out["next", "hidden"]
+        )
 
 
 def test_safe_specs():
