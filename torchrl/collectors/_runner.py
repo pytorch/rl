@@ -65,7 +65,7 @@ def _main_async_collector(
     worker_idx: int | None = None,
     init_random_frames: int | None = None,
     trajs_per_batch: int | None = None,
-    trajs_per_write: int = 1,
+    trajs_per_write: int | None = None,
     init_fn: Callable[[], None] | None = None,
     auto_register_policy_transforms: bool | None = None,
     pre_collect_hook: Callable[[], None] | None = None,
