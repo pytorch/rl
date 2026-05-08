@@ -28,14 +28,14 @@ def _log_prob_key_from_sample_key(key: NestedKey) -> NestedKey:
     return f"{key}_log_prob"
 
 
-def _ensure_log_prob_keys(policy: Callable | None) -> None:
-    """Restore derived log-prob keys after policy serialization.
+def _ensure_derived_policy_output_keys(policy: Callable | None) -> None:
+    """Restore derived policy-output metadata after policy serialization.
 
-    Some probabilistic modules derive ``log_prob_keys`` from ``out_keys`` at
-    construction time. Multi-process collectors may receive a policy whose
-    ``return_log_prob`` flag survived serialization but whose derived keys did
-    not, so restore the default ``<sample_key>_log_prob`` mapping before the
-    worker starts collecting.
+    Collectors already discover declared policy-produced keys, including
+    arbitrary non-action metadata, with the initial policy dry-run. Some
+    modules derive additional output-key metadata at construction time. If
+    serialization drops that metadata, the first dry-run cannot see those
+    outputs, so restore the known derived keys before collection starts.
     """
     if policy is None:
         return
@@ -531,5 +531,5 @@ def _make_policy_factory(
         )
         # Synchronize initial weights
         weight_sync_scheme.connect(worker_idx=worker_idx)
-    _ensure_log_prob_keys(policy)
+    _ensure_derived_policy_output_keys(policy)
     return policy
