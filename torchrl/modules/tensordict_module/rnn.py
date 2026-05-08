@@ -17,7 +17,7 @@ from torch import nn, Tensor
 from torch._higher_order_ops import scan
 from torch.nn.modules.rnn import RNNCellBase
 
-from torchrl._utils import _ContextManager, _DecoratorContextManager
+from torchrl._utils import _ContextManager, _DecoratorContextManager, is_compiling
 from torchrl.data.tensor_specs import Unbounded
 
 
@@ -336,8 +336,6 @@ class LSTM(LSTMBase):
         opt-in via ``LSTM(..., use_scan=True)`` and replaces the python
         ``for`` loop over time. Dropout is not supported here.
         """
-        from torch._higher_order_ops import scan
-
         if self.dropout:
             raise NotImplementedError(
                 "LSTM(use_scan=True) does not support dropout yet."
@@ -345,10 +343,10 @@ class LSTM(LSTMBase):
 
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for weights in self._all_weights:
-            weight_ihs.append(getattr(self, weights[0]))
-            weight_hhs.append(getattr(self, weights[1]))
-            bias_ihs.append(getattr(self, weights[2]) if self.bias else None)
-            bias_hhs.append(getattr(self, weights[3]) if self.bias else None)
+            weight_ihs.append(getattr(self, weights[0]).clone())
+            weight_hhs.append(getattr(self, weights[1]).clone())
+            bias_ihs.append(getattr(self, weights[2]).clone() if self.bias else None)
+            bias_hhs.append(getattr(self, weights[3]).clone() if self.bias else None)
 
         # scan iterates along dim 0; permute to time-first if needed.
         if self.batch_first:
@@ -460,6 +458,12 @@ class LSTMModule(ModuleBase):
             LSTM layer except the last layer, with dropout probability equal to
             :attr:`dropout`. Default: 0
         python_based: If ``True``, will use a full Python implementation of the LSTM cell. Default: ``False``
+        recurrent_backend: backend used in recurrent mode when trajectories reset
+            in the middle of a batch. ``"pad"`` keeps the existing split/pad
+            strategy. ``"scan"`` uses a scan loop over the time dimension and
+            avoids materializing padded trajectory chunks. ``"auto"`` uses
+            ``"pad"`` in eager mode and ``"scan"`` when called under
+            :func:`torch.compile`. Default: ``"pad"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -555,6 +559,7 @@ class LSTMModule(ModuleBase):
         proj_size=0,
         bidirectional=False,
         python_based=False,
+        recurrent_backend: typing.Literal["auto", "pad", "scan"] = "pad",
         *,
         in_key=None,
         in_keys=None,
@@ -565,6 +570,11 @@ class LSTMModule(ModuleBase):
         default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
+        if recurrent_backend not in {"auto", "pad", "scan"}:
+            raise ValueError(
+                "recurrent_backend must be one of 'auto', 'pad' or 'scan'. "
+                f"Got {recurrent_backend}."
+            )
         if lstm is not None:
             if not lstm.batch_first:
                 raise ValueError("The input lstm must have batch_first=True.")
@@ -637,6 +647,7 @@ class LSTMModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = default_recurrent_mode
+        self.recurrent_backend = recurrent_backend
 
     def make_python_based(self) -> LSTMModule:
         """Transforms the LSTM layer in its python-based version.
@@ -818,7 +829,11 @@ class LSTMModule(ModuleBase):
 
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
-        if self.recurrent_mode and is_init[..., 1:].any():
+        backend = self.recurrent_backend
+        if backend == "auto":
+            backend = "scan" if is_compiling() else "pad"
+        use_scan = self.recurrent_mode and backend == "scan"
+        if self.recurrent_mode and not use_scan and is_init[..., 1:].any():
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
             # if we have consecutive trajectories, things get a little more complicated
@@ -865,6 +880,7 @@ class LSTMModule(ModuleBase):
             hidden0,
             hidden1,
             splits,
+            is_init=is_init if use_scan else None,
         )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden0)
@@ -889,6 +905,7 @@ class LSTMModule(ModuleBase):
         hidden0_in: torch.Tensor | None = None,
         hidden1_in: torch.Tensor | None = None,
         splits: torch.Tensor | None = None,
+        is_init: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         if not self.recurrent_mode and steps != 1:
@@ -919,6 +936,10 @@ class LSTMModule(ModuleBase):
             _hidden1_in.transpose(-3, -2).contiguous(),
         )
 
+        if is_init is not None:
+            return self._lstm_scan_with_resets(
+                input, hidden0_in, hidden1_in, hidden, is_init
+            )
         if splits is None:
             y, hidden = self.lstm(input, hidden)
         elif isinstance(self.lstm, nn.LSTM):
@@ -957,6 +978,98 @@ class LSTMModule(ModuleBase):
                     1,
                 )
         return tuple(out)
+
+    def _lstm_scan_with_resets(
+        self,
+        input: torch.Tensor,
+        hidden0_in: torch.Tensor,
+        hidden1_in: torch.Tensor,
+        initial_hidden: tuple[torch.Tensor, torch.Tensor],
+        is_init: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.lstm.dropout:
+            raise NotImplementedError(
+                "LSTMModule(recurrent_backend='scan') does not support dropout yet."
+            )
+        if self.lstm.proj_size:
+            raise NotImplementedError(
+                "LSTMModule(recurrent_backend='scan') does not support proj_size yet."
+            )
+
+        weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
+        for layer in range(self.lstm.num_layers):
+            weights = self.lstm._all_weights[layer]
+            weight_ihs.append(getattr(self.lstm, weights[0]).clone())
+            weight_hhs.append(getattr(self.lstm, weights[1]).clone())
+            bias_ihs.append(
+                getattr(self.lstm, weights[2]).clone() if self.lstm.bias else None
+            )
+            bias_hhs.append(
+                getattr(self.lstm, weights[3]).clone() if self.lstm.bias else None
+            )
+
+        input = input.transpose(0, 1)
+        is_init = is_init.transpose(0, 1)
+        reset_hidden0 = hidden0_in.transpose(0, 1).transpose(-3, -2).contiguous()
+        reset_hidden1 = hidden1_in.transpose(0, 1).transpose(-3, -2).contiguous()
+        num_layers = self.lstm.num_layers
+
+        def step(carry, inputs):
+            h_layers, c_layers = carry
+            x_t, init_t, reset_hidden0_t, reset_hidden1_t = inputs
+            init_t = init_t.unsqueeze(0).unsqueeze(-1)
+            h_layers = torch.where(init_t, reset_hidden0_t, h_layers)
+            c_layers = torch.where(init_t, reset_hidden1_t, c_layers)
+            h_unbound = h_layers.unbind(0)
+            c_unbound = c_layers.unbind(0)
+            new_h = []
+            new_c = []
+            for layer in range(num_layers):
+                h_new, c_new = LSTM._lstm_cell(
+                    x_t,
+                    h_unbound[layer],
+                    c_unbound[layer],
+                    weight_ihs[layer],
+                    bias_ihs[layer],
+                    weight_hhs[layer],
+                    bias_hhs[layer],
+                )
+                new_h.append(h_new)
+                new_c.append(c_new)
+                x_t = h_new
+            new_h = torch.stack(new_h, 0).clone()
+            new_c = torch.stack(new_c, 0).clone()
+            hidden0_out = new_h.transpose(0, 1).flatten(1).clone()
+            hidden1_out = new_c.transpose(0, 1).flatten(1).clone()
+            return (new_h, new_c), (x_t.clone(), hidden0_out, hidden1_out)
+
+        _, (outputs, hidden0_steps, hidden1_steps) = scan(
+            step,
+            initial_hidden,
+            (input, is_init, reset_hidden0, reset_hidden1),
+            dim=0,
+        )
+        outputs = outputs.transpose(0, 1)
+        hidden0_steps = hidden0_steps.unflatten(
+            -1, (self.lstm.num_layers, self.lstm.hidden_size)
+        ).transpose(0, 1)
+        hidden1_steps = hidden1_steps.unflatten(
+            -1, (self.lstm.num_layers, self.lstm.hidden_size)
+        ).transpose(0, 1)
+        end_mask = torch.empty_like(is_init.transpose(0, 1))
+        end_mask[:, :-1] = is_init.transpose(0, 1)[:, 1:]
+        end_mask[:, -1] = True
+        hidden0_steps = torch.where(
+            end_mask.unsqueeze(-1).unsqueeze(-1),
+            hidden0_steps,
+            torch.zeros_like(hidden0_steps),
+        )
+        hidden1_steps = torch.where(
+            end_mask.unsqueeze(-1).unsqueeze(-1),
+            hidden1_steps,
+            torch.zeros_like(hidden1_steps),
+        )
+        return outputs, hidden0_steps, hidden1_steps
 
 
 class GRUCell(RNNCellBase):
@@ -1240,10 +1353,10 @@ class GRU(GRUBase):
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.num_layers):
             weights = self._all_weights[layer]
-            weight_ihs.append(getattr(self, weights[0]))
-            weight_hhs.append(getattr(self, weights[1]))
-            bias_ihs.append(getattr(self, weights[2]) if self.bias else None)
-            bias_hhs.append(getattr(self, weights[3]) if self.bias else None)
+            weight_ihs.append(getattr(self, weights[0]).clone())
+            weight_hhs.append(getattr(self, weights[1]).clone())
+            bias_ihs.append(getattr(self, weights[2]).clone() if self.bias else None)
+            bias_hhs.append(getattr(self, weights[3]).clone() if self.bias else None)
 
         if self.batch_first:
             x = x.transpose(0, 1)
@@ -1345,7 +1458,9 @@ class GRUModule(ModuleBase):
         recurrent_backend: backend used in recurrent mode when trajectories reset
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
-            avoids materializing padded trajectory chunks. Default: ``"pad"``.
+            avoids materializing padded trajectory chunks. ``"auto"`` uses
+            ``"pad"`` in eager mode and ``"scan"`` when called under
+            :func:`torch.compile`. Default: ``"pad"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -1466,7 +1581,7 @@ class GRUModule(ModuleBase):
         dropout=0,
         bidirectional=False,
         python_based=False,
-        recurrent_backend: typing.Literal["pad", "scan"] = "pad",
+        recurrent_backend: typing.Literal["auto", "pad", "scan"] = "pad",
         *,
         in_key=None,
         in_keys=None,
@@ -1477,9 +1592,9 @@ class GRUModule(ModuleBase):
         default_recurrent_mode: bool | None = None,
     ):
         super().__init__()
-        if recurrent_backend not in {"pad", "scan"}:
+        if recurrent_backend not in {"auto", "pad", "scan"}:
             raise ValueError(
-                "recurrent_backend must be one of 'pad' or 'scan'. "
+                "recurrent_backend must be one of 'auto', 'pad' or 'scan'. "
                 f"Got {recurrent_backend}."
             )
         if gru is not None:
@@ -1729,9 +1844,11 @@ class GRUModule(ModuleBase):
 
         is_init = tensordict_shaped["is_init"].squeeze(-1)
         splits = None
-        has_mid_init = self.recurrent_mode and is_init[..., 1:].any()
-        use_scan = has_mid_init and self.recurrent_backend == "scan"
-        if has_mid_init and not use_scan:
+        backend = self.recurrent_backend
+        if backend == "auto":
+            backend = "scan" if is_compiling() else "pad"
+        use_scan = self.recurrent_mode and backend == "scan"
+        if self.recurrent_mode and not use_scan and is_init[..., 1:].any():
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
             # if we have consecutive trajectories, things get a little more complicated
@@ -1855,10 +1972,14 @@ class GRUModule(ModuleBase):
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
-            weight_ihs.append(getattr(self.gru, weights[0]))
-            weight_hhs.append(getattr(self.gru, weights[1]))
-            bias_ihs.append(getattr(self.gru, weights[2]) if self.gru.bias else None)
-            bias_hhs.append(getattr(self.gru, weights[3]) if self.gru.bias else None)
+            weight_ihs.append(getattr(self.gru, weights[0]).clone())
+            weight_hhs.append(getattr(self.gru, weights[1]).clone())
+            bias_ihs.append(
+                getattr(self.gru, weights[2]).clone() if self.gru.bias else None
+            )
+            bias_hhs.append(
+                getattr(self.gru, weights[3]).clone() if self.gru.bias else None
+            )
 
         input = input.transpose(0, 1)
         is_init = is_init.transpose(0, 1)
