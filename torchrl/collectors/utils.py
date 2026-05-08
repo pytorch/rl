@@ -22,6 +22,39 @@ _NON_NN_POLICY_WEIGHTS = (
 )
 
 
+def _log_prob_key_from_sample_key(key: NestedKey) -> NestedKey:
+    if isinstance(key, tuple):
+        return (*key[:-1], f"{key[-1]}_log_prob")
+    return f"{key}_log_prob"
+
+
+def _ensure_log_prob_keys(policy: Callable | None) -> None:
+    """Restore derived log-prob keys after policy serialization.
+
+    Some probabilistic modules derive ``log_prob_keys`` from ``out_keys`` at
+    construction time. Multi-process collectors may receive a policy whose
+    ``return_log_prob`` flag survived serialization but whose derived keys did
+    not, so restore the default ``<sample_key>_log_prob`` mapping before the
+    worker starts collecting.
+    """
+    if policy is None:
+        return
+    modules = policy.modules() if isinstance(policy, nn.Module) else (policy,)
+    for module in modules:
+        if not getattr(module, "return_log_prob", False):
+            continue
+        try:
+            log_prob_keys = module.log_prob_keys
+        except AttributeError:
+            continue
+        if log_prob_keys:
+            continue
+        out_keys = getattr(module, "out_keys", None)
+        if not out_keys:
+            continue
+        module.log_prob_keys = [_log_prob_key_from_sample_key(key) for key in out_keys]
+
+
 def _stack_output(fun) -> Callable:
     def stacked_output_fun(*args, **kwargs):
         out = fun(*args, **kwargs)
@@ -492,4 +525,5 @@ def _make_policy_factory(
         )
         # Synchronize initial weights
         weight_sync_scheme.connect(worker_idx=worker_idx)
+    _ensure_log_prob_keys(policy)
     return policy
