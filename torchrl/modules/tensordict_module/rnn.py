@@ -1983,7 +1983,7 @@ class GRUModule(ModuleBase):
 
         input = input.transpose(0, 1)
         is_init = is_init.transpose(0, 1)
-        reset_hidden = hidden_in.transpose(0, 1).transpose(-3, -2).contiguous()
+        reset_hidden = hidden_in.permute(1, 2, 0, 3).contiguous()
         num_layers = self.gru.num_layers
 
         def step(carry, inputs):
@@ -2004,6 +2004,8 @@ class GRUModule(ModuleBase):
                 )
                 new_h.append(h_new)
                 x_t = h_new
+            # scan returns both carry and per-step outputs; clone to avoid
+            # aliasing between those two pytrees under torch.compile.
             new_h = torch.stack(new_h, 0).clone()
             hidden_out = new_h.transpose(0, 1).flatten(1).clone()
             return new_h, (x_t.clone(), hidden_out)
