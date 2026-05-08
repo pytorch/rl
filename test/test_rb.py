@@ -2825,9 +2825,34 @@ class TestMultiProc:
 
     def test_error_prb(self):
         # PrioritizedSampler cannot be shared
-        with pytest.raises(RuntimeError, match="cannot be shared between processes"):
+        with pytest.raises(
+            RuntimeError,
+            match="cannot be shared between processes.*sync=False",
+        ):
             self.exec_multiproc_rb(
                 sampler_type=lambda: PrioritizedSampler(21, alpha=1.1, beta=0.5)
+            )
+
+    def test_shared_prefetch_error_mentions_fix(self):
+        with pytest.raises(
+            ValueError,
+            match="Cannot share prefetched replay buffers.*prefetch=0.*shared=False",
+        ):
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(10),
+                batch_size=2,
+                prefetch=1,
+                shared=True,
+            )
+
+    def test_shared_cuda_storage_error_at_construction(self):
+        with pytest.raises(
+            ValueError,
+            match="shared=True requires storage device='cpu'.*cuda:0",
+        ):
+            TensorDictReplayBuffer(
+                storage=LazyTensorStorage(10, device="cuda:0"),
+                shared=True,
             )
 
     def test_async_prioritized_rb_multiproc_writes(self):
