@@ -411,8 +411,15 @@ class VecGymEnvTransform(Transform):
 
     """
 
-    def __init__(self, final_name: str = "final", missing_obs_value: Any = np.nan):
+    def __init__(
+        self,
+        final_name: str = "final",
+        missing_obs_value: Any = np.nan,
+        *,
+        native_autoreset: bool = False,
+    ):
         self.final_name = final_name
+        self.native_autoreset = native_autoreset
         super().__init__()
         self._memo = {}
         if not isinstance(missing_obs_value, torch.Tensor):
@@ -428,6 +435,8 @@ class VecGymEnvTransform(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if self.native_autoreset:
+            return next_tensordict
         # save the final info
         done = False
         for done_key in self.done_keys:
@@ -458,6 +467,9 @@ class VecGymEnvTransform(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
+        if self.native_autoreset:
+            tensordict_reset.pop(self.final_name, None)
+            return tensordict_reset
         done = self._memo.get("done", None)
         reset = tensordict.get("_reset", done)
         if done is not None:
