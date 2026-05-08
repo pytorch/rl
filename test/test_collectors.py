@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import functools
 import gc
+import logging
 import os
 import subprocess
 import sys
@@ -136,6 +137,7 @@ from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
+    SharedMemTransport,
     SharedMemWeightSyncScheme,
 )
 
@@ -1907,6 +1909,24 @@ if __name__ == "__main__":
         finally:
             collector.shutdown()
             del collector
+
+    def test_shared_mem_transport_logs_weight_sync(self, caplog):
+        transport = SharedMemTransport()
+        buffer = TensorDict({"weight": torch.zeros(2, 3)}, [])
+        source = TensorDict({"weight": torch.ones(2, 3)}, [])
+        transport.register_weights(
+            params_map={0: buffer},
+            init_queues={},
+        )
+
+        with caplog.at_level(logging.DEBUG, logger=torchrl_logger.name):
+            transport.send_weights(source)
+
+        assert (
+            "Synced weights" in caplog.text
+            and "params=6" in caplog.text
+            and "bytes=24" in caplog.text
+        )
 
     @pytest.mark.parametrize(
         "use_async", [True]
