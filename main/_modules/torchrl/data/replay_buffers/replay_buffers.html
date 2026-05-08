@@ -584,7 +584,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_executor</span> <span class="o">=</span> <span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_prefetch_cap</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">shared</span> <span class="ow">and</span> <span class="n">prefetch</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot share prefetched replay buffers.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot share prefetched replay buffers. Pass prefetch=0 or &quot;</span>
+                <span class="s2">&quot;shared=False.&quot;</span>
+            <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">shared</span> <span class="o">=</span> <span class="n">shared</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">share</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shared</span><span class="p">)</span>
 
@@ -976,6 +979,52 @@
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_replay_lock</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
         <span class="k">return</span>
+
+<div class="viewcode-block" id="ReplayBuffer.read_all_in_order">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.read_all_in_order">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">read_all_in_order</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Read storage contents in physical order.</span>
+
+<span class="sd">        This is equivalent to ``rb[:]`` when ``end`` is ``None``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            end (int, optional): Number of leading storage entries to read.</span>
+<span class="sd">                Defaults to the entire storage slice.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A storage slice containing entries ``[:end]``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="p">[:]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="p">[:</span><span class="n">end</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ReplayBuffer.write_all">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.write_all">[docs]</a>
+    <span class="nd">@_maybe_delay_init</span>
+    <span class="k">def</span> <span class="nf">write_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write data back to storage in physical order.</span>
+
+<span class="sd">        This is equivalent to ``rb[:end] = data``. If ``end`` is ``None``,</span>
+<span class="sd">        ``end`` defaults to ``data.shape[0]`` for tensor collections and</span>
+<span class="sd">        ``len(data)`` otherwise. If ``data`` spans the full storage, this is</span>
+<span class="sd">        equivalent to ``rb[:] = data``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            data: Data to write to storage.</span>
+<span class="sd">            end (int, optional): Number of leading storage entries to update.</span>
+<span class="sd">                Defaults to ``data.shape[0]`` for tensor collections and</span>
+<span class="sd">                ``len(data)`` otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">end</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">max_size</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_storage</span><span class="p">,</span> <span class="s2">&quot;max_size&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">max_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="n">max_size</span><span class="p">:</span>
+                <span class="bp">self</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">data</span>
+                <span class="k">return</span>
+            <span class="n">end</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="p">[:</span><span class="n">end</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span></div>
+
 
 <div class="viewcode-block" id="ReplayBuffer.set_at_">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.set_at_">[docs]</a>

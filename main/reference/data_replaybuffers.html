@@ -302,6 +302,26 @@ Storages in contiguous memory include <a class="reference internal" href="genera
 Indexing and sampling collect data at given indices in the storage and then process them
 through a series of transforms and <code class="docutils literal notranslate"><span class="pre">collate_fn</span></code> that can be passed to the <cite>__init__</cite>
 function of the replay buffer.</p>
+<p>The full physical storage can be read with <code class="docutils literal notranslate"><span class="pre">rb[:]</span></code>. This is useful when all
+stored items must be processed in storage order, for example to recompute value
+targets after collection. <a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.read_all_in_order" title="torchrl.data.ReplayBuffer.read_all_in_order"><code class="xref py py-meth docutils literal notranslate"><span class="pre">read_all_in_order()</span></code></a>
+is an explicit equivalent to <code class="docutils literal notranslate"><span class="pre">rb[:]</span></code>, and
+<a class="reference internal" href="generated/torchrl.data.ReplayBuffer.html#torchrl.data.ReplayBuffer.write_all" title="torchrl.data.ReplayBuffer.write_all"><code class="xref py py-meth docutils literal notranslate"><span class="pre">write_all()</span></code></a> is an explicit equivalent to
+<code class="docutils literal notranslate"><span class="pre">rb[:]</span> <span class="pre">=</span> <span class="pre">data</span></code>. Passing <code class="docutils literal notranslate"><span class="pre">end=...</span></code> to these helpers updates only the leading
+storage entries.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span><span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;obs&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">)},</span> <span class="p">[</span><span class="mi">3</span><span class="p">]))</span>
+<span class="go">tensor([0, 1, 2])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">read_all_in_order</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="n">rb</span><span class="p">[:])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;obs&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">write_all</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="k">assert</span> <span class="p">(</span><span class="n">rb</span><span class="p">[:]</span> <span class="o">==</span> <span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+</div>
 </section>
 </section>
 </section>

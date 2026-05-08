@@ -604,6 +604,7 @@
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trajs_per_write</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">auto_register_policy_transforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -612,6 +613,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_write</span> <span class="o">=</span> <span class="n">trajs_per_write</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span> <span class="o">=</span> <span class="n">auto_register_policy_transforms</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">pre_collect_hook</span><span class="o">=</span><span class="n">pre_collect_hook</span><span class="p">,</span>
@@ -1308,6 +1310,28 @@
                     <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
                         <span class="k">continue</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">zero</span><span class="p">())</span>
+            <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_policy_to_check</span><span class="p">,</span> <span class="s2">&quot;out_keys&quot;</span><span class="p">,</span> <span class="p">())</span>
+            <span class="n">missing_out_keys</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out_keys</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="n">missing_out_keys</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+                    <span class="n">policy_input</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">:</span>
+                        <span class="n">policy_input</span> <span class="o">=</span> <span class="n">policy_input</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_device</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compiled_policy</span><span class="p">:</span>
+                        <span class="n">cudagraph_mark_step_begin</span><span class="p">()</span>
+                    <span class="n">policy_output</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_wrapped_policy</span><span class="p">(</span><span class="n">policy_input</span><span class="p">)</span>
+                <span class="n">policy_output_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">policy_output</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+                <span class="n">missing_out_keys</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">missing_out_keys</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">policy_output_keys</span>
+                <span class="p">]</span>
+                <span class="k">if</span> <span class="n">missing_out_keys</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_policy_output_keys</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">missing_out_keys</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                            <span class="n">policy_output</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">missing_out_keys</span><span class="p">)</span>
+                        <span class="p">)</span>
         <span class="k">elif</span> <span class="p">(</span>
             <span class="ow">not</span> <span class="n">make_rollout</span>
             <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span>

@@ -531,6 +531,14 @@
 <span class="sd">                collector.start()  # workers fill rb with complete trajectories</span>
 
 <span class="sd">            Defaults to ``None`` (fixed-frame batches).</span>
+<span class="sd">        trajs_per_write (int, optional): When ``trajs_per_batch`` is used with</span>
+<span class="sd">            a replay buffer, write this many completed trajectories to the</span>
+<span class="sd">            buffer per ``extend`` call. Larger values reduce Python overhead</span>
+<span class="sd">            for highly batched environments. For example, if 10 complete</span>
+<span class="sd">            trajectories are queued for replay-buffer insertion,</span>
+<span class="sd">            ``trajs_per_write=2`` makes 5 writes, while</span>
+<span class="sd">            ``trajs_per_write=10`` or larger makes 1 write. Defaults to</span>
+<span class="sd">            ``None`` (write all currently queued completed trajectories).</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">_task</span> <span class="o">=</span> <span class="kc">None</span>
@@ -547,6 +555,7 @@
     <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="n">_profile_config</span><span class="p">:</span> <span class="n">ProfileConfig</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">trajs_per_write</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">_post_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -1601,9 +1610,18 @@
                     <span class="c1"># pad-then-unpad round-trip and works with any storage</span>
                     <span class="c1"># ndim (variable-length trajectories cannot fill a</span>
                     <span class="c1"># fixed second dimension reliably).</span>
+                    <span class="n">trajs_per_write</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;trajs_per_write&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">trajs_per_write</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">trajs_per_write</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">complete_trajs</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">trajs_per_write</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">trajs_per_write</span><span class="p">),</span> <span class="mi">1</span><span class="p">)</span>
                     <span class="k">while</span> <span class="n">complete_trajs</span><span class="p">:</span>
-                        <span class="n">traj</span> <span class="o">=</span> <span class="n">complete_trajs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-                        <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">traj</span><span class="p">)</span>
+                        <span class="n">trajs</span> <span class="o">=</span> <span class="n">complete_trajs</span><span class="p">[:</span><span class="n">trajs_per_write</span><span class="p">]</span>
+                        <span class="k">del</span> <span class="n">complete_trajs</span><span class="p">[:</span><span class="n">trajs_per_write</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">trajs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">trajs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">trajs</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
                     <span class="k">yield</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">complete_trajs</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span><span class="p">:</span>

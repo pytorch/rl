@@ -645,6 +645,7 @@
         <span class="n">track_policy_version</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">trajs_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trajs_per_write</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">init_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">auto_register_policy_transforms</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">pre_collect_hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -653,6 +654,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">closed</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">worker_idx</span> <span class="o">=</span> <span class="n">worker_idx</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_batch</span> <span class="o">=</span> <span class="n">trajs_per_batch</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_write</span> <span class="o">=</span> <span class="n">trajs_per_write</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span> <span class="o">=</span> <span class="n">auto_register_policy_transforms</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
             <span class="n">pre_collect_hook</span><span class="o">=</span><span class="n">pre_collect_hook</span><span class="p">,</span>
@@ -707,7 +709,6 @@
         <span class="c1"># Set up replay buffer</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="o">=</span> <span class="n">use_buffers</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span> <span class="o">=</span> <span class="n">replay_buffer</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_replay_buffer</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="n">extend_buffer</span><span class="p">)</span>
 
         <span class="c1"># Set up policy and weights</span>
         <span class="k">if</span> <span class="n">trust_policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -723,39 +724,21 @@
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
                 <span class="s2">&quot;Cannot specify both weight_sync_schemes and weight_updater.&quot;</span>
             <span class="p">)</span>
-        <span class="c1"># Check if policy_factory entries are all the same (replicated from single factory)</span>
-        <span class="c1"># vs different factories per worker.</span>
-        <span class="n">has_uniform_policy_factory</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span>
-            <span class="n">f</span> <span class="ow">is</span> <span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">policy_factory</span>
-        <span class="p">)</span>
-        <span class="n">has_distinct_policy_factory</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_uniform_policy_factory</span>
-        <span class="p">)</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">weight_sync_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">weight_sync_schemes</span>
             <span class="ow">and</span> <span class="n">weight_updater</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
         <span class="p">):</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
-            <span class="k">elif</span> <span class="n">has_uniform_policy_factory</span><span class="p">:</span>
-                <span class="n">_probe</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_probe</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                    <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
-                <span class="k">del</span> <span class="n">_probe</span>
-            <span class="k">elif</span> <span class="n">has_distinct_policy_factory</span><span class="p">:</span>
-                <span class="n">_probe</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">f</span><span class="p">()</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">policy_factory</span> <span class="k">if</span> <span class="n">f</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">_probe</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-                    <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">(</span>
-                        <span class="n">per_worker_weights</span><span class="o">=</span><span class="kc">True</span>
-                    <span class="p">)</span>
-                <span class="k">del</span> <span class="n">_probe</span>
+            <span class="n">weight_sync_schemes</span><span class="p">[</span><span class="s2">&quot;policy&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_weight_sync</span><span class="p">(</span><span class="n">weight_updater</span><span class="p">,</span> <span class="n">weight_sync_schemes</span><span class="p">)</span>
 
         <span class="c1"># Store policy and policy_factory - temporary set to make them visible to the receiver</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="o">=</span> <span class="n">policy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span> <span class="o">=</span> <span class="n">policy_factory</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_multi_replay_buffer</span><span class="p">(</span><span class="n">replay_buffer</span><span class="p">,</span> <span class="n">extend_buffer</span><span class="p">)</span>
 
         <span class="c1"># Set up weight receivers if provided</span>
         <span class="k">if</span> <span class="n">weight_recv_schemes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1215,6 +1198,10 @@
         <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">is_init</span><span class="p">:</span>
             <span class="n">storage</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">_storage</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_should_init_replay_buffer_from_worker</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_enable_replay_buffer_worker_init</span><span class="p">(</span><span class="n">storage</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">share</span><span class="p">()</span>
+                <span class="k">return</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;shared_init&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
                 <span class="c1"># New behavior: storage handles all coordination itself</span>
                 <span class="c1"># Nothing to do here - the storage will coordinate during first write</span>
@@ -1230,6 +1217,7 @@
                 <span class="n">fake_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_env_fn</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span>
                     <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">create_env_kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
                 <span class="p">)</span><span class="o">.</span><span class="n">fake_tensordict</span><span class="p">()</span>
+            <span class="n">fake_td</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_policy_outputs_to_fake_td</span><span class="p">(</span><span class="n">fake_td</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_worker_trajs_per_batch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="c1"># With trajs_per_batch, workers write flat 1-D timesteps to</span>
                 <span class="c1"># the buffer.  Initialise the storage as 1-D so that the</span>
@@ -1246,6 +1234,43 @@
                 <span class="c1"># Use extend to avoid time-related transforms to fail</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">fake_td</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">replay_buffer</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_should_init_replay_buffer_from_worker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">storage</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">local_init_rb</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">policy_factory</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;shared_init&quot;</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;_make_init_directory&quot;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_enable_replay_buffer_worker_init</span><span class="p">(</span><span class="n">storage</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;_compilable&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Cannot initialize a compilable replay-buffer storage from &quot;</span>
+                <span class="s2">&quot;multi-collector workers.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">storage</span><span class="p">,</span> <span class="s2">&quot;shared_init&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="n">storage</span><span class="o">.</span><span class="n">shared_init</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">storage</span><span class="o">.</span><span class="n">_init_lock</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+        <span class="n">storage</span><span class="o">.</span><span class="n">_init_event</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="n">storage</span><span class="o">.</span><span class="n">_make_init_directory</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_add_policy_outputs_to_fake_td</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fake_td</span><span class="p">):</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;policy&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="s2">&quot;out_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">out_keys</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">fake_td</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">policy_output</span> <span class="o">=</span> <span class="n">policy</span><span class="p">(</span><span class="n">fake_td</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+        <span class="n">policy_output_keys</span> <span class="o">=</span> <span class="n">policy_output</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">fake_td</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span> <span class="ow">or</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">policy_output_keys</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">fake_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">policy_output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">fake_td</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span> <span class="nf">_total_workers_from_env</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env_creators</span><span class="p">):</span>
@@ -1525,6 +1550,7 @@
                     <span class="s2">&quot;worker_idx&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span>  <span class="c1"># Worker index for queue-based weight distribution</span>
                     <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>
                     <span class="s2">&quot;trajs_per_batch&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_trajs_per_batch</span><span class="p">,</span>
+                    <span class="s2">&quot;trajs_per_write&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">trajs_per_write</span><span class="p">,</span>
                     <span class="s2">&quot;init_fn&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_init_fn</span><span class="p">,</span>
                     <span class="s2">&quot;auto_register_policy_transforms&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_auto_register_policy_transforms</span><span class="p">,</span>
                     <span class="s2">&quot;pre_collect_hook&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_worker_pre_collect_hook</span><span class="p">,</span>

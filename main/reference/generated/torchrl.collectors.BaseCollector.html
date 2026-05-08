@@ -257,7 +257,8 @@
 <dd><p>Base class for data collectors.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>trajs_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>When set, the collector yields batches
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>trajs_per_batch</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>When set, the collector yields batches
 of exactly this many complete, zero-padded trajectories instead of
 fixed-frame batches. Each yielded <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="(in tensordict v0.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDict</span></code></a>
 has shape <code class="docutils literal notranslate"><span class="pre">(trajs_per_batch,</span> <span class="pre">max_traj_len)</span></code> and includes a
@@ -322,7 +323,16 @@ iteration pattern (<code class="docutils literal notranslate"><span class="pre">
 </pre></div>
 </div>
 <p>Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code> (fixed-frame batches).</p>
-</p>
+</p></li>
+<li><p><strong>trajs_per_write</strong> (<em>int</em><em>, </em><em>optional</em>) – When <code class="docutils literal notranslate"><span class="pre">trajs_per_batch</span></code> is used with
+a replay buffer, write this many completed trajectories to the
+buffer per <code class="docutils literal notranslate"><span class="pre">extend</span></code> call. Larger values reduce Python overhead
+for highly batched environments. For example, if 10 complete
+trajectories are queued for replay-buffer insertion,
+<code class="docutils literal notranslate"><span class="pre">trajs_per_write=2</span></code> makes 5 writes, while
+<code class="docutils literal notranslate"><span class="pre">trajs_per_write=10</span></code> or larger makes 1 write. Defaults to
+<code class="docutils literal notranslate"><span class="pre">None</span></code> (write all currently queued completed trajectories).</p></li>
+</ul>
 </dd>
 </dl>
 <dl class="py method">

@@ -373,13 +373,11 @@
 <span class="sd">      Requires *env* to be a callable and *policy_factory* to be provided.</span>
 
 <span class="sd">    **Backpressure / overlap policy**: calling :meth:`trigger_eval` while a</span>
-<span class="sd">    previous evaluation is still running either raises immediately</span>
-<span class="sd">    (``busy_policy=&quot;error&quot;``; default) or queues the new request</span>
-<span class="sd">    (``busy_policy=&quot;queue&quot;``). Use :attr:`pending` to conditionally skip</span>
-<span class="sd">    trigger calls::</span>
-
-<span class="sd">        if not evaluator.pending:</span>
-<span class="sd">            evaluator.trigger_eval(weights, step=step)</span>
+<span class="sd">    previous evaluation is still running skips the new request by default</span>
+<span class="sd">    (``busy_policy=&quot;skip&quot;``), raises immediately</span>
+<span class="sd">    (``busy_policy=&quot;error&quot;``), or queues the new request</span>
+<span class="sd">    (``busy_policy=&quot;queue&quot;``). :meth:`trigger_eval` returns ``True`` when a</span>
+<span class="sd">    request was accepted and ``False`` when it was skipped.</span>
 
 <span class="sd">    **Callback thread-safety**: when ``on_result`` is provided, it is</span>
 <span class="sd">    invoked from the evaluator&#39;s async coordination thread after the</span>
@@ -452,10 +450,10 @@
 <span class="sd">            with the same prefixed metric names returned by</span>
 <span class="sd">            :meth:`evaluate`, :meth:`poll`, and :meth:`wait`.</span>
 <span class="sd">        busy_policy (str): Behaviour when :meth:`trigger_eval` is called</span>
-<span class="sd">            while another async evaluation is still pending. ``&quot;error&quot;``</span>
-<span class="sd">            raises immediately (default; recommended). ``&quot;queue&quot;`` enqueues</span>
-<span class="sd">            the new request and runs it when the current evaluation</span>
-<span class="sd">            finishes.</span>
+<span class="sd">            while another async evaluation is still pending. ``&quot;skip&quot;``</span>
+<span class="sd">            returns ``False`` without scheduling a new request (default).</span>
+<span class="sd">            ``&quot;error&quot;`` raises immediately. ``&quot;queue&quot;`` enqueues the new</span>
+<span class="sd">            request and runs it when the current evaluation finishes.</span>
 
 <span class="sd">            .. warning::</span>
 <span class="sd">                With ``busy_policy=&quot;queue&quot;``, each queued request stores a</span>
@@ -518,7 +516,7 @@
         <span class="n">metrics_fn</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dump_video</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">on_result</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">busy_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span>
+        <span class="n">busy_policy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;skip&quot;</span><span class="p">,</span>
         <span class="c1"># Backend selection</span>
         <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;thread&quot;</span><span class="p">,</span>
         <span class="c1"># Ray-specific</span>
@@ -534,9 +532,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_on_result</span> <span class="o">=</span> <span class="n">on_result</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_step_counter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dump_video</span> <span class="o">=</span> <span class="n">dump_video</span>
-        <span class="k">if</span> <span class="n">busy_policy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;queue&quot;</span><span class="p">}:</span>
+        <span class="k">if</span> <span class="n">busy_policy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;skip&quot;</span><span class="p">,</span> <span class="s2">&quot;error&quot;</span><span class="p">,</span> <span class="s2">&quot;queue&quot;</span><span class="p">}:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Unknown busy_policy </span><span class="si">{</span><span class="n">busy_policy</span><span class="si">!r}</span><span class="s2">. Choose &#39;error&#39; or &#39;queue&#39;.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Unknown busy_policy </span><span class="si">{</span><span class="n">busy_policy</span><span class="si">!r}</span><span class="s2">. Choose &#39;skip&#39;, &#39;error&#39; &quot;</span>
+                <span class="s2">&quot;or &#39;queue&#39;.&quot;</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">=</span> <span class="n">busy_policy</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
@@ -662,27 +661,34 @@
         <span class="n">step</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">weights_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Start an async evaluation.</span>
 
 <span class="sd">        Args:</span>
 <span class="sd">            weights: Policy weights to load.  See :meth:`evaluate`.</span>
 <span class="sd">            step: Logging step.  See :meth:`evaluate`.</span>
 <span class="sd">            weights_dict: Multi-model weights dict.  See :meth:`evaluate`.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ``True`` if an evaluation request was scheduled, ``False`` if it</span>
+<span class="sd">            was skipped because another request was pending and</span>
+<span class="sd">            ``busy_policy=&quot;skip&quot;``.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">prepared</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_weights_dict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">weights_dict</span><span class="p">)</span>
         <span class="n">step</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_step</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_lock</span><span class="p">:</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span> <span class="ow">and</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span>
-            <span class="p">):</span>
+            <span class="n">busy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">pending</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">==</span> <span class="s2">&quot;error&quot;</span> <span class="ow">and</span> <span class="n">busy</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                     <span class="s2">&quot;Evaluation already pending. Wait for completion or set &quot;</span>
-                    <span class="s2">&quot;busy_policy=&#39;queue&#39;.&quot;</span>
+                    <span class="s2">&quot;busy_policy=&#39;skip&#39; or busy_policy=&#39;queue&#39;.&quot;</span>
                 <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_busy_policy</span> <span class="o">==</span> <span class="s2">&quot;skip&quot;</span> <span class="ow">and</span> <span class="n">busy</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">False</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_async_requests</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">prepared</span><span class="p">,</span> <span class="n">step</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_async_trigger</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_async_thread</span><span class="p">()</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensure_async_thread</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
 
 
 <div class="viewcode-block" id="Evaluator.poll">
@@ -1349,7 +1355,16 @@
                 <span class="k">continue</span>
 
             <span class="n">weights_dict</span><span class="p">,</span> <span class="n">step</span> <span class="o">=</span> <span class="n">request</span>
-            <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_eval</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_eval</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shutdown_flag</span> <span class="ow">and</span> <span class="s2">&quot;Queue&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">)</span> <span class="ow">and</span> <span class="s2">&quot;closed&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">err</span><span class="p">):</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                        <span class="s2">&quot;Suppressing expected evaluator shutdown queue error&quot;</span><span class="p">,</span>
+                        <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">break</span>
+                <span class="k">raise</span>
             <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;_step&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span>
             <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_result</span> <span class="o">=</span> <span class="n">metrics</span>

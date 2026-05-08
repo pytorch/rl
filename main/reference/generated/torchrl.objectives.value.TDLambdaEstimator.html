@@ -302,6 +302,9 @@ Negative dimensions are considered with respect to the input
 tensordict.</p></li>
 <li><p><strong>deactivate_vmap</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to deactivate vmap calls and replace them with a plain for loop.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>value_chunk_size</strong> (<em>int</em><em>, </em><em>optional</em>) – if set, splits value-network calls
+into chunks of this many elements along the leading dimension.
+Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 </dl>

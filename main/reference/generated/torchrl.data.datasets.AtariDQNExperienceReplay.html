@@ -951,6 +951,22 @@ transformed. This is useful to debug the transform at first.</p></li>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.read_all_in_order">
+<span class="sig-name descname"><span class="pre">read_all_in_order</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">end</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.read_all_in_order" title="Link to this definition">¶</a></dt>
+<dd><p>Read storage contents in physical order.</p>
+<p>This is equivalent to <code class="docutils literal notranslate"><span class="pre">rb[:]</span></code> when <code class="docutils literal notranslate"><span class="pre">end</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>end</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of leading storage entries to read.
+Defaults to the entire storage slice.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A storage slice containing entries <code class="docutils literal notranslate"><span class="pre">[:end]</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.register_load_hook">
 <span class="sig-name descname"><span class="pre">register_load_hook</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hook</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.register_load_hook" title="Link to this definition">¶</a></dt>
 <dd><p>Registers a load hook for the storage.</p>
@@ -1103,6 +1119,26 @@ these keys will be updated.</p></li>
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.write_all">
+<span class="sig-name descname"><span class="pre">write_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">end</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.write_all" title="Link to this definition">¶</a></dt>
+<dd><p>Write data back to storage in physical order.</p>
+<p>This is equivalent to <code class="docutils literal notranslate"><span class="pre">rb[:end]</span> <span class="pre">=</span> <span class="pre">data</span></code>. If <code class="docutils literal notranslate"><span class="pre">end</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>,
+<code class="docutils literal notranslate"><span class="pre">end</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">data.shape[0]</span></code> for tensor collections and
+<code class="docutils literal notranslate"><span class="pre">len(data)</span></code> otherwise. If <code class="docutils literal notranslate"><span class="pre">data</span></code> spans the full storage, this is
+equivalent to <code class="docutils literal notranslate"><span class="pre">rb[:]</span> <span class="pre">=</span> <span class="pre">data</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> – Data to write to storage.</p></li>
+<li><p><strong>end</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of leading storage entries to update.
+Defaults to <code class="docutils literal notranslate"><span class="pre">data.shape[0]</span></code> for tensor collections and
+<code class="docutils literal notranslate"><span class="pre">len(data)</span></code> otherwise.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="torchrl.data.datasets.AtariDQNExperienceReplay.write_count">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">write_count</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></em><a class="headerlink" href="#torchrl.data.datasets.AtariDQNExperienceReplay.write_count" title="Link to this definition">¶</a></dt>
@@ -1176,6 +1212,7 @@ these keys will be updated.</p></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.loads"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.loads()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.next"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.next()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.preprocess"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.preprocess()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.read_all_in_order"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.read_all_in_order()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.register_load_hook"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.register_load_hook()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.register_save_hook"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.register_save_hook()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.sample"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.sample()</span></code></a></li>
@@ -1189,6 +1226,7 @@ these keys will be updated.</p></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.storage"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.storage</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.transform"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.transform</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.update_"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.update_()</span></code></a></li>
+<li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.write_all"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.write_all()</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.write_count"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.write_count</span></code></a></li>
 <li><a class="reference internal" href="#torchrl.data.datasets.AtariDQNExperienceReplay.writer"><code class="docutils literal notranslate"><span class="pre">AtariDQNExperienceReplay.writer</span></code></a></li>
 </ul>

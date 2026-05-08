@@ -263,6 +263,39 @@
 <span class="p">)</span>
 
 
+<span class="k">def</span> <span class="nf">_log_prob_key_from_sample_key</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NestedKey</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="o">*</span><span class="n">key</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">_log_prob&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">_log_prob&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_ensure_derived_policy_output_keys</span><span class="p">(</span><span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Restore derived policy-output metadata after policy serialization.</span>
+
+<span class="sd">    Collectors already discover declared policy-produced keys, including</span>
+<span class="sd">    arbitrary non-action metadata, with the initial policy dry-run. Some</span>
+<span class="sd">    modules derive additional output-key metadata at construction time. If</span>
+<span class="sd">    serialization drops that metadata, the first dry-run cannot see those</span>
+<span class="sd">    outputs, so restore the known derived keys before collection starts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="n">modules</span> <span class="o">=</span> <span class="n">policy</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="n">policy</span><span class="p">,)</span>
+    <span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">modules</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;return_log_prob&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">log_prob_keys</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">log_prob_keys</span>
+        <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">log_prob_keys</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">out_keys</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="s2">&quot;out_keys&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">out_keys</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">module</span><span class="o">.</span><span class="n">log_prob_keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">_log_prob_key_from_sample_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">out_keys</span><span class="p">]</span>
+
+
 <span class="k">def</span> <span class="nf">_stack_output</span><span class="p">(</span><span class="n">fun</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">:</span>
     <span class="k">def</span> <span class="nf">stacked_output_fun</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">out</span> <span class="o">=</span> <span class="n">fun</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
@@ -677,10 +710,16 @@
             <span class="s2">&quot;split_trajs=False (the default).&quot;</span>
         <span class="p">)</span>
 
-    <span class="n">unique_ids</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">tid_tensor</span> <span class="ow">in</span> <span class="n">unique_ids</span><span class="p">:</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">traj_ids</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">stable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">flat</span> <span class="o">=</span> <span class="n">flat</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
+    <span class="n">traj_ids</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="n">order</span><span class="p">]</span>
+    <span class="n">unique_ids</span><span class="p">,</span> <span class="n">counts</span> <span class="o">=</span> <span class="n">traj_ids</span><span class="o">.</span><span class="n">unique_consecutive</span><span class="p">(</span><span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">tid_tensor</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">unique_ids</span><span class="p">,</span> <span class="n">counts</span><span class="p">):</span>
         <span class="n">tid</span> <span class="o">=</span> <span class="n">tid_tensor</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-        <span class="n">chunk</span> <span class="o">=</span> <span class="n">flat</span><span class="p">[</span><span class="n">traj_ids</span> <span class="o">==</span> <span class="n">tid_tensor</span><span class="p">]</span>
+        <span class="n">stop</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="n">count</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="n">chunk</span> <span class="o">=</span> <span class="n">flat</span><span class="p">[</span><span class="n">start</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">stop</span>
 
         <span class="k">if</span> <span class="n">tid</span> <span class="ow">in</span> <span class="n">partial_trajs</span><span class="p">:</span>
             <span class="n">partial_trajs</span><span class="p">[</span><span class="n">tid</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
@@ -736,6 +775,7 @@
         <span class="p">)</span>
         <span class="c1"># Synchronize initial weights</span>
         <span class="n">weight_sync_scheme</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">)</span>
+    <span class="n">_ensure_derived_policy_output_keys</span><span class="p">(</span><span class="n">policy</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">policy</span>
 </pre></div>
 

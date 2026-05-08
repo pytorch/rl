@@ -263,6 +263,39 @@
     <span class="n">queue</span><span class="o">.</span><span class="n">join_thread</span><span class="p">()</span>
 
 
+<span class="k">def</span> <span class="nf">_tensor_summary</span><span class="p">(</span><span class="n">weights</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="n">devices</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">numel</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">nbytes</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">weights</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">is_tensor</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">devices</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+        <span class="n">numel</span> <span class="o">+=</span> <span class="n">value</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="n">nbytes</span> <span class="o">+=</span> <span class="n">value</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="o">*</span> <span class="n">value</span><span class="o">.</span><span class="n">element_size</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">devices</span><span class="p">,</span> <span class="n">numel</span><span class="p">,</span> <span class="n">nbytes</span>
+
+
+<span class="k">def</span> <span class="nf">_log_weight_sync</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">worker_idx</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">source</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="n">destination</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">source_devices</span><span class="p">,</span> <span class="n">numel</span><span class="p">,</span> <span class="n">nbytes</span> <span class="o">=</span> <span class="n">_tensor_summary</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+    <span class="n">destination_devices</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_tensor_summary</span><span class="p">(</span><span class="n">destination</span><span class="p">)</span>
+    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+        <span class="s2">&quot;Synced weights model_id=</span><span class="si">%s</span><span class="s2"> worker=</span><span class="si">%s</span><span class="s2"> params=</span><span class="si">%s</span><span class="s2"> bytes=</span><span class="si">%s</span><span class="s2"> devices=</span><span class="si">%s</span><span class="s2"> -&gt; </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">model_id</span><span class="p">,</span>
+        <span class="n">worker_idx</span><span class="p">,</span>
+        <span class="n">numel</span><span class="p">,</span>
+        <span class="n">nbytes</span><span class="p">,</span>
+        <span class="nb">sorted</span><span class="p">(</span><span class="n">source_devices</span><span class="p">),</span>
+        <span class="nb">sorted</span><span class="p">(</span><span class="n">destination_devices</span><span class="p">),</span>
+    <span class="p">)</span>
+
+
 <div class="viewcode-block" id="SharedMemTransport">
 <a class="viewcode-back" href="../../../reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport">[docs]</a>
 <span class="k">class</span> <span class="nc">SharedMemTransport</span><span class="p">:</span>
@@ -464,6 +497,12 @@
                         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
                             <span class="s2">&quot;Gradients should not be required for weights.&quot;</span>
                         <span class="p">)</span>
+                    <span class="n">_log_weight_sync</span><span class="p">(</span>
+                        <span class="n">model_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                        <span class="n">worker_idx</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                        <span class="n">source</span><span class="o">=</span><span class="n">weights_to_update</span><span class="p">,</span>
+                        <span class="n">destination</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span>
+                    <span class="p">)</span>
                     <span class="n">buffer</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_to_update</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
@@ -497,6 +536,12 @@
         <span class="k">if</span> <span class="n">weights_to_update</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Gradients should not be required for weights.&quot;</span><span class="p">)</span>
 
+        <span class="n">_log_weight_sync</span><span class="p">(</span>
+            <span class="n">model_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">worker_idx</span><span class="o">=</span><span class="n">worker_idx</span><span class="p">,</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">weights_to_update</span><span class="p">,</span>
+            <span class="n">destination</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">buffer</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">weights_to_update</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <div class="viewcode-block" id="SharedMemTransport.receive_weights">
@@ -1088,6 +1133,12 @@
         <span class="c1"># buffers (one per device). We must update ALL of them, not just the first.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shared_transport</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">:</span>
             <span class="k">for</span> <span class="n">shared_weights</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">:</span>
+                <span class="n">_log_weight_sync</span><span class="p">(</span>
+                    <span class="n">model_id</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+                    <span class="n">worker_idx</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                    <span class="n">source</span><span class="o">=</span><span class="n">fresh_weights</span><span class="p">,</span>
+                    <span class="n">destination</span><span class="o">=</span><span class="n">shared_weights</span><span class="p">,</span>
+                <span class="p">)</span>
                 <span class="n">shared_weights</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">update_</span><span class="p">(</span><span class="n">fresh_weights</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">shared_transport</span><span class="o">.</span><span class="n">unique_weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 

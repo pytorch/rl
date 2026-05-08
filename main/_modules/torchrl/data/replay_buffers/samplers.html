@@ -951,7 +951,10 @@
     <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">get_spawning_popen</span><span class="p">()</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Samplers of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> cannot be shared between processes.&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Samplers of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> cannot be shared between processes. &quot;</span>
+                <span class="s2">&quot;Use TensorDictPrioritizedReplayBuffer(sync=False) instead: &quot;</span>
+                <span class="s2">&quot;the writer process gets a uniform sampler and the learner &quot;</span>
+                <span class="s2">&quot;keeps a local prioritized sampler.&quot;</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__getstate__</span><span class="p">()</span>
 
