@@ -466,10 +466,16 @@ def _traj_ingest(
             "split_trajs=False (the default)."
         )
 
-    unique_ids = traj_ids.unique()
-    for tid_tensor in unique_ids:
+    order = torch.argsort(traj_ids.reshape(-1), stable=True)
+    flat = flat[order]
+    traj_ids = traj_ids.reshape(-1)[order]
+    unique_ids, counts = traj_ids.unique_consecutive(return_counts=True)
+    start = 0
+    for tid_tensor, count in zip(unique_ids, counts):
         tid = tid_tensor.item()
-        chunk = flat[traj_ids == tid_tensor]
+        stop = start + count.item()
+        chunk = flat[start:stop]
+        start = stop
 
         if tid in partial_trajs:
             partial_trajs[tid].append(chunk)

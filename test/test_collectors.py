@@ -6040,6 +6040,18 @@ class TestTrajsPerBatch:
         assert len(complete) == 2
         assert complete[0].shape[0] == 5  # traj 0: 5 steps
 
+    def test_ingest_interleaved_ids_preserves_step_order(self):
+        batch = self._make_batch(
+            traj_ids=[0, 1, 0, 1],
+            done_flags=[False, False, True, True],
+            obs_start=0,
+        )
+        partial, complete = {}, []
+        _traj_ingest(batch, partial, complete)
+        assert len(complete) == 2
+        assert complete[0]["obs"].tolist() == [0.0, 2.0]
+        assert complete[1]["obs"].tolist() == [1.0, 3.0]
+
     def test_ingest_partial_not_promoted(self):
         """Incomplete trajectories stay in partial_trajs."""
         batch = self._make_batch([0, 0, 1, 1], [False, True, False, False])
@@ -6283,6 +6295,38 @@ class TestTrajsPerBatchReplayBuffer:
         sample = rb.sample(num_trajs)
         assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
         assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_write_batches_replay_buffer_extends(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        extend_sizes = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_sizes.append(td.shape[0])
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+            trajs_per_write=2,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert any(size >= 2 * max_steps for size in extend_sizes)
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_batch_replay_buffer_start_async(self):

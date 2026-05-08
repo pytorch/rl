@@ -65,6 +65,7 @@ def _main_async_collector(
     worker_idx: int | None = None,
     init_random_frames: int | None = None,
     trajs_per_batch: int | None = None,
+    trajs_per_write: int = 1,
     init_fn: Callable[[], None] | None = None,
     auto_register_policy_transforms: bool | None = None,
     pre_collect_hook: Callable[[], None] | None = None,
@@ -135,6 +136,7 @@ def _main_async_collector(
             # which checks replay_buffer.write_count when replay_buffer is provided
             init_random_frames=init_random_frames,
             trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
             auto_register_policy_transforms=auto_register_policy_transforms,
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
