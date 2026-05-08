@@ -535,17 +535,6 @@ class ReplayBuffer:
     def share(self, shared: bool = True) -> Self:
         self.shared = shared
         if self.shared:
-            storage = getattr(self, "_storage", self._init_storage)
-            if storage is not None and not callable(storage):
-                storage_device = getattr(storage, "device", None)
-                if storage_device is not None and storage_device != "auto":
-                    storage_device = torch.device(storage_device)
-                    if storage_device.type != "cpu":
-                        raise ValueError(
-                            "shared=True requires storage device='cpu'; got "
-                            f"device={storage_device}. Pass "
-                            "storage=LazyTensorStorage(..., device='cpu')."
-                        )
             self._write_lock = multiprocessing.Lock()
         else:
             self._write_lock = contextlib.nullcontext()
@@ -743,21 +732,27 @@ class ReplayBuffer:
     def read_all_in_order(self, end: int | None = None) -> Any:
         """Read storage contents in physical order.
 
+        This is equivalent to ``rb[:]`` when ``end`` is ``None``.
+
         Args:
             end (int, optional): Number of leading storage entries to read.
-                Defaults to ``len(self)``.
+                Defaults to the entire storage slice.
 
         Returns:
             A storage slice containing entries ``[:end]``.
         """
         if end is None:
-            end = len(self)
-        with self._replay_lock:
-            return self._storage[:end]
+            return self[:]
+        return self[:end]
 
     @_maybe_delay_init
     def write_all(self, data: Any, end: int | None = None) -> None:
         """Write data back to storage in physical order.
+
+        This is equivalent to ``rb[:end] = data``. If ``end`` is ``None``,
+        ``end`` defaults to ``data.shape[0]`` for tensor collections and
+        ``len(data)`` otherwise. If ``data`` spans the full storage, this is
+        equivalent to ``rb[:] = data``.
 
         Args:
             data: Data to write to storage.
@@ -766,9 +761,12 @@ class ReplayBuffer:
                 ``len(data)`` otherwise.
         """
         if end is None:
+            max_size = getattr(self._storage, "max_size", None)
+            if max_size is not None and len(self) == max_size:
+                self[:] = data
+                return
             end = data.shape[0] if is_tensor_collection(data) else len(data)
-        with self._replay_lock:
-            self._storage[:end] = data
+        self[:end] = data
 
     @_maybe_delay_init
     def set_at_(self, key, value, index):

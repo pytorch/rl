@@ -6187,6 +6187,25 @@ class TestTrajsPerBatch:
                 env.close(raise_if_closed=False)
 
 
+class _PolicyWithInfo(nn.Module):
+    def __init__(self, action_dim):
+        super().__init__()
+        self.action_dim = action_dim
+
+    def forward(self, obs):
+        action = obs.new_zeros(*obs.shape[:-1], self.action_dim)
+        policy_info = obs.sum(-1, keepdim=True)
+        return action, policy_info
+
+
+def _make_policy_with_info():
+    return TensorDictModule(
+        _PolicyWithInfo(7),
+        in_keys=["observation"],
+        out_keys=["action", "policy_info"],
+    )
+
+
 class TestTrajsPerBatchReplayBuffer:
     """Tests for trajs_per_batch + ReplayBuffer integration.
 
@@ -6253,6 +6272,20 @@ class TestTrajsPerBatchReplayBuffer:
         finally:
             probe.close(raise_if_closed=False)
         return env_fn, policy
+
+    @staticmethod
+    def _make_continuous_env_and_policy_with_info(max_steps=4):
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            ContinuousActionVecMockEnv(maxstep=max_steps), StepCounter(max_steps)
+        )
+        probe = env_fn()
+        try:
+            action_dim = probe.action_spec.shape[-1]
+            if action_dim != 7:
+                raise RuntimeError(f"Expected action_dim=7 but got {action_dim}.")
+        finally:
+            probe.close(raise_if_closed=False)
+        return env_fn, _make_policy_with_info
 
     @staticmethod
     def _make_batched_env_fn(max_steps=4, num_envs=2):
@@ -6351,6 +6384,37 @@ class TestTrajsPerBatchReplayBuffer:
             env.close(raise_if_closed=False)
 
         assert any(size >= 2 * max_steps for size in extend_sizes)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_write_defaults_to_all_queued_replay_buffer_extends(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        extend_sizes = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_sizes.append(td.shape[0])
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert any(size >= 3 * max_steps for size in extend_sizes)
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_batch_replay_buffer_start_async(self):
@@ -6807,6 +6871,33 @@ class TestTrajsPerBatchReplayBuffer:
         assert len(rb) > 0, "replay buffer must be non-empty"
         all_data = rb.storage[: len(rb)]
         assert "action_log_prob" in all_data.keys(True, True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_multi_async_policy_writes_extra_output_to_rb(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy_factory = self._make_continuous_env_and_policy_with_info(
+            max_steps
+        )
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn, env_fn],
+            policy_factory=policy_factory,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        all_data = rb.storage[: len(rb)]
+        assert "policy_info" in all_data.keys(True, True)
         self._assert_rb_trajectories_complete(rb)
 
     # ------------------------------------------------------------------
