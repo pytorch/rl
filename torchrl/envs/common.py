@@ -3866,7 +3866,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict_ = self._step_mdp(tensordict)
         # if self._post_step_mdp_hooks is not None:
         # tensordict_ = self._post_step_mdp_hooks(tensordict_)
-        if getattr(self, "_torchrl_native_autoreset", False):
+        if self.__dict__.get("_torchrl_native_autoreset", False):
             for done_key in self.done_keys:
                 init_key = _replace_last(done_key, "is_init")
                 if init_key in tensordict_.keys(True, True):
