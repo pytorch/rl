@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-05-08
+# Flaky Test Report - 2026-05-09
 
 ## Summary
 
-- **Flaky tests**: 120
-- **Newly flaky** (last 7 days): 120
+- **Flaky tests**: 130
+- **Newly flaky** (last 7 days): 130
 - **Resolved**: 0
-- **Total tests analyzed**: 27436
+- **Total tests analyzed**: 27451
 - **CI runs analyzed**: 15
 
 ---
@@ -14,26 +14,26 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...nforce_value_net[False-True-ValueEstimators.TD1-gae-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...force_value_net[False-True-ValueEstimators.TD1-gae-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...inforce_value_net[False-True-ValueEstimators.TD1-td-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...nforce_value_net[False-True-ValueEstimators.TD1-td-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `..._value_net[False-True-ValueEstimators.TD1-td_lambda-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...value_net[False-True-ValueEstimators.TD1-td_lambda-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...force_value_net[False-True-ValueEstimators.TD1-None-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...orce_value_net[False-True-ValueEstimators.TD1-None-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...nforce_value_net[False-True-ValueEstimators.TD0-gae-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...force_value_net[False-True-ValueEstimators.TD0-gae-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...inforce_value_net[False-True-ValueEstimators.TD0-td-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...nforce_value_net[False-True-ValueEstimators.TD0-td-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `..._value_net[False-True-ValueEstimators.TD0-td_lambda-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...value_net[False-True-ValueEstimators.TD0-td_lambda-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...force_value_net[False-True-ValueEstimators.TD0-None-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...orce_value_net[False-True-ValueEstimators.TD0-None-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...nforce_value_net[False-True-ValueEstimators.GAE-gae-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...force_value_net[False-True-ValueEstimators.GAE-gae-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...inforce_value_net[False-True-ValueEstimators.GAE-td-True]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
-| `...nforce_value_net[False-True-ValueEstimators.GAE-td-False]` 🆕 | 21.4% (30/140) | 30 | 0.43 | 2026-05-06 |
+| `...nforce_value_net[False-True-ValueEstimators.TD1-gae-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...force_value_net[False-True-ValueEstimators.TD1-gae-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...inforce_value_net[False-True-ValueEstimators.TD1-td-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...nforce_value_net[False-True-ValueEstimators.TD1-td-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `..._value_net[False-True-ValueEstimators.TD1-td_lambda-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...value_net[False-True-ValueEstimators.TD1-td_lambda-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...force_value_net[False-True-ValueEstimators.TD1-None-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...orce_value_net[False-True-ValueEstimators.TD1-None-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...nforce_value_net[False-True-ValueEstimators.TD0-gae-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...force_value_net[False-True-ValueEstimators.TD0-gae-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...inforce_value_net[False-True-ValueEstimators.TD0-td-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...nforce_value_net[False-True-ValueEstimators.TD0-td-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `..._value_net[False-True-ValueEstimators.TD0-td_lambda-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...value_net[False-True-ValueEstimators.TD0-td_lambda-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...force_value_net[False-True-ValueEstimators.TD0-None-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...orce_value_net[False-True-ValueEstimators.TD0-None-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...nforce_value_net[False-True-ValueEstimators.GAE-gae-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...force_value_net[False-True-ValueEstimators.GAE-gae-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...inforce_value_net[False-True-ValueEstimators.GAE-td-True]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
+| `...nforce_value_net[False-True-ValueEstimators.GAE-td-False]` 🆕 | 20.0% (30/150) | 30 | 0.40 | 2026-05-06 |
 
 
 ### Newly Flaky Tests
@@ -158,6 +158,16 @@
 - `test/objectives/test_ppo.py::TestReinforce::test_reinforce_value_net[True-True-None-td_lambda-False]`
 - `test/objectives/test_ppo.py::TestReinforce::test_reinforce_value_net[True-True-None-None-True]`
 - `test/objectives/test_ppo.py::TestReinforce::test_reinforce_value_net[True-True-None-None-False]`
+- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-False-MultiSyncCollector]`
+- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-False-MultiAsyncCollector]`
+- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-True-MultiSyncCollector]`
+- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-True-MultiAsyncCollector]`
+- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-MultiSyncCollector]`
+- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-MultiAsyncCollector]`
+- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiSyncCollector]`
+- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiAsyncCollector]`
+- `test/test_collectors.py::TestMakePolicyFactory::test_per_worker_weight_sync_with_distinct_factories`
+- `test/test_collectors.py::TestMakePolicyFactory::test_per_worker_weight_sync_multiple_workers_update`
 
 ---
 
@@ -170,4 +180,4 @@
 
 ---
 
-*Generated at 2026-05-08T06:45:11.457974+00:00*
+*Generated at 2026-05-09T06:50:46.026740+00:00*
