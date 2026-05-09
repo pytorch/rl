@@ -793,12 +793,35 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_frames_per_batch_corrected</span> <span class="o">=</span> <span class="n">frames_per_batch</span>
 
+        <span class="c1"># When the inner collector is a Multi*Collector built from a</span>
+        <span class="c1"># policy_factory (no policy instance), the inner collector&#39;s</span>
+        <span class="c1"># auto-scheme branch in MultiCollector only handles</span>
+        <span class="c1"># isinstance(policy, nn.Module); a remote update_policy_weights_(weights)</span>
+        <span class="c1"># would otherwise propagate to the remote node&#39;s main process but</span>
+        <span class="c1"># never reach its worker subprocesses. Inject a default</span>
+        <span class="c1"># SharedMemWeightSyncScheme on the inner collector so the broadcast</span>
+        <span class="c1"># actually lands. Only when the user hasn&#39;t already supplied one.</span>
+        <span class="n">needs_inner_shared_mem_scheme</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">policy_factory</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">collector_class</span> <span class="ow">in</span> <span class="p">(</span><span class="n">MultiSyncCollector</span><span class="p">,</span> <span class="n">MultiAsyncCollector</span><span class="p">)</span>
+        <span class="p">)</span>
+
         <span class="c1"># update collector kwargs</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">collector_kwarg</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collector_kwargs</span><span class="p">):</span>
             <span class="c1"># Don&#39;t pass policy_factory if we have a policy - remote collectors need the policy object</span>
             <span class="c1"># to be able to apply weight updates</span>
             <span class="k">if</span> <span class="n">policy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;policy_factory&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_factory</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">needs_inner_shared_mem_scheme</span>
+                <span class="ow">and</span> <span class="s2">&quot;weight_sync_schemes&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">collector_kwarg</span>
+            <span class="p">):</span>
+                <span class="kn">from</span> <span class="nn">torchrl.weight_update</span> <span class="kn">import</span> <span class="n">SharedMemWeightSyncScheme</span>
+
+                <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;weight_sync_schemes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">SharedMemWeightSyncScheme</span><span class="p">()</span>
+                <span class="p">}</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">max_frames_per_traj</span>
             <span class="n">collector_kwarg</span><span class="p">[</span><span class="s2">&quot;init_random_frames&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">init_random_frames</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_collectors</span>
