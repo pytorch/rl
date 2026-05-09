@@ -23,6 +23,9 @@ class IsaacLabWrapper(GymWrapper):
         native_autoreset (bool, optional): if ``True``, keeps Isaac Lab's native
             auto-reset observations in the collector hot path and avoids the
             synthetic reset call in :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`.
+            The terminal ``"next"`` observation remains unavailable and is
+            marked with ``NaN``; the native reset observation is cloned into
+            the next root observation.
             Defaults to ``False``.
 
     For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation.
