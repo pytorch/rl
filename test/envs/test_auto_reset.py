@@ -27,12 +27,7 @@ from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import (
-    InitTracker,
-    StepCounter,
-    TransformedEnv,
-    VecNormV2,
-)
+from torchrl.envs.transforms import InitTracker, StepCounter, TransformedEnv, VecNormV2
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
