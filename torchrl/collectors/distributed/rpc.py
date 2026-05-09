@@ -425,6 +425,20 @@ class RPCCollector(BaseCollector):
             else [copy(collector_kwargs) for _ in range(self.num_workers)]
         )
 
+        # When the inner collector is a Multi*Collector built from a
+        # policy_factory (no policy instance), the inner collector's
+        # auto-scheme branch in MultiCollector only handles
+        # isinstance(policy, nn.Module); a remote update_policy_weights_(weights)
+        # would otherwise reach the remote node's main process but never
+        # propagate down to its worker subprocesses. Inject a default
+        # SharedMemWeightSyncScheme on the inner collector so the broadcast
+        # actually lands. Only when the user hasn't already supplied one.
+        needs_inner_shared_mem_scheme = (
+            policy is None
+            and any(policy_factory)
+            and collector_class in (MultiSyncCollector, MultiAsyncCollector)
+        )
+
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
@@ -447,6 +461,15 @@ class RPCCollector(BaseCollector):
             collector_kwarg["policy_device"] = self.policy_device[i]
             if trajs_per_batch is not None:
                 collector_kwarg["trajs_per_batch"] = trajs_per_batch
+            if (
+                needs_inner_shared_mem_scheme
+                and "weight_sync_schemes" not in collector_kwarg
+            ):
+                from torchrl.weight_update import SharedMemWeightSyncScheme
+
+                collector_kwarg["weight_sync_schemes"] = {
+                    "policy": SharedMemWeightSyncScheme()
+                }
 
         self.postproc = postproc
         self.split_trajs = split_trajs

@@ -383,6 +383,9 @@ class TestMakePolicyFactory:
         collector = MultiSyncCollector(
             create_env_fn=[ContinuousActionVecMockEnv] * 3,
             policy_factory=policy_factories,
+            weight_sync_schemes={
+                "policy": SharedMemWeightSyncScheme(per_worker_weights=True)
+            },
             frames_per_batch=30,  # 10 per worker
             total_frames=90,  # 3 batches
             cat_results="stack",
@@ -457,6 +460,9 @@ class TestMakePolicyFactory:
         collector = MultiSyncCollector(
             create_env_fn=[ContinuousActionVecMockEnv] * 3,
             policy_factory=policy_factories,
+            weight_sync_schemes={
+                "policy": SharedMemWeightSyncScheme(per_worker_weights=True)
+            },
             frames_per_batch=30,
             total_frames=60,
             cat_results="stack",
