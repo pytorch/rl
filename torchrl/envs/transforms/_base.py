@@ -781,6 +781,11 @@ class Transform(nn.Module):
                 parent, _ = container._rebuild_up_to(self)
             elif isinstance(container, TransformedEnv):
                 parent = TransformedEnv(container.base_env, auto_unwrap=False)
+                native_autoreset = container.__dict__.get(
+                    "_torchrl_native_autoreset", False
+                )
+                if native_autoreset:
+                    parent._torchrl_native_autoreset = native_autoreset
             else:
                 raise ValueError(f"container is of type {type(container)}")
             self.__dict__["_parent"] = parent
@@ -934,6 +939,8 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         else:
             auto_unwrap = False
 
+        native_autoreset = base_env.__dict__.get("_torchrl_native_autoreset", False)
+
         if auto_unwrap:
             self._set_env(base_env.base_env, device)
             if type(transform) is not Compose:
@@ -965,6 +972,9 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             self._set_env(base_env, device)
             if transform is None:
                 transform = Compose()
+
+        if native_autoreset:
+            self._torchrl_native_autoreset = native_autoreset
 
         self.transform = transform
 
@@ -1813,6 +1823,11 @@ class Compose(Transform):
                 return None, None
         elif isinstance(container, TransformedEnv):
             out = TransformedEnv(container.base_env, auto_unwrap=False)
+            native_autoreset = container.__dict__.get(
+                "_torchrl_native_autoreset", False
+            )
+            if native_autoreset:
+                out._torchrl_native_autoreset = native_autoreset
         elif container is None:
             # returns None if there is no parent env
             return None, None
