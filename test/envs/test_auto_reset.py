@@ -84,6 +84,7 @@ class TestAutoReset:
             assert vecnorm.reset_calls == initial_reset_calls
 
         assert tensordict["next", "done"].all()
+        assert not tensordict_["done"].any()
         assert tensordict_["is_init"].all()
 
     def test_native_auto_reset_step_and_maybe_reset(self):
@@ -99,6 +100,7 @@ class TestAutoReset:
 
         assert tensordict["next", "done"].all()
         assert (tensordict["next", "observation"] == 0).all()
+        assert not tensordict_["done"].any()
         assert tensordict_["is_init"].all()
 
     def test_auto_reset(self):

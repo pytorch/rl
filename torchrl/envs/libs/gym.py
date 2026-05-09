@@ -951,9 +951,12 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             (e.g., with IsaacLab). This argument is passed to :class:`~torchrl.envs.VecGymEnvTransform` by
             the metaclass.
         native_autoreset (bool, optional): if ``True`` and the wrapped environment
-            is an Isaac Lab vectorized environment, keeps the native auto-reset
-            observation returned by the environment instead of reconstructing
-            TorchRL non-auto-reset semantics. Defaults to ``False``.
+            is an Isaac Lab vectorized environment, uses the native auto-reset
+            observation returned by the environment as the next root observation
+            instead of calling reset from
+            :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`. The terminal
+            ``"next"`` observation is still invalid and filled with ``NaN`` for
+            floating point observations. Defaults to ``False``.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.
