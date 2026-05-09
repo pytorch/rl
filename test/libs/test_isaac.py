@@ -89,7 +89,8 @@ def _force_isaaclab_next_step_done(env):
         raw_env, "max_episode_length"
     ):
         pytest.skip("Isaac Lab env does not expose episode length buffers.")
-    raw_env.episode_length_buf.fill_(raw_env.max_episode_length - 1)
+    raw_env.episode_length_buf.zero_()
+    raw_env.episode_length_buf.reshape(-1)[0] = raw_env.max_episode_length - 1
 
 
 def _isaaclab_rollout_keys(rollout):
@@ -128,7 +129,8 @@ def force_next_step_done(env):
     raw = raw_env(env)
     if not hasattr(raw, "episode_length_buf") or not hasattr(raw, "max_episode_length"):
         raise RuntimeError("Isaac Lab env does not expose episode length buffers.")
-    raw.episode_length_buf.fill_(raw.max_episode_length - 1)
+    raw.episode_length_buf.zero_()
+    raw.episode_length_buf.reshape(-1)[0] = raw.max_episode_length - 1
 
 
 def seeded_random_policy(env, seed):
@@ -216,13 +218,7 @@ def _isaaclab_native_rollout(seed: int, max_steps: int = 4):
 
 
 def _isaaclab_transition_keys(rollout):
-    keys = [
-        "action",
-        ("next", "done"),
-        ("next", "terminated"),
-        ("next", "truncated"),
-    ]
-    return [key for key in keys if key in rollout.keys(True, True)]
+    return _isaaclab_rollout_keys(rollout)
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
@@ -514,9 +510,13 @@ class TestIsaacLab:
             raw_env.episode_length_buf.fill_(raw_env.max_episode_length - 1)
 
             td = env.rand_action(td)
-            td, _ = env.step_and_maybe_reset(td)
+            td, td_ = env.step_and_maybe_reset(td)
 
             assert td["next", "done"].any()
+            done = td["next", "done"].squeeze(-1)
+            assert torch.isnan(td["next", obs_key][done]).all()
+            assert not td_["done"].any()
+            assert td_[obs_key][done].isfinite().all()
             assert vecnorm.step_calls == initial_step_calls + 1
             assert vecnorm.step_calls + vecnorm.reset_calls == initial_call_count + 1
         finally:
@@ -537,6 +537,10 @@ class TestIsaacLab:
         keys = _isaaclab_transition_keys(rollout_native)
 
         assert rollout_native["next", "done"].any()
+        done = rollout["next", "done"].squeeze(-1)
+        done_native = rollout_native["next", "done"].squeeze(-1)
+        assert torch.isnan(rollout["next", "policy"][done]).all()
+        assert torch.isnan(rollout_native["next", "policy"][done_native]).all()
         assert_allclose_td(
             rollout.select(*keys),
             rollout_native.select(*keys),
@@ -550,17 +554,12 @@ class TestIsaacLab:
         done = rollout["next", "done"].squeeze(-1)
 
         assert done.any()
-        torch.testing.assert_close(
-            rollout["done"][..., 1:, :],
-            rollout["next", "done"][..., :-1, :],
-        )
+        assert not rollout["done"].any()
         if done[..., :-1].any():
-            torch.testing.assert_close(
-                rollout["policy"][..., 1:, :][done[..., :-1]],
-                rollout["next", "policy"][..., :-1, :][done[..., :-1]],
-                rtol=1e-6,
-                atol=1e-6,
-            )
+            assert torch.isnan(
+                rollout["next", "policy"][..., :-1, :][done[..., :-1]]
+            ).all()
+            assert rollout["policy"][..., 1:, :][done[..., :-1]].isfinite().all()
 
     def test_isaaclab_lstm(self, env):
         """Test that LSTM/RNN works with pre-vectorized IsaacLab environments (Issue #1493).
