@@ -21,7 +21,7 @@ from torchrl.collectors.distributed import RayCollector
 from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import InitTracker, StepCounter, TransformedEnv
+from torchrl.envs import InitTracker, StepCounter, TransformedEnv, VecNormV2
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import LSTMModule, MLP
 from torchrl.testing import get_default_devices
@@ -55,6 +55,21 @@ _isaac_env_maker_cuda1 = partial(
 # it can be used directly as a ``policy_factory``.
 _isaac_policy_maker = make_isaac_policy
 _isaac_policy_maker_cuda1 = partial(make_isaac_policy, device=torch.device("cuda:1"))
+
+
+class CountingVecNormV2(VecNormV2):
+    def __init__(self, *args, **kwargs):
+        self.step_calls = 0
+        self.reset_calls = 0
+        super().__init__(*args, **kwargs)
+
+    def _step(self, tensordict, next_tensordict):
+        self.step_calls += 1
+        return super()._step(tensordict, next_tensordict)
+
+    def _reset(self, tensordict, tensordict_reset):
+        self.reset_calls += 1
+        return super()._reset(tensordict, tensordict_reset)
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
@@ -320,6 +335,38 @@ class TestIsaacLab:
 
         # Check that done obs are None
         assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
+
+    def test_isaaclab_native_autoreset_vecnorm_step_and_maybe_reset(self):
+        env = make_isaac_env(native_autoreset=True)
+        try:
+            obs_keys = list(env.full_observation_spec.keys(True, True))
+            obs_key = "policy" if "policy" in obs_keys else obs_keys[0]
+            vecnorm = CountingVecNormV2(
+                in_keys=[obs_key],
+                reduce_batch_dims=True,
+            )
+            env = TransformedEnv(env, vecnorm)
+            td = env.reset()
+            initial_call_count = vecnorm.step_calls + vecnorm.reset_calls
+
+            isaac_env = env
+            while isinstance(isaac_env, TransformedEnv):
+                isaac_env = isaac_env.base_env
+            raw_env = isaac_env._env.unwrapped
+            if not hasattr(raw_env, "episode_length_buf") or not hasattr(
+                raw_env, "max_episode_length"
+            ):
+                pytest.skip("Isaac Lab env does not expose episode length buffers.")
+            raw_env.episode_length_buf.fill_(raw_env.max_episode_length - 1)
+
+            td = env.rand_action(td)
+            td, _ = env.step_and_maybe_reset(td)
+
+            assert td["next", "done"].any()
+            assert vecnorm.step_calls == 1
+            assert vecnorm.step_calls + vecnorm.reset_calls == initial_call_count + 1
+        finally:
+            env.close()
 
     def test_isaaclab_lstm(self, env):
         """Test that LSTM/RNN works with pre-vectorized IsaacLab environments (Issue #1493).
