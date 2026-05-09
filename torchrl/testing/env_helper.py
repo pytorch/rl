@@ -30,6 +30,7 @@ def make_isaac_env(
     *,
     device=None,
     init_app: bool = True,
+    native_autoreset: bool = False,
 ):
     """Helper function to create an IsaacLab env.
 
@@ -42,6 +43,8 @@ def make_isaac_env(
             started in headless mode before the env is created.  Set to
             ``False`` when the caller has already initialised ``AppLauncher``
             (e.g. via an ``init_fn`` in a child process).
+        native_autoreset: if ``True``, keep Isaac Lab's native autoreset
+            observations in TorchRL's step-and-reset path.
     """
     if init_app:
         _isaac_app_launcher_init()
@@ -59,7 +62,7 @@ def make_isaac_env(
     torchrl_logger.info("Making IsaacLab env...")
     env = gym.make(env_name, cfg=AntEnvCfg())
     torchrl_logger.info("Wrapping IsaacLab env...")
-    env = IsaacLabWrapper(env, device=device)
+    env = IsaacLabWrapper(env, device=device, native_autoreset=native_autoreset)
     return env
 
 

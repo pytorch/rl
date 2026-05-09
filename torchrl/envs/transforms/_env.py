@@ -1431,7 +1431,7 @@ class InitTracker(Transform):
         return self.parent._filtered_reset_keys
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        native_autoreset = getattr(self.parent, "_torchrl_native_autoreset", False)
+        native_autoreset = self.parent.__dict__.get("_torchrl_native_autoreset", False)
         for init_key in self.init_keys:
             done_key = _replace_last(init_key, "done")
             if init_key not in next_tensordict.keys(True, True):
