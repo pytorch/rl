@@ -69,7 +69,6 @@ class IsaacLabWrapper(GymWrapper):
             categorical_action_encoding=categorical_action_encoding,
             allow_done_after_reset=allow_done_after_reset,
             convert_actions_to_numpy=convert_actions_to_numpy,
-            native_autoreset=native_autoreset,
             **kwargs,
         )
 
