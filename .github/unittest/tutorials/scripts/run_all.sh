@@ -59,14 +59,51 @@ export MAX_IDLE_COUNT=1000
 export DISPLAY=:99
 export BATCHED_PIPE_TIMEOUT=60
 export TOKENIZERS_PARALLELISM=true
+export UV_LINK_MODE=copy
+
+# ============================================================================================ #
+# ================================ PyTorch =================================================== #
+
+if [[ ${#CU_VERSION} -eq 4 ]]; then
+    CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
+elif [[ ${#CU_VERSION} -eq 5 ]]; then
+    CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
+fi
+echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
+
+# submodules
+git submodule sync && git submodule update --init --recursive
+
+printf "Installing PyTorch with %s\n" "${CU_VERSION}"
+if [[ "$TORCH_VERSION" == "nightly" ]]; then
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      uv pip install --no-progress --upgrade --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/cpu
+  else
+      uv pip install --no-progress --upgrade --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
+  fi
+elif [[ "$TORCH_VERSION" == "stable" ]]; then
+  if [ "${CU_VERSION:-}" == cpu ] ; then
+      uv pip install --no-progress --upgrade torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/cpu
+  else
+      uv pip install --no-progress --upgrade torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/$CU_VERSION
+  fi
+else
+  printf "Failed to install pytorch"
+  exit 1
+fi
+
+# smoke test
+python -c "import functorch"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 
 # ==================================================================================== #
 # ================================ Install dependencies ============================== #
 
 printf "* Installing dependencies\n"
 
-# Install base dependencies
-uv pip install \
+# Install base dependencies after PyTorch so dependencies such as vmas do not
+# pull a stable torch wheel before the requested nightly/stable build.
+uv pip install --no-progress \
   hypothesis \
   future \
   cloudpickle \
@@ -100,49 +137,17 @@ uv pip install \
   onnxruntime
 
 # ============================================================================================ #
-# ================================ PyTorch & TorchRL ========================================= #
-
-if [[ ${#CU_VERSION} -eq 4 ]]; then
-    CUDA_VERSION="${CU_VERSION:2:1}.${CU_VERSION:3:1}"
-elif [[ ${#CU_VERSION} -eq 5 ]]; then
-    CUDA_VERSION="${CU_VERSION:2:2}.${CU_VERSION:4:1}"
-fi
-echo "Using CUDA $CUDA_VERSION as determined by CU_VERSION ($CU_VERSION)"
-
-# submodules
-git submodule sync && git submodule update --init --recursive
-
-printf "Installing PyTorch with %s\n" "${CU_VERSION}"
-if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install --upgrade --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/cpu
-  else
-      uv pip install --upgrade --pre torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/nightly/$CU_VERSION
-  fi
-elif [[ "$TORCH_VERSION" == "stable" ]]; then
-  if [ "${CU_VERSION:-}" == cpu ] ; then
-      uv pip install --upgrade torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/cpu
-  else
-      uv pip install --upgrade torch torchvision "numpy==1.26.4" --index-url https://download.pytorch.org/whl/$CU_VERSION
-  fi
-else
-  printf "Failed to install pytorch"
-  exit 1
-fi
-
-# smoke test
-python -c "import functorch"
-bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+# ================================ TorchRL =================================================== #
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
-  uv pip install --no-deps git+https://github.com/pytorch/tensordict.git
+  uv pip install --no-progress --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  uv pip install --no-deps tensordict
+  uv pip install --no-progress --no-deps tensordict
 fi
 
 printf "* Installing torchrl\n"
-uv pip install -e . --no-build-isolation --no-deps
+uv pip install --no-progress -e . --no-build-isolation --no-deps
 
 # ==================================================================================== #
 # ================================ Run tests ========================================= #
