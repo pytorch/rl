@@ -12,6 +12,8 @@ import pytest
 import torch
 
 import torchrl.modules
+
+from packaging import version
 from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from tensordict.utils import assert_close
@@ -66,6 +68,8 @@ from torchrl.modules.utils.utils import _compute_missing_env_transforms
 from torchrl.objectives import DDPGLoss
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 _has_functorch = False
 try:
@@ -1115,6 +1119,10 @@ class TestLSTMModule:
     @pytest.mark.skipif(
         sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
     )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
     def test_lstm_scan_prototype(self):
         # Opt-in prototype: torch._higher_order_ops.scan-based time loop.
         # Must be exercised under torch.compile -- scan is unusable in eager.
@@ -1152,6 +1160,10 @@ class TestLSTMModule:
         torch.testing.assert_close(cn_ref, cn_s)
 
     @pytest.mark.parametrize("python_based", [False, True])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
     def test_lstm_module_scan_backend_matches_pad(self, python_based, monkeypatch):
         torch.manual_seed(0)
         B, T, F, H, L = 4, 7, 3, 5, 2
@@ -1696,6 +1708,10 @@ class TestGRUModule:
     @pytest.mark.skipif(
         sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
     )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
     def test_gru_scan_prototype(self):
         # Opt-in prototype: see TestLSTMModule.test_lstm_scan_prototype.
         from torchrl.modules.tensordict_module.rnn import GRU
@@ -1730,6 +1746,10 @@ class TestGRUModule:
         torch.testing.assert_close(hn_ref, hn_s)
 
     @pytest.mark.parametrize("python_based", [False, True])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
     def test_gru_module_scan_backend_matches_pad(self, python_based, monkeypatch):
         torch.manual_seed(0)
         B, T, F, H, L = 4, 7, 3, 5, 2

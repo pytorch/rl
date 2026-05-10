@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
 import typing
 from typing import Any
 
@@ -14,11 +15,41 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
 from torch import nn, Tensor
-from torch._higher_order_ops import scan
 from torch.nn.modules.rnn import RNNCellBase
 
-from torchrl._utils import _ContextManager, _DecoratorContextManager, is_compiling
+from torchrl._utils import (
+    _ContextManager,
+    _DecoratorContextManager,
+    implement_for,
+    is_compiling,
+)
 from torchrl.data.tensor_specs import Unbounded
+
+_has_torch_scan = importlib.util.find_spec("torch._higher_order_ops.scan") is not None
+_torch_scan = None
+
+
+@implement_for("torch", None, "2.6.0")
+def _scan(*args: Any, **kwargs: Any) -> Any:
+    raise NotImplementedError(
+        "torch._higher_order_ops.scan is required for the scan recurrent backend "
+        "and is available in PyTorch >= 2.6.0."
+    )
+
+
+@implement_for("torch", "2.6.0")
+def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
+    global _torch_scan
+    if _torch_scan is None:
+        if not _has_torch_scan:
+            raise NotImplementedError(
+                "torch._higher_order_ops.scan is required for the scan recurrent "
+                "backend but is not available in this PyTorch build."
+            )
+        from torch._higher_order_ops import scan as torch_scan
+
+        _torch_scan = torch_scan
+    return _torch_scan(*args, **kwargs)
 
 
 def _place_at_traj_end(
@@ -387,7 +418,7 @@ class LSTM(LSTMBase):
             return (new_h, new_c), x_t.clone()
 
         h0, c0 = hx
-        (h_final, c_final), outputs = scan(step, (h0, c0), (x, mask), dim=0)
+        (h_final, c_final), outputs = _scan(step, (h0, c0), (x, mask), dim=0)
         if self.batch_first:
             outputs = outputs.transpose(0, 1)
         return outputs, (h_final, c_final)
@@ -1043,7 +1074,7 @@ class LSTMModule(ModuleBase):
             hidden1_out = new_c.transpose(0, 1).flatten(1).clone()
             return (new_h, new_c), (x_t.clone(), hidden0_out, hidden1_out)
 
-        _, (outputs, hidden0_steps, hidden1_steps) = scan(
+        _, (outputs, hidden0_steps, hidden1_steps) = _scan(
             step,
             initial_hidden,
             (input, is_init, reset_hidden0, reset_hidden1),
@@ -1389,7 +1420,7 @@ class GRU(GRUBase):
             new_h = torch.stack(new_h, 0).clone()
             return new_h, x_t.clone()
 
-        h_final, outputs = scan(step, hx, (x, mask), dim=0)
+        h_final, outputs = _scan(step, hx, (x, mask), dim=0)
         if self.batch_first:
             outputs = outputs.transpose(0, 1)
         return outputs, h_final
@@ -2010,7 +2041,7 @@ class GRUModule(ModuleBase):
             hidden_out = new_h.transpose(0, 1).flatten(1).clone()
             return new_h, (x_t.clone(), hidden_out)
 
-        _, (outputs, hidden_steps) = scan(
+        _, (outputs, hidden_steps) = _scan(
             step, initial_hidden, (input, is_init, reset_hidden), dim=0
         )
         outputs = outputs.transpose(0, 1)
