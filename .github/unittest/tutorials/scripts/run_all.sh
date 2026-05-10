@@ -21,6 +21,8 @@ apt-get install -y vim git wget cmake curl
 apt-get install -y libglfw3 libosmesa6 libglew-dev libosmesa6-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2
 apt-get install -y g++ gcc patchelf
+apt-get install -y ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+apt-get install -y libavdevice-dev libavfilter-dev libswresample-dev pkg-config
 
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 # from cudagl docker image
@@ -95,6 +97,23 @@ fi
 # smoke test
 python -c "import functorch"
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+
+# ============================================================================================ #
+# ================================ TorchCodec ================================================ #
+
+printf "* Installing torchcodec\n"
+if [[ "$RELEASE" == 0 ]]; then
+  uv pip install --no-progress setuptools ninja packaging "pybind11[global]"
+  torchcodec_dir="$(mktemp -d)"
+  git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
+  python_base="$(python -c 'import sys; print(sys.base_prefix)')"
+  CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
+    I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
+    uv pip install --no-progress --no-build-isolation "$torchcodec_dir"
+  rm -rf "$torchcodec_dir"
+else
+  uv pip install --no-progress "torchcodec>=0.10.0"
+fi
 
 # ==================================================================================== #
 # ================================ Install dependencies ============================== #
