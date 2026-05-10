@@ -15,10 +15,15 @@
 from __future__ import annotations
 
 from .builtin import FileReadTool, PythonTool, ShellTool, StopTool, StopSignal
+from .http import HttpTool
 from .legacy_adapter import as_tool
+from .mcp import MCPServerConfig, MCPToolset
 
 __all__ = [
     "FileReadTool",
+    "HttpTool",
+    "MCPServerConfig",
+    "MCPToolset",
     "PythonTool",
     "ShellTool",
     "StopSignal",

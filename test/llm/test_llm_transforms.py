@@ -1563,3 +1563,58 @@ class TestLegacyAdapter:
         # The last appended message should be the tool result containing
         # the legacy output.
         assert "legacy got" in prompt[0][-1].content
+
+
+# ----- MCP and HTTP tools -----
+
+from torchrl.envs.llm.agentic.tools import HttpTool  # noqa: E402
+from torchrl.envs.llm.agentic.tools.mcp import (  # noqa: E402
+    MCPServerConfig,
+    _has_mcp,
+)
+
+
+class TestMCPToolset:
+    def test_construction_requires_mcp_package(self):
+        if not _has_mcp:
+            with pytest.raises(ImportError):
+                from torchrl.envs.llm.agentic.tools import MCPToolset
+
+                MCPToolset(MCPServerConfig(command="true"))
+        else:
+            # When the package is installed we can at least construct
+            # without opening a session.
+            from torchrl.envs.llm.agentic.tools import MCPToolset
+
+            pool = MCPToolset(MCPServerConfig(command="true"))
+            assert pool.tools == ()
+
+    def test_server_config(self):
+        cfg = MCPServerConfig(
+            command="npx", args=("@browsermcp/mcp@latest",)
+        )
+        assert cfg.command == "npx"
+        assert cfg.args == ("@browsermcp/mcp@latest",)
+
+
+class TestHttpTool:
+    def test_blocks_disallowed_host(self):
+        async def go():
+            tool = HttpTool(allowed_hosts=("api.example.com",))
+            await tool.setup()
+            res = await tool.run(
+                {"url": "https://other-host.example/foo"},
+                ToolContext(call_id="c"),
+            )
+            assert res.is_error
+            assert "allowed_hosts" in res.text
+            await tool.teardown()
+
+        _run(go())
+
+    def test_protocol_conformance(self):
+        tool = HttpTool()
+        # Sanity: it walks like a Tool.
+        assert tool.name == "http"
+        assert callable(tool.run)
+        assert "url" in tool.input_schema["properties"]
