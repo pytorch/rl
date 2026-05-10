@@ -132,6 +132,7 @@ fi
 
 # smoke test
 python -c "import functorch"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
 
 # install tensordict
 if [[ "$RELEASE" == 0 ]]; then
