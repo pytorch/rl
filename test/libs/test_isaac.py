@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import itertools
 import os
-import subprocess
-import sys
-import tempfile
+import queue as queue_lib
 import time
+import traceback
 from functools import partial
 
 import pytest
@@ -109,108 +110,94 @@ def _isaaclab_rollout_keys(rollout):
     return [key for key in keys if key in rollout.keys(True, True)]
 
 
-def _isaaclab_rollout(seed: int, *, native_autoreset: bool, max_steps: int = 4):
-    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as file:
-        output_path = file.name
-    code = f"""
-import itertools
-import torch
-from torchrl.envs import TransformedEnv
-from torchrl.testing.env_helper import make_isaac_env
-
-
-def raw_env(env):
-    while isinstance(env, TransformedEnv):
-        env = env.base_env
-    return env._env.unwrapped
-
-
-def force_next_step_done(env):
-    raw = raw_env(env)
-    if not hasattr(raw, "episode_length_buf") or not hasattr(raw, "max_episode_length"):
-        raise RuntimeError("Isaac Lab env does not expose episode length buffers.")
-    raw.episode_length_buf.zero_()
-    raw.episode_length_buf.reshape(-1)[0] = raw.max_episode_length - 1
-
-
-def seeded_random_policy(env, seed):
+def _isaaclab_rollout_in_process(
+    seed: int, *, native_autoreset: bool, max_steps: int = 4
+):
     counter = itertools.count()
 
-    def policy(tensordict):
+    def seeded_random_policy(tensordict):
         torch.manual_seed(seed + next(counter))
         return env.full_action_spec.rand_update(tensordict)
 
-    return policy
+    os.environ["ACCEPT_EULA"] = "Y"
+    os.environ["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    os.environ["PRIVACY_CONSENT"] = "Y"
+    env = make_isaac_env(native_autoreset=native_autoreset)
+    try:
+        env.set_seed(seed, static_seed=True)
+        torch.manual_seed(seed)
+        tensordict = env.reset()
+        _force_isaaclab_next_step_done(env)
+        rollout = env.rollout(
+            max_steps,
+            policy=seeded_random_policy,
+            auto_reset=False,
+            tensordict=tensordict,
+            break_when_any_done=False,
+            return_contiguous=True,
+        )
+        return rollout.select(*_isaaclab_rollout_keys(rollout)).cpu()
+    finally:
+        env.close()
 
 
-def rollout_keys(rollout):
-    keys = [
-        "action",
-        "policy",
-        "done",
-        "terminated",
-        "truncated",
-        ("next", "policy"),
-        ("next", "reward"),
-        ("next", "done"),
-        ("next", "terminated"),
-        ("next", "truncated"),
-    ]
-    return [key for key in keys if key in rollout.keys(True, True)]
+def _isaaclab_rollout_worker(queue, seed: int, native_autoreset: bool, max_steps: int):
+    try:
+        buffer = io.BytesIO()
+        torch.save(
+            _isaaclab_rollout_in_process(
+                seed, native_autoreset=native_autoreset, max_steps=max_steps
+            ),
+            buffer,
+        )
+        queue.put(
+            (
+                "succeeded",
+                buffer.getvalue(),
+            )
+        )
+    except BaseException:
+        queue.put(("failed", traceback.format_exc()))
+        raise
 
 
-env = make_isaac_env(native_autoreset={native_autoreset!r})
-try:
-    env.set_seed({seed!r})
-    torch.manual_seed({seed!r})
-    tensordict = env.reset()
-    force_next_step_done(env)
-    rollout = env.rollout(
-        {max_steps!r},
-        policy=seeded_random_policy(env, {seed!r}),
-        auto_reset=False,
-        tensordict=tensordict,
-        break_when_any_done=False,
-        return_contiguous=True,
-    )
-    torch.save(rollout.select(*rollout_keys(rollout)).cpu(), {output_path!r})
-finally:
-    env.close()
-"""
-    env = os.environ.copy()
-    env.update(
-        {
-            "ACCEPT_EULA": "Y",
-            "OMNI_KIT_ACCEPT_EULA": "YES",
-            "PRIVACY_CONSENT": "Y",
-        }
+def _isaaclab_rollout(seed: int, *, native_autoreset: bool, max_steps: int = 4):
+    queue = mp.Queue(1)
+    proc = mp.Process(
+        target=_isaaclab_rollout_worker,
+        args=(queue, seed, native_autoreset, max_steps),
     )
     try:
-        result = subprocess.run(
-            [sys.executable, "-c", code],
-            check=False,
-            cwd=os.getcwd(),
-            env=env,
-            text=True,
-            capture_output=True,
-            timeout=300,
-        )
-        if result.returncode:
-            pytest.fail(
-                "Isaac Lab rollout subprocess failed with "
-                f"returncode={result.returncode}\n"
-                f"stdout:\n{result.stdout[-4000:]}\n"
-                f"stderr:\n{result.stderr[-4000:]}"
-            )
-        if not os.path.getsize(output_path):
-            pytest.fail(
-                "Isaac Lab rollout subprocess did not write a rollout file.\n"
-                f"stdout:\n{result.stdout[-4000:]}\n"
-                f"stderr:\n{result.stderr[-4000:]}"
-            )
-        return torch.load(output_path, weights_only=False)
+        proc.start()
+        deadline = time.monotonic() + 300
+        while True:
+            try:
+                status, result = queue.get(timeout=1)
+                break
+            except queue_lib.Empty:
+                if not proc.is_alive():
+                    proc.join()
+                    pytest.fail(
+                        f"Isaac Lab rollout worker exited with code {proc.exitcode} "
+                        "without returning a rollout."
+                    )
+                if time.monotonic() > deadline:
+                    proc.terminate()
+                    proc.join(timeout=30)
+                    pytest.fail("Isaac Lab rollout worker timed out.")
+        proc.join(timeout=30)
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=30)
+            pytest.fail("Isaac Lab rollout worker did not exit after returning.")
+        if status != "succeeded":
+            pytest.fail(f"Isaac Lab rollout worker failed:\n{result}")
+        if proc.exitcode:
+            pytest.fail(f"Isaac Lab rollout worker exited with code {proc.exitcode}.")
+        return torch.load(io.BytesIO(result), weights_only=False)
     finally:
-        os.unlink(output_path)
+        queue.close()
+        proc.join()
 
 
 def _isaaclab_native_rollout(seed: int, max_steps: int = 4):
