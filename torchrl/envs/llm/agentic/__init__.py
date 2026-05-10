@@ -27,6 +27,7 @@ See ``docs/source/reference/llms_envs.rst`` and
 # - formal deprecation of legacy tool transforms once the new API soaks
 from __future__ import annotations
 
+from .compose import DispatchResult, ToolCompose
 from .protocols import (
     FileRefPart,
     ImagePart,
@@ -41,21 +42,39 @@ from .protocols import (
     ToolResultPart,
     TextPart,
 )
+from .rate_limit import RateLimiter
 from .schema import json_schema_from_pydantic, validate_args
+from .tools import (
+    FileReadTool,
+    PythonTool,
+    ShellTool,
+    StopSignal,
+    StopTool,
+    as_tool,
+)
 
 __all__ = [
+    "DispatchResult",
+    "FileReadTool",
     "FileRefPart",
     "ImagePart",
     "JsonPart",
     "ParseResult",
     "ParsedCall",
+    "PythonTool",
+    "RateLimiter",
+    "ShellTool",
+    "StopSignal",
+    "StopTool",
     "TextPart",
     "Tool",
     "ToolCallParser",
+    "ToolCompose",
     "ToolContext",
     "ToolError",
     "ToolResult",
     "ToolResultPart",
+    "as_tool",
     "json_schema_from_pydantic",
     "validate_args",
 ]
