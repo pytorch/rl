@@ -16,7 +16,7 @@ apt-get install -y --no-install-recommends tzdata
 dpkg-reconfigure -f noninteractive tzdata || true
 
 apt-get upgrade -y
-apt-get install -y vim git wget cmake curl
+apt-get install -y vim git wget cmake curl python3-dev python3.12-dev
 
 apt-get install -y libglfw3 libosmesa6 libglew-dev libosmesa6-dev
 apt-get install -y libglvnd0 libgl1 libglx0 libglx-mesa0 libegl1 libgles2
