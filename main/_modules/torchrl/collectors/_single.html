@@ -412,6 +412,11 @@
 <span class="sd">            See :func:`~torchrl.collectors.utils.split_trajectories` for more</span>
 <span class="sd">            information.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        track_traj_ids (bool, optional): if ``False``, the collector will not</span>
+<span class="sd">            write ``(&quot;collector&quot;, &quot;traj_ids&quot;)`` in the rollout nor update</span>
+<span class="sd">            trajectory identifiers at every environment step. This is useful</span>
+<span class="sd">            when trajectory splitting or trajectory-aware replay sampling is not</span>
+<span class="sd">            needed. Defaults to ``True``.</span>
 <span class="sd">        exploration_type (ExplorationType, optional): interaction mode to be used when</span>
 <span class="sd">            collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,</span>
 <span class="sd">            ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``</span>
@@ -584,6 +589,7 @@
         <span class="n">reset_at_each_iter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">split_trajs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">track_traj_ids</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">exploration_type</span><span class="p">:</span> <span class="n">ExplorationType</span> <span class="o">=</span> <span class="n">DEFAULT_EXPLORATION_TYPE</span><span class="p">,</span>
         <span class="n">return_same_td</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">reset_when_done</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -708,15 +714,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">return_same_td</span> <span class="o">=</span> <span class="n">return_same_td</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">set_truncated</span> <span class="o">=</span> <span class="n">set_truncated</span>
 
-        <span class="c1"># Create shuttle and rollout buffers</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_make_shuttle</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_final_rollout</span><span class="p">(</span><span class="n">make_rollout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_set_truncated_keys</span><span class="p">()</span>
-
         <span class="c1"># Set split trajectories option</span>
         <span class="k">if</span> <span class="n">split_trajs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">split_trajs</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">elif</span> <span class="n">split_trajs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">track_traj_ids</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;split_trajs=True requires track_traj_ids=True.&quot;</span><span class="p">)</span>
             <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
                 <span class="s2">&quot;split_trajs=True produces a (N_traj, T_max) zero-padded &quot;</span>
                 <span class="s2">&quot;tensordict with a &#39;mask&#39; key. For sequence training, prefer &quot;</span>
@@ -730,7 +733,13 @@
                 <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">split_trajs</span> <span class="o">=</span> <span class="n">split_trajs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span> <span class="o">=</span> <span class="n">track_traj_ids</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exclude_private_keys</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Create shuttle and rollout buffers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_make_shuttle</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maybe_make_final_rollout</span><span class="p">(</span><span class="n">make_rollout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_truncated_keys</span><span class="p">()</span>
 
         <span class="c1"># Set up interruptor and frame tracking</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span> <span class="o">=</span> <span class="n">interruptor</span>
@@ -1231,13 +1240,14 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle_has_no_device</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="n">traj_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_traj_pool</span><span class="o">.</span><span class="n">get_traj_and_increment</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
-            <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
-            <span class="n">traj_ids</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
+            <span class="n">traj_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_traj_pool</span><span class="o">.</span><span class="n">get_traj_and_increment</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">n_env</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+                <span class="n">traj_ids</span><span class="p">,</span>
+            <span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_maybe_make_final_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">make_rollout</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">make_rollout</span><span class="p">:</span>
@@ -1445,16 +1455,17 @@
                 <span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
             <span class="p">)</span>
 
-            <span class="c1"># in addition to outputs of the policy, we add traj_ids to</span>
-            <span class="c1"># _final_rollout which will be collected during rollout</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
-                <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
-                <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
-                    <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
-                    <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
-                    <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span>
-                <span class="p">),</span>
-            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
+                <span class="c1"># in addition to outputs of the policy, we add traj_ids to</span>
+                <span class="c1"># _final_rollout which will be collected during rollout</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+                    <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                        <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+                        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">storing_device</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">refine_names</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">)</span>
 
     <span class="k">def</span> <span class="nf">_set_truncated_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1857,7 +1868,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">())</span>
 
         <span class="c1"># self._shuttle.fill_((&quot;collector&quot;, &quot;step_count&quot;), 0)</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_use_buffers</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_final_rollout</span><span class="o">.</span><span class="n">fill_</span><span class="p">((</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">pass</span>
@@ -1965,13 +1976,15 @@
                     <span class="k">else</span><span class="p">:</span>
                         <span class="n">tensordicts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">)</span>
 
-                <span class="c1"># carry over collector data without messing up devices</span>
-                <span class="n">collector_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
+                    <span class="c1"># carry over collector data without messing up devices</span>
+                    <span class="n">collector_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span> <span class="o">=</span> <span class="n">env_next_output</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shuttle_has_no_device</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">clear_device_</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">env_output</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="n">collector_data</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_update_traj_ids</span><span class="p">(</span><span class="n">env_output</span><span class="p">)</span>
 
                 <span class="k">if</span> <span class="p">(</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">interruptor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -2064,8 +2077,8 @@
     <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
     <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Resets the environments to a new initial state.&quot;&quot;&quot;</span>
-        <span class="c1"># metadata</span>
-        <span class="n">collector_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
+            <span class="n">collector_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># check that the env supports partial reset</span>
             <span class="k">if</span> <span class="n">prod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -2085,10 +2098,11 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">zero_</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">env</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">collector_metadata</span><span class="p">[</span><span class="s2">&quot;traj_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">collector_metadata</span><span class="p">[</span><span class="s2">&quot;traj_ids&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">collector_metadata</span><span class="p">[</span><span class="s2">&quot;traj_ids&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">[</span><span class="s2">&quot;collector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">collector_metadata</span></div>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">track_traj_ids</span><span class="p">:</span>
+            <span class="n">collector_metadata</span><span class="p">[</span><span class="s2">&quot;traj_ids&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">collector_metadata</span><span class="p">[</span><span class="s2">&quot;traj_ids&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">collector_metadata</span><span class="p">[</span><span class="s2">&quot;traj_ids&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_carrier</span><span class="p">[</span><span class="s2">&quot;collector&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">collector_metadata</span></div>
 
 
 <div class="viewcode-block" id="Collector.shutdown">

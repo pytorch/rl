@@ -3979,6 +3979,29 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="n">next_tensordict</span><span class="p">)</span></div>
 
 
+    <span class="k">def</span> <span class="nf">_native_autoreset_set_invalid_next_observation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">next_tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="n">done</span> <span class="o">|</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="kc">False</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">done</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="k">return</span> <span class="p">{}</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">done</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">reset_observations</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">obs_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_observation_keys_step_mdp</span><span class="p">:</span>
+            <span class="n">obs</span> <span class="o">=</span> <span class="n">next_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">obs_key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">obs</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="n">reset_observations</span><span class="p">[</span><span class="n">obs_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">obs</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">obs</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">():</span>
+                <span class="n">obs</span><span class="p">[</span><span class="n">done</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nan</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">obs</span><span class="p">[</span><span class="n">done</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">reset_observations</span>
+
     <span class="nd">@property</span>
     <span class="nd">@_cache_value</span>
     <span class="k">def</span> <span class="nf">_step_mdp</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">]:</span>
@@ -4168,10 +4191,26 @@
         <span class="n">tensordict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="c1"># done and truncated are in done_keys</span>
         <span class="c1"># We read if any key is done.</span>
+        <span class="n">native_autoreset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_torchrl_native_autoreset&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">native_autoreset</span><span class="p">:</span>
+            <span class="n">reset_observations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native_autoreset_set_invalid_next_observation</span><span class="p">(</span>
+                <span class="n">tensordict</span>
+            <span class="p">)</span>
         <span class="n">tensordict_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_mdp</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
         <span class="c1"># if self._post_step_mdp_hooks is not None:</span>
         <span class="c1"># tensordict_ = self._post_step_mdp_hooks(tensordict_)</span>
-        <span class="n">tensordict_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maybe_reset</span><span class="p">(</span><span class="n">tensordict_</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">native_autoreset</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">obs_key</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">reset_observations</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">obs_key</span> <span class="ow">in</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                    <span class="n">tensordict_</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">obs_key</span><span class="p">,</span> <span class="n">obs</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
+                <span class="n">done</span> <span class="o">=</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">done_key</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">init_key</span> <span class="o">=</span> <span class="n">_replace_last</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="s2">&quot;is_init&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">init_key</span> <span class="ow">in</span> <span class="n">tensordict_</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+                    <span class="n">tensordict_</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">init_key</span><span class="p">,</span> <span class="n">done</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+                <span class="n">tensordict_</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">done_key</span><span class="p">,</span> <span class="n">done</span><span class="o">.</span><span class="n">zero_</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">tensordict_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maybe_reset</span><span class="p">(</span><span class="n">tensordict_</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">tensordict</span><span class="p">,</span> <span class="n">tensordict_</span></div>
 
 

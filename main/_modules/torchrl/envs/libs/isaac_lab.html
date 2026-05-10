@@ -263,6 +263,13 @@
 <span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
 <span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
 <span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        native_autoreset (bool, optional): if ``True``, keeps Isaac Lab&#39;s native</span>
+<span class="sd">            auto-reset observations in the collector hot path and avoids the</span>
+<span class="sd">            synthetic reset call in :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`.</span>
+<span class="sd">            The terminal ``&quot;next&quot;`` observation remains unavailable and is</span>
+<span class="sd">            marked with ``NaN``; the native reset observation is cloned into</span>
+<span class="sd">            the next root observation.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation.</span>
 
@@ -297,6 +304,7 @@
         <span class="n">allow_done_after_reset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">convert_actions_to_numpy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">native_autoreset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>

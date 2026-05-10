@@ -266,6 +266,13 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">False</
 <li><p><strong>allow_done_after_reset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, it is tolerated
 for envs to be <code class="docutils literal notranslate"><span class="pre">done</span></code> just after <a class="reference internal" href="torchrl.envs.ModelBasedEnvBase.html#torchrl.envs.reset" title="torchrl.envs.reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reset()</span></code></a> is called.
 Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>native_autoreset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, keeps Isaac Lab’s native
+auto-reset observations in the collector hot path and avoids the
+synthetic reset call in <a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.step_and_maybe_reset" title="torchrl.envs.EnvBase.step_and_maybe_reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step_and_maybe_reset()</span></code></a>.
+The terminal <code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> observation remains unavailable and is
+marked with <code class="docutils literal notranslate"><span class="pre">NaN</span></code>; the native reset observation is cloned into
+the next root observation.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 </dl>

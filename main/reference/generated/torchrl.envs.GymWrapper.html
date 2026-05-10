@@ -302,6 +302,13 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">True</s
 the environment is auto-resetting and missing observations cannot be found in the info dictionary
 (e.g., with IsaacLab). This argument is passed to <code class="xref py py-class docutils literal notranslate"><span class="pre">VecGymEnvTransform</span></code> by
 the metaclass.</p></li>
+<li><p><strong>native_autoreset</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code> and the wrapped environment
+is an Isaac Lab vectorized environment, uses the native auto-reset
+observation returned by the environment as the next root observation
+instead of calling reset from
+<a class="reference internal" href="torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.step_and_maybe_reset" title="torchrl.envs.EnvBase.step_and_maybe_reset"><code class="xref py py-meth docutils literal notranslate"><span class="pre">step_and_maybe_reset()</span></code></a>. The terminal
+<code class="docutils literal notranslate"><span class="pre">&quot;next&quot;</span></code> observation is still invalid and filled with <code class="docutils literal notranslate"><span class="pre">NaN</span></code> for
+floating point observations. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-odd">Variables<span class="colon">:</span></dt>

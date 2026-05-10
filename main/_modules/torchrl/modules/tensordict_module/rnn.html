@@ -245,6 +245,7 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">importlib.util</span>
 <span class="kn">import</span> <span class="nn">typing</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
@@ -257,8 +258,37 @@
 <span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span><span class="p">,</span> <span class="n">Tensor</span>
 <span class="kn">from</span> <span class="nn">torch.nn.modules.rnn</span> <span class="kn">import</span> <span class="n">RNNCellBase</span>
 
-<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">_ContextManager</span><span class="p">,</span> <span class="n">_DecoratorContextManager</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_ContextManager</span><span class="p">,</span>
+    <span class="n">_DecoratorContextManager</span><span class="p">,</span>
+    <span class="n">implement_for</span><span class="p">,</span>
+    <span class="n">is_compiling</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Unbounded</span>
+
+<span class="n">_has_torch_scan</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torch._higher_order_ops.scan&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="k">if</span> <span class="n">_has_torch_scan</span><span class="p">:</span>
+    <span class="kn">from</span> <span class="nn">torch._higher_order_ops</span> <span class="kn">import</span> <span class="n">scan</span> <span class="k">as</span> <span class="n">_torch_scan</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">_torch_scan</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.6.0&quot;</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_scan</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+        <span class="s2">&quot;torch._higher_order_ops.scan is required for the scan recurrent backend &quot;</span>
+        <span class="s2">&quot;and is available in PyTorch &gt;= 2.6.0.&quot;</span>
+    <span class="p">)</span>
+
+
+<span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="s2">&quot;2.6.0&quot;</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span> <span class="nf">_scan</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>  <span class="c1"># noqa: F811</span>
+    <span class="k">if</span> <span class="n">_torch_scan</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">&quot;torch._higher_order_ops.scan is required for the scan recurrent &quot;</span>
+            <span class="s2">&quot;backend but is not available in this PyTorch build.&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_torch_scan</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 
 
 <span class="k">def</span> <span class="nf">_place_at_traj_end</span><span class="p">(</span>
@@ -576,8 +606,6 @@
 <span class="sd">        opt-in via ``LSTM(..., use_scan=True)`` and replaces the python</span>
 <span class="sd">        ``for`` loop over time. Dropout is not supported here.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">torch._higher_order_ops</span> <span class="kn">import</span> <span class="n">scan</span>
-
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;LSTM(use_scan=True) does not support dropout yet.&quot;</span>
@@ -585,10 +613,10 @@
 
         <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">weights</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">:</span>
-            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
-            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="c1"># scan iterates along dim 0; permute to time-first if needed.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
@@ -629,7 +657,7 @@
             <span class="k">return</span> <span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="n">new_c</span><span class="p">),</span> <span class="n">x_t</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
         <span class="n">h0</span><span class="p">,</span> <span class="n">c0</span> <span class="o">=</span> <span class="n">hx</span>
-        <span class="p">(</span><span class="n">h_final</span><span class="p">,</span> <span class="n">c_final</span><span class="p">),</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="p">(</span><span class="n">h0</span><span class="p">,</span> <span class="n">c0</span><span class="p">),</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="p">(</span><span class="n">h_final</span><span class="p">,</span> <span class="n">c_final</span><span class="p">),</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">_scan</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="p">(</span><span class="n">h0</span><span class="p">,</span> <span class="n">c0</span><span class="p">),</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
             <span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="p">(</span><span class="n">h_final</span><span class="p">,</span> <span class="n">c_final</span><span class="p">)</span>
@@ -702,6 +730,12 @@
 <span class="sd">            LSTM layer except the last layer, with dropout probability equal to</span>
 <span class="sd">            :attr:`dropout`. Default: 0</span>
 <span class="sd">        python_based: If ``True``, will use a full Python implementation of the LSTM cell. Default: ``False``</span>
+<span class="sd">        recurrent_backend: backend used in recurrent mode when trajectories reset</span>
+<span class="sd">            in the middle of a batch. ``&quot;pad&quot;`` keeps the existing split/pad</span>
+<span class="sd">            strategy. ``&quot;scan&quot;`` uses a scan loop over the time dimension and</span>
+<span class="sd">            avoids materializing padded trajectory chunks. ``&quot;auto&quot;`` uses</span>
+<span class="sd">            ``&quot;pad&quot;`` in eager mode and ``&quot;scan&quot;`` when called under</span>
+<span class="sd">            :func:`torch.compile`. Default: ``&quot;pad&quot;``.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        in_key (str or tuple of str): the input key of the module. Exclusive use</span>
@@ -797,6 +831,7 @@
         <span class="n">proj_size</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">python_based</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">recurrent_backend</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">in_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -807,6 +842,11 @@
         <span class="n">default_recurrent_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;recurrent_backend must be one of &#39;auto&#39;, &#39;pad&#39; or &#39;scan&#39;. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="n">recurrent_backend</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">lstm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">lstm</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input lstm must have batch_first=True.&quot;</span><span class="p">)</span>
@@ -879,6 +919,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_recurrent_mode</span> <span class="o">=</span> <span class="n">default_recurrent_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_backend</span> <span class="o">=</span> <span class="n">recurrent_backend</span>
 
 <div class="viewcode-block" id="LSTMModule.make_python_based">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule.make_python_based">[docs]</a>
@@ -1074,7 +1115,11 @@
 
         <span class="n">is_init</span> <span class="o">=</span> <span class="n">tensordict_shaped</span><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">splits</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_backend</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+            <span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;scan&quot;</span> <span class="k">if</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;pad&quot;</span>
+        <span class="n">use_scan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;scan&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_scan</span> <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="n">_get_num_per_traj_init</span>
 
             <span class="c1"># if we have consecutive trajectories, things get a little more complicated</span>
@@ -1121,6 +1166,7 @@
             <span class="n">hidden0</span><span class="p">,</span>
             <span class="n">hidden1</span><span class="p">,</span>
             <span class="n">splits</span><span class="p">,</span>
+            <span class="n">is_init</span><span class="o">=</span><span class="n">is_init</span> <span class="k">if</span> <span class="n">use_scan</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">val</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden0</span><span class="p">)</span>
@@ -1146,6 +1192,7 @@
         <span class="n">hidden0_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">hidden1_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">steps</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -1176,6 +1223,10 @@
             <span class="n">_hidden1_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
         <span class="p">)</span>
 
+        <span class="k">if</span> <span class="n">is_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_scan_with_resets</span><span class="p">(</span>
+                <span class="nb">input</span><span class="p">,</span> <span class="n">hidden0_in</span><span class="p">,</span> <span class="n">hidden1_in</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">is_init</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">LSTM</span><span class="p">):</span>
@@ -1213,7 +1264,99 @@
                     <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span>
                     <span class="mi">1</span><span class="p">,</span>
                 <span class="p">)</span>
-        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_lstm_scan_with_resets</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden0_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden1_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">initial_hidden</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">],</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;LSTMModule(recurrent_backend=&#39;scan&#39;) does not support dropout yet.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;LSTMModule(recurrent_backend=&#39;scan&#39;) does not support proj_size yet.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+
+        <span class="nb">input</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">is_init</span> <span class="o">=</span> <span class="n">is_init</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">reset_hidden0</span> <span class="o">=</span> <span class="n">hidden0_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">reset_hidden1</span> <span class="o">=</span> <span class="n">hidden1_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">num_layers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span>
+
+        <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="n">carry</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+            <span class="n">h_layers</span><span class="p">,</span> <span class="n">c_layers</span> <span class="o">=</span> <span class="n">carry</span>
+            <span class="n">x_t</span><span class="p">,</span> <span class="n">init_t</span><span class="p">,</span> <span class="n">reset_hidden0_t</span><span class="p">,</span> <span class="n">reset_hidden1_t</span> <span class="o">=</span> <span class="n">inputs</span>
+            <span class="n">init_t</span> <span class="o">=</span> <span class="n">init_t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">h_layers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">init_t</span><span class="p">,</span> <span class="n">reset_hidden0_t</span><span class="p">,</span> <span class="n">h_layers</span><span class="p">)</span>
+            <span class="n">c_layers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">init_t</span><span class="p">,</span> <span class="n">reset_hidden1_t</span><span class="p">,</span> <span class="n">c_layers</span><span class="p">)</span>
+            <span class="n">h_unbound</span> <span class="o">=</span> <span class="n">h_layers</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">c_unbound</span> <span class="o">=</span> <span class="n">c_layers</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">new_c</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_layers</span><span class="p">):</span>
+                <span class="n">h_new</span><span class="p">,</span> <span class="n">c_new</span> <span class="o">=</span> <span class="n">LSTM</span><span class="o">.</span><span class="n">_lstm_cell</span><span class="p">(</span>
+                    <span class="n">x_t</span><span class="p">,</span>
+                    <span class="n">h_unbound</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">c_unbound</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">weight_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">weight_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="n">new_h</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_new</span><span class="p">)</span>
+                <span class="n">new_c</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c_new</span><span class="p">)</span>
+                <span class="n">x_t</span> <span class="o">=</span> <span class="n">h_new</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">new_c</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_c</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">hidden0_out</span> <span class="o">=</span> <span class="n">new_h</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">hidden1_out</span> <span class="o">=</span> <span class="n">new_c</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="n">new_c</span><span class="p">),</span> <span class="p">(</span><span class="n">x_t</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">hidden0_out</span><span class="p">,</span> <span class="n">hidden1_out</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">hidden0_steps</span><span class="p">,</span> <span class="n">hidden1_steps</span><span class="p">)</span> <span class="o">=</span> <span class="n">_scan</span><span class="p">(</span>
+            <span class="n">step</span><span class="p">,</span>
+            <span class="n">initial_hidden</span><span class="p">,</span>
+            <span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">is_init</span><span class="p">,</span> <span class="n">reset_hidden0</span><span class="p">,</span> <span class="n">reset_hidden1</span><span class="p">),</span>
+            <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">hidden0_steps</span> <span class="o">=</span> <span class="n">hidden0_steps</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">hidden1_steps</span> <span class="o">=</span> <span class="n">hidden1_steps</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">end_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">is_init</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">end_mask</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">is_init</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[:,</span> <span class="mi">1</span><span class="p">:]</span>
+        <span class="n">end_mask</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">hidden0_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">end_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">hidden0_steps</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden0_steps</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">hidden1_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">end_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">hidden1_steps</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden1_steps</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">hidden0_steps</span><span class="p">,</span> <span class="n">hidden1_steps</span></div>
 
 
 
@@ -1490,8 +1633,6 @@
 
     <span class="k">def</span> <span class="nf">_gru_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;Prototype scan-based time loop. See :meth:`LSTM._lstm_scan`.&quot;&quot;&quot;</span>
-        <span class="kn">from</span> <span class="nn">torch._higher_order_ops</span> <span class="kn">import</span> <span class="n">scan</span>
-
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;GRU(use_scan=True) does not support dropout yet.&quot;</span>
@@ -1500,10 +1641,10 @@
         <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
         <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
             <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
-            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
-            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
-            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
             <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
@@ -1536,7 +1677,7 @@
             <span class="n">new_h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">new_h</span><span class="p">,</span> <span class="n">x_t</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
 
-        <span class="n">h_final</span><span class="p">,</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">h_final</span><span class="p">,</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">_scan</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">hx</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">mask</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
             <span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">h_final</span>
@@ -1604,6 +1745,12 @@
 <span class="sd">            GRU layer except the last layer, with dropout probability equal to</span>
 <span class="sd">            :attr:`dropout`. Default: 0</span>
 <span class="sd">        python_based: If ``True``, will use a full Python implementation of the GRU cell. Default: ``False``</span>
+<span class="sd">        recurrent_backend: backend used in recurrent mode when trajectories reset</span>
+<span class="sd">            in the middle of a batch. ``&quot;pad&quot;`` keeps the existing split/pad</span>
+<span class="sd">            strategy. ``&quot;scan&quot;`` uses a scan loop over the time dimension and</span>
+<span class="sd">            avoids materializing padded trajectory chunks. ``&quot;auto&quot;`` uses</span>
+<span class="sd">            ``&quot;pad&quot;`` in eager mode and ``&quot;scan&quot;`` when called under</span>
+<span class="sd">            :func:`torch.compile`. Default: ``&quot;pad&quot;``.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        in_key (str or tuple of str): the input key of the module. Exclusive use</span>
@@ -1724,6 +1871,7 @@
         <span class="n">dropout</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">python_based</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">recurrent_backend</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">in_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -1734,6 +1882,11 @@
         <span class="n">default_recurrent_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">}:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;recurrent_backend must be one of &#39;auto&#39;, &#39;pad&#39; or &#39;scan&#39;. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="n">recurrent_backend</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">gru</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">gru</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input gru must have batch_first=True.&quot;</span><span class="p">)</span>
@@ -1803,6 +1956,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">in_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_recurrent_mode</span> <span class="o">=</span> <span class="n">default_recurrent_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_backend</span> <span class="o">=</span> <span class="n">recurrent_backend</span>
 
 <div class="viewcode-block" id="GRUModule.make_python_based">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule.make_python_based">[docs]</a>
@@ -1994,7 +2148,11 @@
 
         <span class="n">is_init</span> <span class="o">=</span> <span class="n">tensordict_shaped</span><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="n">splits</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_backend</span>
+        <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+            <span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;scan&quot;</span> <span class="k">if</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;pad&quot;</span>
+        <span class="n">use_scan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;scan&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_scan</span> <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
             <span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="n">_get_num_per_traj_init</span>
 
             <span class="c1"># if we have consecutive trajectories, things get a little more complicated</span>
@@ -2020,7 +2178,16 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">is_init</span><span class="o">.</span><span class="n">any</span><span class="p">()</span> <span class="ow">and</span> <span class="n">hidden</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">is_init_expand</span> <span class="o">=</span> <span class="n">expand_as_right</span><span class="p">(</span><span class="n">is_init</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
             <span class="n">hidden</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is_init_expand</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
-        <span class="n">val</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">splits</span><span class="p">)</span>
+        <span class="n">val</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="n">batch</span><span class="p">,</span>
+            <span class="n">steps</span><span class="p">,</span>
+            <span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="p">,</span>
+            <span class="n">hidden</span><span class="p">,</span>
+            <span class="n">splits</span><span class="p">,</span>
+            <span class="n">is_init</span><span class="o">=</span><span class="n">is_init</span> <span class="k">if</span> <span class="n">use_scan</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">val</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -2043,7 +2210,8 @@
         <span class="n">dtype</span><span class="p">,</span>
         <span class="n">hidden_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">steps</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected a single step&quot;</span><span class="p">)</span>
@@ -2062,6 +2230,8 @@
         <span class="n">_hidden_in</span> <span class="o">=</span> <span class="n">hidden_in</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="n">_hidden_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
 
+        <span class="k">if</span> <span class="n">is_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_scan_with_resets</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden_in</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">is_init</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">y</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">GRU</span><span class="p">):</span>
@@ -2090,7 +2260,77 @@
                 <span class="mi">1</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="n">out</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">,</span> <span class="n">hidden</span><span class="p">]</span>
-        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_gru_scan_with_resets</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">initial_hidden</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;GRUModule(recurrent_backend=&#39;scan&#39;) does not support dropout yet.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+            <span class="n">weight_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">weight_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+            <span class="n">bias_ihs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+            <span class="n">bias_hhs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+
+        <span class="nb">input</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">is_init</span> <span class="o">=</span> <span class="n">is_init</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">reset_hidden</span> <span class="o">=</span> <span class="n">hidden_in</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">num_layers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span>
+
+        <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="n">carry</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+            <span class="n">h_layers</span> <span class="o">=</span> <span class="n">carry</span>
+            <span class="n">x_t</span><span class="p">,</span> <span class="n">init_t</span><span class="p">,</span> <span class="n">reset_hidden_t</span> <span class="o">=</span> <span class="n">inputs</span>
+            <span class="n">init_t</span> <span class="o">=</span> <span class="n">init_t</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">h_layers</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">init_t</span><span class="p">,</span> <span class="n">reset_hidden_t</span><span class="p">,</span> <span class="n">h_layers</span><span class="p">)</span>
+            <span class="n">h_unbound</span> <span class="o">=</span> <span class="n">h_layers</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_layers</span><span class="p">):</span>
+                <span class="n">h_new</span> <span class="o">=</span> <span class="n">GRU</span><span class="o">.</span><span class="n">_gru_cell</span><span class="p">(</span>
+                    <span class="n">x_t</span><span class="p">,</span>
+                    <span class="n">h_unbound</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">weight_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_ihs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">weight_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                    <span class="n">bias_hhs</span><span class="p">[</span><span class="n">layer</span><span class="p">],</span>
+                <span class="p">)</span>
+                <span class="n">new_h</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_new</span><span class="p">)</span>
+                <span class="n">x_t</span> <span class="o">=</span> <span class="n">h_new</span>
+            <span class="c1"># scan returns both carry and per-step outputs; clone to avoid</span>
+            <span class="c1"># aliasing between those two pytrees under torch.compile.</span>
+            <span class="n">new_h</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">new_h</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="n">hidden_out</span> <span class="o">=</span> <span class="n">new_h</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">new_h</span><span class="p">,</span> <span class="p">(</span><span class="n">x_t</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span> <span class="n">hidden_out</span><span class="p">)</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">hidden_steps</span><span class="p">)</span> <span class="o">=</span> <span class="n">_scan</span><span class="p">(</span>
+            <span class="n">step</span><span class="p">,</span> <span class="n">initial_hidden</span><span class="p">,</span> <span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">is_init</span><span class="p">,</span> <span class="n">reset_hidden</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">hidden_steps</span> <span class="o">=</span> <span class="n">hidden_steps</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span>
+            <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">end_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">is_init</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">end_mask</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">is_init</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[:,</span> <span class="mi">1</span><span class="p">:]</span>
+        <span class="n">end_mask</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">hidden_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">end_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">hidden_steps</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden_steps</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">hidden_steps</span></div>
 
 
 

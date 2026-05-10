@@ -1068,6 +1068,7 @@
 <span class="k">class</span> <span class="nc">_GymAsyncMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
     <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="n">missing_obs_value</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;missing_obs_value&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">native_autoreset</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;native_autoreset&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
         <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;GymEnv&quot;</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -1096,7 +1097,12 @@
                 <span class="k">if</span> <span class="n">missing_obs_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;missing_obs_value&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">missing_obs_value</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">instance</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">unwrapped</span><span class="p">,</span> <span class="n">ManagerBasedRLEnv</span><span class="p">):</span>
-                    <span class="k">return</span> <span class="n">TransformedEnv</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">VecGymEnvTransform</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
+                    <span class="n">env</span> <span class="o">=</span> <span class="n">TransformedEnv</span><span class="p">(</span>
+                        <span class="n">instance</span><span class="p">,</span>
+                        <span class="n">VecGymEnvTransform</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">native_autoreset</span><span class="o">=</span><span class="n">native_autoreset</span><span class="p">),</span>
+                    <span class="p">)</span>
+                    <span class="n">env</span><span class="o">.</span><span class="n">_torchrl_native_autoreset</span> <span class="o">=</span> <span class="n">native_autoreset</span>
+                    <span class="k">return</span> <span class="n">env</span>
 
             <span class="k">if</span> <span class="n">_has_sb3</span><span class="p">:</span>
                 <span class="kn">from</span> <span class="nn">stable_baselines3.common.vec_env.base_vec_env</span> <span class="kn">import</span> <span class="n">VecEnv</span>
@@ -1196,6 +1202,13 @@
 <span class="sd">            the environment is auto-resetting and missing observations cannot be found in the info dictionary</span>
 <span class="sd">            (e.g., with IsaacLab). This argument is passed to :class:`~torchrl.envs.VecGymEnvTransform` by</span>
 <span class="sd">            the metaclass.</span>
+<span class="sd">        native_autoreset (bool, optional): if ``True`` and the wrapped environment</span>
+<span class="sd">            is an Isaac Lab vectorized environment, uses the native auto-reset</span>
+<span class="sd">            observation returned by the environment as the next root observation</span>
+<span class="sd">            instead of calling reset from</span>
+<span class="sd">            :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`. The terminal</span>
+<span class="sd">            ``&quot;next&quot;`` observation is still invalid and filled with ``NaN`` for</span>
+<span class="sd">            floating point observations. Defaults to ``False``.</span>
 
 <span class="sd">    Attributes:</span>
 <span class="sd">        available_envs (List[str]): a list of environments to build.</span>

@@ -669,14 +669,26 @@
 <span class="sd">            Defaults to `&quot;final&quot;`.</span>
 <span class="sd">        missing_obs_value (Any, optional): default value to use as placeholder for missing</span>
 <span class="sd">            last observations. Defaults to `np.nan`.</span>
+<span class="sd">        native_autoreset (bool, optional): if ``True``, leaves the native</span>
+<span class="sd">            auto-reset observation available to the environment wrapper so it</span>
+<span class="sd">            can be cloned into the next root observation, while the terminal</span>
+<span class="sd">            floating point ``&quot;next&quot;`` observation is marked with ``NaN``.</span>
+<span class="sd">            Defaults to ``False``.</span>
 
 <span class="sd">    .. note:: In general, this class should not be handled directly. It is</span>
 <span class="sd">        created whenever a vectorized environment is placed within a :class:`GymWrapper`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">final_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;final&quot;</span><span class="p">,</span> <span class="n">missing_obs_value</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">final_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;final&quot;</span><span class="p">,</span>
+        <span class="n">missing_obs_value</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">native_autoreset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">final_name</span> <span class="o">=</span> <span class="n">final_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">native_autoreset</span> <span class="o">=</span> <span class="n">native_autoreset</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_memo</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">missing_obs_value</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
@@ -692,6 +704,8 @@
     <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">next_tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_autoreset</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">next_tensordict</span>
         <span class="c1"># save the final info</span>
         <span class="n">done</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">for</span> <span class="n">done_key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">:</span>
@@ -722,6 +736,9 @@
     <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">tensordict_reset</span><span class="p">:</span> <span class="n">TensorDictBase</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_autoreset</span><span class="p">:</span>
+            <span class="n">tensordict_reset</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">final_name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">tensordict_reset</span>
         <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_memo</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="n">reset</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">,</span> <span class="n">done</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
