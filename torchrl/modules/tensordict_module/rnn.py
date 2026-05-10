@@ -26,10 +26,13 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import Unbounded
 
 _has_torch_scan = importlib.util.find_spec("torch._higher_order_ops.scan") is not None
-_torch_scan = None
+if _has_torch_scan:
+    from torch._higher_order_ops import scan as _torch_scan
+else:
+    _torch_scan = None
 
 
-@implement_for("torch", None, "2.6.0")
+@implement_for("torch", None, "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:
     raise NotImplementedError(
         "torch._higher_order_ops.scan is required for the scan recurrent backend "
@@ -37,18 +40,13 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
     )
 
 
-@implement_for("torch", "2.6.0")
+@implement_for("torch", "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
-    global _torch_scan
     if _torch_scan is None:
-        if not _has_torch_scan:
-            raise NotImplementedError(
-                "torch._higher_order_ops.scan is required for the scan recurrent "
-                "backend but is not available in this PyTorch build."
-            )
-        from torch._higher_order_ops import scan as torch_scan
-
-        _torch_scan = torch_scan
+        raise NotImplementedError(
+            "torch._higher_order_ops.scan is required for the scan recurrent "
+            "backend but is not available in this PyTorch build."
+        )
     return _torch_scan(*args, **kwargs)
 
 
