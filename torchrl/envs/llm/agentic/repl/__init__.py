@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 from .base import Repl, ReplDisplay, ReplError, ReplResult
-from .jupyter import JupyterRepl, _has_jupyter_client
+from .jupyter import _has_jupyter_client, JupyterRepl
 from .subprocess import SubprocessRepl
 
 __all__ = [
@@ -22,4 +22,5 @@ __all__ = [
     "ReplError",
     "ReplResult",
     "SubprocessRepl",
+    "_has_jupyter_client",
 ]
