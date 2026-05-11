@@ -47,11 +47,7 @@ class XMLToolCallParser:
     )
 
     def parse(self, response: str | Mapping[str, Any]) -> ParseResult:
-        text = (
-            response
-            if isinstance(response, str)
-            else str(response.get("text", ""))
-        )
+        text = response if isinstance(response, str) else str(response.get("text", ""))
         calls: list[ParsedCall] = []
 
         def repl(m: re.Match) -> str:
@@ -79,9 +75,7 @@ class XMLToolCallParser:
         body = json.dumps(dict(call.args), ensure_ascii=False)
         return f'<tool name="{call.tool}"{tag}>{body}</tool>'
 
-    def render_result(
-        self, call_id: str, result: ToolResult
-    ) -> Mapping[str, Any]:
+    def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
         body = result.text
         prefix = "[error] " if result.is_error else ""
         return {

@@ -14,17 +14,6 @@ stateful REPL.
 See ``docs/source/reference/llms_envs.rst`` and
 ``docs/source/tutorials/llm_agentic.rst`` for a walkthrough.
 """
-# TODO: contributors please update as items are picked up.
-# - streaming tool results (AsyncIterator[ToolEvent] from Tool.run)
-# - per-tool token-budget accounting
-# - E2B / Modal real implementations (stubs land first)
-# - harmony parser (gpt-oss / o1-style)
-# - Ray dispatcher (ToolCompose(parallel="ray"))
-# - multimodal tool outputs (image / audio in ToolResult.parts)
-# - structured-output validation against Tool.output_schema
-# - per-tool retry / circuit breaker
-# - tool-result caching (content-addressed) for replay
-# - formal deprecation of legacy tool transforms once the new API soaks
 from __future__ import annotations
 
 from .compose import DispatchResult, ToolCompose
@@ -34,13 +23,13 @@ from .protocols import (
     JsonPart,
     ParsedCall,
     ParseResult,
+    TextPart,
     Tool,
     ToolCallParser,
     ToolContext,
     ToolError,
     ToolResult,
     ToolResultPart,
-    TextPart,
 )
 from .rate_limit import RateLimiter
 from .schema import json_schema_from_pydantic, validate_args

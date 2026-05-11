@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import ClassVar
 
-from .base import ResourceLimits, Sandbox, SandboxError, SandboxResult
+from .base import ResourceLimits, SandboxResult
 
 
 class DockerSandbox:
@@ -28,7 +28,7 @@ class DockerSandbox:
         *,
         image: str = "python:3.11-slim",
     ) -> None:
-        self.limits = limits or ResourceLimits()
+        self.limits = limits if limits is not None else ResourceLimits()
         self.image = image
 
     async def open(self) -> None:

@@ -13,7 +13,7 @@ import importlib.util
 from collections.abc import Sequence
 from typing import ClassVar
 
-from .base import ResourceLimits, Sandbox, SandboxError, SandboxResult
+from .base import ResourceLimits, SandboxResult
 
 _has_e2b = importlib.util.find_spec("e2b") is not None
 
@@ -24,7 +24,7 @@ class E2BSandbox:
     name: ClassVar[str] = "e2b"
 
     def __init__(self, limits: ResourceLimits | None = None) -> None:
-        self.limits = limits or ResourceLimits()
+        self.limits = limits if limits is not None else ResourceLimits()
 
     async def open(self) -> None:
         raise NotImplementedError(
