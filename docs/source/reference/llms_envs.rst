@@ -35,9 +35,32 @@ Agentic toolkit (preview)
 .. currentmodule:: torchrl.envs.llm.agentic
 
 The :mod:`torchrl.envs.llm.agentic` package provides a SOTA, async-first
-substrate for tool-calling agents. The headline orchestrator
-(``ToolCompose``) lands in a follow-up commit; this preview ships the
-contracts, parsers, sandboxing, and stateful REPLs that it builds on.
+substrate for tool-calling agents on top of an unmodified
+:class:`~torchrl.envs.llm.ChatEnv`: structured parsers for the major
+provider protocols (XML, JSON-block, OpenAI ``tool_calls``, Anthropic
+``tool_use``), hardened :class:`Sandbox` backends, and stateful
+:class:`Repl` sessions.
+
+This preview ships the substrate the headline orchestrator
+(``ToolCompose``) is built on. A minimal end-to-end sketch -- usable
+today against the substrate, formalised by the orchestrator -- looks
+like:
+
+.. code-block:: python
+
+    from torchrl.envs.llm.agentic.parsers import XMLToolCallParser
+    from torchrl.envs.llm.agentic.sandbox import default_sandbox, ResourceLimits
+    from torchrl.envs.llm.agentic.repl import SubprocessRepl
+
+    parser = XMLToolCallParser()
+    parsed = parser.parse('<tool name="python" tag="c1">{"code": "print(2+2)"}</tool>')
+    # -> parsed.calls[0].tool == "python", parsed.calls[0].call_id == "c1"
+
+    sandbox = default_sandbox(ResourceLimits(wall_seconds=10, network="none"))
+    async def run():
+        async with sandbox, SubprocessRepl(sandbox) as repl:
+            result = await repl.execute("print(2+2)")
+            assert result.stdout.strip() == "4"
 
 Tool contracts
 ~~~~~~~~~~~~~~
@@ -96,8 +119,8 @@ provides a no-isolation fallback that warns loudly on every
    Apple has officially deprecated ``sandbox-exec``, but it still ships
    with macOS 14+ and remains the most portable in-process isolation
    primitive on that platform. For stronger or cross-platform
-   isolation, prefer :class:`DockerSandbox` (real implementation
-   tracked in the package TODO list).
+   isolation, prefer :class:`DockerSandbox` (currently a stub --
+   contributions welcome).
 
 .. autosummary::
     :toctree: generated/

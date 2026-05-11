@@ -22,7 +22,7 @@ from typing import Any, ClassVar
 from torchrl._utils import logger as torchrl_logger
 
 from ..sandbox.base import Sandbox, SandboxError
-from .base import Repl, ReplDisplay, ReplError, ReplResult
+from .base import ReplDisplay, ReplError, ReplResult
 
 _has_jupyter_client = importlib.util.find_spec("jupyter_client") is not None
 
@@ -119,9 +119,7 @@ class JupyterRepl:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         await self.close()
 
-    async def execute(
-        self, code: str, *, timeout: float | None = None
-    ) -> ReplResult:
+    async def execute(self, code: str, *, timeout: float | None = None) -> ReplResult:
         if self._kc is None:
             raise SandboxError("REPL is not open; call open() first")
         msg_id: str = self._kc.execute(code)
@@ -164,7 +162,7 @@ class JupyterRepl:
                 elif mtype == "status":
                     if content.get("execution_state") == "idle":
                         break
-        except asyncio.TimeoutError:
+        except TimeoutError:
             try:
                 if self._km is not None:
                     self._km.interrupt_kernel()

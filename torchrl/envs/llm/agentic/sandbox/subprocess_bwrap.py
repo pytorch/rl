@@ -22,7 +22,6 @@ documented but not silently papered over.
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import os
 import shutil
 import time
@@ -30,7 +29,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import ClassVar
 
-from .base import ResourceLimits, Sandbox, SandboxError, SandboxResult
+from .base import ResourceLimits, SandboxError, SandboxResult
 
 _OUTPUT_CAP = 1 << 20
 
@@ -71,7 +70,7 @@ class BubblewrapSandbox:
         *,
         bwrap_path: str | None = None,
     ) -> None:
-        self.limits = limits or ResourceLimits()
+        self.limits = limits if limits is not None else ResourceLimits()
         self._bwrap = bwrap_path or shutil.which("bwrap")
         self._opened = False
 
@@ -167,7 +166,7 @@ class BubblewrapSandbox:
                 proc.communicate(stdin), timeout=eff.wall_seconds
             )
             timed_out = False
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             try:
                 out_b, err_b = await proc.communicate()
@@ -200,9 +199,7 @@ class BubblewrapSandbox:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_bytes(data)
 
-    async def read_file(
-        self, path: str, max_bytes: int | None = None
-    ) -> bytes:
+    async def read_file(self, path: str, max_bytes: int | None = None) -> bytes:
         if not self._opened:
             raise SandboxError("sandbox is not open; call open() first")
         b = Path(path).read_bytes()
