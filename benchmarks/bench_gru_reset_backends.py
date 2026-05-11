@@ -368,7 +368,7 @@ def main() -> None:
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--input-size", type=int, default=64)
     parser.add_argument("--hidden-size", type=int, default=256)
-    parser.add_argument("--num-layers", type=int, default=1)
+    parser.add_argument("--num-layers", type=int, nargs="+", default=[1])
     parser.add_argument(
         "--dropouts",
         type=float,
@@ -422,8 +422,13 @@ def main() -> None:
         "device,rnn_type,batch,steps,num_layers,dropout,reset_prob,mode,"
         "median_ms,min_ms,frames_per_s,actual_reset_frac"
     )
-    for rnn_type, batch, steps, dropout, reset_prob in itertools.product(
-        args.rnn_types, args.batches, args.lengths, args.dropouts, args.reset_probs
+    for rnn_type, batch, steps, num_layers, dropout, reset_prob in itertools.product(
+        args.rnn_types,
+        args.batches,
+        args.lengths,
+        args.num_layers,
+        args.dropouts,
+        args.reset_probs,
     ):
         torch.manual_seed(args.seed)
         if device.type == "cuda":
@@ -432,7 +437,7 @@ def main() -> None:
             rnn_type,
             args.input_size,
             args.hidden_size,
-            args.num_layers,
+            num_layers,
             dropout,
             device,
         )
@@ -442,7 +447,7 @@ def main() -> None:
         hidden0 = torch.zeros(
             batch,
             steps,
-            args.num_layers,
+            num_layers,
             args.hidden_size,
             device=device,
         )
@@ -471,7 +476,7 @@ def main() -> None:
             median_ms, min_ms = _bench(fn, device, args.warmup, args.iters)
             frames_per_s = batch * steps / (median_ms / 1000)
             print(
-                f"{device},{rnn_type},{batch},{steps},{args.num_layers},{dropout},"
+                f"{device},{rnn_type},{batch},{steps},{num_layers},{dropout},"
                 f"{reset_prob},{mode},"
                 f"{median_ms:.4f},{min_ms:.4f},{frames_per_s:.2f},"
                 f"{actual_reset_frac:.6f}"
