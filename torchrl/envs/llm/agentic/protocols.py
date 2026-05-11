@@ -18,77 +18,86 @@ Stable ``call_id`` invariant: every :class:`ParsedCall` carries a
 Anthropic ``tool_use_id`` -- else a parser-assigned uuid4). Round-trips
 through :meth:`ToolCallParser.render_result` so downstream consumers can
 correlate calls and results.
+
+Value types (:class:`TextPart`, :class:`JsonPart`, :class:`ImagePart`,
+:class:`FileRefPart`, :class:`ToolResult`, :class:`ParsedCall`,
+:class:`ParseResult`, :class:`ToolContext`) are all
+:class:`tensordict.TensorClass` subclasses so they stack across batch
+dims and compose with TorchRL's batched envs and trajectories.
 """
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
-from tensordict import TensorDictBase
+from tensordict import TensorClass, TensorDictBase
 
 
 # ----- result parts -----
 
-@dataclass(frozen=True, slots=True)
-class TextPart:
+
+class TextPart(TensorClass["nocast"]):
     """A text fragment of a :class:`ToolResult`."""
 
     text: str
-    kind: Literal["text"] = "text"
+    kind: str = "text"
 
 
-@dataclass(frozen=True, slots=True)
-class JsonPart:
+class JsonPart(TensorClass["nocast"]):
     """A JSON-serialisable structured fragment of a :class:`ToolResult`."""
 
     data: Any
-    kind: Literal["json"] = "json"
+    kind: str = "json"
 
 
-@dataclass(frozen=True, slots=True)
-class ImagePart:
+class ImagePart(TensorClass["nocast"]):
     """An image fragment of a :class:`ToolResult` (raw bytes + media type)."""
 
     data: bytes
     media_type: str = "image/png"
-    kind: Literal["image"] = "image"
+    kind: str = "image"
 
 
-@dataclass(frozen=True, slots=True)
-class FileRefPart:
+class FileRefPart(TensorClass["nocast"]):
     """A reference to a file produced by a tool (path inside the sandbox)."""
 
     path: str
     media_type: str | None = None
-    kind: Literal["file_ref"] = "file_ref"
+    kind: str = "file_ref"
 
 
 ToolResultPart = TextPart | JsonPart | ImagePart | FileRefPart
 
 
-@dataclass(frozen=True, slots=True)
-class ToolResult:
+class ToolResult(TensorClass["nocast"]):
     """The output of a single :meth:`Tool.run` invocation.
 
     Attributes:
-        parts: Ordered tuple of result fragments. ``parts[0]`` is conventionally
-            text. Most call sites only need ``result.text``.
-        is_error: Whether the tool raised or otherwise produced an error.
-            ``parts[0]`` should describe the error when ``True``.
-        meta: Free-form metadata (timing, tokens used, raw provider payload).
+        parts: Ordered tuple of result fragments. ``parts[0]`` is
+            conventionally text. Most call sites only need
+            :attr:`text`.
+        is_error: Whether the tool raised or otherwise produced an
+            error. ``parts[0]`` should describe the error when ``True``.
+        meta: Free-form metadata (timing, tokens used, raw provider
+            payload).
+
+    Stacks with :func:`tensordict.lazy_stack` so a batched env can
+    return one ``ToolResult`` per item without manual padding.
     """
 
-    parts: tuple[ToolResultPart, ...] = ()
+    parts: tuple = ()
     is_error: bool = False
-    meta: Mapping[str, Any] = field(default_factory=dict)
+    meta: Mapping[str, Any] | None = None
 
     @property
     def text(self) -> str:
-        """Concatenation of all :class:`TextPart` and stringified
-        :class:`JsonPart` content. Convenience for the common case."""
+        """Return the textual flattening of :attr:`parts`.
+
+        Concatenates all :class:`TextPart` text and stringified
+        :class:`JsonPart` content. Convenience for the common case.
+        """
         out: list[str] = []
-        for p in self.parts:
+        for p in self.parts or ():
             if isinstance(p, TextPart):
                 out.append(p.text)
             elif isinstance(p, JsonPart):
@@ -113,38 +122,37 @@ class ToolResult:
         return cls(
             parts=(TextPart(text=text),),
             is_error=is_error,
-            meta=dict(meta or {}),
+            meta=dict(meta) if meta else None,
         )
 
 
-@dataclass
 class ToolError(Exception):
     """Raised by tools to signal a structured failure.
 
     Catching this in :class:`ToolCompose` produces a
-    :class:`ToolResult` with ``is_error=True``. Anything else surfaces as
-    an unstructured error (still wrapped, but flagged in ``meta``).
+    :class:`ToolResult` with ``is_error=True``. Anything else surfaces
+    as an unstructured error (still wrapped, but flagged in ``meta``).
     """
 
-    message: str
-    detail: Mapping[str, Any] = field(default_factory=dict)
-
-    def __str__(self) -> str:
-        return self.message
+    def __init__(self, message: str, detail: Mapping[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.detail = dict(detail) if detail else {}
 
 
 # ----- call / parse types -----
 
-@dataclass(frozen=True, slots=True)
-class ParsedCall:
+
+class ParsedCall(TensorClass["nocast"]):
     """A single tool invocation parsed out of an LLM response.
 
     Attributes:
         tool: The name of the tool to invoke.
         args: Already-decoded keyword arguments. Validation against
             :attr:`Tool.input_schema` happens in :class:`ToolCompose`.
-        call_id: Stable identifier (parser-assigned if not present in the
-            source). Round-trips through :meth:`ToolCallParser.render_result`.
+        call_id: Stable identifier (parser-assigned if not present in
+            the source). Round-trips through
+            :meth:`ToolCallParser.render_result`.
         tag: Optional human-visible label (back-compat with
             ``ExecuteToolsInOrder``).
     """
@@ -155,38 +163,39 @@ class ParsedCall:
     tag: str | None = None
 
 
-@dataclass(frozen=True, slots=True)
-class ParseResult:
+class ParseResult(TensorClass["nocast"]):
     """Output of :meth:`ToolCallParser.parse`.
 
     Attributes:
-        text: Cleaned message body with tool-call syntax stripped (when the
-            family embeds calls in the text -- XML, JSON-block). Empty for
-            providers where calls live in a structured field (OpenAI,
-            Anthropic).
+        text: Cleaned message body with tool-call syntax stripped (when
+            the family embeds calls in the text -- XML, JSON-block).
+            Empty for providers where calls live in a structured field
+            (OpenAI, Anthropic).
         calls: Calls in the order the model emitted them.
         raw: The original response, for round-trip and debugging.
     """
 
     text: str
-    calls: tuple[ParsedCall, ...]
+    calls: tuple = ()
     raw: Any = None
 
 
 # ----- context passed to a Tool -----
 
-@dataclass
-class ToolContext:
+
+class ToolContext(TensorClass["nocast"]):
     """Per-call context handed to :meth:`Tool.run`.
 
     Attributes:
-        call_id: The :attr:`ParsedCall.call_id`. Stable across this turn.
+        call_id: The :attr:`ParsedCall.call_id`. Stable across this
+            turn.
         tag: Optional :attr:`ParsedCall.tag`.
-        state: Read-only filtered view of the env state. Only populated when
-            the owning :class:`ToolCompose` has ``pass_state_to_tools=True``
-            *and* the tool has ``wants_state=True``.
-        sandbox: The compose-level sandbox, if any. Tools may also hold
-            their own sandbox by reference.
+        state: Read-only filtered view of the env state. Only
+            populated when the owning :class:`ToolCompose` has
+            ``pass_state_to_tools=True`` *and* the tool has
+            ``wants_state=True``.
+        sandbox: The compose-level sandbox, if any. Tools may also
+            hold their own sandbox by reference.
         repl: The compose-level REPL, if any.
         compose: Back-reference to the owning :class:`ToolCompose` for
             tool-to-tool dispatch from inside a tool body.
@@ -202,17 +211,18 @@ class ToolContext:
 
 # ----- protocols -----
 
+
 @runtime_checkable
 class Tool(Protocol):
     """A unit invoked by name from an LLM response.
 
-    Subclasses (or duck-typed equivalents) declare ``name``, ``description``,
-    and ``input_schema`` (JSON Schema dict) at the class level, and implement
-    an async :meth:`run`.
+    Subclasses (or duck-typed equivalents) declare ``name``,
+    ``description``, and ``input_schema`` (JSON Schema dict) at the
+    class level, and implement an async :meth:`run`.
 
-    A tool may opt in to receiving env state via the ``wants_state`` class
-    attribute -- :class:`ToolCompose` will populate ``ctx.state`` when both
-    sides agree.
+    A tool may opt in to receiving env state via the ``wants_state``
+    class attribute -- :class:`ToolCompose` will populate
+    ``ctx.state`` when both sides agree.
 
     Example:
         >>> from torchrl.envs.llm.agentic import Tool, ToolContext, ToolResult
@@ -236,24 +246,29 @@ class Tool(Protocol):
     output_schema: ClassVar[Mapping[str, Any] | None]
     wants_state: ClassVar[bool]
 
-    async def run(
-        self, args: Mapping[str, Any], ctx: ToolContext
-    ) -> ToolResult: ...
+    async def run(self, args: Mapping[str, Any], ctx: ToolContext) -> ToolResult:
+        ...
 
-    async def setup(self) -> None: ...
+    async def setup(self) -> None:
+        ...
 
-    async def teardown(self) -> None: ...
+    async def teardown(self) -> None:
+        ...
 
 
 @runtime_checkable
 class ToolCallParser(Protocol):
-    """Parses an LLM response into :class:`ParsedCall` items and renders
-    results back into the family's message shape.
+    """Parses LLM responses and renders results in a provider format.
+
+    A :class:`ToolCallParser` extracts :class:`ParsedCall` items from
+    an assistant message and renders results back into the family's
+    message shape (OpenAI, Anthropic, XML, JSON-block).
 
     Implementations must guarantee:
 
     1. :meth:`parse` is pure and synchronous.
-    2. Every returned :class:`ParsedCall` has a non-empty :attr:`call_id`.
+    2. Every returned :class:`ParsedCall` has a non-empty
+       :attr:`call_id`.
     3. ``parse -> render_call`` round-trips for calls produced by
        :meth:`parse` (within the same parser family).
     4. :meth:`render_result` produces a mapping suitable for one new
@@ -263,10 +278,11 @@ class ToolCallParser(Protocol):
 
     name: ClassVar[str]
 
-    def parse(self, response: str | Mapping[str, Any]) -> ParseResult: ...
+    def parse(self, response: str | Mapping[str, Any]) -> ParseResult:
+        ...
 
-    def render_call(self, call: ParsedCall) -> str: ...
+    def render_call(self, call: ParsedCall) -> str:
+        ...
 
-    def render_result(
-        self, call_id: str, result: ToolResult
-    ) -> Mapping[str, Any]: ...
+    def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
+        ...

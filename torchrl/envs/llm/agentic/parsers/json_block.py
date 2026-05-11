@@ -16,7 +16,9 @@ from ..protocols import ParsedCall, ParseResult, ToolResult
 class JSONToolCallParser:
     """Parses LLM responses formatted as a single JSON object.
 
-    Expected shape::
+    The expected shape is:
+
+    .. code-block:: json
 
         {
           "message": "Let me search.",
@@ -72,9 +74,7 @@ class JSONToolCallParser:
             ensure_ascii=False,
         )
 
-    def render_result(
-        self, call_id: str, result: ToolResult
-    ) -> Mapping[str, Any]:
+    def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
         return {
             "role": "tool",
             "content": json.dumps(

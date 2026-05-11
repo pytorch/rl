@@ -22,17 +22,19 @@ from ..protocols import ParsedCall, ParseResult, ToolResult
 class OpenAIToolCallParser:
     """Parses OpenAI-style ``tool_calls`` from an assistant message.
 
-    Accepts any of these shapes:
+    Accepts any of these shapes -- the full message dict:
 
-    - The full message dict::
+    .. code-block:: json
 
-          {"role": "assistant", "content": "...", "tool_calls": [...]}
+        {"role": "assistant", "content": "...", "tool_calls": [...]}
 
-    - The choice dict::
+    the choice dict:
 
-          {"message": {... "tool_calls": [...]}}
+    .. code-block:: json
 
-    - A bare list under ``tool_calls`` at the top level.
+        {"message": {"role": "assistant", "tool_calls": [...]}}
+
+    or a bare list under ``tool_calls`` at the top level.
 
     Each call's ``id`` is preserved as :attr:`ParsedCall.call_id`. Arguments
     are JSON-decoded from the ``function.arguments`` string.
@@ -111,9 +113,7 @@ class OpenAIToolCallParser:
             ensure_ascii=False,
         )
 
-    def render_result(
-        self, call_id: str, result: ToolResult
-    ) -> Mapping[str, Any]:
+    def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
         # OpenAI shape: a "tool" role message with tool_call_id correlation.
         return {
             "role": "tool",

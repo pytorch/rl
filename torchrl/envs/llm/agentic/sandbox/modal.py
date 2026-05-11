@@ -13,7 +13,7 @@ import importlib.util
 from collections.abc import Sequence
 from typing import ClassVar
 
-from .base import ResourceLimits, Sandbox, SandboxError, SandboxResult
+from .base import ResourceLimits, SandboxResult
 
 _has_modal = importlib.util.find_spec("modal") is not None
 
@@ -24,7 +24,7 @@ class ModalSandbox:
     name: ClassVar[str] = "modal"
 
     def __init__(self, limits: ResourceLimits | None = None) -> None:
-        self.limits = limits or ResourceLimits()
+        self.limits = limits if limits is not None else ResourceLimits()
 
     async def open(self) -> None:
         raise NotImplementedError(

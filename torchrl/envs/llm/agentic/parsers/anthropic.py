@@ -21,7 +21,9 @@ from ..protocols import ParsedCall, ParseResult, ToolResult
 class AnthropicToolUseParser:
     """Parses Anthropic-style ``tool_use`` content blocks.
 
-    Accepts either the full assistant message::
+    Accepts either the full assistant message:
+
+    .. code-block:: json
 
         {
           "role": "assistant",
@@ -99,9 +101,7 @@ class AnthropicToolUseParser:
             ensure_ascii=False,
         )
 
-    def render_result(
-        self, call_id: str, result: ToolResult
-    ) -> Mapping[str, Any]:
+    def render_result(self, call_id: str, result: ToolResult) -> Mapping[str, Any]:
         return {
             "role": "user",
             "content": [

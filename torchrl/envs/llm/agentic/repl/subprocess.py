@@ -23,7 +23,7 @@ import uuid
 from typing import ClassVar
 
 from ..sandbox.base import Sandbox, SandboxError
-from .base import Repl, ReplError, ReplResult
+from .base import ReplError, ReplResult
 
 
 _BOOT = textwrap.dedent(
@@ -120,7 +120,7 @@ class SubprocessRepl:
                 self._proc.kill()
                 try:
                     await asyncio.wait_for(self._proc.wait(), timeout=2.0)
-                except asyncio.TimeoutError:  # pragma: no cover
+                except TimeoutError:  # pragma: no cover
                     pass
         finally:
             self._proc = None
@@ -132,9 +132,7 @@ class SubprocessRepl:
     async def __aexit__(self, exc_type, exc, tb) -> None:
         await self.close()
 
-    async def execute(
-        self, code: str, *, timeout: float | None = None
-    ) -> ReplResult:
+    async def execute(self, code: str, *, timeout: float | None = None) -> ReplResult:
         if self._proc is None or self._proc.returncode is not None:
             raise SandboxError("REPL is not running; call open() first")
         async with self._lock:
@@ -153,7 +151,6 @@ class SubprocessRepl:
                 stdout, stderr = await asyncio.wait_for(
                     self._read_until_sentinels(sentinel), timeout=timeout
                 )
-                timed_out = False
                 err: ReplError | None = None
                 if stderr.endswith(f"{sentinel}_ERR\n"):
                     body = stderr[: -len(f"{sentinel}_ERR\n")]
@@ -172,7 +169,7 @@ class SubprocessRepl:
                     timed_out=False,
                     execution_count=-1,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send SIGINT and let the boot loop recover. State is
                 # preserved unless the user code is in an uninterruptible
                 # syscall, in which case the user must call restart().
@@ -196,9 +193,7 @@ class SubprocessRepl:
         await self.close()
         await self.open()
 
-    async def _read_until_sentinels(
-        self, sentinel: str
-    ) -> tuple[str, str]:
+    async def _read_until_sentinels(self, sentinel: str) -> tuple[str, str]:
         # Read stdout until "<sentinel>_END\n" appears, then drain stderr
         # until "<sentinel>_OK\n" or "<sentinel>_ERR\n" appears.
         assert self._proc is not None
@@ -242,8 +237,10 @@ def _parse_traceback(tb: str) -> ReplError:
 
 
 async def _wrap_argv_via_sandbox(sandbox: Sandbox, argv: tuple[str, ...]) -> list[str]:
-    """Best-effort: ask the sandbox to compute the prefixed argv, fallback
-    to the raw argv if the backend doesn't support pre-wrapping.
+    """Ask the sandbox to compute the prefixed argv if it supports it.
+
+    Falls back to the raw argv if the backend doesn't expose a
+    ``_build_argv`` hook. Best-effort.
     """
     builder = getattr(sandbox, "_build_argv", None)
     if callable(builder):
