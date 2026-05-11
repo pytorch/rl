@@ -125,6 +125,7 @@ offline-data = [
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
+mujoco_playground = ["jax>=0.7.0; python_version>='3.11'", "playground; python_version>='3.11'"]
 genesis = ["genesis-world"]
 procgen = ["procgen; python_version<'3.10'"]
 pilco = [
@@ -189,6 +190,9 @@ twitter = "https://x.com/torchrl1"
 linkedin = "https://www.linkedin.com/company/torchrl"
 discord = "https://discord.gg/cZs26Qq3Dd"
 benchmark = "https://docs.pytorch.org/rl/dev/bench/"
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 
 [tool.setuptools_scm]
 # Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases.
