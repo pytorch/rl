@@ -10,7 +10,6 @@ elsewhere (with a :class:`UserWarning`).
 """
 from __future__ import annotations
 
-import shutil
 import sys
 import warnings
 
@@ -18,8 +17,8 @@ from .base import ResourceLimits, Sandbox, SandboxError, SandboxResult
 from .docker import DockerSandbox
 from .e2b import E2BSandbox
 from .modal import ModalSandbox
-from .subprocess_bwrap import BubblewrapSandbox, _has_bwrap
-from .subprocess_seatbelt import SeatbeltSandbox, _has_sandbox_exec
+from .subprocess_bwrap import _has_bwrap, BubblewrapSandbox
+from .subprocess_seatbelt import _has_sandbox_exec, SeatbeltSandbox
 from .unsafe import UnsafeSubprocessSandbox
 
 

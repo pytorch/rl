@@ -34,9 +34,7 @@ class SchemaValidationError(ValueError):
     """Raised by :func:`validate_args` on a schema mismatch."""
 
 
-def validate_args(
-    args: Mapping[str, Any], schema: Mapping[str, Any] | None
-) -> None:
+def validate_args(args: Mapping[str, Any], schema: Mapping[str, Any] | None) -> None:
     """Validate ``args`` against a JSON Schema dict.
 
     Implements the subset that matters for tool-call dispatch:
@@ -97,6 +95,4 @@ def json_schema_from_pydantic(model: Any) -> dict[str, Any]:
         )
     if hasattr(model, "model_json_schema"):
         return model.model_json_schema()
-    raise TypeError(
-        f"{model!r} is not a pydantic v2 BaseModel subclass."
-    )
+    raise TypeError(f"{model!r} is not a pydantic v2 BaseModel subclass.")
