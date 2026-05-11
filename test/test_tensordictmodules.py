@@ -82,14 +82,9 @@ def _has_triton_backend() -> bool:
     (Triton >= 2.2). Older Triton installations are routed to scan/pad
     backends, so the triton-specific tests are skipped there.
     """
-    if (
-        _importlib_util.find_spec("triton") is None
-        or not torch.cuda.is_available()
-    ):
+    if _importlib_util.find_spec("triton") is None or not torch.cuda.is_available():
         return False
-    return (
-        _importlib_util.find_spec("triton.language.extra.libdevice") is not None
-    )
+    return _importlib_util.find_spec("triton.language.extra.libdevice") is not None
 
 
 _has_triton = _has_triton_backend()

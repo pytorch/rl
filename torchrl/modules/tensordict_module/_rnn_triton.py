@@ -39,6 +39,7 @@ import importlib.util
 import torch
 import torch.nn.functional as F
 
+
 def _check_triton_available() -> bool:
     """True if the installed Triton exposes everything this module needs.
 
@@ -51,9 +52,7 @@ def _check_triton_available() -> bool:
     """
     if importlib.util.find_spec("triton") is None:
         return False
-    return (
-        importlib.util.find_spec("triton.language.extra.libdevice") is not None
-    )
+    return importlib.util.find_spec("triton.language.extra.libdevice") is not None
 
 
 _has_triton = _check_triton_available()

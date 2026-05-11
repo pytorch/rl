@@ -31,6 +31,7 @@ if _has_torch_scan:
 else:
     _torch_scan = None
 
+
 def _check_triton_available() -> bool:
     """True if Triton is installed and exposes the API the kernels need.
 
@@ -40,9 +41,7 @@ def _check_triton_available() -> bool:
     """
     if importlib.util.find_spec("triton") is None:
         return False
-    return (
-        importlib.util.find_spec("triton.language.extra.libdevice") is not None
-    )
+    return importlib.util.find_spec("triton.language.extra.libdevice") is not None
 
 
 _has_triton = _check_triton_available()
