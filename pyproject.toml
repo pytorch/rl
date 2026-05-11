@@ -186,7 +186,8 @@ skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/re
 # splitted: used as variable name
 # te: Telugu language code in ifeval
 # uncompressible: used as class/function name in benchmarks
-ignore-words-list = "multicat,nd,splitted,te,uncompressible"
+# dout: standard autograd shorthand for gradient w.r.t. ``out``
+ignore-words-list = "multicat,nd,splitted,te,uncompressible,dout"
 
 [tool.usort]
 first_party_detection = false

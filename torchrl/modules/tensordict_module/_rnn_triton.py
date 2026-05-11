@@ -128,9 +128,21 @@ if _has_triton:
 
         for t in range(T):
             base_x = b_off[:, None] * (T * 3 * H) + t * (3 * H)
-            gx_r = tl.load(gates_x_ptr + base_x + 0 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
-            gx_z = tl.load(gates_x_ptr + base_x + 1 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
-            gx_n = tl.load(gates_x_ptr + base_x + 2 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
+            gx_r = tl.load(
+                gates_x_ptr + base_x + 0 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            gx_z = tl.load(
+                gates_x_ptr + base_x + 1 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            gx_n = tl.load(
+                gates_x_ptr + base_x + 2 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
 
             is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
             reset_h = tl.load(
@@ -154,7 +166,10 @@ if _has_triton:
                     )
                 else:
                     h_prev_stored = tl.load(
-                        out_ptr + b_off[:, None] * (T * H) + (t - 1) * H + k_off[None, :],
+                        out_ptr
+                        + b_off[:, None] * (T * H)
+                        + (t - 1) * H
+                        + k_off[None, :],
                         mask=mask_b[:, None],
                         other=0.0,
                     )
@@ -189,7 +204,9 @@ if _has_triton:
             tl.store(save_n_ptr + base_out, n, mask=mask_b[:, None])
             tl.store(save_gh_n_ptr + base_out, gh_n, mask=mask_b[:, None])
 
-        tl.store(h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None])
+        tl.store(
+            h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
+        )
 
     # ------------------------------------------------------------------------
     # GRU backward
@@ -274,25 +291,55 @@ if _has_triton:
             dr_pre = (dn_pre * gh_n) * r * (1.0 - r)
 
             base_gx = b_off[:, None] * (T * 3 * H) + t * (3 * H)
-            tl.store(dgates_x_ptr + base_gx + 0 * H + h_off[None, :], dr_pre, mask=mask_b[:, None])
-            tl.store(dgates_x_ptr + base_gx + 1 * H + h_off[None, :], dz_pre, mask=mask_b[:, None])
-            tl.store(dgates_x_ptr + base_gx + 2 * H + h_off[None, :], dn_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 0 * H + h_off[None, :], dr_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 1 * H + h_off[None, :], dz_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 2 * H + h_off[None, :], dgh_n, mask=mask_b[:, None])
+            tl.store(
+                dgates_x_ptr + base_gx + 0 * H + h_off[None, :],
+                dr_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_x_ptr + base_gx + 1 * H + h_off[None, :],
+                dz_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_x_ptr + base_gx + 2 * H + h_off[None, :],
+                dn_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 0 * H + h_off[None, :],
+                dr_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 1 * H + h_off[None, :],
+                dz_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 2 * H + h_off[None, :],
+                dgh_n,
+                mask=mask_b[:, None],
+            )
 
             dh_prev_total = dh_prev_direct
             for k_iter in tl.static_range(N_K):
                 k_off = k_iter * BLOCK_K + k_inner
                 base_gx_k = b_off[:, None] * (T * 3 * H) + t * (3 * H) + k_off[None, :]
                 w_r_chunk = tl.load(w_r_ptr + k_off[:, None] * H + h_off[None, :])
-                dr_chunk = tl.load(dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0)
+                dr_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(dr_chunk.to(w_r_chunk.dtype), w_r_chunk)
                 w_z_chunk = tl.load(w_z_ptr + k_off[:, None] * H + h_off[None, :])
-                dz_chunk = tl.load(dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0)
+                dz_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(dz_chunk.to(w_z_chunk.dtype), w_z_chunk)
                 w_n_chunk = tl.load(w_n_ptr + k_off[:, None] * H + h_off[None, :])
-                dn_chunk = tl.load(dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0)
+                dn_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(dn_chunk.to(w_n_chunk.dtype), w_n_chunk)
 
             # At reset positions, dh_prev flows into dhidden[b, t] not dh_{t-1}.
@@ -323,7 +370,7 @@ if _has_triton:
     def _lstm_fwd_kernel(
         gates_x_ptr,
         hidden_ptr,  # [B, T, H]
-        cell_ptr,    # [B, T, H]
+        cell_ptr,  # [B, T, H]
         w_i_ptr,
         w_f_ptr,
         w_g_ptr,
@@ -369,10 +416,26 @@ if _has_triton:
 
         for t in range(T):
             base_x = b_off[:, None] * (T * 4 * H) + t * (4 * H)
-            gx_i = tl.load(gates_x_ptr + base_x + 0 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
-            gx_f = tl.load(gates_x_ptr + base_x + 1 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
-            gx_g = tl.load(gates_x_ptr + base_x + 2 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
-            gx_o = tl.load(gates_x_ptr + base_x + 3 * H + h_off[None, :], mask=mask_b[:, None], other=0.0)
+            gx_i = tl.load(
+                gates_x_ptr + base_x + 0 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            gx_f = tl.load(
+                gates_x_ptr + base_x + 1 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            gx_g = tl.load(
+                gates_x_ptr + base_x + 2 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            gx_o = tl.load(
+                gates_x_ptr + base_x + 3 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
 
             is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
             reset_h = tl.load(
@@ -403,7 +466,10 @@ if _has_triton:
                     )
                 else:
                     h_prev_stored = tl.load(
-                        out_ptr + b_off[:, None] * (T * H) + (t - 1) * H + k_off[None, :],
+                        out_ptr
+                        + b_off[:, None] * (T * H)
+                        + (t - 1) * H
+                        + k_off[None, :],
                         mask=mask_b[:, None],
                         other=0.0,
                     )
@@ -446,8 +512,12 @@ if _has_triton:
             tl.store(save_o_ptr + base_out, o, mask=mask_b[:, None])
             tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
 
-        tl.store(h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None])
-        tl.store(c_final_ptr + b_off[:, None] * H + h_off[None, :], c, mask=mask_b[:, None])
+        tl.store(
+            h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
+        )
+        tl.store(
+            c_final_ptr + b_off[:, None] * H + h_off[None, :], c, mask=mask_b[:, None]
+        )
 
     # ------------------------------------------------------------------------
     # LSTM backward
@@ -547,30 +617,70 @@ if _has_triton:
             do_pre = do * o * (1.0 - o)
 
             base_gx = b_off[:, None] * (T * 4 * H) + t * (4 * H)
-            tl.store(dgates_x_ptr + base_gx + 0 * H + h_off[None, :], di_pre, mask=mask_b[:, None])
-            tl.store(dgates_x_ptr + base_gx + 1 * H + h_off[None, :], df_pre, mask=mask_b[:, None])
-            tl.store(dgates_x_ptr + base_gx + 2 * H + h_off[None, :], dg_pre, mask=mask_b[:, None])
-            tl.store(dgates_x_ptr + base_gx + 3 * H + h_off[None, :], do_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 0 * H + h_off[None, :], di_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 1 * H + h_off[None, :], df_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 2 * H + h_off[None, :], dg_pre, mask=mask_b[:, None])
-            tl.store(dgates_h_ptr + base_gx + 3 * H + h_off[None, :], do_pre, mask=mask_b[:, None])
+            tl.store(
+                dgates_x_ptr + base_gx + 0 * H + h_off[None, :],
+                di_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_x_ptr + base_gx + 1 * H + h_off[None, :],
+                df_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_x_ptr + base_gx + 2 * H + h_off[None, :],
+                dg_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_x_ptr + base_gx + 3 * H + h_off[None, :],
+                do_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 0 * H + h_off[None, :],
+                di_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 1 * H + h_off[None, :],
+                df_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 2 * H + h_off[None, :],
+                dg_pre,
+                mask=mask_b[:, None],
+            )
+            tl.store(
+                dgates_h_ptr + base_gx + 3 * H + h_off[None, :],
+                do_pre,
+                mask=mask_b[:, None],
+            )
 
             dh_prev_total = tl.zeros_like(dh_next)
             for k_iter in tl.static_range(N_K):
                 k_off = k_iter * BLOCK_K + k_inner
                 base_gx_k = b_off[:, None] * (T * 4 * H) + t * (4 * H) + k_off[None, :]
                 w_i_chunk = tl.load(w_i_ptr + k_off[:, None] * H + h_off[None, :])
-                di_chunk = tl.load(dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0)
+                di_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(di_chunk.to(w_i_chunk.dtype), w_i_chunk)
                 w_f_chunk = tl.load(w_f_ptr + k_off[:, None] * H + h_off[None, :])
-                df_chunk = tl.load(dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0)
+                df_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(df_chunk.to(w_f_chunk.dtype), w_f_chunk)
                 w_g_chunk = tl.load(w_g_ptr + k_off[:, None] * H + h_off[None, :])
-                dg_chunk = tl.load(dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0)
+                dg_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(dg_chunk.to(w_g_chunk.dtype), w_g_chunk)
                 w_o_chunk = tl.load(w_o_ptr + k_off[:, None] * H + h_off[None, :])
-                do_chunk = tl.load(dgates_h_ptr + base_gx_k + 3 * H, mask=mask_b[:, None], other=0.0)
+                do_chunk = tl.load(
+                    dgates_h_ptr + base_gx_k + 3 * H, mask=mask_b[:, None], other=0.0
+                )
                 dh_prev_total += tl.dot(do_chunk.to(w_o_chunk.dtype), w_o_chunk)
 
             tl.atomic_add(
@@ -603,7 +713,9 @@ if _has_triton:
 # ============================================================================
 
 
-_MIN_H_PAD_PY = 16  # mirror of _MIN_H_PAD; constant so callers outside Triton block can use it
+_MIN_H_PAD_PY = (
+    16  # mirror of _MIN_H_PAD; constant so callers outside Triton block can use it
+)
 
 
 def _next_pow2(n: int) -> int:
@@ -625,7 +737,9 @@ def _pad_last(t: torch.Tensor, H: int, H_pad: int) -> torch.Tensor:
     return torch.cat([t, t.new_zeros(*pad)], dim=-1)
 
 
-def _pad_gate_dim(t: torch.Tensor, n_gates: int, H: int, H_pad: int, dim: int = 0) -> torch.Tensor:
+def _pad_gate_dim(
+    t: torch.Tensor, n_gates: int, H: int, H_pad: int, dim: int = 0
+) -> torch.Tensor:
     if H == H_pad:
         return t
     shape = list(t.shape)
@@ -653,7 +767,9 @@ def _unpad_last(t: torch.Tensor, H: int, H_pad: int) -> torch.Tensor:
     return t[..., :H].contiguous()
 
 
-def _unpad_gate_dim(t: torch.Tensor, n_gates: int, H: int, H_pad: int, dim: int = 0) -> torch.Tensor:
+def _unpad_gate_dim(
+    t: torch.Tensor, n_gates: int, H: int, H_pad: int, dim: int = 0
+) -> torch.Tensor:
     if H == H_pad:
         return t
     shape = list(t.shape)
@@ -679,7 +795,7 @@ class _GRUFn(torch.autograd.Function):
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
             )
-        B, T, I = x.shape
+        B, T, I_in = x.shape
         H = hidden.shape[-1]
         H_pad = _padded_hidden_size(H)
 
@@ -689,7 +805,11 @@ class _GRUFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
 
-        gates_x = F.linear(x.reshape(-1, I), w_ih_p, b_ih_p).view(B, T, 3 * H_pad).contiguous()
+        gates_x = (
+            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+            .view(B, T, 3 * H_pad)
+            .contiguous()
+        )
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
@@ -711,24 +831,62 @@ class _GRUFn(torch.autograd.Function):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
         _gru_fwd_kernel[grid](
-            gates_x, hidden_p, w_r_t, w_z_t, w_n_t, b_hh_p, is_init,
-            out, save_r, save_z, save_n, save_gh_n, h_final,
-            B, T, H=H_pad,
+            gates_x,
+            hidden_p,
+            w_r_t,
+            w_z_t,
+            w_n_t,
+            b_hh_p,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            h_final,
+            B,
+            T,
+            H=H_pad,
         )
 
         ctx.save_for_backward(
-            x, hidden_p, w_ih, w_hh, is_init, out,
-            save_r, save_z, save_n, save_gh_n, w_r, w_z, w_n, w_ih_p,
+            x,
+            hidden_p,
+            w_ih,
+            w_hh,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
         )
-        ctx.shapes = (B, T, I, H, H_pad)
+        ctx.shapes = (B, T, I_in, H, H_pad)
         return _unpad_last(out, H, H_pad), _unpad_last(h_final, H, H_pad)
 
     @staticmethod
     def backward(ctx, dout, dh_final):
-        (x, hidden_p, w_ih, w_hh, is_init, out,
-         save_r, save_z, save_n, save_gh_n,
-         w_r, w_z, w_n, w_ih_p) = ctx.saved_tensors
-        B, T, I, H, H_pad = ctx.shapes
+        (
+            x,
+            hidden_p,
+            w_ih,
+            w_hh,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        ) = ctx.saved_tensors
+        B, T, I_in, H, H_pad = ctx.shapes
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
@@ -741,10 +899,24 @@ class _GRUFn(torch.autograd.Function):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
         _gru_bwd_kernel[grid](
-            hidden_p, w_r, w_z, w_n, is_init, out,
-            save_r, save_z, save_n, save_gh_n,
-            dout_p, dh_final_p, dgates_x, dgates_h, dhidden_p,
-            B, T, H=H_pad,
+            hidden_p,
+            w_r,
+            w_z,
+            w_n,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            dout_p,
+            dh_final_p,
+            dgates_x,
+            dgates_h,
+            dhidden_p,
+            B,
+            T,
+            H=H_pad,
         )
 
         # h_prev[b, t] for the dW_hh computation.
@@ -752,9 +924,7 @@ class _GRUFn(torch.autograd.Function):
         h_prev_all[:, 0] = hidden_p[:, 0]
         if T > 1:
             h_prev_all[:, 1:] = out[:, :-1]
-        h_prev_all = torch.where(
-            is_init.unsqueeze(-1), hidden_p, h_prev_all
-        )
+        h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
 
         dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
@@ -762,10 +932,10 @@ class _GRUFn(torch.autograd.Function):
         db_hh_p = dgates_h_flat.sum(0)
 
         dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
-        x_flat = x.reshape(B * T, I)
+        x_flat = x.reshape(B * T, I_in)
         dW_ih_p = dgates_x_flat.t() @ x_flat
         db_ih_p = dgates_x_flat.sum(0)
-        dx = (dgates_x_flat @ w_ih_p).view(B, T, I)
+        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
 
         dhidden = _unpad_last(dhidden_p, H, H_pad)
         dW_hh = _unpad_w_hh(dW_hh_p, 3, H, H_pad)
@@ -783,7 +953,7 @@ class _LSTMFn(torch.autograd.Function):
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
             )
-        B, T, I = x.shape
+        B, T, I_in = x.shape
         H = hidden.shape[-1]
         H_pad = _padded_hidden_size(H)
 
@@ -794,7 +964,11 @@ class _LSTMFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
 
-        gates_x = F.linear(x.reshape(-1, I), w_ih_p, b_ih_p).view(B, T, 4 * H_pad).contiguous()
+        gates_x = (
+            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+            .view(B, T, 4 * H_pad)
+            .contiguous()
+        )
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
@@ -821,17 +995,50 @@ class _LSTMFn(torch.autograd.Function):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
         _lstm_fwd_kernel[grid](
-            gates_x, hidden_p, cell_p, w_i_t, w_f_t, w_g_t, w_o_t, b_hh_p, is_init,
-            out, c_out, save_i, save_f, save_g, save_o, save_tanhc,
-            h_final, c_final, B, T, H=H_pad,
+            gates_x,
+            hidden_p,
+            cell_p,
+            w_i_t,
+            w_f_t,
+            w_g_t,
+            w_o_t,
+            b_hh_p,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            h_final,
+            c_final,
+            B,
+            T,
+            H=H_pad,
         )
 
         ctx.save_for_backward(
-            x, hidden_p, cell_p, w_ih, w_hh, is_init,
-            out, c_out, save_i, save_f, save_g, save_o, save_tanhc,
-            w_i, w_f, w_g, w_o, w_ih_p,
+            x,
+            hidden_p,
+            cell_p,
+            w_ih,
+            w_hh,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
         )
-        ctx.shapes = (B, T, I, H, H_pad)
+        ctx.shapes = (B, T, I_in, H, H_pad)
         return (
             _unpad_last(out, H, H_pad),
             _unpad_last(c_out, H, H_pad),
@@ -841,10 +1048,27 @@ class _LSTMFn(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dout, dc_out, dh_final, dc_final):
-        (x, hidden_p, cell_p, w_ih, w_hh, is_init, out, c_out,
-         save_i, save_f, save_g, save_o, save_tanhc,
-         w_i, w_f, w_g, w_o, w_ih_p) = ctx.saved_tensors
-        B, T, I, H, H_pad = ctx.shapes
+        (
+            x,
+            hidden_p,
+            cell_p,
+            w_ih,
+            w_hh,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        ) = ctx.saved_tensors
+        B, T, I_in, H, H_pad = ctx.shapes
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
@@ -866,19 +1090,37 @@ class _LSTMFn(torch.autograd.Function):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
 
         _lstm_bwd_kernel[grid](
-            hidden_p, cell_p, w_i, w_f, w_g, w_o, is_init,
-            out, c_out, save_i, save_f, save_g, save_o, save_tanhc,
-            dout_p, dh_final_p, dc_final_p, dgates_x, dgates_h, dhidden_p, dcell_p,
-            B, T, H=H_pad,
+            hidden_p,
+            cell_p,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            dout_p,
+            dh_final_p,
+            dc_final_p,
+            dgates_x,
+            dgates_h,
+            dhidden_p,
+            dcell_p,
+            B,
+            T,
+            H=H_pad,
         )
 
         h_prev_all = torch.empty_like(out)
         h_prev_all[:, 0] = hidden_p[:, 0]
         if T > 1:
             h_prev_all[:, 1:] = out[:, :-1]
-        h_prev_all = torch.where(
-            is_init.unsqueeze(-1), hidden_p, h_prev_all
-        )
+        h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
 
         dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
@@ -886,10 +1128,10 @@ class _LSTMFn(torch.autograd.Function):
         db_hh_p = dgates_h_flat.sum(0)
 
         dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
-        x_flat = x.reshape(B * T, I)
+        x_flat = x.reshape(B * T, I_in)
         dW_ih_p = dgates_x_flat.t() @ x_flat
         db_ih_p = dgates_x_flat.sum(0)
-        dx = (dgates_x_flat @ w_ih_p).view(B, T, I)
+        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
 
         dhidden = _unpad_last(dhidden_p, H, H_pad)
         dcell = _unpad_last(dcell_p, H, H_pad)
@@ -950,4 +1192,6 @@ def lstm_triton(
     Returns:
         ``(h_steps, c_steps, h_final, c_final)``.
     """
-    return _LSTMFn.apply(x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
+    return _LSTMFn.apply(
+        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+    )
