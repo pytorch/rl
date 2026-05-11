@@ -89,60 +89,81 @@ def _make_modules(
     input_size: int,
     hidden_size: int,
     num_layers: int,
+    dropout: float,
     device: torch.device,
 ) -> tuple[
     GRUModule | LSTMModule,
-    GRUModule | LSTMModule,
-    GRUModule | LSTMModule,
+    GRUModule | LSTMModule | None,
+    GRUModule | LSTMModule | None,
     GRUModule | LSTMModule | None,
 ]:
+    # scan backend cannot run with dropout > 0. cuDNN's nn.LSTM/nn.GRU only
+    # applies the configured dropout when num_layers > 1. The triton backend
+    # uses cudnn_pad's state_dict, so all modules see the same parameters.
+    scan_supported = dropout == 0.0
+    triton_supported = device.type == "cuda"
+    # Whether dropout is exercised at runtime (only kicks in with multi-layer
+    # stacks where there's a between-layer dropout point).
+    effective_dropout = dropout if num_layers > 1 else 0.0
+    train_mode = effective_dropout > 0
     if rnn_type == "lstm":
         cudnn_pad = LSTMModule(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
+            dropout=dropout,
             in_keys=["obs", "hidden0", "hidden1"],
             out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
             default_recurrent_mode=True,
             device=device,
-        ).eval()
-        scan_eager = LSTMModule(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            in_keys=["obs", "hidden0", "hidden1"],
-            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
-            recurrent_backend="scan",
-            default_recurrent_mode=True,
-            device=device,
-        ).eval()
-        scan_compile = LSTMModule(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            in_keys=["obs", "hidden0", "hidden1"],
-            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
-            recurrent_backend="scan",
-            default_recurrent_mode=True,
-            python_based=True,
-            device=device,
-        ).eval()
-        scan_eager.load_state_dict(cudnn_pad.state_dict())
-        scan_compile.load_state_dict(cudnn_pad.state_dict())
+        )
+        cudnn_pad.train(train_mode)
+        scan_eager = None
+        scan_compile = None
+        if scan_supported:
+            scan_eager = LSTMModule(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="scan",
+                default_recurrent_mode=True,
+                device=device,
+            )
+            scan_eager.load_state_dict(cudnn_pad.state_dict())
+            scan_eager.train(train_mode)
+            scan_compile = LSTMModule(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="scan",
+                default_recurrent_mode=True,
+                python_based=True,
+                device=device,
+            )
+            scan_compile.load_state_dict(cudnn_pad.state_dict())
+            scan_compile.train(train_mode)
         triton_mod = None
-        if num_layers == 1 and device.type == "cuda":
+        if triton_supported:
             try:
                 triton_mod = LSTMModule(
                     input_size=input_size,
                     hidden_size=hidden_size,
                     num_layers=num_layers,
+                    dropout=dropout,
                     in_keys=["obs", "hidden0", "hidden1"],
                     out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
                     recurrent_backend="triton",
                     default_recurrent_mode=True,
                     device=device,
-                ).eval()
+                )
                 triton_mod.load_state_dict(cudnn_pad.state_dict())
+                triton_mod.train(train_mode)
             except RuntimeError:
                 triton_mod = None
         return cudnn_pad, scan_eager, scan_compile, triton_mod
@@ -151,47 +172,57 @@ def _make_modules(
         input_size=input_size,
         hidden_size=hidden_size,
         num_layers=num_layers,
+        dropout=dropout,
         in_keys=["obs", "hidden"],
         out_keys=["feat", ("next", "hidden")],
         default_recurrent_mode=True,
         device=device,
-    ).eval()
-    scan_eager = GRUModule(
-        input_size=input_size,
-        hidden_size=hidden_size,
-        num_layers=num_layers,
-        in_keys=["obs", "hidden"],
-        out_keys=["feat", ("next", "hidden")],
-        recurrent_backend="scan",
-        default_recurrent_mode=True,
-        device=device,
-    ).eval()
-    scan_compile = GRUModule(
-        input_size=input_size,
-        hidden_size=hidden_size,
-        num_layers=num_layers,
-        in_keys=["obs", "hidden"],
-        out_keys=["feat", ("next", "hidden")],
-        recurrent_backend="scan",
-        default_recurrent_mode=True,
-        python_based=True,
-        device=device,
-    ).eval()
-    scan_eager.load_state_dict(cudnn_pad.state_dict())
-    scan_compile.load_state_dict(cudnn_pad.state_dict())
+    )
+    cudnn_pad.train(train_mode)
+    scan_eager = None
+    scan_compile = None
+    if scan_supported:
+        scan_eager = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+            default_recurrent_mode=True,
+            device=device,
+        )
+        scan_eager.load_state_dict(cudnn_pad.state_dict())
+        scan_eager.train(train_mode)
+        scan_compile = GRUModule(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+            default_recurrent_mode=True,
+            python_based=True,
+            device=device,
+        )
+        scan_compile.load_state_dict(cudnn_pad.state_dict())
+        scan_compile.train(train_mode)
     triton_mod = None
-    if num_layers == 1 and device.type == "cuda":
+    if triton_supported:
         try:
             triton_mod = GRUModule(
                 input_size=input_size,
                 hidden_size=hidden_size,
                 num_layers=num_layers,
+                dropout=dropout,
                 in_keys=["obs", "hidden"],
                 out_keys=["feat", ("next", "hidden")],
                 recurrent_backend="triton",
                 default_recurrent_mode=True,
                 device=device,
-            ).eval()
+            )
             triton_mod.load_state_dict(cudnn_pad.state_dict())
         except RuntimeError:
             triton_mod = None
@@ -202,8 +233,8 @@ def _make_fn(
     rnn_type: RNNType,
     mode: Mode,
     cudnn_pad: GRUModule | LSTMModule,
-    scan_eager: GRUModule | LSTMModule,
-    scan_compile: GRUModule | LSTMModule,
+    scan_eager: GRUModule | LSTMModule | None,
+    scan_compile: GRUModule | LSTMModule | None,
     triton_mod: GRUModule | LSTMModule | None,
     obs: torch.Tensor,
     hidden: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
@@ -339,6 +370,17 @@ def main() -> None:
     parser.add_argument("--hidden-size", type=int, default=256)
     parser.add_argument("--num-layers", type=int, default=1)
     parser.add_argument(
+        "--dropouts",
+        type=float,
+        nargs="+",
+        default=[0.0],
+        help=(
+            "Dropout probabilities to sweep. Only effective with num_layers > 1 "
+            "(dropout is between stacked layers). Scan modes are skipped when "
+            "dropout > 0 since they raise NotImplementedError."
+        ),
+    )
+    parser.add_argument(
         "--rnn-types", nargs="+", default=["gru"], choices=["gru", "lstm"]
     )
     parser.add_argument("--batches", type=int, nargs="+", default=[128, 512, 2048])
@@ -377,16 +419,22 @@ def main() -> None:
     generator = torch.Generator(device=device).manual_seed(args.seed)
 
     print(
-        "device,rnn_type,batch,steps,reset_prob,mode,median_ms,min_ms,frames_per_s,actual_reset_frac"
+        "device,rnn_type,batch,steps,num_layers,dropout,reset_prob,mode,"
+        "median_ms,min_ms,frames_per_s,actual_reset_frac"
     )
-    for rnn_type, batch, steps, reset_prob in itertools.product(
-        args.rnn_types, args.batches, args.lengths, args.reset_probs
+    for rnn_type, batch, steps, dropout, reset_prob in itertools.product(
+        args.rnn_types, args.batches, args.lengths, args.dropouts, args.reset_probs
     ):
         torch.manual_seed(args.seed)
         if device.type == "cuda":
             torch.cuda.manual_seed_all(args.seed)
         cudnn_pad, scan_eager, scan_compile, triton_mod = _make_modules(
-            rnn_type, args.input_size, args.hidden_size, args.num_layers, device
+            rnn_type,
+            args.input_size,
+            args.hidden_size,
+            args.num_layers,
+            dropout,
+            device,
         )
         obs = torch.randn(
             batch, steps, args.input_size, device=device, generator=generator
@@ -407,6 +455,8 @@ def main() -> None:
         for mode in args.modes:
             if mode == "triton_td" and triton_mod is None:
                 continue
+            if mode.startswith("scan_") and (scan_eager is None or scan_compile is None):
+                continue
             fn = _make_fn(
                 rnn_type,
                 mode,
@@ -421,7 +471,8 @@ def main() -> None:
             median_ms, min_ms = _bench(fn, device, args.warmup, args.iters)
             frames_per_s = batch * steps / (median_ms / 1000)
             print(
-                f"{device},{rnn_type},{batch},{steps},{reset_prob},{mode},"
+                f"{device},{rnn_type},{batch},{steps},{args.num_layers},{dropout},"
+                f"{reset_prob},{mode},"
                 f"{median_ms:.4f},{min_ms:.4f},{frames_per_s:.2f},"
                 f"{actual_reset_frac:.6f}"
             )
