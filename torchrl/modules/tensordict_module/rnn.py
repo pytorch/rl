@@ -10,7 +10,7 @@ from typing import Any
 
 import torch
 import torch.nn.functional as F
-from tensordict import TensorDictBase, unravel_key_list
+from tensordict import TensorDict, TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
 from tensordict.utils import expand_as_right, prod, set_lazy_legacy
@@ -72,6 +72,17 @@ def _place_at_traj_end(
         .expand_as(h.unsqueeze(1))
     )
     return h_padded.scatter(1, idx, h.unsqueeze(1))
+
+
+def _num_directions(rnn: nn.RNNBase) -> int:
+    return 2 if rnn.bidirectional else 1
+
+
+def _end_mask_from_is_init(is_init: torch.Tensor) -> torch.Tensor:
+    end_mask = torch.empty_like(is_init)
+    end_mask[:, :-1] = is_init[:, 1:]
+    end_mask[:, -1] = True
+    return end_mask
 
 
 class LSTMCell(RNNCellBase):
@@ -493,11 +504,11 @@ class LSTMModule(ModuleBase):
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
             avoids materializing padded trajectory chunks. ``"triton"``
-            (prototype, CUDA only) fuses the whole time loop into a single
-            Triton kernel; single-layer only, no dropout / proj_size /
-            bidirectional. ``"auto"`` uses ``"pad"`` in eager mode and
-            ``"scan"`` when called under :func:`torch.compile`. Default:
-            ``"pad"``.
+            (prototype, CUDA only) uses Triton kernels where available and
+            otherwise preserves pad-backend recurrent semantics for dropout,
+            projections and bidirectional layers. ``"auto"`` uses ``"pad"``
+            in eager mode and ``"scan"`` when called under
+            :func:`torch.compile`. Default: ``"pad"``.
         recurrent_compute_dtype: dtype used for the recurrent matmul inside the
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
@@ -622,8 +633,6 @@ class LSTMModule(ModuleBase):
         if lstm is not None:
             if not lstm.batch_first:
                 raise ValueError("The input lstm must have batch_first=True.")
-            if lstm.bidirectional:
-                raise ValueError("The input lstm cannot be bidirectional.")
             if input_size is not None or hidden_size is not None:
                 raise ValueError(
                     "An LSTM instance cannot be passed along with class argument."
@@ -631,10 +640,12 @@ class LSTMModule(ModuleBase):
         else:
             if not batch_first:
                 raise ValueError("The input lstm must have batch_first=True.")
-            if bidirectional:
-                raise ValueError("The input lstm cannot be bidirectional.")
             if not hidden_size:
                 raise ValueError("hidden_size must be passed.")
+            if python_based and bidirectional:
+                raise ValueError(
+                    "python_based=True does not support bidirectional LSTMs."
+                )
             if python_based:
                 lstm = LSTM(
                     input_size=input_size,
@@ -645,7 +656,7 @@ class LSTMModule(ModuleBase):
                     proj_size=proj_size,
                     device=device,
                     batch_first=True,
-                    bidirectional=False,
+                    bidirectional=bidirectional,
                 )
             else:
                 lstm = nn.LSTM(
@@ -657,7 +668,7 @@ class LSTMModule(ModuleBase):
                     proj_size=proj_size,
                     device=device,
                     batch_first=True,
-                    bidirectional=False,
+                    bidirectional=bidirectional,
                 )
         if not ((in_key is None) ^ (in_keys is None)):
             raise ValueError(
@@ -810,10 +821,14 @@ class LSTMModule(ModuleBase):
                 "have compatible names, ie. the out_keys should be named after ('next', <in_key>). Got "
                 f"in_keys={self.in_keys} and out_keys={self.out_keys} instead."
             )
+        num_states = self.lstm.num_layers * _num_directions(self.lstm)
+        real_hidden_size = (
+            self.lstm.proj_size if self.lstm.proj_size > 0 else self.lstm.hidden_size
+        )
         return TensorDictPrimer(
             {
-                in_key1: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
-                in_key2: Unbounded(shape=(self.lstm.num_layers, self.lstm.hidden_size)),
+                in_key1: Unbounded(shape=(num_states, real_hidden_size)),
+                in_key2: Unbounded(shape=(num_states, self.lstm.hidden_size)),
             },
             expand_specs=True,
         )
@@ -879,7 +894,12 @@ class LSTMModule(ModuleBase):
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        if self.recurrent_mode and not use_scan and not use_triton and is_init[..., 1:].any():
+        if (
+            self.recurrent_mode
+            and not use_scan
+            and not use_triton
+            and is_init[..., 1:].any()
+        ):
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
             # if we have consecutive trajectories, things get a little more complicated
@@ -961,15 +981,21 @@ class LSTMModule(ModuleBase):
 
         if hidden1_in is None and hidden0_in is None:
             shape = (batch, steps)
+            num_states = self.lstm.num_layers * _num_directions(self.lstm)
+            real_hidden_size = (
+                self.lstm.proj_size
+                if self.lstm.proj_size > 0
+                else self.lstm.hidden_size
+            )
             hidden0_in, hidden1_in = (
                 torch.zeros(
                     *shape,
-                    self.lstm.num_layers,
-                    self.lstm.hidden_size,
+                    num_states,
+                    hidden_size,
                     device=device,
                     dtype=dtype,
                 )
-                for _ in range(2)
+                for hidden_size in (real_hidden_size, self.lstm.hidden_size)
             )
         elif hidden1_in is None or hidden0_in is None:
             raise RuntimeError(
@@ -985,9 +1011,7 @@ class LSTMModule(ModuleBase):
         )
 
         if is_init is not None and backend == "triton":
-            return self._lstm_triton_with_resets(
-                input, hidden0_in, hidden1_in, is_init
-            )
+            return self._lstm_triton_with_resets(input, hidden0_in, hidden1_in, is_init)
         if is_init is not None:
             return self._lstm_scan_with_resets(
                 input, hidden0_in, hidden1_in, hidden, is_init
@@ -1038,60 +1062,124 @@ class LSTMModule(ModuleBase):
         hidden1_in: torch.Tensor,
         is_init: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        if self.lstm.num_layers != 1:
-            raise NotImplementedError(
-                "LSTMModule(recurrent_backend='triton') only supports num_layers=1."
-            )
-        if self.lstm.dropout:
-            raise NotImplementedError(
-                "LSTMModule(recurrent_backend='triton') does not support dropout."
-            )
-        if self.lstm.proj_size:
-            raise NotImplementedError(
-                "LSTMModule(recurrent_backend='triton') does not support proj_size."
-            )
+        if self.lstm.bidirectional or self.lstm.proj_size:
+            return self._lstm_pad_with_resets(input, hidden0_in, hidden1_in, is_init)
         from torchrl.modules.tensordict_module._rnn_triton import lstm_triton
 
-        weights = self.lstm._all_weights[0]
-        w_ih = getattr(self.lstm, weights[0])
-        w_hh = getattr(self.lstm, weights[1])
-        b_ih = getattr(self.lstm, weights[2]) if self.lstm.bias else None
-        b_hh = getattr(self.lstm, weights[3]) if self.lstm.bias else None
-        if b_ih is None or b_hh is None:
-            zeros = torch.zeros(
-                4 * self.lstm.hidden_size, device=input.device, dtype=input.dtype
+        if self.lstm.bidirectional:
+            raise RuntimeError(
+                "Triton LSTM layer composition expects unidirectional weights."
             )
-            b_ih = zeros if b_ih is None else b_ih
-            b_hh = zeros if b_hh is None else b_hh
 
-        # hidden0_in / hidden1_in: [B, T, num_layers=1, H] -> [B, T, H].
-        hidden_per_step = hidden0_in[..., 0, :]
-        cell_per_step = hidden1_in[..., 0, :]
+        layer_input = input
+        hidden0_layers = []
+        hidden1_layers = []
+        for layer in range(self.lstm.num_layers):
+            weights = self.lstm._all_weights[layer]
+            w_ih = getattr(self.lstm, weights[0])
+            w_hh = getattr(self.lstm, weights[1])
+            b_ih = getattr(self.lstm, weights[2]) if self.lstm.bias else None
+            b_hh = getattr(self.lstm, weights[3]) if self.lstm.bias else None
+            if b_ih is None or b_hh is None:
+                zeros = torch.zeros(
+                    4 * self.lstm.hidden_size, device=input.device, dtype=input.dtype
+                )
+                b_ih = zeros if b_ih is None else b_ih
+                b_hh = zeros if b_hh is None else b_hh
 
-        h_steps, c_steps, _, _ = lstm_triton(
-            input,
-            hidden_per_step,
-            cell_per_step,
-            w_ih,
-            w_hh,
-            b_ih,
-            b_hh,
-            is_init,
-            compute_dtype=self.recurrent_compute_dtype,
-        )
+            hidden_per_step = hidden0_in[..., layer, :]
+            cell_per_step = hidden1_in[..., layer, :]
+
+            h_steps, c_steps, _, _ = lstm_triton(
+                layer_input,
+                hidden_per_step,
+                cell_per_step,
+                w_ih,
+                w_hh,
+                b_ih,
+                b_hh,
+                is_init,
+                compute_dtype=self.recurrent_compute_dtype,
+            )
+            hidden0_layers.append(h_steps)
+            hidden1_layers.append(c_steps)
+            if layer < self.lstm.num_layers - 1 and self.lstm.dropout:
+                layer_input = F.dropout(
+                    h_steps, p=self.lstm.dropout, training=self.lstm.training
+                )
+            else:
+                layer_input = h_steps
 
         # Match the per-step "next hidden" semantics used by the scan backend:
         # the [b, t] hidden slot is populated only at trajectory ends.
-        end_mask = torch.empty_like(is_init)
-        end_mask[:, :-1] = is_init[:, 1:]
-        end_mask[:, -1] = True
-        zeros = torch.zeros_like(h_steps)
-        hidden0_steps = torch.where(end_mask.unsqueeze(-1), h_steps, zeros)
-        hidden1_steps = torch.where(end_mask.unsqueeze(-1), c_steps, zeros)
-        # torchrl's contract is [B, T, num_layers=1, H].
-        hidden0_steps = hidden0_steps.unsqueeze(-2)
-        hidden1_steps = hidden1_steps.unsqueeze(-2)
-        return h_steps, hidden0_steps, hidden1_steps
+        end_mask = _end_mask_from_is_init(is_init)
+        hidden0_steps = torch.stack(hidden0_layers, -2)
+        hidden1_steps = torch.stack(hidden1_layers, -2)
+        hidden0_steps = torch.where(
+            end_mask.unsqueeze(-1).unsqueeze(-1),
+            hidden0_steps,
+            torch.zeros_like(hidden0_steps),
+        )
+        hidden1_steps = torch.where(
+            end_mask.unsqueeze(-1).unsqueeze(-1),
+            hidden1_steps,
+            torch.zeros_like(hidden1_steps),
+        )
+        return layer_input, hidden0_steps, hidden1_steps
+
+    def _lstm_pad_with_resets(
+        self,
+        input: torch.Tensor,
+        hidden0_in: torch.Tensor,
+        hidden1_in: torch.Tensor,
+        is_init: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+        from torchrl.objectives.value.utils import _get_num_per_traj_init
+
+        # The outer forward path intentionally skips split/pad when
+        # ``backend='triton'``. Configurations handled here need pad semantics,
+        # so the split/pad work is redone locally before re-entering ``_lstm``.
+        splits = _get_num_per_traj_init(is_init)
+        batch, steps = input.shape[:2]
+        # Private synthetic keys avoid collisions with user-provided in/out keys
+        # while this helper reshapes the data through TensorDict utilities.
+        source = TensorDict(
+            {
+                "_input": input,
+                "_hidden0": hidden0_in,
+                "_hidden1": hidden1_in,
+                "is_init": is_init.unsqueeze(-1),
+            },
+            [batch, steps],
+        )
+        padded = _split_and_pad_sequence(source, splits)
+        val, hidden0, hidden1 = self._lstm(
+            padded["_input"],
+            padded.shape[0],
+            padded.shape[1],
+            input.device,
+            input.dtype,
+            padded["_hidden0"],
+            padded["_hidden1"],
+            splits=splits,
+            is_init=None,
+            backend="pad",
+        )
+        padded.set("_value_out", val)
+        padded.set("_hidden0_out", hidden0)
+        padded.set("_hidden1_out", hidden1)
+        restored = _inv_pad_sequence(
+            padded.select("_value_out", "_hidden0_out", "_hidden1_out"), splits
+        ).reshape(batch, steps)
+        return (
+            restored["_value_out"],
+            restored["_hidden0_out"],
+            restored["_hidden1_out"],
+        )
 
     def _lstm_scan_with_resets(
         self,
@@ -1108,6 +1196,10 @@ class LSTMModule(ModuleBase):
         if self.lstm.proj_size:
             raise NotImplementedError(
                 "LSTMModule(recurrent_backend='scan') does not support proj_size yet."
+            )
+        if self.lstm.bidirectional:
+            raise ValueError(
+                "LSTMModule(recurrent_backend='scan') does not support bidirectional LSTMs yet."
             )
 
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
@@ -1573,8 +1665,9 @@ class GRUModule(ModuleBase):
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
             avoids materializing padded trajectory chunks. ``"triton"``
-            (prototype, CUDA only) fuses the whole time loop into a single
-            Triton kernel; single-layer only, no dropout / bidirectional.
+            (prototype, CUDA only) uses Triton kernels where available and
+            otherwise preserves pad-backend recurrent semantics for dropout
+            and bidirectional layers.
             ``"auto"`` uses ``"pad"`` in eager mode and ``"scan"`` when called
             under :func:`torch.compile`. Default: ``"pad"``.
         recurrent_compute_dtype: dtype used for the recurrent matmul inside the
@@ -1726,8 +1819,6 @@ class GRUModule(ModuleBase):
         if gru is not None:
             if not gru.batch_first:
                 raise ValueError("The input gru must have batch_first=True.")
-            if gru.bidirectional:
-                raise ValueError("The input gru cannot be bidirectional.")
             if input_size is not None or hidden_size is not None:
                 raise ValueError(
                     "An GRU instance cannot be passed along with class argument."
@@ -1735,8 +1826,10 @@ class GRUModule(ModuleBase):
         else:
             if not batch_first:
                 raise ValueError("The input gru must have batch_first=True.")
-            if bidirectional:
-                raise ValueError("The input gru cannot be bidirectional.")
+            if python_based and bidirectional:
+                raise ValueError(
+                    "python_based=True does not support bidirectional GRUs."
+                )
 
             if python_based:
                 gru = GRU(
@@ -1747,7 +1840,7 @@ class GRUModule(ModuleBase):
                     dropout=dropout,
                     device=device,
                     batch_first=True,
-                    bidirectional=False,
+                    bidirectional=bidirectional,
                 )
             else:
                 gru = nn.GRU(
@@ -1758,7 +1851,7 @@ class GRUModule(ModuleBase):
                     dropout=dropout,
                     device=device,
                     batch_first=True,
-                    bidirectional=False,
+                    bidirectional=bidirectional,
                 )
         if not ((in_key is None) ^ (in_keys is None)):
             raise ValueError(
@@ -1909,7 +2002,12 @@ class GRUModule(ModuleBase):
             )
         return TensorDictPrimer(
             {
-                in_key1: Unbounded(shape=(self.gru.num_layers, self.gru.hidden_size)),
+                in_key1: Unbounded(
+                    shape=(
+                        self.gru.num_layers * _num_directions(self.gru),
+                        self.gru.hidden_size,
+                    )
+                ),
             },
             expand_specs=True,
         )
@@ -1976,7 +2074,12 @@ class GRUModule(ModuleBase):
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        if self.recurrent_mode and not use_scan and not use_triton and is_init[..., 1:].any():
+        if (
+            self.recurrent_mode
+            and not use_scan
+            and not use_triton
+            and is_init[..., 1:].any()
+        ):
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
             # if we have consecutive trajectories, things get a little more complicated
@@ -2045,7 +2148,7 @@ class GRUModule(ModuleBase):
             shape = (batch, steps)
             hidden_in = torch.zeros(
                 *shape,
-                self.gru.num_layers,
+                self.gru.num_layers * _num_directions(self.gru),
                 self.gru.hidden_size,
                 device=device,
                 dtype=dtype,
@@ -2095,51 +2198,102 @@ class GRUModule(ModuleBase):
         hidden_in: torch.Tensor,
         is_init: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.gru.num_layers != 1:
-            raise NotImplementedError(
-                "GRUModule(recurrent_backend='triton') only supports num_layers=1."
-            )
-        if self.gru.dropout:
-            raise NotImplementedError(
-                "GRUModule(recurrent_backend='triton') does not support dropout."
-            )
+        if self.gru.bidirectional:
+            return self._gru_pad_with_resets(input, hidden_in, is_init)
         from torchrl.modules.tensordict_module._rnn_triton import gru_triton
 
-        weights = self.gru._all_weights[0]
-        w_ih = getattr(self.gru, weights[0])
-        w_hh = getattr(self.gru, weights[1])
-        b_ih = getattr(self.gru, weights[2]) if self.gru.bias else None
-        b_hh = getattr(self.gru, weights[3]) if self.gru.bias else None
-        if b_ih is None or b_hh is None:
-            zeros = torch.zeros(
-                3 * self.gru.hidden_size, device=input.device, dtype=input.dtype
+        if self.gru.bidirectional:
+            raise RuntimeError(
+                "Triton GRU layer composition expects unidirectional weights."
             )
-            b_ih = zeros if b_ih is None else b_ih
-            b_hh = zeros if b_hh is None else b_hh
 
-        # hidden_in: [B, T, num_layers=1, H] -> [B, T, H].
-        hidden_per_step = hidden_in[..., 0, :]
+        layer_input = input
+        hidden_layers = []
+        for layer in range(self.gru.num_layers):
+            weights = self.gru._all_weights[layer]
+            w_ih = getattr(self.gru, weights[0])
+            w_hh = getattr(self.gru, weights[1])
+            b_ih = getattr(self.gru, weights[2]) if self.gru.bias else None
+            b_hh = getattr(self.gru, weights[3]) if self.gru.bias else None
+            if b_ih is None or b_hh is None:
+                zeros = torch.zeros(
+                    3 * self.gru.hidden_size, device=input.device, dtype=input.dtype
+                )
+                b_ih = zeros if b_ih is None else b_ih
+                b_hh = zeros if b_hh is None else b_hh
 
-        h_steps, _ = gru_triton(
-            input,
-            hidden_per_step,
-            w_ih,
-            w_hh,
-            b_ih,
-            b_hh,
-            is_init,
-            compute_dtype=self.recurrent_compute_dtype,
-        )
+            hidden_per_step = hidden_in[..., layer, :]
+            h_steps, _ = gru_triton(
+                layer_input,
+                hidden_per_step,
+                w_ih,
+                w_hh,
+                b_ih,
+                b_hh,
+                is_init,
+                compute_dtype=self.recurrent_compute_dtype,
+            )
+            hidden_layers.append(h_steps)
+            if layer < self.gru.num_layers - 1 and self.gru.dropout:
+                layer_input = F.dropout(
+                    h_steps, p=self.gru.dropout, training=self.gru.training
+                )
+            else:
+                layer_input = h_steps
 
         # Match the scan backend's per-step hidden output semantics.
-        end_mask = torch.empty_like(is_init)
-        end_mask[:, :-1] = is_init[:, 1:]
-        end_mask[:, -1] = True
+        end_mask = _end_mask_from_is_init(is_init)
+        hidden_steps = torch.stack(hidden_layers, -2)
         hidden_steps = torch.where(
-            end_mask.unsqueeze(-1), h_steps, torch.zeros_like(h_steps)
+            end_mask.unsqueeze(-1).unsqueeze(-1),
+            hidden_steps,
+            torch.zeros_like(hidden_steps),
         )
-        hidden_steps = hidden_steps.unsqueeze(-2)
-        return h_steps, hidden_steps
+        return layer_input, hidden_steps
+
+    def _gru_pad_with_resets(
+        self,
+        input: torch.Tensor,
+        hidden_in: torch.Tensor,
+        is_init: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+        from torchrl.objectives.value.utils import _get_num_per_traj_init
+
+        # See ``_lstm_pad_with_resets``: this helper owns split/pad because the
+        # outer recurrent path bypasses it for ``backend='triton'``.
+        splits = _get_num_per_traj_init(is_init)
+        batch, steps = input.shape[:2]
+        # Private synthetic keys avoid collisions with user-provided in/out keys.
+        source = TensorDict(
+            {
+                "_input": input,
+                "_hidden": hidden_in,
+                "is_init": is_init.unsqueeze(-1),
+            },
+            [batch, steps],
+        )
+        padded = _split_and_pad_sequence(source, splits)
+        val, hidden = self._gru(
+            padded["_input"],
+            padded.shape[0],
+            padded.shape[1],
+            input.device,
+            input.dtype,
+            padded["_hidden"],
+            splits=splits,
+            is_init=None,
+            backend="pad",
+        )
+        padded.set("_value_out", val)
+        padded.set("_hidden_out", hidden)
+        restored = _inv_pad_sequence(
+            padded.select("_value_out", "_hidden_out"), splits
+        ).reshape(batch, steps)
+        return restored["_value_out"], restored["_hidden_out"]
 
     def _gru_scan_with_resets(
         self,
@@ -2151,6 +2305,10 @@ class GRUModule(ModuleBase):
         if self.gru.dropout:
             raise NotImplementedError(
                 "GRUModule(recurrent_backend='scan') does not support dropout yet."
+            )
+        if self.gru.bidirectional:
+            raise ValueError(
+                "GRUModule(recurrent_backend='scan') does not support bidirectional GRUs yet."
             )
 
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []

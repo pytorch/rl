@@ -19,10 +19,15 @@ size we care about in RL.
 
 Limitations of this prototype:
 
-* ``num_layers == 1`` only.
-* No dropout, no projection (``proj_size``), no bidirectional.
+* Low-level kernels operate on one layer and one direction at a time.
+  Multilayer module wrappers therefore autotune once per layer shape on the
+  first call.
+* No projection (``proj_size``) in the low-level kernel.
 * ``hidden_size`` is internally padded to the next power of two (kept on the
   Python side; no in-kernel masking).
+* The autograd wrapper saves per-layer gate activations explicitly. Multilayer
+  execution scales this activation memory linearly with the number of layers,
+  unlike cuDNN's opaque ``reserve_space``.
 * ``compute_dtype`` controls the matmul precision: ``torch.float32`` (default,
   TF32 on Ampere/Hopper, matching ``torch.nn.GRU`` / ``LSTM`` behavior) or
   ``torch.bfloat16`` (twice the SMEM headroom, ~7-bit mantissa).
@@ -546,6 +551,7 @@ if _has_triton:
         save_o_ptr,
         save_tanhc_ptr,
         dout_ptr,
+        dc_out_ptr,
         dh_final_ptr,
         dc_final_ptr,
         dgates_x_ptr,
@@ -580,6 +586,7 @@ if _has_triton:
             t = T - 1 - t_inv
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
             dout_t = tl.load(dout_ptr + base_out, mask=mask_b[:, None], other=0.0)
+            dc_out_t = tl.load(dc_out_ptr + base_out, mask=mask_b[:, None], other=0.0)
             i = tl.load(save_i_ptr + base_out, mask=mask_b[:, None], other=0.0)
             f = tl.load(save_f_ptr + base_out, mask=mask_b[:, None], other=0.0)
             g = tl.load(save_g_ptr + base_out, mask=mask_b[:, None], other=0.0)
@@ -604,7 +611,7 @@ if _has_triton:
 
             dh = dout_t + dh_next
             do = dh * tanh_c
-            dc = dc_next + dh * o * (1.0 - tanh_c * tanh_c)
+            dc = dc_out_t + dc_next + dh * o * (1.0 - tanh_c * tanh_c)
 
             df = dc * c_prev
             di = dc * g
@@ -1074,13 +1081,6 @@ class _LSTMFn(torch.autograd.Function):
         dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
         dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
         dc_final_p = _pad_last(dc_final.contiguous(), H, H_pad).contiguous()
-        # Note: dc_out (gradient on intermediate c_t) is not propagated by the
-        # bwd kernel — its consumers are expected to use only the final c
-        # (or the values at trajectory ends). If a user passes a non-zero
-        # gradient through intermediate c_t we silently drop it. Documented
-        # under the triton backend's known limitations.
-        del dc_out_p
-
         dgates_x = torch.empty(B, T, 4 * H_pad, dtype=x.dtype, device=x.device)
         dgates_h = torch.empty_like(dgates_x)
         dhidden_p = torch.zeros_like(hidden_p)
@@ -1105,6 +1105,7 @@ class _LSTMFn(torch.autograd.Function):
             save_o,
             save_tanhc,
             dout_p,
+            dc_out_p,
             dh_final_p,
             dc_final_p,
             dgates_x,
