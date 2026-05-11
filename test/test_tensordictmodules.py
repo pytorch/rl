@@ -71,6 +71,13 @@ from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEn
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
+import importlib.util as _importlib_util  # noqa: E402
+
+_has_triton = (
+    _importlib_util.find_spec("triton") is not None and torch.cuda.is_available()
+)
+_triton_skip_reason = "requires triton and CUDA"
+
 _has_functorch = False
 try:
     try:
@@ -1245,6 +1252,132 @@ class TestLSTMModule:
             scan_out["next", "hidden1"], auto_scan_out["next", "hidden1"]
         )
 
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
+    @pytest.mark.parametrize("H", [16, 64])
+    def test_lstm_module_triton_backend_matches_pad(self, H, compute_dtype):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F = 4, 7, 3
+        pad_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            device=device,
+        )
+        triton_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            recurrent_backend="triton",
+            recurrent_compute_dtype=compute_dtype,
+            device=device,
+        )
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden0 = torch.randn(B, T, 1, H, device=device)
+        hidden1 = torch.randn(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[1, 5] = True
+        is_init[2, 1] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(data.clone())
+            triton_out = triton_module(data.clone())
+
+        atol = 5e-2 if compute_dtype == torch.bfloat16 else 5e-3
+        torch.testing.assert_close(pad_out["feat"], triton_out["feat"], atol=atol, rtol=atol)
+        torch.testing.assert_close(
+            pad_out["next", "hidden0"], triton_out["next", "hidden0"], atol=atol, rtol=atol
+        )
+        torch.testing.assert_close(
+            pad_out["next", "hidden1"], triton_out["next", "hidden1"], atol=atol, rtol=atol
+        )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    def test_lstm_module_triton_backward(self):
+        """Backward path: gradients match pad backend within tolerance."""
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 64
+        pad_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            device=device,
+        )
+        triton_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            recurrent_backend="triton",
+            device=device,
+        )
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden0 = torch.zeros(B, T, 1, H, device=device)
+        hidden1 = torch.zeros(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[1, 3] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        def loss_for(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            out = mod(data.clone())
+            return out["feat"].pow(2).sum()
+
+        with set_recurrent_mode(True):
+            loss_pad = loss_for(pad_module)
+            loss_pad.backward()
+            grads_pad = {
+                k: p.grad.detach().clone() for k, p in pad_module.named_parameters()
+            }
+            loss_triton = loss_for(triton_module)
+            loss_triton.backward()
+            grads_triton = {
+                k: p.grad.detach().clone() for k, p in triton_module.named_parameters()
+            }
+
+        for k in grads_pad:
+            torch.testing.assert_close(
+                grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
+            )
+
+    def test_lstm_module_triton_requires_triton(self, monkeypatch):
+        from torchrl.modules.tensordict_module import rnn as rnn_module
+
+        monkeypatch.setattr(rnn_module, "_has_triton", False)
+        with pytest.raises(RuntimeError, match="triton"):
+            LSTMModule(
+                input_size=3,
+                hidden_size=12,
+                num_layers=1,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="triton",
+            )
+
 
 class TestGRUModule:
     def test_errs(self):
@@ -1818,6 +1951,126 @@ class TestGRUModule:
         torch.testing.assert_close(
             scan_out["next", "hidden"], auto_scan_out["next", "hidden"]
         )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
+    @pytest.mark.parametrize("H", [16, 64])
+    def test_gru_module_triton_backend_matches_pad(self, H, compute_dtype):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F = 4, 7, 3
+        pad_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            device=device,
+        )
+        triton_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="triton",
+            recurrent_compute_dtype=compute_dtype,
+            device=device,
+        )
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden = torch.randn(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[1, 5] = True
+        is_init[2, 1] = True
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init},
+            [B, T],
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(data.clone())
+            triton_out = triton_module(data.clone())
+
+        atol = 5e-2 if compute_dtype == torch.bfloat16 else 5e-3
+        torch.testing.assert_close(pad_out["feat"], triton_out["feat"], atol=atol, rtol=atol)
+        torch.testing.assert_close(
+            pad_out["next", "hidden"], triton_out["next", "hidden"], atol=atol, rtol=atol
+        )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    def test_gru_module_triton_backward(self):
+        """Backward path: gradients match pad backend within tolerance."""
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 64
+        pad_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            device=device,
+        )
+        triton_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="triton",
+            device=device,
+        )
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden = torch.zeros(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[1, 3] = True
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init}, [B, T]
+        )
+
+        def loss_for(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            out = mod(data.clone())
+            return out["feat"].pow(2).sum()
+
+        with set_recurrent_mode(True):
+            loss_pad = loss_for(pad_module)
+            loss_pad.backward()
+            grads_pad = {
+                k: p.grad.detach().clone() for k, p in pad_module.named_parameters()
+            }
+            loss_triton = loss_for(triton_module)
+            loss_triton.backward()
+            grads_triton = {
+                k: p.grad.detach().clone() for k, p in triton_module.named_parameters()
+            }
+
+        for k in grads_pad:
+            torch.testing.assert_close(
+                grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
+            )
+
+    def test_gru_module_triton_requires_triton(self, monkeypatch):
+        from torchrl.modules.tensordict_module import rnn as rnn_module
+
+        monkeypatch.setattr(rnn_module, "_has_triton", False)
+        with pytest.raises(RuntimeError, match="triton"):
+            GRUModule(
+                input_size=3,
+                hidden_size=12,
+                num_layers=1,
+                in_keys=["obs", "hidden"],
+                out_keys=["feat", ("next", "hidden")],
+                recurrent_backend="triton",
+            )
 
 
 def test_safe_specs():

@@ -24,6 +24,7 @@ Mode = Literal[
     "scan_compile_td",
     "scan_eager_direct",
     "scan_compile_direct",
+    "triton_td",
 ]
 
 
@@ -89,7 +90,12 @@ def _make_modules(
     hidden_size: int,
     num_layers: int,
     device: torch.device,
-) -> tuple[GRUModule | LSTMModule, GRUModule | LSTMModule, GRUModule | LSTMModule]:
+) -> tuple[
+    GRUModule | LSTMModule,
+    GRUModule | LSTMModule,
+    GRUModule | LSTMModule,
+    GRUModule | LSTMModule | None,
+]:
     if rnn_type == "lstm":
         cudnn_pad = LSTMModule(
             input_size=input_size,
@@ -123,7 +129,23 @@ def _make_modules(
         ).eval()
         scan_eager.load_state_dict(cudnn_pad.state_dict())
         scan_compile.load_state_dict(cudnn_pad.state_dict())
-        return cudnn_pad, scan_eager, scan_compile
+        triton_mod = None
+        if num_layers == 1 and device.type == "cuda":
+            try:
+                triton_mod = LSTMModule(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    in_keys=["obs", "hidden0", "hidden1"],
+                    out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                    recurrent_backend="triton",
+                    default_recurrent_mode=True,
+                    device=device,
+                ).eval()
+                triton_mod.load_state_dict(cudnn_pad.state_dict())
+            except RuntimeError:
+                triton_mod = None
+        return cudnn_pad, scan_eager, scan_compile, triton_mod
 
     cudnn_pad = GRUModule(
         input_size=input_size,
@@ -157,7 +179,23 @@ def _make_modules(
     ).eval()
     scan_eager.load_state_dict(cudnn_pad.state_dict())
     scan_compile.load_state_dict(cudnn_pad.state_dict())
-    return cudnn_pad, scan_eager, scan_compile
+    triton_mod = None
+    if num_layers == 1 and device.type == "cuda":
+        try:
+            triton_mod = GRUModule(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                in_keys=["obs", "hidden"],
+                out_keys=["feat", ("next", "hidden")],
+                recurrent_backend="triton",
+                default_recurrent_mode=True,
+                device=device,
+            ).eval()
+            triton_mod.load_state_dict(cudnn_pad.state_dict())
+        except RuntimeError:
+            triton_mod = None
+    return cudnn_pad, scan_eager, scan_compile, triton_mod
 
 
 def _make_fn(
@@ -166,6 +204,7 @@ def _make_fn(
     cudnn_pad: GRUModule | LSTMModule,
     scan_eager: GRUModule | LSTMModule,
     scan_compile: GRUModule | LSTMModule,
+    triton_mod: GRUModule | LSTMModule | None,
     obs: torch.Tensor,
     hidden: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
     is_init: torch.Tensor,
@@ -181,6 +220,14 @@ def _make_fn(
 
         def fn():
             return scan_eager(_make_td(rnn_type, obs, hidden, is_init))
+
+        return fn
+    if mode == "triton_td":
+        if triton_mod is None:
+            raise ValueError("triton backend not available on this device / num_layers")
+
+        def fn():
+            return triton_mod(_make_td(rnn_type, obs, hidden, is_init))
 
         return fn
     if mode == "scan_compile_td" and rnn_type == "gru":
@@ -308,6 +355,7 @@ def main() -> None:
             "scan_compile_td",
             "scan_eager_direct",
             "scan_compile_direct",
+            "triton_td",
         ],
         choices=[
             "cudnn_pad_td",
@@ -315,6 +363,7 @@ def main() -> None:
             "scan_compile_td",
             "scan_eager_direct",
             "scan_compile_direct",
+            "triton_td",
         ],
     )
     parser.add_argument("--seed", type=int, default=0)
@@ -336,7 +385,7 @@ def main() -> None:
         torch.manual_seed(args.seed)
         if device.type == "cuda":
             torch.cuda.manual_seed_all(args.seed)
-        cudnn_pad, scan_eager, scan_compile = _make_modules(
+        cudnn_pad, scan_eager, scan_compile, triton_mod = _make_modules(
             rnn_type, args.input_size, args.hidden_size, args.num_layers, device
         )
         obs = torch.randn(
@@ -356,12 +405,15 @@ def main() -> None:
         is_init = _make_is_init(batch, steps, reset_prob, device, generator)
         actual_reset_frac = is_init[:, 1:].float().mean().item() if steps > 1 else 0
         for mode in args.modes:
+            if mode == "triton_td" and triton_mod is None:
+                continue
             fn = _make_fn(
                 rnn_type,
                 mode,
                 cudnn_pad,
                 scan_eager,
                 scan_compile,
+                triton_mod,
                 obs,
                 hidden,
                 is_init,
