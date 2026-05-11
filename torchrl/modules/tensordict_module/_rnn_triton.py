@@ -72,6 +72,15 @@ if _has_triton:
         triton.Config({"BLOCK_B": 32, "BLOCK_K": 64}, num_warps=4, num_stages=1),
     ]
 
+    # Some older Triton versions read ``prune_configs_by`` as a plain dict and
+    # require all three keys to be present. Newer ones use ``.get`` and treat
+    # ``None`` as "no perf model / no top-k". Spelling them out keeps the
+    # autotune wiring backwards-compatible.
+    _PRUNE_BY_TEMPLATE = {
+        "perf_model": None,
+        "top_k": None,
+    }
+
     def _prune_block_k(configs, named_args, **kwargs):
         """Drop configs where BLOCK_K doesn't divide the padded H."""
         H = kwargs.get("H") or named_args.get("H")
@@ -91,7 +100,7 @@ if _has_triton:
     @triton.autotune(
         configs=_FWD_CONFIGS,
         key=["B", "T", "H"],
-        prune_configs_by={"early_config_prune": _prune_block_k},
+        prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
     def _gru_fwd_kernel(
@@ -221,7 +230,7 @@ if _has_triton:
         configs=_BWD_CONFIGS,
         key=["B", "T", "H"],
         reset_to_zero=["dhidden_ptr"],
-        prune_configs_by={"early_config_prune": _prune_block_k},
+        prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
     def _gru_bwd_kernel(
@@ -369,7 +378,7 @@ if _has_triton:
     @triton.autotune(
         configs=_FWD_CONFIGS,
         key=["B", "T", "H"],
-        prune_configs_by={"early_config_prune": _prune_block_k},
+        prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
     def _lstm_fwd_kernel(
@@ -532,7 +541,7 @@ if _has_triton:
         configs=_BWD_CONFIGS,
         key=["B", "T", "H"],
         reset_to_zero=["dhidden_ptr", "dcell_ptr"],
-        prune_configs_by={"early_config_prune": _prune_block_k},
+        prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
     def _lstm_bwd_kernel(

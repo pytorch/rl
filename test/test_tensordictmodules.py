@@ -1370,21 +1370,34 @@ class TestLSTMModule:
             torch.manual_seed(1)
             triton_out = triton_module(data.clone())
 
-        torch.testing.assert_close(
-            pad_out["feat"], triton_out["feat"], atol=5e-3, rtol=5e-3
-        )
-        torch.testing.assert_close(
-            pad_out["next", "hidden0"],
-            triton_out["next", "hidden0"],
-            atol=5e-3,
-            rtol=5e-3,
-        )
-        torch.testing.assert_close(
-            pad_out["next", "hidden1"],
-            triton_out["next", "hidden1"],
-            atol=5e-3,
-            rtol=5e-3,
-        )
+        # Bit-exact equivalence isn't achievable in training mode with dropout:
+        # cuDNN's nn.LSTM stores its dropout mask state in a cuDNN dropout
+        # descriptor that advances independently of torch's global RNG, while
+        # the triton backend's between-layer ``F.dropout`` consumes torch's
+        # RNG directly. Verify both produce sane, same-shape outputs instead.
+        dropout_active = training and module_kwargs.get("dropout", 0.0) > 0
+        if dropout_active:
+            for key in ["feat", ("next", "hidden0"), ("next", "hidden1")]:
+                assert pad_out[key].shape == triton_out[key].shape
+                assert pad_out[key].dtype == triton_out[key].dtype
+                assert torch.isfinite(pad_out[key]).all()
+                assert torch.isfinite(triton_out[key]).all()
+        else:
+            torch.testing.assert_close(
+                pad_out["feat"], triton_out["feat"], atol=5e-3, rtol=5e-3
+            )
+            torch.testing.assert_close(
+                pad_out["next", "hidden0"],
+                triton_out["next", "hidden0"],
+                atol=5e-3,
+                rtol=5e-3,
+            )
+            torch.testing.assert_close(
+                pad_out["next", "hidden1"],
+                triton_out["next", "hidden1"],
+                atol=5e-3,
+                rtol=5e-3,
+            )
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_lstm_module_triton_backward(self):
@@ -2287,15 +2300,26 @@ class TestGRUModule:
             torch.manual_seed(1)
             triton_out = triton_module(data.clone())
 
-        torch.testing.assert_close(
-            pad_out["feat"], triton_out["feat"], atol=5e-3, rtol=5e-3
-        )
-        torch.testing.assert_close(
-            pad_out["next", "hidden"],
-            triton_out["next", "hidden"],
-            atol=5e-3,
-            rtol=5e-3,
-        )
+        # See comment on test_lstm_module_triton_extended_forward_matches_pad:
+        # under dropout + training=True the two backends draw their masks from
+        # different RNG state and bit-exact comparison is not meaningful.
+        dropout_active = training and module_kwargs.get("dropout", 0.0) > 0
+        if dropout_active:
+            for key in ["feat", ("next", "hidden")]:
+                assert pad_out[key].shape == triton_out[key].shape
+                assert pad_out[key].dtype == triton_out[key].dtype
+                assert torch.isfinite(pad_out[key]).all()
+                assert torch.isfinite(triton_out[key]).all()
+        else:
+            torch.testing.assert_close(
+                pad_out["feat"], triton_out["feat"], atol=5e-3, rtol=5e-3
+            )
+            torch.testing.assert_close(
+                pad_out["next", "hidden"],
+                triton_out["next", "hidden"],
+                atol=5e-3,
+                rtol=5e-3,
+            )
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_gru_module_triton_backward(self):
