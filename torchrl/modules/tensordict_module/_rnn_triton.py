@@ -93,6 +93,18 @@ if _has_triton:
         ]
         return out or [min(configs, key=lambda c: c.kwargs["BLOCK_K"])]
 
+    @triton.jit
+    def _tanh(x):
+        """Identity tanh(x) = 2*sigmoid(2x) - 1.
+
+        Avoids ``tl.extra.libdevice.tanh``, which is missing on older Triton
+        versions (the ``libdevice`` namespace lived under ``tl`` in 2.x and
+        moved to ``tl.extra`` in 2.2+). ``tl.sigmoid`` is available
+        everywhere and lowers to the same hardware ``ex2`` / ``rcp`` pair as
+        ``libdevice.tanh`` does.
+        """
+        return 2.0 * tl.sigmoid(2.0 * x) - 1.0
+
     # ------------------------------------------------------------------------
     # GRU forward
     # ------------------------------------------------------------------------
@@ -208,7 +220,7 @@ if _has_triton:
 
             r = tl.sigmoid(gx_r + gh_r)
             z = tl.sigmoid(gx_z + gh_z)
-            n = tl.extra.libdevice.tanh(gx_n + r * gh_n)
+            n = _tanh(gx_n + r * gh_n)
             h = n + z * (h - n)
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
@@ -511,10 +523,10 @@ if _has_triton:
 
             i = tl.sigmoid(gx_i + gh_i)
             f = tl.sigmoid(gx_f + gh_f)
-            g = tl.extra.libdevice.tanh(gx_g + gh_g)
+            g = _tanh(gx_g + gh_g)
             o = tl.sigmoid(gx_o + gh_o)
             c = f * c + i * g
-            tanh_c = tl.extra.libdevice.tanh(c)
+            tanh_c = _tanh(c)
             h = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
