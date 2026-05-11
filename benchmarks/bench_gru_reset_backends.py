@@ -18,6 +18,7 @@ from torchrl.modules import GRUModule, LSTMModule
 
 
 RNNType = Literal["gru", "lstm"]
+CompileMode = Literal["none", "default", "reduce-overhead", "max-autotune"]
 Mode = Literal[
     "cudnn_pad_td",
     "scan_eager_td",
@@ -82,6 +83,32 @@ def _bench(
             _sync(device)
             times.append((time.perf_counter() - start) * 1000)
     return statistics.median(times), min(times)
+
+
+def _compile_fn(
+    fn: Callable[[], object],
+    compile_mode: CompileMode,
+    fullgraph: bool,
+    dynamic: bool | None,
+) -> Callable[[], object]:
+    if compile_mode == "none":
+        return fn
+    kwargs = {}
+    if compile_mode != "default":
+        kwargs["mode"] = compile_mode
+    kwargs["fullgraph"] = fullgraph
+    if dynamic is not None:
+        kwargs["dynamic"] = dynamic
+    return torch.compile(fn, **kwargs)
+
+
+def _first_call_ms(fn: Callable[[], object], device: torch.device) -> float:
+    with torch.inference_mode():
+        _sync(device)
+        start = time.perf_counter()
+        fn()
+        _sync(device)
+    return (time.perf_counter() - start) * 1000
 
 
 def _make_modules(
@@ -408,11 +435,60 @@ def main() -> None:
             "triton_td",
         ],
     )
+    parser.add_argument(
+        "--compile",
+        choices=["none", "default", "reduce-overhead", "max-autotune"],
+        default="none",
+        help=(
+            "Optionally wrap selected benchmark modes in torch.compile. "
+            "'default' calls torch.compile(fn); the other values are passed as "
+            "torch.compile(..., mode=...)."
+        ),
+    )
+    parser.add_argument(
+        "--compile-modes",
+        nargs="+",
+        default=["triton_td"],
+        choices=[
+            "all",
+            "cudnn_pad_td",
+            "scan_eager_td",
+            "scan_compile_td",
+            "scan_eager_direct",
+            "scan_compile_direct",
+            "triton_td",
+        ],
+        help=(
+            "Modes to wrap with --compile. Use 'all' to compile every selected "
+            "mode. The legacy scan_compile_* modes are already compiled before "
+            "this wrapper is applied."
+        ),
+    )
+    parser.add_argument(
+        "--compile-fullgraph",
+        action="store_true",
+        help="Pass fullgraph=True to torch.compile for modes selected by --compile.",
+    )
+    parser.add_argument(
+        "--compile-dynamic",
+        choices=["auto", "true", "false"],
+        default="auto",
+        help=(
+            "Pass dynamic=True/False to torch.compile for selected modes. "
+            "'auto' leaves the argument unset."
+        ),
+    )
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
-    if "scan_compile_td" in args.modes:
+    if "scan_compile_td" in args.modes or args.compile != "none":
         torch._dynamo.config.capture_scalar_outputs = True
 
+    compile_dynamic = {
+        "auto": None,
+        "true": True,
+        "false": False,
+    }[args.compile_dynamic]
+    compile_modes = set(args.compile_modes)
     device = torch.device(args.device)
     if device.type == "cuda":
         torch.cuda.set_device(device)
@@ -420,6 +496,7 @@ def main() -> None:
 
     print(
         "device,rnn_type,batch,steps,num_layers,dropout,reset_prob,mode,"
+        "compile,compile_fullgraph,compile_dynamic,first_call_ms,"
         "median_ms,min_ms,frames_per_s,actual_reset_frac"
     )
     for rnn_type, batch, steps, num_layers, dropout, reset_prob in itertools.product(
@@ -460,7 +537,9 @@ def main() -> None:
         for mode in args.modes:
             if mode == "triton_td" and triton_mod is None:
                 continue
-            if mode.startswith("scan_") and (scan_eager is None or scan_compile is None):
+            if mode.startswith("scan_") and (
+                scan_eager is None or scan_compile is None
+            ):
                 continue
             fn = _make_fn(
                 rnn_type,
@@ -473,11 +552,26 @@ def main() -> None:
                 hidden,
                 is_init,
             )
+            mode_compile = (
+                args.compile
+                if args.compile != "none"
+                and ("all" in compile_modes or mode in compile_modes)
+                else "none"
+            )
+            fn = _compile_fn(
+                fn,
+                mode_compile,
+                args.compile_fullgraph,
+                compile_dynamic,
+            )
+            first_call_ms = _first_call_ms(fn, device)
             median_ms, min_ms = _bench(fn, device, args.warmup, args.iters)
             frames_per_s = batch * steps / (median_ms / 1000)
             print(
                 f"{device},{rnn_type},{batch},{steps},{num_layers},{dropout},"
                 f"{reset_prob},{mode},"
+                f"{mode_compile},{args.compile_fullgraph},{args.compile_dynamic},"
+                f"{first_call_ms:.4f},"
                 f"{median_ms:.4f},{min_ms:.4f},{frames_per_s:.2f},"
                 f"{actual_reset_frac:.6f}"
             )
