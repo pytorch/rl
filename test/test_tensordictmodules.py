@@ -1553,6 +1553,62 @@ class TestLSTMModule:
                 recurrent_backend="triton",
             )
 
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_three_backends_equivalent(self, num_layers):
+        """pad / scan / triton agree at the intersection of supported configs.
+
+        Scan does not support dropout, so this test fixes ``dropout=0``; the
+        pad-vs-triton dropout case is covered separately by
+        ``test_lstm_module_triton_extended_forward_matches_pad``.
+        """
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 16
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            "device": device,
+        }
+        pad_module = LSTMModule(**kwargs)
+        scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
+        triton_module = LSTMModule(**kwargs, recurrent_backend="triton")
+        scan_module.load_state_dict(pad_module.state_dict())
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden0 = torch.randn(B, T, num_layers, H, device=device)
+        hidden1 = torch.randn(B, T, num_layers, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[1, 5] = True
+        is_init[2, 1] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(data.clone())
+            scan_out = scan_module(data.clone())
+            triton_out = triton_module(data.clone())
+
+        for key in ["feat", ("next", "hidden0"), ("next", "hidden1")]:
+            torch.testing.assert_close(
+                pad_out[key], scan_out[key], atol=5e-3, rtol=5e-3
+            )
+            torch.testing.assert_close(
+                pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
+            )
+
 
 class TestGRUModule:
     def test_errs(self):
@@ -2377,6 +2433,61 @@ class TestGRUModule:
                 in_keys=["obs", "hidden"],
                 out_keys=["feat", ("next", "hidden")],
                 recurrent_backend="triton",
+            )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_module_three_backends_equivalent(self, num_layers):
+        """pad / scan / triton agree at the intersection of supported configs.
+
+        Scan does not support dropout, so this test fixes ``dropout=0``; the
+        pad-vs-triton dropout case is covered separately by
+        ``test_gru_module_triton_extended_forward_matches_pad``.
+        """
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 16
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+            "device": device,
+        }
+        pad_module = GRUModule(**kwargs)
+        scan_module = GRUModule(**kwargs, recurrent_backend="scan")
+        triton_module = GRUModule(**kwargs, recurrent_backend="triton")
+        scan_module.load_state_dict(pad_module.state_dict())
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden = torch.randn(B, T, num_layers, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[1, 5] = True
+        is_init[2, 1] = True
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init},
+            [B, T],
+        )
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(data.clone())
+            scan_out = scan_module(data.clone())
+            triton_out = triton_module(data.clone())
+
+        for key in ["feat", ("next", "hidden")]:
+            torch.testing.assert_close(
+                pad_out[key], scan_out[key], atol=5e-3, rtol=5e-3
+            )
+            torch.testing.assert_close(
+                pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
 
