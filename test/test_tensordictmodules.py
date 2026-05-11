@@ -73,10 +73,27 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 import importlib.util as _importlib_util  # noqa: E402
 
-_has_triton = (
-    _importlib_util.find_spec("triton") is not None and torch.cuda.is_available()
-)
-_triton_skip_reason = "requires triton and CUDA"
+
+def _has_triton_backend() -> bool:
+    """Mirror of the triton-availability check inside the RNN backend.
+
+    Triton must be installed, CUDA must be available, and the Triton build
+    must expose the ``triton.language.extra.libdevice`` submodule
+    (Triton >= 2.2). Older Triton installations are routed to scan/pad
+    backends, so the triton-specific tests are skipped there.
+    """
+    if (
+        _importlib_util.find_spec("triton") is None
+        or not torch.cuda.is_available()
+    ):
+        return False
+    return (
+        _importlib_util.find_spec("triton.language.extra.libdevice") is not None
+    )
+
+
+_has_triton = _has_triton_backend()
+_triton_skip_reason = "requires triton (>= 2.2) and CUDA"
 
 _has_functorch = False
 try:

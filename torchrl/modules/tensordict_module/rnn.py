@@ -31,7 +31,21 @@ if _has_torch_scan:
 else:
     _torch_scan = None
 
-_has_triton = importlib.util.find_spec("triton") is not None
+def _check_triton_available() -> bool:
+    """True if Triton is installed and exposes the API the kernels need.
+
+    Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
+    Checks for the ``triton.language.extra.libdevice`` submodule (Triton
+    >= 2.2). Older Triton builds fall back to the scan / pad backends.
+    """
+    if importlib.util.find_spec("triton") is None:
+        return False
+    return (
+        importlib.util.find_spec("triton.language.extra.libdevice") is not None
+    )
+
+
+_has_triton = _check_triton_available()
 
 
 @implement_for("torch", None, "2.6.0", compilable=True)

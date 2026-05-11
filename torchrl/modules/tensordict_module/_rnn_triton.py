@@ -39,7 +39,24 @@ import importlib.util
 import torch
 import torch.nn.functional as F
 
-_has_triton = importlib.util.find_spec("triton") is not None
+def _check_triton_available() -> bool:
+    """True if the installed Triton exposes everything this module needs.
+
+    The backend's kernels rely on ``triton.language.extra.libdevice.tanh``
+    (Triton >= 2.2) and on a backward path that uses ``tl.atomic_add`` with
+    a 2-D mask, which older Triton compilers reject. Probing the lazy
+    ``libdevice`` submodule import at module-load time is a reliable proxy
+    for "Triton is new enough"; older installations fall back transparently
+    to the ``scan`` / ``pad`` backends.
+    """
+    if importlib.util.find_spec("triton") is None:
+        return False
+    return (
+        importlib.util.find_spec("triton.language.extra.libdevice") is not None
+    )
+
+
+_has_triton = _check_triton_available()
 
 if _has_triton:
     import triton
@@ -92,18 +109,6 @@ if _has_triton:
             if c.kwargs["BLOCK_K"] <= H and H % c.kwargs["BLOCK_K"] == 0
         ]
         return out or [min(configs, key=lambda c: c.kwargs["BLOCK_K"])]
-
-    @triton.jit
-    def _tanh(x):
-        """Identity tanh(x) = 2*sigmoid(2x) - 1.
-
-        Avoids ``tl.extra.libdevice.tanh``, which is missing on older Triton
-        versions (the ``libdevice`` namespace lived under ``tl`` in 2.x and
-        moved to ``tl.extra`` in 2.2+). ``tl.sigmoid`` is available
-        everywhere and lowers to the same hardware ``ex2`` / ``rcp`` pair as
-        ``libdevice.tanh`` does.
-        """
-        return 2.0 * tl.sigmoid(2.0 * x) - 1.0
 
     # ------------------------------------------------------------------------
     # GRU forward
@@ -220,7 +225,7 @@ if _has_triton:
 
             r = tl.sigmoid(gx_r + gh_r)
             z = tl.sigmoid(gx_z + gh_z)
-            n = _tanh(gx_n + r * gh_n)
+            n = tl.extra.libdevice.tanh(gx_n + r * gh_n)
             h = n + z * (h - n)
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
@@ -523,10 +528,10 @@ if _has_triton:
 
             i = tl.sigmoid(gx_i + gh_i)
             f = tl.sigmoid(gx_f + gh_f)
-            g = _tanh(gx_g + gh_g)
+            g = tl.extra.libdevice.tanh(gx_g + gh_g)
             o = tl.sigmoid(gx_o + gh_o)
             c = f * c + i * g
-            tanh_c = _tanh(c)
+            tanh_c = tl.extra.libdevice.tanh(c)
             h = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
