@@ -108,6 +108,11 @@ class BrowserTransform(SimpleToolTransform):
 
     For a complete example of how to use this transform, see the LLM Tools tutorial in the documentation.
 
+    .. seealso::
+        For a parallel-dispatched, sandboxed agent loop pair this with
+        :func:`~torchrl.envs.llm.agentic.tools.as_tool` and drop the
+        result into :class:`~torchrl.envs.llm.agentic.ToolCompose`.
+
     Args:
         allowed_domains (list[str], optional): List of allowed domains. If None, all domains are allowed.
         headless (bool): Whether to run browser in headless mode. Defaults to True.

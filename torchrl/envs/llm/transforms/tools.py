@@ -411,6 +411,10 @@ class XMLBlockParser:
     Parses tool calls in the format:
         <tool name="tool_name" tag="optional_tag">{"arg": "value"}</tool>
 
+    .. seealso::
+        :class:`~torchrl.envs.llm.agentic.parsers.XMLToolCallParser` is the
+        modern equivalent with a stable ``call_id`` invariant.
+
     Examples:
         >>> parser = XMLBlockParser()
         >>> response = '<tool name="search" tag="A">{"query": "torchrl"}</tool>\\nSome text.'
@@ -462,6 +466,10 @@ class XMLBlockParser:
 
 class JSONCallParser:
     """Parser for JSON-style function-calling responses.
+
+    .. seealso::
+        :class:`~torchrl.envs.llm.agentic.parsers.JSONToolCallParser` is
+        the modern equivalent with a stable ``call_id`` invariant.
 
     Expects responses in the format::
 
@@ -525,6 +533,13 @@ class ExecuteToolsInOrder(ToolTransformBase):
 
     The transform integrates naturally with TorchRL's LLM environments and can
     read/write conversation history alongside other transforms.
+
+    .. seealso::
+        :class:`~torchrl.envs.llm.agentic.ToolCompose` is the modern,
+        async-first replacement and dispatches tools concurrently. Existing
+        tool services that don't yet have native :class:`Tool` subclasses
+        can be lifted via :func:`~torchrl.envs.llm.agentic.tools.as_tool`
+        and dropped into ``ToolCompose`` without rewriting.
 
     Args:
         registry (ToolRegistry): Registry containing available tool services.
@@ -1054,6 +1069,16 @@ class PythonInterpreter(ToolTransformBase):
     This transform inherits from :class:`ToolTransformBase` and handles all the
     boilerplate for history extraction, batch processing, and result injection.
 
+    .. seealso::
+        :class:`~torchrl.envs.llm.agentic.PythonTool` is the modern,
+        sandboxed equivalent. It runs code in a hardened
+        :class:`~torchrl.envs.llm.agentic.sandbox.Sandbox` (bubblewrap on
+        Linux, sandbox-exec on macOS) using a stateful
+        :class:`~torchrl.envs.llm.agentic.repl.JupyterRepl` or
+        :class:`~torchrl.envs.llm.agentic.repl.SubprocessRepl`. Pair it
+        with :class:`~torchrl.envs.llm.agentic.ToolCompose` for parallel
+        dispatch alongside other tools.
+
     Args:
         tokenizer: The tokenizer to use. Defaults to `None` (no tokenizer).
         tool_name: The name of the tool in the chat history. Defaults to `"tool"`.
@@ -1390,6 +1415,13 @@ class SimpleToolTransform(ToolTransformBase):
     This is a lightweight alternative to MCPToolTransform for simple use cases
     where you don't need the full Model Context Protocol infrastructure.
 
+    .. seealso::
+        Write a native :class:`~torchrl.envs.llm.agentic.Tool` subclass and
+        register it with :class:`~torchrl.envs.llm.agentic.ToolCompose` for
+        parallel dispatch and async lifecycle. To migrate an existing
+        callable-dict tool without rewriting, lift this transform via
+        :func:`~torchrl.envs.llm.agentic.tools.as_tool`.
+
     Args:
         tools (dict[str, Callable]): Dictionary mapping tool names to their implementation functions.
             Each function should accept kwargs matching its expected parameters.
@@ -1524,6 +1556,14 @@ class MCPToolTransform(ToolTransformBase):
     This transform connects to MCP servers and executes tools through the official
     MCP library. It runs async operations in a background thread to work with
     TorchRL's synchronous transform API.
+
+    .. seealso::
+        :class:`~torchrl.envs.llm.agentic.MCPToolset` is the modern,
+        natively-async replacement. An MCP server's ``tools/list`` is
+        materialised as N :class:`~torchrl.envs.llm.agentic.Tool` instances,
+        each with its native schema. Drop them into
+        :class:`~torchrl.envs.llm.agentic.ToolCompose` alongside other
+        tools for concurrent dispatch.
 
     Args:
         servers (dict[str, dict]): Dictionary mapping server names to their configurations.
