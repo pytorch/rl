@@ -390,8 +390,8 @@ We can also customize the storage location on disk:
  .. code-block:: none
 
     The buffer has 3 elements
-    the 'a' tensor is stored in /tmp/tmp8dkloqas/a.memmap
-    the ('b', 'c') tensor is stored in /tmp/tmp8dkloqas/b/c.memmap
+    the 'a' tensor is stored in /tmp/tmp_y671q3p/a.memmap
+    the ('b', 'c') tensor is stored in /tmp/tmp_y671q3p/b/c.memmap
     samples: a= tensor([[ 0,  1,  2,  3],
             [ 8,  9, 10, 11],
             [ 0,  1,  2,  3],

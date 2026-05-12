@@ -245,13 +245,14 @@
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span> <span class="nn">importlib.util</span>
+<span class="kn">import</span> <span class="nn">importlib.metadata</span>
 <span class="kn">import</span> <span class="nn">typing</span>
 <span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span> <span class="nn">torch</span>
 <span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
-<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key_list</span>
+<span class="kn">from</span> <span class="nn">packaging</span> <span class="kn">import</span> <span class="n">version</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">unravel_key_list</span>
 <span class="kn">from</span> <span class="nn">tensordict.base</span> <span class="kn">import</span> <span class="n">NO_DEFAULT</span>
 <span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">dispatch</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span> <span class="k">as</span> <span class="n">ModuleBase</span>
 <span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">expand_as_right</span><span class="p">,</span> <span class="n">prod</span><span class="p">,</span> <span class="n">set_lazy_legacy</span>
@@ -266,11 +267,35 @@
 <span class="p">)</span>
 <span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Unbounded</span>
 
-<span class="n">_has_torch_scan</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;torch._higher_order_ops.scan&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="c1"># ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. Gate the</span>
+<span class="c1"># import on the runtime torch version: probing via ``importlib.util.find_spec``</span>
+<span class="c1"># would eagerly import the (missing) ``torch._higher_order_ops`` parent on</span>
+<span class="c1"># older builds and crash this module at load time.</span>
+<span class="n">_has_torch_scan</span> <span class="o">=</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">&quot;2.6.0&quot;</span><span class="p">)</span>
 <span class="k">if</span> <span class="n">_has_torch_scan</span><span class="p">:</span>
     <span class="kn">from</span> <span class="nn">torch._higher_order_ops</span> <span class="kn">import</span> <span class="n">scan</span> <span class="k">as</span> <span class="n">_torch_scan</span>
 <span class="k">else</span><span class="p">:</span>
     <span class="n">_torch_scan</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">_check_triton_available</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;True if Triton is installed and exposes the API the kernels need.</span>
+
+<span class="sd">    Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.</span>
+<span class="sd">    The backend requires ``triton.language.extra.libdevice`` which is only</span>
+<span class="sd">    available from Triton 2.2 onwards. Older Triton builds fall back to the</span>
+<span class="sd">    scan / pad backends. The version is read from package metadata to avoid</span>
+<span class="sd">    eagerly importing Triton (or its missing ``triton.language.extra`` parent)</span>
+<span class="sd">    at torchrl import time.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">triton_version</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">version</span><span class="p">(</span><span class="s2">&quot;triton&quot;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">importlib</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">PackageNotFoundError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">triton_version</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">&quot;2.2&quot;</span><span class="p">)</span>
+
+
+<span class="n">_has_triton</span> <span class="o">=</span> <span class="n">_check_triton_available</span><span class="p">()</span>
 
 
 <span class="nd">@implement_for</span><span class="p">(</span><span class="s2">&quot;torch&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;2.6.0&quot;</span><span class="p">,</span> <span class="n">compilable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -311,6 +336,17 @@
         <span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">h_padded</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">_num_directions</span><span class="p">(</span><span class="n">rnn</span><span class="p">:</span> <span class="n">nn</span><span class="o">.</span><span class="n">RNNBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">return</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">rnn</span><span class="o">.</span><span class="n">bidirectional</span> <span class="k">else</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">_end_mask_from_is_init</span><span class="p">(</span><span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="n">end_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">is_init</span><span class="p">)</span>
+    <span class="n">end_mask</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">is_init</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:]</span>
+    <span class="n">end_mask</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="n">end_mask</span>
 
 
 <span class="k">class</span> <span class="nc">LSTMCell</span><span class="p">(</span><span class="n">RNNCellBase</span><span class="p">):</span>
@@ -733,9 +769,16 @@
 <span class="sd">        recurrent_backend: backend used in recurrent mode when trajectories reset</span>
 <span class="sd">            in the middle of a batch. ``&quot;pad&quot;`` keeps the existing split/pad</span>
 <span class="sd">            strategy. ``&quot;scan&quot;`` uses a scan loop over the time dimension and</span>
-<span class="sd">            avoids materializing padded trajectory chunks. ``&quot;auto&quot;`` uses</span>
-<span class="sd">            ``&quot;pad&quot;`` in eager mode and ``&quot;scan&quot;`` when called under</span>
+<span class="sd">            avoids materializing padded trajectory chunks. ``&quot;triton&quot;``</span>
+<span class="sd">            (prototype, CUDA only) uses Triton kernels where available and</span>
+<span class="sd">            otherwise preserves pad-backend recurrent semantics for dropout,</span>
+<span class="sd">            projections and bidirectional layers. ``&quot;auto&quot;`` uses ``&quot;pad&quot;``</span>
+<span class="sd">            in eager mode and ``&quot;scan&quot;`` when called under</span>
 <span class="sd">            :func:`torch.compile`. Default: ``&quot;pad&quot;``.</span>
+<span class="sd">        recurrent_compute_dtype: dtype used for the recurrent matmul inside the</span>
+<span class="sd">            ``&quot;triton&quot;`` backend (``torch.float32`` -&gt; TF32 on H100, default;</span>
+<span class="sd">            ``torch.bfloat16`` -&gt; bigger SMEM margin, lower precision).</span>
+<span class="sd">            Ignored by the other backends. Default: ``torch.float32``.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        in_key (str or tuple of str): the input key of the module. Exclusive use</span>
@@ -831,7 +874,8 @@
         <span class="n">proj_size</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">python_based</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">recurrent_backend</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
+        <span class="n">recurrent_backend</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">,</span> <span class="s2">&quot;triton&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
+        <span class="n">recurrent_compute_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">in_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -842,16 +886,19 @@
         <span class="n">default_recurrent_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">}:</span>
+        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">,</span> <span class="s2">&quot;triton&quot;</span><span class="p">}:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;recurrent_backend must be one of &#39;auto&#39;, &#39;pad&#39; or &#39;scan&#39;. &quot;</span>
+                <span class="s2">&quot;recurrent_backend must be one of &#39;auto&#39;, &#39;pad&#39;, &#39;scan&#39; or &#39;triton&#39;. &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="n">recurrent_backend</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="o">==</span> <span class="s2">&quot;triton&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_has_triton</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;recurrent_backend=&#39;triton&#39; requires the triton package. &quot;</span>
+                <span class="s2">&quot;Install it with `pip install triton`.&quot;</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">lstm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">lstm</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input lstm must have batch_first=True.&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">lstm</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input lstm cannot be bidirectional.&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">input_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">hidden_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;An LSTM instance cannot be passed along with class argument.&quot;</span>
@@ -859,10 +906,12 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">batch_first</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input lstm must have batch_first=True.&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">bidirectional</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input lstm cannot be bidirectional.&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">hidden_size</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;hidden_size must be passed.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">python_based</span> <span class="ow">and</span> <span class="n">bidirectional</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;python_based=True does not support bidirectional LSTMs.&quot;</span>
+                <span class="p">)</span>
             <span class="k">if</span> <span class="n">python_based</span><span class="p">:</span>
                 <span class="n">lstm</span> <span class="o">=</span> <span class="n">LSTM</span><span class="p">(</span>
                     <span class="n">input_size</span><span class="o">=</span><span class="n">input_size</span><span class="p">,</span>
@@ -873,7 +922,7 @@
                     <span class="n">proj_size</span><span class="o">=</span><span class="n">proj_size</span><span class="p">,</span>
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">bidirectional</span><span class="o">=</span><span class="n">bidirectional</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">lstm</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LSTM</span><span class="p">(</span>
@@ -885,7 +934,7 @@
                     <span class="n">proj_size</span><span class="o">=</span><span class="n">proj_size</span><span class="p">,</span>
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">bidirectional</span><span class="o">=</span><span class="n">bidirectional</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">in_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">^</span> <span class="p">(</span><span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -920,6 +969,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_recurrent_mode</span> <span class="o">=</span> <span class="n">default_recurrent_mode</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_backend</span> <span class="o">=</span> <span class="n">recurrent_backend</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_compute_dtype</span> <span class="o">=</span> <span class="n">recurrent_compute_dtype</span>
 
 <div class="viewcode-block" id="LSTMModule.make_python_based">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule.make_python_based">[docs]</a>
@@ -1045,10 +1095,14 @@
                 <span class="s2">&quot;have compatible names, ie. the out_keys should be named after (&#39;next&#39;, &lt;in_key&gt;). Got &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;in_keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span><span class="si">}</span><span class="s2"> and out_keys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="si">}</span><span class="s2"> instead.&quot;</span>
             <span class="p">)</span>
+        <span class="n">num_states</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">*</span> <span class="n">_num_directions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">)</span>
+        <span class="n">real_hidden_size</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="n">TensorDictPrimer</span><span class="p">(</span>
             <span class="p">{</span>
-                <span class="n">in_key1</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)),</span>
-                <span class="n">in_key2</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)),</span>
+                <span class="n">in_key1</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_states</span><span class="p">,</span> <span class="n">real_hidden_size</span><span class="p">)),</span>
+                <span class="n">in_key2</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_states</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)),</span>
             <span class="p">},</span>
             <span class="n">expand_specs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span></div>
@@ -1119,7 +1173,13 @@
         <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
             <span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;scan&quot;</span> <span class="k">if</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;pad&quot;</span>
         <span class="n">use_scan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;scan&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_scan</span> <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">use_triton</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;triton&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_scan</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_triton</span>
+            <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="n">_get_num_per_traj_init</span>
 
             <span class="c1"># if we have consecutive trajectories, things get a little more complicated</span>
@@ -1166,7 +1226,8 @@
             <span class="n">hidden0</span><span class="p">,</span>
             <span class="n">hidden1</span><span class="p">,</span>
             <span class="n">splits</span><span class="p">,</span>
-            <span class="n">is_init</span><span class="o">=</span><span class="n">is_init</span> <span class="k">if</span> <span class="n">use_scan</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">is_init</span><span class="o">=</span><span class="n">is_init</span> <span class="k">if</span> <span class="p">(</span><span class="n">use_scan</span> <span class="ow">or</span> <span class="n">use_triton</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="n">backend</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="k">else</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">val</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden0</span><span class="p">)</span>
@@ -1193,6 +1254,7 @@
         <span class="n">hidden1_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">steps</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -1200,15 +1262,21 @@
 
         <span class="k">if</span> <span class="n">hidden1_in</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">hidden0_in</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+            <span class="n">num_states</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">*</span> <span class="n">_num_directions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">)</span>
+            <span class="n">real_hidden_size</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span>
+            <span class="p">)</span>
             <span class="n">hidden0_in</span><span class="p">,</span> <span class="n">hidden1_in</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
                     <span class="o">*</span><span class="n">shape</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">,</span>
+                    <span class="n">num_states</span><span class="p">,</span>
+                    <span class="n">hidden_size</span><span class="p">,</span>
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
                 <span class="p">)</span>
-                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">hidden_size</span> <span class="ow">in</span> <span class="p">(</span><span class="n">real_hidden_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)</span>
             <span class="p">)</span>
         <span class="k">elif</span> <span class="n">hidden1_in</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">hidden0_in</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1223,6 +1291,8 @@
             <span class="n">_hidden1_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">(),</span>
         <span class="p">)</span>
 
+        <span class="k">if</span> <span class="n">is_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;triton&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_triton_with_resets</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden0_in</span><span class="p">,</span> <span class="n">hidden1_in</span><span class="p">,</span> <span class="n">is_init</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">is_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_scan_with_resets</span><span class="p">(</span>
                 <span class="nb">input</span><span class="p">,</span> <span class="n">hidden0_in</span><span class="p">,</span> <span class="n">hidden1_in</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">is_init</span>
@@ -1266,6 +1336,132 @@
                 <span class="p">)</span>
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_lstm_triton_with_resets</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden0_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden1_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bidirectional</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm_pad_with_resets</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden0_in</span><span class="p">,</span> <span class="n">hidden1_in</span><span class="p">,</span> <span class="n">is_init</span><span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module._rnn_triton</span> <span class="kn">import</span> <span class="n">lstm_triton</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Triton LSTM layer composition expects unidirectional weights.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">layer_input</span> <span class="o">=</span> <span class="nb">input</span>
+        <span class="n">hidden0_layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">hidden1_layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+            <span class="n">w_ih</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">w_hh</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">b_ih</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">b_hh</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">b_ih</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">b_hh</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">zeros</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="mi">4</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="p">)</span>
+                <span class="n">b_ih</span> <span class="o">=</span> <span class="n">zeros</span> <span class="k">if</span> <span class="n">b_ih</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">b_ih</span>
+                <span class="n">b_hh</span> <span class="o">=</span> <span class="n">zeros</span> <span class="k">if</span> <span class="n">b_hh</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">b_hh</span>
+
+            <span class="n">hidden_per_step</span> <span class="o">=</span> <span class="n">hidden0_in</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">layer</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="n">cell_per_step</span> <span class="o">=</span> <span class="n">hidden1_in</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">layer</span><span class="p">,</span> <span class="p">:]</span>
+
+            <span class="n">h_steps</span><span class="p">,</span> <span class="n">c_steps</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">lstm_triton</span><span class="p">(</span>
+                <span class="n">layer_input</span><span class="p">,</span>
+                <span class="n">hidden_per_step</span><span class="p">,</span>
+                <span class="n">cell_per_step</span><span class="p">,</span>
+                <span class="n">w_ih</span><span class="p">,</span>
+                <span class="n">w_hh</span><span class="p">,</span>
+                <span class="n">b_ih</span><span class="p">,</span>
+                <span class="n">b_hh</span><span class="p">,</span>
+                <span class="n">is_init</span><span class="p">,</span>
+                <span class="n">compute_dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">recurrent_compute_dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">hidden0_layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_steps</span><span class="p">)</span>
+            <span class="n">hidden1_layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">c_steps</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">layer</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
+                <span class="n">layer_input</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span>
+                    <span class="n">h_steps</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">dropout</span><span class="p">,</span> <span class="n">training</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">training</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">layer_input</span> <span class="o">=</span> <span class="n">h_steps</span>
+
+        <span class="c1"># Match the per-step &quot;next hidden&quot; semantics used by the scan backend:</span>
+        <span class="c1"># the [b, t] hidden slot is populated only at trajectory ends.</span>
+        <span class="n">end_mask</span> <span class="o">=</span> <span class="n">_end_mask_from_is_init</span><span class="p">(</span><span class="n">is_init</span><span class="p">)</span>
+        <span class="n">hidden0_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">hidden0_layers</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">hidden1_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">hidden1_layers</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">hidden0_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">end_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">hidden0_steps</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden0_steps</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">hidden1_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">end_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">hidden1_steps</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden1_steps</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">layer_input</span><span class="p">,</span> <span class="n">hidden0_steps</span><span class="p">,</span> <span class="n">hidden1_steps</span>
+
+    <span class="k">def</span> <span class="nf">_lstm_pad_with_resets</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden0_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden1_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="kn">from</span> <span class="nn">torchrl.objectives.value.functional</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">_inv_pad_sequence</span><span class="p">,</span>
+            <span class="n">_split_and_pad_sequence</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="n">_get_num_per_traj_init</span>
+
+        <span class="c1"># The outer forward path intentionally skips split/pad when</span>
+        <span class="c1"># ``backend=&#39;triton&#39;``. Configurations handled here need pad semantics,</span>
+        <span class="c1"># so the split/pad work is redone locally before re-entering ``_lstm``.</span>
+        <span class="n">splits</span> <span class="o">=</span> <span class="n">_get_num_per_traj_init</span><span class="p">(</span><span class="n">is_init</span><span class="p">)</span>
+        <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="c1"># Private synthetic keys avoid collisions with user-provided in/out keys</span>
+        <span class="c1"># while this helper reshapes the data through TensorDict utilities.</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;_input&quot;</span><span class="p">:</span> <span class="nb">input</span><span class="p">,</span>
+                <span class="s2">&quot;_hidden0&quot;</span><span class="p">:</span> <span class="n">hidden0_in</span><span class="p">,</span>
+                <span class="s2">&quot;_hidden1&quot;</span><span class="p">:</span> <span class="n">hidden1_in</span><span class="p">,</span>
+                <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <span class="n">is_init</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">padded</span> <span class="o">=</span> <span class="n">_split_and_pad_sequence</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">splits</span><span class="p">)</span>
+        <span class="n">val</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">,</span> <span class="n">hidden1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lstm</span><span class="p">(</span>
+            <span class="n">padded</span><span class="p">[</span><span class="s2">&quot;_input&quot;</span><span class="p">],</span>
+            <span class="n">padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">padded</span><span class="p">[</span><span class="s2">&quot;_hidden0&quot;</span><span class="p">],</span>
+            <span class="n">padded</span><span class="p">[</span><span class="s2">&quot;_hidden1&quot;</span><span class="p">],</span>
+            <span class="n">splits</span><span class="o">=</span><span class="n">splits</span><span class="p">,</span>
+            <span class="n">is_init</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;pad&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">padded</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_value_out&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+        <span class="n">padded</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_hidden0_out&quot;</span><span class="p">,</span> <span class="n">hidden0</span><span class="p">)</span>
+        <span class="n">padded</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_hidden1_out&quot;</span><span class="p">,</span> <span class="n">hidden1</span><span class="p">)</span>
+        <span class="n">restored</span> <span class="o">=</span> <span class="n">_inv_pad_sequence</span><span class="p">(</span>
+            <span class="n">padded</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;_value_out&quot;</span><span class="p">,</span> <span class="s2">&quot;_hidden0_out&quot;</span><span class="p">,</span> <span class="s2">&quot;_hidden1_out&quot;</span><span class="p">),</span> <span class="n">splits</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">restored</span><span class="p">[</span><span class="s2">&quot;_value_out&quot;</span><span class="p">],</span>
+            <span class="n">restored</span><span class="p">[</span><span class="s2">&quot;_hidden0_out&quot;</span><span class="p">],</span>
+            <span class="n">restored</span><span class="p">[</span><span class="s2">&quot;_hidden1_out&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_lstm_scan_with_resets</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -1281,6 +1477,10 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">proj_size</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;LSTMModule(recurrent_backend=&#39;scan&#39;) does not support proj_size yet.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lstm</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;LSTMModule(recurrent_backend=&#39;scan&#39;) does not support bidirectional LSTMs yet.&quot;</span>
             <span class="p">)</span>
 
         <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
@@ -1748,9 +1948,16 @@
 <span class="sd">        recurrent_backend: backend used in recurrent mode when trajectories reset</span>
 <span class="sd">            in the middle of a batch. ``&quot;pad&quot;`` keeps the existing split/pad</span>
 <span class="sd">            strategy. ``&quot;scan&quot;`` uses a scan loop over the time dimension and</span>
-<span class="sd">            avoids materializing padded trajectory chunks. ``&quot;auto&quot;`` uses</span>
-<span class="sd">            ``&quot;pad&quot;`` in eager mode and ``&quot;scan&quot;`` when called under</span>
-<span class="sd">            :func:`torch.compile`. Default: ``&quot;pad&quot;``.</span>
+<span class="sd">            avoids materializing padded trajectory chunks. ``&quot;triton&quot;``</span>
+<span class="sd">            (prototype, CUDA only) uses Triton kernels where available and</span>
+<span class="sd">            otherwise preserves pad-backend recurrent semantics for dropout</span>
+<span class="sd">            and bidirectional layers.</span>
+<span class="sd">            ``&quot;auto&quot;`` uses ``&quot;pad&quot;`` in eager mode and ``&quot;scan&quot;`` when called</span>
+<span class="sd">            under :func:`torch.compile`. Default: ``&quot;pad&quot;``.</span>
+<span class="sd">        recurrent_compute_dtype: dtype used for the recurrent matmul inside the</span>
+<span class="sd">            ``&quot;triton&quot;`` backend (``torch.float32`` -&gt; TF32 on H100, default;</span>
+<span class="sd">            ``torch.bfloat16`` -&gt; bigger SMEM margin, lower precision).</span>
+<span class="sd">            Ignored by the other backends. Default: ``torch.float32``.</span>
 
 <span class="sd">    Keyword Args:</span>
 <span class="sd">        in_key (str or tuple of str): the input key of the module. Exclusive use</span>
@@ -1871,7 +2078,8 @@
         <span class="n">dropout</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
         <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
         <span class="n">python_based</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="n">recurrent_backend</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
+        <span class="n">recurrent_backend</span><span class="p">:</span> <span class="n">typing</span><span class="o">.</span><span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">,</span> <span class="s2">&quot;triton&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
+        <span class="n">recurrent_compute_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span>
         <span class="o">*</span><span class="p">,</span>
         <span class="n">in_key</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">in_keys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
@@ -1882,16 +2090,19 @@
         <span class="n">default_recurrent_mode</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">}:</span>
+        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span> <span class="s2">&quot;scan&quot;</span><span class="p">,</span> <span class="s2">&quot;triton&quot;</span><span class="p">}:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;recurrent_backend must be one of &#39;auto&#39;, &#39;pad&#39; or &#39;scan&#39;. &quot;</span>
+                <span class="s2">&quot;recurrent_backend must be one of &#39;auto&#39;, &#39;pad&#39;, &#39;scan&#39; or &#39;triton&#39;. &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;Got </span><span class="si">{</span><span class="n">recurrent_backend</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">recurrent_backend</span> <span class="o">==</span> <span class="s2">&quot;triton&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_has_triton</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;recurrent_backend=&#39;triton&#39; requires the triton package. &quot;</span>
+                <span class="s2">&quot;Install it with `pip install triton`.&quot;</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">gru</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">gru</span><span class="o">.</span><span class="n">batch_first</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input gru must have batch_first=True.&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">gru</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input gru cannot be bidirectional.&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">input_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">hidden_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">&quot;An GRU instance cannot be passed along with class argument.&quot;</span>
@@ -1899,8 +2110,10 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">batch_first</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input gru must have batch_first=True.&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">bidirectional</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The input gru cannot be bidirectional.&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">python_based</span> <span class="ow">and</span> <span class="n">bidirectional</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;python_based=True does not support bidirectional GRUs.&quot;</span>
+                <span class="p">)</span>
 
             <span class="k">if</span> <span class="n">python_based</span><span class="p">:</span>
                 <span class="n">gru</span> <span class="o">=</span> <span class="n">GRU</span><span class="p">(</span>
@@ -1911,7 +2124,7 @@
                     <span class="n">dropout</span><span class="o">=</span><span class="n">dropout</span><span class="p">,</span>
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">bidirectional</span><span class="o">=</span><span class="n">bidirectional</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="n">gru</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">GRU</span><span class="p">(</span>
@@ -1922,7 +2135,7 @@
                     <span class="n">dropout</span><span class="o">=</span><span class="n">dropout</span><span class="p">,</span>
                     <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                     <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-                    <span class="n">bidirectional</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                    <span class="n">bidirectional</span><span class="o">=</span><span class="n">bidirectional</span><span class="p">,</span>
                 <span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">((</span><span class="n">in_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">^</span> <span class="p">(</span><span class="n">in_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1957,6 +2170,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">out_keys</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_recurrent_mode</span> <span class="o">=</span> <span class="n">default_recurrent_mode</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_backend</span> <span class="o">=</span> <span class="n">recurrent_backend</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_compute_dtype</span> <span class="o">=</span> <span class="n">recurrent_compute_dtype</span>
 
 <div class="viewcode-block" id="GRUModule.make_python_based">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.GRUModule.html#torchrl.modules.GRUModule.make_python_based">[docs]</a>
@@ -2080,7 +2294,12 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">TensorDictPrimer</span><span class="p">(</span>
             <span class="p">{</span>
-                <span class="n">in_key1</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">)),</span>
+                <span class="n">in_key1</span><span class="p">:</span> <span class="n">Unbounded</span><span class="p">(</span>
+                    <span class="n">shape</span><span class="o">=</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">*</span> <span class="n">_num_directions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">),</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">),</span>
             <span class="p">},</span>
             <span class="n">expand_specs</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="p">)</span></div>
@@ -2152,7 +2371,13 @@
         <span class="k">if</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
             <span class="n">backend</span> <span class="o">=</span> <span class="s2">&quot;scan&quot;</span> <span class="k">if</span> <span class="n">is_compiling</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;pad&quot;</span>
         <span class="n">use_scan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;scan&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_scan</span> <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">use_triton</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;triton&quot;</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_scan</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">use_triton</span>
+            <span class="ow">and</span> <span class="n">is_init</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">any</span><span class="p">()</span>
+        <span class="p">):</span>
             <span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="n">_get_num_per_traj_init</span>
 
             <span class="c1"># if we have consecutive trajectories, things get a little more complicated</span>
@@ -2186,7 +2411,8 @@
             <span class="n">dtype</span><span class="p">,</span>
             <span class="n">hidden</span><span class="p">,</span>
             <span class="n">splits</span><span class="p">,</span>
-            <span class="n">is_init</span><span class="o">=</span><span class="n">is_init</span> <span class="k">if</span> <span class="n">use_scan</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">is_init</span><span class="o">=</span><span class="n">is_init</span> <span class="k">if</span> <span class="p">(</span><span class="n">use_scan</span> <span class="ow">or</span> <span class="n">use_triton</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="n">backend</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="k">else</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">val</span><span class="p">)</span>
         <span class="n">tensordict_shaped</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">hidden</span><span class="p">)</span>
@@ -2211,6 +2437,7 @@
         <span class="n">hidden_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">splits</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;pad&quot;</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">recurrent_mode</span> <span class="ow">and</span> <span class="n">steps</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
@@ -2220,7 +2447,7 @@
             <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
             <span class="n">hidden_in</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
                 <span class="o">*</span><span class="n">shape</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">*</span> <span class="n">_num_directions</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">),</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">,</span>
                 <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
                 <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
@@ -2230,6 +2457,8 @@
         <span class="n">_hidden_in</span> <span class="o">=</span> <span class="n">hidden_in</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
         <span class="n">hidden</span> <span class="o">=</span> <span class="n">_hidden_in</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
 
+        <span class="k">if</span> <span class="n">is_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">backend</span> <span class="o">==</span> <span class="s2">&quot;triton&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_triton_with_resets</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden_in</span><span class="p">,</span> <span class="n">is_init</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">is_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_scan_with_resets</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden_in</span><span class="p">,</span> <span class="n">hidden</span><span class="p">,</span> <span class="n">is_init</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">splits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -2262,6 +2491,109 @@
         <span class="n">out</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">,</span> <span class="n">hidden</span><span class="p">]</span>
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
 
+    <span class="k">def</span> <span class="nf">_gru_triton_with_resets</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru_pad_with_resets</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="n">hidden_in</span><span class="p">,</span> <span class="n">is_init</span><span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">torchrl.modules.tensordict_module._rnn_triton</span> <span class="kn">import</span> <span class="n">gru_triton</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Triton GRU layer composition expects unidirectional weights.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">layer_input</span> <span class="o">=</span> <span class="nb">input</span>
+        <span class="n">hidden_layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">_all_weights</span><span class="p">[</span><span class="n">layer</span><span class="p">]</span>
+            <span class="n">w_ih</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">w_hh</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">b_ih</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="n">b_hh</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="p">,</span> <span class="n">weights</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bias</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">b_ih</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">b_hh</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">zeros</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+                    <span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">hidden_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">input</span><span class="o">.</span><span class="n">dtype</span>
+                <span class="p">)</span>
+                <span class="n">b_ih</span> <span class="o">=</span> <span class="n">zeros</span> <span class="k">if</span> <span class="n">b_ih</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">b_ih</span>
+                <span class="n">b_hh</span> <span class="o">=</span> <span class="n">zeros</span> <span class="k">if</span> <span class="n">b_hh</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">b_hh</span>
+
+            <span class="n">hidden_per_step</span> <span class="o">=</span> <span class="n">hidden_in</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">layer</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="n">h_steps</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">gru_triton</span><span class="p">(</span>
+                <span class="n">layer_input</span><span class="p">,</span>
+                <span class="n">hidden_per_step</span><span class="p">,</span>
+                <span class="n">w_ih</span><span class="p">,</span>
+                <span class="n">w_hh</span><span class="p">,</span>
+                <span class="n">b_ih</span><span class="p">,</span>
+                <span class="n">b_hh</span><span class="p">,</span>
+                <span class="n">is_init</span><span class="p">,</span>
+                <span class="n">compute_dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">recurrent_compute_dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">hidden_layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">h_steps</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">layer</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">num_layers</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
+                <span class="n">layer_input</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">dropout</span><span class="p">(</span>
+                    <span class="n">h_steps</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">dropout</span><span class="p">,</span> <span class="n">training</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">training</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">layer_input</span> <span class="o">=</span> <span class="n">h_steps</span>
+
+        <span class="c1"># Match the scan backend&#39;s per-step hidden output semantics.</span>
+        <span class="n">end_mask</span> <span class="o">=</span> <span class="n">_end_mask_from_is_init</span><span class="p">(</span><span class="n">is_init</span><span class="p">)</span>
+        <span class="n">hidden_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">hidden_layers</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">hidden_steps</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+            <span class="n">end_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="n">hidden_steps</span><span class="p">,</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hidden_steps</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">layer_input</span><span class="p">,</span> <span class="n">hidden_steps</span>
+
+    <span class="k">def</span> <span class="nf">_gru_pad_with_resets</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">hidden_in</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">is_init</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="kn">from</span> <span class="nn">torchrl.objectives.value.functional</span> <span class="kn">import</span> <span class="p">(</span>
+            <span class="n">_inv_pad_sequence</span><span class="p">,</span>
+            <span class="n">_split_and_pad_sequence</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="kn">from</span> <span class="nn">torchrl.objectives.value.utils</span> <span class="kn">import</span> <span class="n">_get_num_per_traj_init</span>
+
+        <span class="c1"># See ``_lstm_pad_with_resets``: this helper owns split/pad because the</span>
+        <span class="c1"># outer recurrent path bypasses it for ``backend=&#39;triton&#39;``.</span>
+        <span class="n">splits</span> <span class="o">=</span> <span class="n">_get_num_per_traj_init</span><span class="p">(</span><span class="n">is_init</span><span class="p">)</span>
+        <span class="n">batch</span><span class="p">,</span> <span class="n">steps</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="c1"># Private synthetic keys avoid collisions with user-provided in/out keys.</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;_input&quot;</span><span class="p">:</span> <span class="nb">input</span><span class="p">,</span>
+                <span class="s2">&quot;_hidden&quot;</span><span class="p">:</span> <span class="n">hidden_in</span><span class="p">,</span>
+                <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <span class="n">is_init</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+            <span class="p">},</span>
+            <span class="p">[</span><span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">padded</span> <span class="o">=</span> <span class="n">_split_and_pad_sequence</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="n">splits</span><span class="p">)</span>
+        <span class="n">val</span><span class="p">,</span> <span class="n">hidden</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gru</span><span class="p">(</span>
+            <span class="n">padded</span><span class="p">[</span><span class="s2">&quot;_input&quot;</span><span class="p">],</span>
+            <span class="n">padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">padded</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="nb">input</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="nb">input</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">padded</span><span class="p">[</span><span class="s2">&quot;_hidden&quot;</span><span class="p">],</span>
+            <span class="n">splits</span><span class="o">=</span><span class="n">splits</span><span class="p">,</span>
+            <span class="n">is_init</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;pad&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">padded</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_value_out&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+        <span class="n">padded</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;_hidden_out&quot;</span><span class="p">,</span> <span class="n">hidden</span><span class="p">)</span>
+        <span class="n">restored</span> <span class="o">=</span> <span class="n">_inv_pad_sequence</span><span class="p">(</span>
+            <span class="n">padded</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;_value_out&quot;</span><span class="p">,</span> <span class="s2">&quot;_hidden_out&quot;</span><span class="p">),</span> <span class="n">splits</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">batch</span><span class="p">,</span> <span class="n">steps</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">restored</span><span class="p">[</span><span class="s2">&quot;_value_out&quot;</span><span class="p">],</span> <span class="n">restored</span><span class="p">[</span><span class="s2">&quot;_hidden_out&quot;</span><span class="p">]</span>
+
     <span class="k">def</span> <span class="nf">_gru_scan_with_resets</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="nb">input</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
@@ -2272,6 +2604,10 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">dropout</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
                 <span class="s2">&quot;GRUModule(recurrent_backend=&#39;scan&#39;) does not support dropout yet.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gru</span><span class="o">.</span><span class="n">bidirectional</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;GRUModule(recurrent_backend=&#39;scan&#39;) does not support bidirectional GRUs yet.&quot;</span>
             <span class="p">)</span>
 
         <span class="n">weight_ihs</span><span class="p">,</span> <span class="n">weight_hhs</span><span class="p">,</span> <span class="n">bias_ihs</span><span class="p">,</span> <span class="n">bias_hhs</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
