@@ -50,6 +50,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.modules.models.decision_transformer import _has_transformers
+from torchrl.modules.tensordict_module import _rnn_triton
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
@@ -89,6 +90,7 @@ def _has_triton_backend() -> bool:
 
 _has_triton = _has_triton_backend()
 _triton_skip_reason = "requires triton (>= 2.2) and CUDA"
+_has_compile = hasattr(torch, "compile")
 
 _has_functorch = False
 try:
@@ -1471,6 +1473,99 @@ class TestLSTMModule:
             )
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(not _has_compile, reason="requires torch.compile")
+    def test_lstm_triton_custom_op_compile_forward_backward(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 3, 5, 4, 16
+        inputs = (
+            torch.randn(B, T, F, device=device),
+            torch.randn(B, T, H, device=device),
+            torch.randn(B, T, H, device=device),
+            torch.randn(4 * H, F, device=device),
+            torch.randn(4 * H, H, device=device),
+            torch.randn(4 * H, device=device),
+            torch.randn(4 * H, device=device),
+            torch.zeros(B, T, dtype=torch.bool, device=device),
+        )
+        inputs[-1][1, 3] = True
+
+        def clone_inputs():
+            return tuple(
+                tensor.detach().clone().requires_grad_(tensor.is_floating_point())
+                for tensor in inputs
+            )
+
+        def loss_fn(x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, c_steps, h_final, c_final = _rnn_triton.lstm_triton(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return (
+                h_steps.pow(2).sum()
+                + c_steps.pow(2).sum()
+                + h_final.pow(2).sum()
+                + c_final.pow(2).sum()
+            )
+
+        eager_inputs = clone_inputs()
+        eager_loss = loss_fn(*eager_inputs)
+        eager_loss.backward()
+        eager_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in eager_inputs
+        ]
+
+        compiled_inputs = clone_inputs()
+        compiled_loss = torch.compile(loss_fn, fullgraph=True)(*compiled_inputs)
+        compiled_loss.backward()
+        compiled_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in compiled_inputs
+        ]
+
+        torch.testing.assert_close(eager_loss, compiled_loss, atol=5e-3, rtol=5e-3)
+        for eager_grad, compiled_grad in zip(eager_grads, compiled_grads):
+            if eager_grad is None:
+                assert compiled_grad is None
+            else:
+                torch.testing.assert_close(
+                    eager_grad, compiled_grad, atol=5e-3, rtol=5e-3
+                )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    def test_lstm_triton_custom_op_vmap_matches_loop(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        V, B, T, F, H = 2, 3, 5, 4, 16
+        x = torch.randn(V, B, T, F, device=device)
+        hidden = torch.randn(V, B, T, H, device=device)
+        cell = torch.randn(V, B, T, H, device=device)
+        w_ih = torch.randn(4 * H, F, device=device)
+        w_hh = torch.randn(4 * H, H, device=device)
+        b_ih = torch.randn(4 * H, device=device)
+        b_hh = torch.randn(4 * H, device=device)
+        is_init = torch.zeros(V, B, T, dtype=torch.bool, device=device)
+        is_init[:, 1, 3] = True
+
+        def call(x, hidden, cell, is_init):
+            return _rnn_triton.lstm_triton(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+
+        vmapped = vmap(call)(x, hidden, cell, is_init)
+        looped = tuple(
+            torch.stack(
+                [call(x[i], hidden[i], cell[i], is_init[i])[j] for i in range(V)]
+            )
+            for j in range(4)
+        )
+        for actual, expected in zip(vmapped, looped):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
         [
@@ -2387,6 +2482,88 @@ class TestGRUModule:
             torch.testing.assert_close(
                 grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
             )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(not _has_compile, reason="requires torch.compile")
+    def test_gru_triton_custom_op_compile_forward_backward(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 3, 5, 4, 16
+        inputs = (
+            torch.randn(B, T, F, device=device),
+            torch.randn(B, T, H, device=device),
+            torch.randn(3 * H, F, device=device),
+            torch.randn(3 * H, H, device=device),
+            torch.randn(3 * H, device=device),
+            torch.randn(3 * H, device=device),
+            torch.zeros(B, T, dtype=torch.bool, device=device),
+        )
+        inputs[-1][1, 3] = True
+
+        def clone_inputs():
+            return tuple(
+                tensor.detach().clone().requires_grad_(tensor.is_floating_point())
+                for tensor in inputs
+            )
+
+        def loss_fn(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, h_final = _rnn_triton.gru_triton(
+                x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return h_steps.pow(2).sum() + h_final.pow(2).sum()
+
+        eager_inputs = clone_inputs()
+        eager_loss = loss_fn(*eager_inputs)
+        eager_loss.backward()
+        eager_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in eager_inputs
+        ]
+
+        compiled_inputs = clone_inputs()
+        compiled_loss = torch.compile(loss_fn, fullgraph=True)(*compiled_inputs)
+        compiled_loss.backward()
+        compiled_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in compiled_inputs
+        ]
+
+        torch.testing.assert_close(eager_loss, compiled_loss, atol=5e-3, rtol=5e-3)
+        for eager_grad, compiled_grad in zip(eager_grads, compiled_grads):
+            if eager_grad is None:
+                assert compiled_grad is None
+            else:
+                torch.testing.assert_close(
+                    eager_grad, compiled_grad, atol=5e-3, rtol=5e-3
+                )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    def test_gru_triton_custom_op_vmap_matches_loop(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        V, B, T, F, H = 2, 3, 5, 4, 16
+        x = torch.randn(V, B, T, F, device=device)
+        hidden = torch.randn(V, B, T, H, device=device)
+        w_ih = torch.randn(3 * H, F, device=device)
+        w_hh = torch.randn(3 * H, H, device=device)
+        b_ih = torch.randn(3 * H, device=device)
+        b_hh = torch.randn(3 * H, device=device)
+        is_init = torch.zeros(V, B, T, dtype=torch.bool, device=device)
+        is_init[:, 1, 3] = True
+
+        def call(x, hidden, is_init):
+            return _rnn_triton.gru_triton(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init)
+
+        vmapped = vmap(call)(x, hidden, is_init)
+        looped = tuple(
+            torch.stack([call(x[i], hidden[i], is_init[i])[j] for i in range(V)])
+            for j in range(2)
+        )
+        for actual, expected in zip(vmapped, looped):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(

@@ -28,9 +28,18 @@ Limitations of this prototype:
 * The autograd wrapper saves per-layer gate activations explicitly. Multilayer
   execution scales this activation memory linearly with the number of layers,
   unlike cuDNN's opaque ``reserve_space``.
+* ``torch.compile`` sees the low-level forward and backward launches as
+  ``torch.library.custom_op`` calls when the API is available.
+* ``torch.vmap`` over these custom ops uses map semantics and launches one
+  Triton call per mapped slice.
 * ``compute_dtype`` controls the matmul precision: ``torch.float32`` (default,
   TF32 on Ampere/Hopper, matching ``torch.nn.GRU`` / ``LSTM`` behavior) or
   ``torch.bfloat16`` (twice the SMEM headroom, ~7-bit mantissa).
+
+The kernel is opaque to ``torch.compile``. ``mode="reduce-overhead"`` / explicit
+CUDA graph capture gains only ~1-3% (vs ~1.6x-1.9x on ``"scan"``, which is
+launch-bound). For wider LSTM stacks the compiled ``"scan"`` backend under
+CUDA graphs may beat ``"triton"``.
 """
 from __future__ import annotations
 
@@ -56,6 +65,11 @@ def _check_triton_available() -> bool:
 
 
 _has_triton = _check_triton_available()
+_has_custom_op = all(
+    hasattr(torch.library, name)
+    for name in ("custom_op", "register_autograd", "register_fake")
+)
+_has_vmap_op = hasattr(torch.library, "register_vmap")
 
 if _has_triton:
     import triton
@@ -820,72 +834,424 @@ def _unpad_w_hh(t: torch.Tensor, n_gates: int, H: int, H_pad: int) -> torch.Tens
     return t.reshape(n_gates * H, H)
 
 
+def _gru_forward_impl(
+    x: torch.Tensor,
+    hidden: torch.Tensor,
+    w_ih: torch.Tensor,
+    w_hh: torch.Tensor,
+    b_ih: torch.Tensor,
+    b_hh: torch.Tensor,
+    is_init: torch.Tensor,
+    compute_dtype: torch.dtype,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    if not _has_triton:
+        raise RuntimeError(
+            "Triton is not available. Install triton or use "
+            "recurrent_backend='pad'/'scan'."
+        )
+    B, T, I_in = x.shape
+    H = hidden.shape[-1]
+    H_pad = _padded_hidden_size(H)
+
+    hidden_p = _pad_last(hidden, H, H_pad).contiguous()
+    b_ih_p = _pad_gate_dim(b_ih, 3, H, H_pad, dim=0)
+    b_hh_p = _pad_gate_dim(b_hh, 3, H, H_pad, dim=0)
+    w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
+    w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
+
+    gates_x = (
+        F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p).view(B, T, 3 * H_pad).contiguous()
+    )
+
+    w_hh_c = w_hh_p.to(compute_dtype)
+    w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
+    w_r_t = w_hh_c3[0].t().contiguous()
+    w_z_t = w_hh_c3[1].t().contiguous()
+    w_n_t = w_hh_c3[2].t().contiguous()
+    w_r = w_hh_c3[0].contiguous()
+    w_z = w_hh_c3[1].contiguous()
+    w_n = w_hh_c3[2].contiguous()
+
+    out = torch.empty(B, T, H_pad, dtype=x.dtype, device=x.device)
+    h_final = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
+    save_r = torch.empty_like(out)
+    save_z = torch.empty_like(out)
+    save_n = torch.empty_like(out)
+    save_gh_n = torch.empty_like(out)
+
+    def grid(meta):
+        return (triton.cdiv(B, meta["BLOCK_B"]),)
+
+    _gru_fwd_kernel[grid](
+        gates_x,
+        hidden_p,
+        w_r_t,
+        w_z_t,
+        w_n_t,
+        b_hh_p,
+        is_init,
+        out,
+        save_r,
+        save_z,
+        save_n,
+        save_gh_n,
+        h_final,
+        B,
+        T,
+        H=H_pad,
+    )
+
+    return (
+        _unpad_last(out, H, H_pad),
+        _unpad_last(h_final, H, H_pad),
+        hidden_p,
+        out,
+        save_r,
+        save_z,
+        save_n,
+        save_gh_n,
+        w_r,
+        w_z,
+        w_n,
+        w_ih_p,
+    )
+
+
+def _gru_backward_impl(
+    dout: torch.Tensor,
+    dh_final: torch.Tensor,
+    x: torch.Tensor,
+    hidden_p: torch.Tensor,
+    is_init: torch.Tensor,
+    out: torch.Tensor,
+    save_r: torch.Tensor,
+    save_z: torch.Tensor,
+    save_n: torch.Tensor,
+    save_gh_n: torch.Tensor,
+    w_r: torch.Tensor,
+    w_z: torch.Tensor,
+    w_n: torch.Tensor,
+    w_ih_p: torch.Tensor,
+    shapes: tuple[int, int, int, int, int],
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    B, T, I_in, H, H_pad = shapes
+
+    dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
+    dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
+
+    dgates_x = torch.empty(B, T, 3 * H_pad, dtype=x.dtype, device=x.device)
+    dgates_h = torch.empty_like(dgates_x)
+    dhidden_p = torch.zeros_like(hidden_p)
+
+    def grid(meta):
+        return (triton.cdiv(B, meta["BLOCK_B"]),)
+
+    _gru_bwd_kernel[grid](
+        hidden_p,
+        w_r,
+        w_z,
+        w_n,
+        is_init,
+        out,
+        save_r,
+        save_z,
+        save_n,
+        save_gh_n,
+        dout_p,
+        dh_final_p,
+        dgates_x,
+        dgates_h,
+        dhidden_p,
+        B,
+        T,
+        H=H_pad,
+    )
+
+    h_prev_all = torch.empty_like(out)
+    h_prev_all[:, 0] = hidden_p[:, 0]
+    if T > 1:
+        h_prev_all[:, 1:] = out[:, :-1]
+    h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
+
+    dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
+    h_prev_flat = h_prev_all.reshape(B * T, H_pad)
+    dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+    db_hh_p = dgates_h_flat.sum(0)
+
+    dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
+    x_flat = x.reshape(B * T, I_in)
+    dW_ih_p = dgates_x_flat.t() @ x_flat
+    db_ih_p = dgates_x_flat.sum(0)
+    dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+
+    dhidden = _unpad_last(dhidden_p, H, H_pad)
+    dW_hh = _unpad_w_hh(dW_hh_p, 3, H, H_pad)
+    db_hh = _unpad_gate_dim(db_hh_p, 3, H, H_pad, dim=0)
+    dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=0)
+    db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=0)
+
+    return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh
+
+
+def _lstm_forward_impl(
+    x: torch.Tensor,
+    hidden: torch.Tensor,
+    cell: torch.Tensor,
+    w_ih: torch.Tensor,
+    w_hh: torch.Tensor,
+    b_ih: torch.Tensor,
+    b_hh: torch.Tensor,
+    is_init: torch.Tensor,
+    compute_dtype: torch.dtype,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    if not _has_triton:
+        raise RuntimeError(
+            "Triton is not available. Install triton or use "
+            "recurrent_backend='pad'/'scan'."
+        )
+    B, T, I_in = x.shape
+    H = hidden.shape[-1]
+    H_pad = _padded_hidden_size(H)
+
+    hidden_p = _pad_last(hidden, H, H_pad).contiguous()
+    cell_p = _pad_last(cell, H, H_pad).contiguous()
+    b_ih_p = _pad_gate_dim(b_ih, 4, H, H_pad, dim=0)
+    b_hh_p = _pad_gate_dim(b_hh, 4, H, H_pad, dim=0)
+    w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
+    w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
+
+    gates_x = (
+        F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p).view(B, T, 4 * H_pad).contiguous()
+    )
+
+    w_hh_c = w_hh_p.to(compute_dtype)
+    w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
+    w_i_t = w_hh_c4[0].t().contiguous()
+    w_f_t = w_hh_c4[1].t().contiguous()
+    w_g_t = w_hh_c4[2].t().contiguous()
+    w_o_t = w_hh_c4[3].t().contiguous()
+    w_i = w_hh_c4[0].contiguous()
+    w_f = w_hh_c4[1].contiguous()
+    w_g = w_hh_c4[2].contiguous()
+    w_o = w_hh_c4[3].contiguous()
+
+    out = torch.empty(B, T, H_pad, dtype=x.dtype, device=x.device)
+    c_out = torch.empty_like(out)
+    save_i = torch.empty_like(out)
+    save_f = torch.empty_like(out)
+    save_g = torch.empty_like(out)
+    save_o = torch.empty_like(out)
+    save_tanhc = torch.empty_like(out)
+    h_final = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
+    c_final = torch.empty_like(h_final)
+
+    def grid(meta):
+        return (triton.cdiv(B, meta["BLOCK_B"]),)
+
+    _lstm_fwd_kernel[grid](
+        gates_x,
+        hidden_p,
+        cell_p,
+        w_i_t,
+        w_f_t,
+        w_g_t,
+        w_o_t,
+        b_hh_p,
+        is_init,
+        out,
+        c_out,
+        save_i,
+        save_f,
+        save_g,
+        save_o,
+        save_tanhc,
+        h_final,
+        c_final,
+        B,
+        T,
+        H=H_pad,
+    )
+
+    return (
+        _unpad_last(out, H, H_pad),
+        _unpad_last(c_out, H, H_pad),
+        _unpad_last(h_final, H, H_pad),
+        _unpad_last(c_final, H, H_pad),
+        hidden_p,
+        cell_p,
+        out,
+        c_out,
+        save_i,
+        save_f,
+        save_g,
+        save_o,
+        save_tanhc,
+        w_i,
+        w_f,
+        w_g,
+        w_o,
+        w_ih_p,
+    )
+
+
+def _lstm_backward_impl(
+    dout: torch.Tensor,
+    dc_out: torch.Tensor,
+    dh_final: torch.Tensor,
+    dc_final: torch.Tensor,
+    x: torch.Tensor,
+    hidden_p: torch.Tensor,
+    cell_p: torch.Tensor,
+    is_init: torch.Tensor,
+    out: torch.Tensor,
+    c_out: torch.Tensor,
+    save_i: torch.Tensor,
+    save_f: torch.Tensor,
+    save_g: torch.Tensor,
+    save_o: torch.Tensor,
+    save_tanhc: torch.Tensor,
+    w_i: torch.Tensor,
+    w_f: torch.Tensor,
+    w_g: torch.Tensor,
+    w_o: torch.Tensor,
+    w_ih_p: torch.Tensor,
+    shapes: tuple[int, int, int, int, int],
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
+    B, T, I_in, H, H_pad = shapes
+
+    dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
+    dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
+    dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
+    dc_final_p = _pad_last(dc_final.contiguous(), H, H_pad).contiguous()
+    dgates_x = torch.empty(B, T, 4 * H_pad, dtype=x.dtype, device=x.device)
+    dgates_h = torch.empty_like(dgates_x)
+    dhidden_p = torch.zeros_like(hidden_p)
+    dcell_p = torch.zeros_like(cell_p)
+
+    def grid(meta):
+        return (triton.cdiv(B, meta["BLOCK_B"]),)
+
+    _lstm_bwd_kernel[grid](
+        hidden_p,
+        cell_p,
+        w_i,
+        w_f,
+        w_g,
+        w_o,
+        is_init,
+        out,
+        c_out,
+        save_i,
+        save_f,
+        save_g,
+        save_o,
+        save_tanhc,
+        dout_p,
+        dc_out_p,
+        dh_final_p,
+        dc_final_p,
+        dgates_x,
+        dgates_h,
+        dhidden_p,
+        dcell_p,
+        B,
+        T,
+        H=H_pad,
+    )
+
+    h_prev_all = torch.empty_like(out)
+    h_prev_all[:, 0] = hidden_p[:, 0]
+    if T > 1:
+        h_prev_all[:, 1:] = out[:, :-1]
+    h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
+
+    dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
+    h_prev_flat = h_prev_all.reshape(B * T, H_pad)
+    dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+    db_hh_p = dgates_h_flat.sum(0)
+
+    dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
+    x_flat = x.reshape(B * T, I_in)
+    dW_ih_p = dgates_x_flat.t() @ x_flat
+    db_ih_p = dgates_x_flat.sum(0)
+    dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+
+    dhidden = _unpad_last(dhidden_p, H, H_pad)
+    dcell = _unpad_last(dcell_p, H, H_pad)
+    dW_hh = _unpad_w_hh(dW_hh_p, 4, H, H_pad)
+    db_hh = _unpad_gate_dim(db_hh_p, 4, H, H_pad, dim=0)
+    dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=0)
+    db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=0)
+
+    return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh
+
+
 class _GRUFn(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
-        if not _has_triton:
-            raise RuntimeError(
-                "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
-            )
-        B, T, I_in = x.shape
-        H = hidden.shape[-1]
-        H_pad = _padded_hidden_size(H)
-
-        hidden_p = _pad_last(hidden, H, H_pad).contiguous()
-        b_ih_p = _pad_gate_dim(b_ih, 3, H, H_pad, dim=0)
-        b_hh_p = _pad_gate_dim(b_hh, 3, H, H_pad, dim=0)
-        w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
-        w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
-
-        gates_x = (
-            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
-            .view(B, T, 3 * H_pad)
-            .contiguous()
-        )
-
-        w_hh_c = w_hh_p.to(compute_dtype)
-        w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
-        w_r_t = w_hh_c3[0].t().contiguous()
-        w_z_t = w_hh_c3[1].t().contiguous()
-        w_n_t = w_hh_c3[2].t().contiguous()
-        w_r = w_hh_c3[0].contiguous()
-        w_z = w_hh_c3[1].contiguous()
-        w_n = w_hh_c3[2].contiguous()
-
-        out = torch.empty(B, T, H_pad, dtype=x.dtype, device=x.device)
-        h_final = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
-        save_r = torch.empty_like(out)
-        save_z = torch.empty_like(out)
-        save_n = torch.empty_like(out)
-        save_gh_n = torch.empty_like(out)
-
-        def grid(meta):
-            return (triton.cdiv(B, meta["BLOCK_B"]),)
-
-        _gru_fwd_kernel[grid](
-            gates_x,
+        (
+            out_unpadded,
+            h_final_unpadded,
             hidden_p,
-            w_r_t,
-            w_z_t,
-            w_n_t,
-            b_hh_p,
-            is_init,
             out,
             save_r,
             save_z,
             save_n,
             save_gh_n,
-            h_final,
-            B,
-            T,
-            H=H_pad,
-        )
-
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        ) = _gru_forward_impl(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
         ctx.save_for_backward(
             x,
             hidden_p,
-            w_ih,
-            w_hh,
             is_init,
             out,
             save_r,
@@ -897,16 +1263,17 @@ class _GRUFn(torch.autograd.Function):
             w_n,
             w_ih_p,
         )
+        B, T, I_in = x.shape
+        H = hidden.shape[-1]
+        H_pad = hidden_p.shape[-1]
         ctx.shapes = (B, T, I_in, H, H_pad)
-        return _unpad_last(out, H, H_pad), _unpad_last(h_final, H, H_pad)
+        return out_unpadded, h_final_unpadded
 
     @staticmethod
     def backward(ctx, dout, dh_final):
         (
             x,
             hidden_p,
-            w_ih,
-            w_hh,
             is_init,
             out,
             save_r,
@@ -918,124 +1285,36 @@ class _GRUFn(torch.autograd.Function):
             w_n,
             w_ih_p,
         ) = ctx.saved_tensors
-        B, T, I_in, H, H_pad = ctx.shapes
-
-        dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
-        dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
-
-        dgates_x = torch.empty(B, T, 3 * H_pad, dtype=x.dtype, device=x.device)
-        dgates_h = torch.empty_like(dgates_x)
-        dhidden_p = torch.zeros_like(hidden_p)
-
-        def grid(meta):
-            return (triton.cdiv(B, meta["BLOCK_B"]),)
-
-        _gru_bwd_kernel[grid](
+        dx, dhidden, dW_ih, dW_hh, db_ih, db_hh = _gru_backward_impl(
+            dout,
+            dh_final,
+            x,
             hidden_p,
-            w_r,
-            w_z,
-            w_n,
             is_init,
             out,
             save_r,
             save_z,
             save_n,
             save_gh_n,
-            dout_p,
-            dh_final_p,
-            dgates_x,
-            dgates_h,
-            dhidden_p,
-            B,
-            T,
-            H=H_pad,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+            ctx.shapes,
         )
-
-        # h_prev[b, t] for the dW_hh computation.
-        h_prev_all = torch.empty_like(out)
-        h_prev_all[:, 0] = hidden_p[:, 0]
-        if T > 1:
-            h_prev_all[:, 1:] = out[:, :-1]
-        h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
-
-        dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
-        h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-        db_hh_p = dgates_h_flat.sum(0)
-
-        dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
-        x_flat = x.reshape(B * T, I_in)
-        dW_ih_p = dgates_x_flat.t() @ x_flat
-        db_ih_p = dgates_x_flat.sum(0)
-        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
-
-        dhidden = _unpad_last(dhidden_p, H, H_pad)
-        dW_hh = _unpad_w_hh(dW_hh_p, 3, H, H_pad)
-        db_hh = _unpad_gate_dim(db_hh_p, 3, H, H_pad, dim=0)
-        dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=0)
-        db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=0)
-
         return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None
 
 
 class _LSTMFn(torch.autograd.Function):
     @staticmethod
     def forward(ctx, x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
-        if not _has_triton:
-            raise RuntimeError(
-                "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
-            )
-        B, T, I_in = x.shape
-        H = hidden.shape[-1]
-        H_pad = _padded_hidden_size(H)
-
-        hidden_p = _pad_last(hidden, H, H_pad).contiguous()
-        cell_p = _pad_last(cell, H, H_pad).contiguous()
-        b_ih_p = _pad_gate_dim(b_ih, 4, H, H_pad, dim=0)
-        b_hh_p = _pad_gate_dim(b_hh, 4, H, H_pad, dim=0)
-        w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
-        w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
-
-        gates_x = (
-            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
-            .view(B, T, 4 * H_pad)
-            .contiguous()
-        )
-
-        w_hh_c = w_hh_p.to(compute_dtype)
-        w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
-        w_i_t = w_hh_c4[0].t().contiguous()
-        w_f_t = w_hh_c4[1].t().contiguous()
-        w_g_t = w_hh_c4[2].t().contiguous()
-        w_o_t = w_hh_c4[3].t().contiguous()
-        w_i = w_hh_c4[0].contiguous()
-        w_f = w_hh_c4[1].contiguous()
-        w_g = w_hh_c4[2].contiguous()
-        w_o = w_hh_c4[3].contiguous()
-
-        out = torch.empty(B, T, H_pad, dtype=x.dtype, device=x.device)
-        c_out = torch.empty_like(out)
-        save_i = torch.empty_like(out)
-        save_f = torch.empty_like(out)
-        save_g = torch.empty_like(out)
-        save_o = torch.empty_like(out)
-        save_tanhc = torch.empty_like(out)
-        h_final = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
-        c_final = torch.empty_like(h_final)
-
-        def grid(meta):
-            return (triton.cdiv(B, meta["BLOCK_B"]),)
-
-        _lstm_fwd_kernel[grid](
-            gates_x,
+        (
+            out_unpadded,
+            c_out_unpadded,
+            h_final_unpadded,
+            c_final_unpadded,
             hidden_p,
             cell_p,
-            w_i_t,
-            w_f_t,
-            w_g_t,
-            w_o_t,
-            b_hh_p,
-            is_init,
             out,
             c_out,
             save_i,
@@ -1043,19 +1322,18 @@ class _LSTMFn(torch.autograd.Function):
             save_g,
             save_o,
             save_tanhc,
-            h_final,
-            c_final,
-            B,
-            T,
-            H=H_pad,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        ) = _lstm_forward_impl(
+            x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
         )
-
         ctx.save_for_backward(
             x,
             hidden_p,
             cell_p,
-            w_ih,
-            w_hh,
             is_init,
             out,
             c_out,
@@ -1070,12 +1348,15 @@ class _LSTMFn(torch.autograd.Function):
             w_o,
             w_ih_p,
         )
+        B, T, I_in = x.shape
+        H = hidden.shape[-1]
+        H_pad = hidden_p.shape[-1]
         ctx.shapes = (B, T, I_in, H, H_pad)
         return (
-            _unpad_last(out, H, H_pad),
-            _unpad_last(c_out, H, H_pad),
-            _unpad_last(h_final, H, H_pad),
-            _unpad_last(c_final, H, H_pad),
+            out_unpadded,
+            c_out_unpadded,
+            h_final_unpadded,
+            c_final_unpadded,
         )
 
     @staticmethod
@@ -1084,8 +1365,6 @@ class _LSTMFn(torch.autograd.Function):
             x,
             hidden_p,
             cell_p,
-            w_ih,
-            w_hh,
             is_init,
             out,
             c_out,
@@ -1100,27 +1379,14 @@ class _LSTMFn(torch.autograd.Function):
             w_o,
             w_ih_p,
         ) = ctx.saved_tensors
-        B, T, I_in, H, H_pad = ctx.shapes
-
-        dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
-        dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
-        dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
-        dc_final_p = _pad_last(dc_final.contiguous(), H, H_pad).contiguous()
-        dgates_x = torch.empty(B, T, 4 * H_pad, dtype=x.dtype, device=x.device)
-        dgates_h = torch.empty_like(dgates_x)
-        dhidden_p = torch.zeros_like(hidden_p)
-        dcell_p = torch.zeros_like(cell_p)
-
-        def grid(meta):
-            return (triton.cdiv(B, meta["BLOCK_B"]),)
-
-        _lstm_bwd_kernel[grid](
+        dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh = _lstm_backward_impl(
+            dout,
+            dc_out,
+            dh_final,
+            dc_final,
+            x,
             hidden_p,
             cell_p,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
             is_init,
             out,
             c_out,
@@ -1129,44 +1395,652 @@ class _LSTMFn(torch.autograd.Function):
             save_g,
             save_o,
             save_tanhc,
-            dout_p,
-            dc_out_p,
-            dh_final_p,
-            dc_final_p,
-            dgates_x,
-            dgates_h,
-            dhidden_p,
-            dcell_p,
-            B,
-            T,
-            H=H_pad,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+            ctx.shapes,
+        )
+        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None
+
+
+if _has_custom_op:
+
+    def _slice_vmap_arg(arg, dim: int | None, index: int):
+        if dim is None or not isinstance(arg, torch.Tensor):
+            return arg
+        return arg.movedim(dim, 0)[index]
+
+    def _loop_vmap_custom_op(op, info, in_dims, *args):
+        results = [
+            op(*(_slice_vmap_arg(arg, dim, index) for arg, dim in zip(args, in_dims)))
+            for index in range(info.batch_size)
+        ]
+        return tuple(torch.stack(items, 0) for items in zip(*results)), tuple(
+            0 for _ in results[0]
         )
 
-        h_prev_all = torch.empty_like(out)
-        h_prev_all[:, 0] = hidden_p[:, 0]
-        if T > 1:
-            h_prev_all[:, 1:] = out[:, :-1]
-        h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
+    @torch.library.custom_op(
+        "torchrl::gru_triton",
+        mutates_args=(),
+        device_types="cuda",
+    )
+    def _gru_triton_op(
+        x: torch.Tensor,
+        hidden: torch.Tensor,
+        w_ih: torch.Tensor,
+        w_hh: torch.Tensor,
+        b_ih: torch.Tensor,
+        b_hh: torch.Tensor,
+        is_init: torch.Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        # ``torch.library.custom_op`` rejects outputs that alias each other or
+        # alias an input. When the padded hidden size equals the unpadded one
+        # the ``_pad_last`` / ``_unpad_last`` fast paths return the same
+        # storage as their input, which violates that contract. Cloning every
+        # element of the output tuple costs a handful of memcpys (each at most
+        # ``B*T*H`` or ``H*H`` elements) but guarantees the contract holds.
+        return tuple(
+            t.clone()
+            for t in _gru_forward_impl(
+                x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+            )
+        )
 
-        dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
-        h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-        db_hh_p = dgates_h_flat.sum(0)
+    @torch.library.register_fake("torchrl::gru_triton")
+    def _gru_triton_fake(
+        x: torch.Tensor,
+        hidden: torch.Tensor,
+        w_ih: torch.Tensor,
+        w_hh: torch.Tensor,
+        b_ih: torch.Tensor,
+        b_hh: torch.Tensor,
+        is_init: torch.Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        del b_ih, b_hh, is_init
+        B, T, I_in = x.shape
+        H = hidden.shape[-1]
+        H_pad = _padded_hidden_size(int(H))
+        padded_shape = (B, T, H_pad)
+        weight_shape = (H_pad, H_pad)
+        return (
+            x.new_empty((B, T, H)),
+            x.new_empty((B, H)),
+            hidden.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_ih.new_empty((3 * H_pad, I_in)),
+        )
 
-        dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
-        x_flat = x.reshape(B * T, I_in)
-        dW_ih_p = dgates_x_flat.t() @ x_flat
-        db_ih_p = dgates_x_flat.sum(0)
-        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+    if _has_vmap_op:
 
-        dhidden = _unpad_last(dhidden_p, H, H_pad)
-        dcell = _unpad_last(dcell_p, H, H_pad)
-        dW_hh = _unpad_w_hh(dW_hh_p, 4, H, H_pad)
-        db_hh = _unpad_gate_dim(db_hh_p, 4, H, H_pad, dim=0)
-        dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=0)
-        db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=0)
+        @torch.library.register_vmap("torchrl::gru_triton")
+        def _gru_triton_vmap(info, in_dims, *args):
+            return _loop_vmap_custom_op(_gru_triton_op, info, in_dims, *args)
 
+    @torch.library.custom_op(
+        "torchrl::gru_triton_backward",
+        mutates_args=(),
+        device_types="cuda",
+    )
+    def _gru_triton_backward_op(
+        dout: torch.Tensor,
+        dh_final: torch.Tensor,
+        x: torch.Tensor,
+        hidden_p: torch.Tensor,
+        is_init: torch.Tensor,
+        out: torch.Tensor,
+        save_r: torch.Tensor,
+        save_z: torch.Tensor,
+        save_n: torch.Tensor,
+        save_gh_n: torch.Tensor,
+        w_r: torch.Tensor,
+        w_z: torch.Tensor,
+        w_n: torch.Tensor,
+        w_ih_p: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        shapes = (x.shape[0], x.shape[1], x.shape[2], dout.shape[-1], out.shape[-1])
+        return _gru_backward_impl(
+            dout,
+            dh_final,
+            x,
+            hidden_p,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+            shapes,
+        )
+
+    @torch.library.register_fake("torchrl::gru_triton_backward")
+    def _gru_triton_backward_fake(
+        dout: torch.Tensor,
+        dh_final: torch.Tensor,
+        x: torch.Tensor,
+        hidden_p: torch.Tensor,
+        is_init: torch.Tensor,
+        out: torch.Tensor,
+        save_r: torch.Tensor,
+        save_z: torch.Tensor,
+        save_n: torch.Tensor,
+        save_gh_n: torch.Tensor,
+        w_r: torch.Tensor,
+        w_z: torch.Tensor,
+        w_n: torch.Tensor,
+        w_ih_p: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        del (
+            dh_final,
+            hidden_p,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        )
+        B, T, I_in = x.shape
+        H = dout.shape[-1]
+        return (
+            x.new_empty(x.shape),
+            x.new_empty((B, T, H)),
+            x.new_empty((3 * H, I_in)),
+            x.new_empty((3 * H, H)),
+            x.new_empty((3 * H,)),
+            x.new_empty((3 * H,)),
+        )
+
+    if _has_vmap_op:
+
+        @torch.library.register_vmap("torchrl::gru_triton_backward")
+        def _gru_triton_backward_vmap(info, in_dims, *args):
+            return _loop_vmap_custom_op(_gru_triton_backward_op, info, in_dims, *args)
+
+    def _gru_triton_setup_context(ctx, inputs, output) -> None:
+        x, hidden, _, _, _, _, is_init, _ = inputs
+        (
+            _,
+            _,
+            hidden_p,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        ) = output
+        ctx.save_for_backward(
+            x,
+            hidden_p,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        )
+        ctx.shapes = (
+            x.shape[0],
+            x.shape[1],
+            x.shape[2],
+            hidden.shape[-1],
+            hidden_p.shape[-1],
+        )
+
+    def _gru_triton_backward(ctx, dout, dh_final, *unused_aux_grads):
+        del unused_aux_grads
+        (
+            x,
+            hidden_p,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        ) = ctx.saved_tensors
+        B, T, _, H, _ = ctx.shapes
+        if dout is None:
+            dout = x.new_zeros((B, T, H))
+        if dh_final is None:
+            dh_final = x.new_zeros((B, H))
+        dx, dhidden, dW_ih, dW_hh, db_ih, db_hh = _gru_triton_backward_op(
+            dout,
+            dh_final,
+            x,
+            hidden_p,
+            is_init,
+            out,
+            save_r,
+            save_z,
+            save_n,
+            save_gh_n,
+            w_r,
+            w_z,
+            w_n,
+            w_ih_p,
+        )
+        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None
+
+    torch.library.register_autograd(
+        "torchrl::gru_triton",
+        _gru_triton_backward,
+        setup_context=_gru_triton_setup_context,
+    )
+
+    @torch.library.custom_op(
+        "torchrl::lstm_triton",
+        mutates_args=(),
+        device_types="cuda",
+    )
+    def _lstm_triton_op(
+        x: torch.Tensor,
+        hidden: torch.Tensor,
+        cell: torch.Tensor,
+        w_ih: torch.Tensor,
+        w_hh: torch.Tensor,
+        b_ih: torch.Tensor,
+        b_hh: torch.Tensor,
+        is_init: torch.Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        # Clone outputs to satisfy ``torch.library.custom_op``'s no-alias
+        # contract — see the matching comment in ``_gru_triton_op``.
+        return tuple(
+            t.clone()
+            for t in _lstm_forward_impl(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+            )
+        )
+
+    @torch.library.register_fake("torchrl::lstm_triton")
+    def _lstm_triton_fake(
+        x: torch.Tensor,
+        hidden: torch.Tensor,
+        cell: torch.Tensor,
+        w_ih: torch.Tensor,
+        w_hh: torch.Tensor,
+        b_ih: torch.Tensor,
+        b_hh: torch.Tensor,
+        is_init: torch.Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        del cell, b_ih, b_hh, is_init
+        B, T, I_in = x.shape
+        H = hidden.shape[-1]
+        H_pad = _padded_hidden_size(int(H))
+        padded_shape = (B, T, H_pad)
+        weight_shape = (H_pad, H_pad)
+        return (
+            x.new_empty((B, T, H)),
+            x.new_empty((B, T, H)),
+            x.new_empty((B, H)),
+            x.new_empty((B, H)),
+            hidden.new_empty(padded_shape),
+            hidden.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            x.new_empty(padded_shape),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_hh.new_empty(weight_shape, dtype=compute_dtype),
+            w_ih.new_empty((4 * H_pad, I_in)),
+        )
+
+    if _has_vmap_op:
+
+        @torch.library.register_vmap("torchrl::lstm_triton")
+        def _lstm_triton_vmap(info, in_dims, *args):
+            return _loop_vmap_custom_op(_lstm_triton_op, info, in_dims, *args)
+
+    @torch.library.custom_op(
+        "torchrl::lstm_triton_backward",
+        mutates_args=(),
+        device_types="cuda",
+    )
+    def _lstm_triton_backward_op(
+        dout: torch.Tensor,
+        dc_out: torch.Tensor,
+        dh_final: torch.Tensor,
+        dc_final: torch.Tensor,
+        x: torch.Tensor,
+        hidden_p: torch.Tensor,
+        cell_p: torch.Tensor,
+        is_init: torch.Tensor,
+        out: torch.Tensor,
+        c_out: torch.Tensor,
+        save_i: torch.Tensor,
+        save_f: torch.Tensor,
+        save_g: torch.Tensor,
+        save_o: torch.Tensor,
+        save_tanhc: torch.Tensor,
+        w_i: torch.Tensor,
+        w_f: torch.Tensor,
+        w_g: torch.Tensor,
+        w_o: torch.Tensor,
+        w_ih_p: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        shapes = (x.shape[0], x.shape[1], x.shape[2], dout.shape[-1], out.shape[-1])
+        return _lstm_backward_impl(
+            dout,
+            dc_out,
+            dh_final,
+            dc_final,
+            x,
+            hidden_p,
+            cell_p,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+            shapes,
+        )
+
+    @torch.library.register_fake("torchrl::lstm_triton_backward")
+    def _lstm_triton_backward_fake(
+        dout: torch.Tensor,
+        dc_out: torch.Tensor,
+        dh_final: torch.Tensor,
+        dc_final: torch.Tensor,
+        x: torch.Tensor,
+        hidden_p: torch.Tensor,
+        cell_p: torch.Tensor,
+        is_init: torch.Tensor,
+        out: torch.Tensor,
+        c_out: torch.Tensor,
+        save_i: torch.Tensor,
+        save_f: torch.Tensor,
+        save_g: torch.Tensor,
+        save_o: torch.Tensor,
+        save_tanhc: torch.Tensor,
+        w_i: torch.Tensor,
+        w_f: torch.Tensor,
+        w_g: torch.Tensor,
+        w_o: torch.Tensor,
+        w_ih_p: torch.Tensor,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        del (
+            dc_out,
+            dh_final,
+            dc_final,
+            hidden_p,
+            cell_p,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        )
+        B, T, I_in = x.shape
+        H = dout.shape[-1]
+        return (
+            x.new_empty(x.shape),
+            x.new_empty((B, T, H)),
+            x.new_empty((B, T, H)),
+            x.new_empty((4 * H, I_in)),
+            x.new_empty((4 * H, H)),
+            x.new_empty((4 * H,)),
+            x.new_empty((4 * H,)),
+        )
+
+    if _has_vmap_op:
+
+        @torch.library.register_vmap("torchrl::lstm_triton_backward")
+        def _lstm_triton_backward_vmap(info, in_dims, *args):
+            return _loop_vmap_custom_op(_lstm_triton_backward_op, info, in_dims, *args)
+
+    def _lstm_triton_setup_context(ctx, inputs, output) -> None:
+        x, hidden, _, _, _, _, _, is_init, _ = inputs
+        (
+            _,
+            _,
+            _,
+            _,
+            hidden_p,
+            cell_p,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        ) = output
+        ctx.save_for_backward(
+            x,
+            hidden_p,
+            cell_p,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        )
+        ctx.shapes = (
+            x.shape[0],
+            x.shape[1],
+            x.shape[2],
+            hidden.shape[-1],
+            hidden_p.shape[-1],
+        )
+
+    def _lstm_triton_backward(ctx, dout, dc_out, dh_final, dc_final, *unused_aux_grads):
+        del unused_aux_grads
+        (
+            x,
+            hidden_p,
+            cell_p,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        ) = ctx.saved_tensors
+        B, T, _, H, _ = ctx.shapes
+        if dout is None:
+            dout = x.new_zeros((B, T, H))
+        if dc_out is None:
+            dc_out = x.new_zeros((B, T, H))
+        if dh_final is None:
+            dh_final = x.new_zeros((B, H))
+        if dc_final is None:
+            dc_final = x.new_zeros((B, H))
+        dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh = _lstm_triton_backward_op(
+            dout,
+            dc_out,
+            dh_final,
+            dc_final,
+            x,
+            hidden_p,
+            cell_p,
+            is_init,
+            out,
+            c_out,
+            save_i,
+            save_f,
+            save_g,
+            save_o,
+            save_tanhc,
+            w_i,
+            w_f,
+            w_g,
+            w_o,
+            w_ih_p,
+        )
         return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None
+
+    torch.library.register_autograd(
+        "torchrl::lstm_triton",
+        _lstm_triton_backward,
+        setup_context=_lstm_triton_setup_context,
+    )
 
 
 def gru_triton(
@@ -1196,6 +2070,11 @@ def gru_triton(
     Returns:
         ``(out, h_final)`` where ``out`` is ``[B, T, H]`` and ``h_final`` is ``[B, H]``.
     """
+    if _has_custom_op and x.is_cuda:
+        out, h_final, *_ = _gru_triton_op(
+            x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+        )
+        return out, h_final
     return _GRUFn.apply(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
 
 
@@ -1218,6 +2097,11 @@ def lstm_triton(
     Returns:
         ``(h_steps, c_steps, h_final, c_final)``.
     """
+    if _has_custom_op and x.is_cuda:
+        h_steps, c_steps, h_final, c_final, *_ = _lstm_triton_op(
+            x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+        )
+        return h_steps, c_steps, h_final, c_final
     return _LSTMFn.apply(
         x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
     )

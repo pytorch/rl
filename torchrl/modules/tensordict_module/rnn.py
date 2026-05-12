@@ -522,6 +522,13 @@ class LSTMModule(ModuleBase):
             projections and bidirectional layers. ``"auto"`` uses ``"pad"``
             in eager mode and ``"scan"`` when called under
             :func:`torch.compile`. Default: ``"pad"``.
+
+            .. note::
+                ``"triton"`` is opaque to ``torch.compile``;
+                ``mode="reduce-overhead"`` / CUDA graph capture gains only
+                ~1-3%. ``"scan"`` is launch-bound and gains ~1.6x-1.9x, so
+                under compile+CUDA graphs it may beat ``"triton"`` on wider
+                LSTM stacks.
         recurrent_compute_dtype: dtype used for the recurrent matmul inside the
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
@@ -1683,6 +1690,13 @@ class GRUModule(ModuleBase):
             and bidirectional layers.
             ``"auto"`` uses ``"pad"`` in eager mode and ``"scan"`` when called
             under :func:`torch.compile`. Default: ``"pad"``.
+
+            .. note::
+                ``"triton"`` is opaque to ``torch.compile``;
+                ``mode="reduce-overhead"`` / CUDA graph capture gains only
+                ~1-3%. ``"scan"`` is launch-bound and gains ~1.6x-1.9x, so
+                under compile+CUDA graphs it may match or beat ``"triton"``
+                on wider stacks.
         recurrent_compute_dtype: dtype used for the recurrent matmul inside the
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
