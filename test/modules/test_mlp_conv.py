@@ -10,13 +10,7 @@ from numbers import Number
 import pytest
 import torch
 from torch import nn
-from torchrl.modules.models import (
-    BatchRenorm1d,
-    Conv3dNet,
-    ConvNet,
-    MLP,
-    NoisyLinear,
-)
+from torchrl.modules.models import BatchRenorm1d, Conv3dNet, ConvNet, MLP, NoisyLinear
 from torchrl.modules.models.recipes.impala import _ConvNetBlock
 from torchrl.modules.models.utils import SquashDims
 

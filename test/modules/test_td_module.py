@@ -12,6 +12,7 @@ from tensordict import LazyStackedTensorDict, TensorDict, unravel_key_list
 from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+from torchrl.envs.utils import set_exploration_type
 from torchrl.modules import (
     AdditiveGaussianModule,
     NormalParamExtractor,
@@ -29,7 +30,6 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-from torchrl.envs.utils import set_exploration_type
 from torchrl.objectives import DDPGLoss
 
 

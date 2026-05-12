@@ -11,16 +11,8 @@ import functools
 import pytest
 import torch
 import torchrl
-from _rb_common import (
-    OLD_TORCH,
-    ReplayBufferRNG,
-    TensorDictReplayBufferRNG,
-)
-from tensordict import (
-    assert_allclose_td,
-    TensorDict,
-    TensorDictBase,
-)
+from _rb_common import OLD_TORCH, ReplayBufferRNG, TensorDictReplayBufferRNG
+from tensordict import assert_allclose_td, TensorDict, TensorDictBase
 
 from torchrl._utils import rl_warnings
 from torchrl.data import (

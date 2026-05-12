@@ -17,13 +17,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import distributions as dist, nn
 
 from torchrl.data import Bounded, Composite
-from torchrl.envs import (
-    CatFrames,
-    Compose,
-    InitTracker,
-    SerialEnv,
-    TransformedEnv,
-)
+from torchrl.envs import CatFrames, Compose, InitTracker, SerialEnv, TransformedEnv
 from torchrl.modules import (
     DiffusionActor,
     MultiStepActorWrapper,

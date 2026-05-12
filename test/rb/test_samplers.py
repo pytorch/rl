@@ -17,10 +17,7 @@ from tensordict import TensorDict
 
 from torchrl._utils import _replace_last
 from torchrl.collectors.utils import split_trajectories
-from torchrl.data import (
-    TensorDictPrioritizedReplayBuffer,
-    TensorDictReplayBuffer,
-)
+from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,

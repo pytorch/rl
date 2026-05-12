@@ -60,11 +60,7 @@ from torchrl.data.replay_buffers.storages import (
 )
 from torchrl.data.replay_buffers.utils import tree_iter
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
-from torchrl.testing import (
-    capture_log_records,
-    get_default_devices,
-    make_tc,
-)
+from torchrl.testing import capture_log_records, get_default_devices, make_tc
 
 
 class TestStorages:

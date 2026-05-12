@@ -16,10 +16,7 @@ from torch.utils._pytree import tree_map
 
 from torchrl.data import ReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import RandomSampler, SliceSampler
-from torchrl.data.replay_buffers.storages import (
-    LazyMemmapStorage,
-    LazyTensorStorage,
-)
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.envs.transforms import NextStateReconstructor
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,

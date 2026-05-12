@@ -11,12 +11,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 from torch import nn
-from torchrl.modules import (
-    MultiAgentConvNet,
-    MultiAgentMLP,
-    QMixer,
-    VDNMixer,
-)
+from torchrl.modules import MultiAgentConvNet, MultiAgentMLP, QMixer, VDNMixer
 from torchrl.modules.models.multiagent import MultiAgentNetBase
 
 from torchrl.testing import retry

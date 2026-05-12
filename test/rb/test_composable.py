@@ -19,11 +19,7 @@ from _rb_common import (
     TORCH_VERSION,
 )
 from packaging import version
-from tensordict import (
-    is_tensor_collection,
-    TensorDict,
-    TensorDictBase,
-)
+from tensordict import is_tensor_collection, TensorDict, TensorDictBase
 from torch.utils._pytree import tree_flatten, tree_map
 
 from torchrl.data import (
