@@ -510,6 +510,14 @@ This will be mediated by the <a class="reference internal" href="torchrl.envs.ll
 Alternatively, a <a class="reference internal" href="torchrl.envs.llm.transforms.PolicyVersion.html#torchrl.envs.llm.transforms.PolicyVersion" title="torchrl.envs.llm.transforms.policy_version.PolicyVersion"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyVersion</span></code></a> instance can be passed, which will be used to track
 the policy version.
 Defaults to <cite>False</cite>.</p></li>
+<li><p><strong>compact_obs</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, each worker drops the
+observation and state keys from the <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">...)</span></code> sub-tensordict
+before stacking. See
+<code class="xref py py-class docutils literal notranslate"><span class="pre">SyncDataCollector</span></code> for details and the
+pairing with
+<code class="xref py py-class docutils literal notranslate"><span class="pre">NextStateReconstructor</span></code>
+at sampling time.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 <li><p><strong>worker_idx</strong> (<em>int</em><em>, </em><em>optional</em>) – the index of the worker.</p></li>
 </ul>
 </dd>

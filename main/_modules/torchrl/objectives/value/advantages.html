@@ -681,6 +681,50 @@
                     <span class="k">return</span> <span class="n">i</span>
         <span class="k">return</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span>
 
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_sanitize_next_obs_nan</span><span class="p">(</span>
+        <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Replace ``NaN`` entries in ``(&quot;next&quot;, k)`` with the corresponding root ``k``.</span>
+
+<span class="sd">        Acts as a finite placeholder for &quot;next observations&quot; that are absent —</span>
+<span class="sd">        as produced by</span>
+<span class="sd">        :class:`~torchrl.envs.transforms.NextStateReconstructor` at trajectory</span>
+<span class="sd">        ends in conjunction with</span>
+<span class="sd">        :class:`~torchrl.collectors.SyncDataCollector` configured with</span>
+<span class="sd">        ``compact_obs=True``. Without this step, ``V(NaN) = NaN`` propagates</span>
+<span class="sd">        through the TD / GAE kernels (the multiplication by ``(1 - done)``</span>
+<span class="sd">        does not zero NaN out because ``0 * NaN = NaN`` in IEEE 754).</span>
+
+<span class="sd">        Semantics of the substitution:</span>
+
+<span class="sd">        - At **terminated** steps the value at the next observation is masked</span>
+<span class="sd">          out by ``(1 - done)`` downstream, so the substitute is discarded.</span>
+<span class="sd">        - At **truncated-only** steps the substitute acts as an approximate</span>
+<span class="sd">          bootstrap ``V(obs[t]) ≈ V(real_next_obs)`` — strictly an</span>
+<span class="sd">          approximation, but finite and well-defined.</span>
+
+<span class="sd">        Operates on a shallow copy so the caller&#39;s ``tensordict`` is not</span>
+<span class="sd">        mutated.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">copied</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">in_keys</span><span class="p">:</span>
+            <span class="n">root</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">root</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">root</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">():</span>
+                <span class="k">continue</span>
+            <span class="n">next_k</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">k</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+            <span class="n">nxt</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">next_k</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">nxt</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">nxt</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">root</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">nan_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">nxt</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">nan_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">copied</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">copied</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">next_k</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">nan_mask</span><span class="p">,</span> <span class="n">root</span><span class="p">,</span> <span class="n">nxt</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">data</span>
+
     <span class="k">def</span> <span class="nf">_call_value_nets</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">data</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
@@ -696,6 +740,7 @@
         <span class="k">if</span> <span class="n">value_net</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">value_net</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_network</span>
         <span class="n">in_keys</span> <span class="o">=</span> <span class="n">value_net</span><span class="o">.</span><span class="n">in_keys</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sanitize_next_obs_nan</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">in_keys</span><span class="p">)</span>
 
         <span class="k">def</span> <span class="nf">_call_value_net</span><span class="p">(</span><span class="n">data_in</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
             <span class="n">chunk_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">value_chunk_size</span>
