@@ -78,18 +78,25 @@ import importlib.util as _importlib_util  # noqa: E402
 def _has_triton_backend() -> bool:
     """Mirror of the triton-availability check inside the RNN backend.
 
-    Triton must be installed, CUDA must be available, and the Triton build
-    must expose the ``triton.language.extra.libdevice`` submodule
-    (Triton >= 2.2). Older Triton installations are routed to scan/pad
-    backends, so the triton-specific tests are skipped there.
+    Requires Triton >= 2.2 (``triton.language.extra.libdevice``), CUDA, and
+    PyTorch with the ``torch.library.custom_op`` family (>= 2.4). Older
+    PyTorch / Triton installations are routed to scan/pad backends.
     """
     if _importlib_util.find_spec("triton") is None or not torch.cuda.is_available():
         return False
-    return _importlib_util.find_spec("triton.language.extra.libdevice") is not None
+    if _importlib_util.find_spec("triton.language.extra.libdevice") is None:
+        return False
+    return all(
+        hasattr(torch.library, name)
+        for name in ("custom_op", "register_autograd", "register_fake")
+    )
 
 
 _has_triton = _has_triton_backend()
-_triton_skip_reason = "requires triton (>= 2.2) and CUDA"
+_triton_skip_reason = (
+    "requires Triton (>= 2.2), CUDA, and PyTorch with torch.library.custom_op "
+    "(>= 2.4)"
+)
 _has_compile = hasattr(torch, "compile")
 
 _has_functorch = False

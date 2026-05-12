@@ -33,15 +33,21 @@ else:
 
 
 def _check_triton_available() -> bool:
-    """True if Triton is installed and exposes the API the kernels need.
+    """True if Triton + PyTorch expose the API the kernels need.
 
     Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
-    Checks for the ``triton.language.extra.libdevice`` submodule (Triton
-    >= 2.2). Older Triton builds fall back to the scan / pad backends.
+    Requires Triton >= 2.2 (``triton.language.extra.libdevice``) and PyTorch
+    >= 2.4 (``torch.library.custom_op`` family). Older installations fall
+    back to the scan / pad backends.
     """
     if importlib.util.find_spec("triton") is None:
         return False
-    return importlib.util.find_spec("triton.language.extra.libdevice") is not None
+    if importlib.util.find_spec("triton.language.extra.libdevice") is None:
+        return False
+    return all(
+        hasattr(torch.library, name)
+        for name in ("custom_op", "register_autograd", "register_fake")
+    )
 
 
 _has_triton = _check_triton_available()
@@ -647,8 +653,8 @@ class LSTMModule(ModuleBase):
             )
         if recurrent_backend == "triton" and not _has_triton:
             raise RuntimeError(
-                "recurrent_backend='triton' requires the triton package. "
-                "Install it with `pip install triton`."
+                "recurrent_backend='triton' requires Triton (>= 2.2) and "
+                "PyTorch with torch.library.custom_op (>= 2.4)."
             )
         if lstm is not None:
             if not lstm.batch_first:
@@ -1840,8 +1846,8 @@ class GRUModule(ModuleBase):
             )
         if recurrent_backend == "triton" and not _has_triton:
             raise RuntimeError(
-                "recurrent_backend='triton' requires the triton package. "
-                "Install it with `pip install triton`."
+                "recurrent_backend='triton' requires Triton (>= 2.2) and "
+                "PyTorch with torch.library.custom_op (>= 2.4)."
             )
         if gru is not None:
             if not gru.batch_first:

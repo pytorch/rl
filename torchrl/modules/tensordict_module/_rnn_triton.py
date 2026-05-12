@@ -29,7 +29,7 @@ Limitations of this prototype:
   execution scales this activation memory linearly with the number of layers,
   unlike cuDNN's opaque ``reserve_space``.
 * ``torch.compile`` sees the low-level forward and backward launches as
-  ``torch.library.custom_op`` calls when the API is available.
+  ``torch.library.custom_op`` calls.
 * ``torch.vmap`` over shared-weight custom ops folds mapped data tensors into
   the kernel batch dimension. Non-leading vmapped dims or per-slice weights
   fall back to map semantics.
@@ -51,25 +51,32 @@ import torch.nn.functional as F
 
 
 def _check_triton_available() -> bool:
-    """True if the installed Triton exposes everything this module needs.
+    """True if the installed Triton and PyTorch expose everything we need.
 
-    The backend's kernels rely on ``triton.language.extra.libdevice.tanh``
-    (Triton >= 2.2) and on a backward path that uses ``tl.atomic_add`` with
-    a 2-D mask, which older Triton compilers reject. Probing the lazy
-    ``libdevice`` submodule import at module-load time is a reliable proxy
-    for "Triton is new enough"; older installations fall back transparently
-    to the ``scan`` / ``pad`` backends.
+    Requires:
+    * Triton with ``triton.language.extra.libdevice.tanh`` (Triton >= 2.2) and
+      backward support for ``tl.atomic_add`` with a 2-D mask.
+    * PyTorch with ``torch.library.custom_op`` / ``register_autograd`` /
+      ``register_fake`` (PyTorch >= 2.4) -- the only autograd entry point the
+      backend ships.
+
+    Older installations fall back transparently to the ``scan`` / ``pad``
+    backends.
     """
     if importlib.util.find_spec("triton") is None:
         return False
-    return importlib.util.find_spec("triton.language.extra.libdevice") is not None
+    if importlib.util.find_spec("triton.language.extra.libdevice") is None:
+        return False
+    return all(
+        hasattr(torch.library, name)
+        for name in ("custom_op", "register_autograd", "register_fake")
+    )
 
 
 _has_triton = _check_triton_available()
-_has_custom_op = all(
-    hasattr(torch.library, name)
-    for name in ("custom_op", "register_autograd", "register_fake")
-)
+# ``register_vmap`` shipped in PyTorch 2.5, one minor after ``custom_op``;
+# tested separately so the backend still works for compile/autograd on
+# 2.4 even when vmap dispatch falls back to the default mapping.
 _has_vmap_op = hasattr(torch.library, "register_vmap")
 
 if _has_triton:
@@ -1298,180 +1305,7 @@ def _lstm_backward_impl(
     return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh
 
 
-class _GRUFn(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
-        (
-            out_unpadded,
-            h_final_unpadded,
-            hidden_p,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            w_r,
-            w_z,
-            w_n,
-            w_ih_p,
-        ) = _gru_forward_impl(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
-        ctx.save_for_backward(
-            x,
-            hidden_p,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            w_r,
-            w_z,
-            w_n,
-            w_ih_p,
-        )
-        B, T, I_in = x.shape
-        H = hidden.shape[-1]
-        H_pad = hidden_p.shape[-1]
-        ctx.shapes = (B, T, I_in, H, H_pad)
-        return out_unpadded, h_final_unpadded
-
-    @staticmethod
-    def backward(ctx, dout, dh_final):
-        (
-            x,
-            hidden_p,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            w_r,
-            w_z,
-            w_n,
-            w_ih_p,
-        ) = ctx.saved_tensors
-        dx, dhidden, dW_ih, dW_hh, db_ih, db_hh = _gru_backward_impl(
-            dout,
-            dh_final,
-            x,
-            hidden_p,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            w_r,
-            w_z,
-            w_n,
-            w_ih_p,
-            ctx.shapes,
-        )
-        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None
-
-
-class _LSTMFn(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
-        (
-            out_unpadded,
-            c_out_unpadded,
-            h_final_unpadded,
-            c_final_unpadded,
-            hidden_p,
-            cell_p,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            w_ih_p,
-        ) = _lstm_forward_impl(
-            x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
-        )
-        ctx.save_for_backward(
-            x,
-            hidden_p,
-            cell_p,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            w_ih_p,
-        )
-        B, T, I_in = x.shape
-        H = hidden.shape[-1]
-        H_pad = hidden_p.shape[-1]
-        ctx.shapes = (B, T, I_in, H, H_pad)
-        return (
-            out_unpadded,
-            c_out_unpadded,
-            h_final_unpadded,
-            c_final_unpadded,
-        )
-
-    @staticmethod
-    def backward(ctx, dout, dc_out, dh_final, dc_final):
-        (
-            x,
-            hidden_p,
-            cell_p,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            w_ih_p,
-        ) = ctx.saved_tensors
-        dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh = _lstm_backward_impl(
-            dout,
-            dc_out,
-            dh_final,
-            dc_final,
-            x,
-            hidden_p,
-            cell_p,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            w_ih_p,
-            ctx.shapes,
-        )
-        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None
-
-
-if _has_custom_op:
+if _has_triton:
 
     def _slice_vmap_arg(arg, dim: int | None, index: int):
         if dim is None or not isinstance(arg, torch.Tensor):
@@ -2397,12 +2231,15 @@ def gru_triton(
     Returns:
         ``(out, h_final)`` where ``out`` is ``[B, T, H]`` and ``h_final`` is ``[B, H]``.
     """
-    if _has_custom_op and x.is_cuda:
-        out, h_final, *_ = _gru_triton_op(
-            x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+    if not _has_triton:
+        raise RuntimeError(
+            "gru_triton requires Triton (>= 2.2) and PyTorch with "
+            "torch.library.custom_op (>= 2.4)."
         )
-        return out, h_final
-    return _GRUFn.apply(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
+    out, h_final, *_ = _gru_triton_op(
+        x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+    )
+    return out, h_final
 
 
 def lstm_triton(
@@ -2424,11 +2261,12 @@ def lstm_triton(
     Returns:
         ``(h_steps, c_steps, h_final, c_final)``.
     """
-    if _has_custom_op and x.is_cuda:
-        h_steps, c_steps, h_final, c_final, *_ = _lstm_triton_op(
-            x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+    if not _has_triton:
+        raise RuntimeError(
+            "lstm_triton requires Triton (>= 2.2) and PyTorch with "
+            "torch.library.custom_op (>= 2.4)."
         )
-        return h_steps, c_steps, h_final, c_final
-    return _LSTMFn.apply(
+    h_steps, c_steps, h_final, c_final, *_ = _lstm_triton_op(
         x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
     )
+    return h_steps, c_steps, h_final, c_final
