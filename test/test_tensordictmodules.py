@@ -98,6 +98,10 @@ try:
         from torch import vmap
     except ImportError:
         from functorch import vmap
+    try:
+        from torch.func import grad
+    except ImportError:
+        from functorch import grad
 
     _has_functorch = True
 except ImportError:
@@ -1565,6 +1569,56 @@ class TestLSTMModule:
         for actual, expected in zip(vmapped, looped):
             torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
 
+        # Mixed in_dims: ``hidden`` and ``is_init`` shared across V; ``x``
+        # and ``cell`` batched. Exercises the broadcast branch of the flatten
+        # vmap rule.
+        hidden_shared = torch.randn(B, T, H, device=device)
+        is_init_shared = torch.zeros(B, T, dtype=torch.bool, device=device)
+        is_init_shared[1, 3] = True
+        vmapped_bc = vmap(call, in_dims=(0, None, 0, None))(
+            x, hidden_shared, cell, is_init_shared
+        )
+        looped_bc = tuple(
+            torch.stack(
+                [
+                    call(x[i], hidden_shared, cell[i], is_init_shared)[j]
+                    for i in range(V)
+                ]
+            )
+            for j in range(4)
+        )
+        for actual, expected in zip(vmapped_bc, looped_bc):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        def loss_fn(x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, c_steps, h_final, c_final = _rnn_triton.lstm_triton(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return (
+                h_steps.pow(2).sum()
+                + c_steps.pow(2).sum()
+                + h_final.pow(2).sum()
+                + c_final.pow(2).sum()
+            )
+
+        grad_fn = grad(loss_fn, argnums=(0, 1, 2, 3, 4, 5, 6))
+        vmapped_grads = vmap(grad_fn, in_dims=(0, 0, 0, None, None, None, None, 0))(
+            x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+        )
+        looped_grads = tuple(
+            torch.stack(
+                [
+                    grad_fn(
+                        x[i], hidden[i], cell[i], w_ih, w_hh, b_ih, b_hh, is_init[i]
+                    )[j]
+                    for i in range(V)
+                ]
+            )
+            for j in range(7)
+        )
+        for actual, expected in zip(vmapped_grads, looped_grads):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
@@ -2563,6 +2617,39 @@ class TestGRUModule:
             for j in range(2)
         )
         for actual, expected in zip(vmapped, looped):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        # Mixed in_dims: ``hidden`` shared across V, ``x`` and ``is_init``
+        # batched. Exercises the broadcast branch of the flatten vmap rule.
+        hidden_shared = torch.randn(B, T, H, device=device)
+        vmapped_bc = vmap(call, in_dims=(0, None, 0))(x, hidden_shared, is_init)
+        looped_bc = tuple(
+            torch.stack([call(x[i], hidden_shared, is_init[i])[j] for i in range(V)])
+            for j in range(2)
+        )
+        for actual, expected in zip(vmapped_bc, looped_bc):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        def loss_fn(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, h_final = _rnn_triton.gru_triton(
+                x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return h_steps.pow(2).sum() + h_final.pow(2).sum()
+
+        grad_fn = grad(loss_fn, argnums=(0, 1, 2, 3, 4, 5))
+        vmapped_grads = vmap(grad_fn, in_dims=(0, 0, None, None, None, None, 0))(
+            x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+        )
+        looped_grads = tuple(
+            torch.stack(
+                [
+                    grad_fn(x[i], hidden[i], w_ih, w_hh, b_ih, b_hh, is_init[i])[j]
+                    for i in range(V)
+                ]
+            )
+            for j in range(6)
+        )
+        for actual, expected in zip(vmapped_grads, looped_grads):
             torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)

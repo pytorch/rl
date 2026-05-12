@@ -30,8 +30,9 @@ Limitations of this prototype:
   unlike cuDNN's opaque ``reserve_space``.
 * ``torch.compile`` sees the low-level forward and backward launches as
   ``torch.library.custom_op`` calls when the API is available.
-* ``torch.vmap`` over these custom ops uses map semantics and launches one
-  Triton call per mapped slice.
+* ``torch.vmap`` over shared-weight custom ops folds mapped data tensors into
+  the kernel batch dimension. Non-leading vmapped dims or per-slice weights
+  fall back to map semantics.
 * ``compute_dtype`` controls the matmul precision: ``torch.float32`` (default,
   TF32 on Ampere/Hopper, matching ``torch.nn.GRU`` / ``LSTM`` behavior) or
   ``torch.bfloat16`` (twice the SMEM headroom, ~7-bit mantissa).
@@ -829,9 +830,10 @@ def _unpad_gate_dim(
 def _unpad_w_hh(t: torch.Tensor, n_gates: int, H: int, H_pad: int) -> torch.Tensor:
     if H == H_pad:
         return t
-    t = t.view(n_gates, H_pad, H_pad)
-    t = t[:, :H, :H].contiguous()
-    return t.reshape(n_gates * H, H)
+    leading_shape = t.shape[:-2]
+    t = t.reshape(*leading_shape, n_gates, H_pad, H_pad)
+    t = t[..., :H, :H].contiguous()
+    return t.reshape(*leading_shape, n_gates * H, H)
 
 
 def _gru_forward_impl(
@@ -946,6 +948,7 @@ def _gru_backward_impl(
     w_n: torch.Tensor,
     w_ih_p: torch.Tensor,
     shapes: tuple[int, int, int, int, int],
+    vmap_batch_size: int | None = None,
 ) -> tuple[
     torch.Tensor,
     torch.Tensor,
@@ -993,22 +996,45 @@ def _gru_backward_impl(
         h_prev_all[:, 1:] = out[:, :-1]
     h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
 
-    dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
-    h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-    dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-    db_hh_p = dgates_h_flat.sum(0)
+    if vmap_batch_size is None:
+        dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
+        h_prev_flat = h_prev_all.reshape(B * T, H_pad)
+        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+        db_hh_p = dgates_h_flat.sum(0)
 
-    dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
-    x_flat = x.reshape(B * T, I_in)
-    dW_ih_p = dgates_x_flat.t() @ x_flat
-    db_ih_p = dgates_x_flat.sum(0)
+        dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
+        x_flat = x.reshape(B * T, I_in)
+        dW_ih_p = dgates_x_flat.t() @ x_flat
+        db_ih_p = dgates_x_flat.sum(0)
+        db_dim = 0
+    else:
+        V = vmap_batch_size
+        if B % V:
+            raise RuntimeError(
+                f"Expected flattened batch {B} to be divisible by vmap batch {V}."
+            )
+        B_per_vmap = B // V
+        BT_per_vmap = B_per_vmap * T
+
+        dgates_h_flat = dgates_h.reshape(V, BT_per_vmap, 3 * H_pad)
+        h_prev_flat = h_prev_all.reshape(V, BT_per_vmap, H_pad)
+        dW_hh_p = torch.bmm(dgates_h_flat.transpose(1, 2), h_prev_flat)
+        db_hh_p = dgates_h_flat.sum(1)
+
+        dgates_x_flat_v = dgates_x.reshape(V, BT_per_vmap, 3 * H_pad)
+        x_flat = x.reshape(V, BT_per_vmap, I_in)
+        dW_ih_p = torch.bmm(dgates_x_flat_v.transpose(1, 2), x_flat)
+        db_ih_p = dgates_x_flat_v.sum(1)
+        dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
+        db_dim = 1
+
     dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
 
     dhidden = _unpad_last(dhidden_p, H, H_pad)
     dW_hh = _unpad_w_hh(dW_hh_p, 3, H, H_pad)
-    db_hh = _unpad_gate_dim(db_hh_p, 3, H, H_pad, dim=0)
-    dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=0)
-    db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=0)
+    db_hh = _unpad_gate_dim(db_hh_p, 3, H, H_pad, dim=db_dim)
+    dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=db_dim)
+    db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=db_dim)
 
     return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh
 
@@ -1154,6 +1180,7 @@ def _lstm_backward_impl(
     w_o: torch.Tensor,
     w_ih_p: torch.Tensor,
     shapes: tuple[int, int, int, int, int],
+    vmap_batch_size: int | None = None,
 ) -> tuple[
     torch.Tensor,
     torch.Tensor,
@@ -1211,23 +1238,46 @@ def _lstm_backward_impl(
         h_prev_all[:, 1:] = out[:, :-1]
     h_prev_all = torch.where(is_init.unsqueeze(-1), hidden_p, h_prev_all)
 
-    dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
-    h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-    dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-    db_hh_p = dgates_h_flat.sum(0)
+    if vmap_batch_size is None:
+        dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
+        h_prev_flat = h_prev_all.reshape(B * T, H_pad)
+        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+        db_hh_p = dgates_h_flat.sum(0)
 
-    dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
-    x_flat = x.reshape(B * T, I_in)
-    dW_ih_p = dgates_x_flat.t() @ x_flat
-    db_ih_p = dgates_x_flat.sum(0)
+        dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
+        x_flat = x.reshape(B * T, I_in)
+        dW_ih_p = dgates_x_flat.t() @ x_flat
+        db_ih_p = dgates_x_flat.sum(0)
+        db_dim = 0
+    else:
+        V = vmap_batch_size
+        if B % V:
+            raise RuntimeError(
+                f"Expected flattened batch {B} to be divisible by vmap batch {V}."
+            )
+        B_per_vmap = B // V
+        BT_per_vmap = B_per_vmap * T
+
+        dgates_h_flat = dgates_h.reshape(V, BT_per_vmap, 4 * H_pad)
+        h_prev_flat = h_prev_all.reshape(V, BT_per_vmap, H_pad)
+        dW_hh_p = torch.bmm(dgates_h_flat.transpose(1, 2), h_prev_flat)
+        db_hh_p = dgates_h_flat.sum(1)
+
+        dgates_x_flat_v = dgates_x.reshape(V, BT_per_vmap, 4 * H_pad)
+        x_flat = x.reshape(V, BT_per_vmap, I_in)
+        dW_ih_p = torch.bmm(dgates_x_flat_v.transpose(1, 2), x_flat)
+        db_ih_p = dgates_x_flat_v.sum(1)
+        dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
+        db_dim = 1
+
     dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
 
     dhidden = _unpad_last(dhidden_p, H, H_pad)
     dcell = _unpad_last(dcell_p, H, H_pad)
     dW_hh = _unpad_w_hh(dW_hh_p, 4, H, H_pad)
-    db_hh = _unpad_gate_dim(db_hh_p, 4, H, H_pad, dim=0)
-    dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=0)
-    db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=0)
+    db_hh = _unpad_gate_dim(db_hh_p, 4, H, H_pad, dim=db_dim)
+    dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=db_dim)
+    db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=db_dim)
 
     return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh
 
@@ -1421,6 +1471,82 @@ if _has_custom_op:
             0 for _ in results[0]
         )
 
+    def _flatten_vmap_custom_op(
+        op,
+        info,
+        in_dims,
+        args,
+        batched_in_idx: tuple[int, ...],
+        batched_out_idx: tuple[int, ...],
+    ):
+        """Fold the vmap dim into the kernel's existing batch dim.
+
+        The Triton kernels already parallelize over the leading ``B`` block
+        dim. When ``vmap`` adds a leading ``V`` dim that maps onto the
+        per-sample data tensors (``x``, ``hidden``[, ``cell``], ``is_init``)
+        and leaves the weights shared, we can call the op once on
+        ``(V*B, ...)`` instead of looping V times. Falls back to the loop
+        otherwise (per-sample weights, or batched-arg vmapped on a non-0 dim).
+        """
+        V = info.batch_size
+        batched_set = set(batched_in_idx)
+        for i, dim in enumerate(in_dims):
+            if i in batched_set:
+                if dim is not None and dim != 0:
+                    return _loop_vmap_custom_op(op, info, in_dims, *args)
+            else:
+                if dim is not None:
+                    return _loop_vmap_custom_op(op, info, in_dims, *args)
+        flat_args = list(args)
+        for i in batched_in_idx:
+            arg = args[i]
+            if in_dims[i] is None:
+                flat_args[i] = (
+                    arg.unsqueeze(0).expand(V, *arg.shape).contiguous().flatten(0, 1)
+                )
+            else:
+                flat_args[i] = arg.flatten(0, 1)
+        results = op(*flat_args)
+        batched_out_set = set(batched_out_idx)
+        out_dims = []
+        unflat = []
+        for i, r in enumerate(results):
+            if i in batched_out_set:
+                unflat.append(r.unflatten(0, (V, -1)))
+                out_dims.append(0)
+            else:
+                unflat.append(r)
+                out_dims.append(None)
+        return tuple(unflat), tuple(out_dims)
+
+    def _flatten_vmap_args_or_none(
+        info,
+        in_dims,
+        args,
+        batched_in_idx: tuple[int, ...],
+    ) -> list[torch.Tensor] | None:
+        V = info.batch_size
+        batched_set = set(batched_in_idx)
+        for i, dim in enumerate(in_dims):
+            if i in batched_set:
+                if dim is not None and dim != 0:
+                    return None
+            elif dim is not None:
+                return None
+        flat_args = list(args)
+        for i in batched_in_idx:
+            arg = args[i]
+            if in_dims[i] is None:
+                flat_args[i] = (
+                    arg.unsqueeze(0).expand(V, *arg.shape).contiguous().flatten(0, 1)
+                )
+            else:
+                flat_args[i] = arg.flatten(0, 1)
+        return flat_args
+
+    def _unflatten_vmap_dim(t: torch.Tensor, info) -> torch.Tensor:
+        return t.unflatten(0, (info.batch_size, -1))
+
     @torch.library.custom_op(
         "torchrl::gru_triton",
         mutates_args=(),
@@ -1508,10 +1634,25 @@ if _has_custom_op:
         )
 
     if _has_vmap_op:
+        # Inputs:  (x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
+        # Batched inputs (have a leading ``B`` dim): x (0), hidden (1),
+        # is_init (6). Weights/biases/dtype are shared across the vmap axis.
+        # Batched outputs (need ``V`` unflattened back out): the first 8
+        # entries (out, h_final, hidden_p, out_padded, save_r/z/n/gh_n).
+        # The trailing 4 weight pass-throughs are shape-invariant.
+        _GRU_FWD_BATCHED_IN = (0, 1, 6)
+        _GRU_FWD_BATCHED_OUT = tuple(range(8))
 
         @torch.library.register_vmap("torchrl::gru_triton")
         def _gru_triton_vmap(info, in_dims, *args):
-            return _loop_vmap_custom_op(_gru_triton_op, info, in_dims, *args)
+            return _flatten_vmap_custom_op(
+                _gru_triton_op,
+                info,
+                in_dims,
+                args,
+                _GRU_FWD_BATCHED_IN,
+                _GRU_FWD_BATCHED_OUT,
+            )
 
     @torch.library.custom_op(
         "torchrl::gru_triton_backward",
@@ -1610,10 +1751,66 @@ if _has_custom_op:
         )
 
     if _has_vmap_op:
+        _GRU_BWD_BATCHED_IN = tuple(range(10))
 
         @torch.library.register_vmap("torchrl::gru_triton_backward")
         def _gru_triton_backward_vmap(info, in_dims, *args):
-            return _loop_vmap_custom_op(_gru_triton_backward_op, info, in_dims, *args)
+            flat_args = _flatten_vmap_args_or_none(
+                info, in_dims, args, _GRU_BWD_BATCHED_IN
+            )
+            if flat_args is None:
+                return _loop_vmap_custom_op(
+                    _gru_triton_backward_op, info, in_dims, *args
+                )
+            (
+                dout,
+                dh_final,
+                x,
+                hidden_p,
+                is_init,
+                out,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                w_r,
+                w_z,
+                w_n,
+                w_ih_p,
+            ) = flat_args
+            shapes = (
+                x.shape[0],
+                x.shape[1],
+                x.shape[2],
+                dout.shape[-1],
+                out.shape[-1],
+            )
+            dx, dhidden, dW_ih, dW_hh, db_ih, db_hh = _gru_backward_impl(
+                dout,
+                dh_final,
+                x,
+                hidden_p,
+                is_init,
+                out,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                w_r,
+                w_z,
+                w_n,
+                w_ih_p,
+                shapes,
+                vmap_batch_size=info.batch_size,
+            )
+            return (
+                _unflatten_vmap_dim(dx, info),
+                _unflatten_vmap_dim(dhidden, info),
+                dW_ih,
+                dW_hh,
+                db_ih,
+                db_hh,
+            ), (0, 0, 0, 0, 0, 0)
 
     def _gru_triton_setup_context(ctx, inputs, output) -> None:
         x, hidden, _, _, _, _, is_init, _ = inputs
@@ -1801,10 +1998,24 @@ if _has_custom_op:
         )
 
     if _has_vmap_op:
+        # Inputs: (x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype).
+        # Batched inputs: x (0), hidden (1), cell (2), is_init (7).
+        # Batched outputs: first 13 entries (out, c_out, h_final, c_final,
+        # hidden_p, cell_p, out_padded, c_out_padded, save_i/f/g/o/tanhc).
+        # The trailing 5 weight pass-throughs are shape-invariant.
+        _LSTM_FWD_BATCHED_IN = (0, 1, 2, 7)
+        _LSTM_FWD_BATCHED_OUT = tuple(range(13))
 
         @torch.library.register_vmap("torchrl::lstm_triton")
         def _lstm_triton_vmap(info, in_dims, *args):
-            return _loop_vmap_custom_op(_lstm_triton_op, info, in_dims, *args)
+            return _flatten_vmap_custom_op(
+                _lstm_triton_op,
+                info,
+                in_dims,
+                args,
+                _LSTM_FWD_BATCHED_IN,
+                _LSTM_FWD_BATCHED_OUT,
+            )
 
     @torch.library.custom_op(
         "torchrl::lstm_triton_backward",
@@ -1930,10 +2141,79 @@ if _has_custom_op:
         )
 
     if _has_vmap_op:
+        _LSTM_BWD_BATCHED_IN = tuple(range(15))
 
         @torch.library.register_vmap("torchrl::lstm_triton_backward")
         def _lstm_triton_backward_vmap(info, in_dims, *args):
-            return _loop_vmap_custom_op(_lstm_triton_backward_op, info, in_dims, *args)
+            flat_args = _flatten_vmap_args_or_none(
+                info, in_dims, args, _LSTM_BWD_BATCHED_IN
+            )
+            if flat_args is None:
+                return _loop_vmap_custom_op(
+                    _lstm_triton_backward_op, info, in_dims, *args
+                )
+            (
+                dout,
+                dc_out,
+                dh_final,
+                dc_final,
+                x,
+                hidden_p,
+                cell_p,
+                is_init,
+                out,
+                c_out,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                w_i,
+                w_f,
+                w_g,
+                w_o,
+                w_ih_p,
+            ) = flat_args
+            shapes = (
+                x.shape[0],
+                x.shape[1],
+                x.shape[2],
+                dout.shape[-1],
+                out.shape[-1],
+            )
+            dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh = _lstm_backward_impl(
+                dout,
+                dc_out,
+                dh_final,
+                dc_final,
+                x,
+                hidden_p,
+                cell_p,
+                is_init,
+                out,
+                c_out,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                w_i,
+                w_f,
+                w_g,
+                w_o,
+                w_ih_p,
+                shapes,
+                vmap_batch_size=info.batch_size,
+            )
+            return (
+                _unflatten_vmap_dim(dx, info),
+                _unflatten_vmap_dim(dhidden, info),
+                _unflatten_vmap_dim(dcell, info),
+                dW_ih,
+                dW_hh,
+                db_ih,
+                db_hh,
+            ), (0, 0, 0, 0, 0, 0, 0)
 
     def _lstm_triton_setup_context(ctx, inputs, output) -> None:
         x, hidden, _, _, _, _, _, is_init, _ = inputs
