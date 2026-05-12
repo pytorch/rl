@@ -265,6 +265,17 @@ class Collector(BaseCollector):
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        compact_obs (bool, optional): if ``True``, the collector drops the
+            observation and state keys from the ``("next", ...)`` sub-tensordict
+            before stacking per-step data. Those keys are bit-for-bit identical
+            to the root keys of the next step (modulo the last frame of the
+            rollout), so storing both copies wastes memory. ``("next", "reward")``,
+            ``("next", "done")`` and ``("next", "truncated")`` are preserved
+            because they cannot be reconstructed from the root keys. The dropped
+            keys can be re-hydrated at sampling time with
+            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+            when consuming a :class:`~torchrl.data.SliceSampler`-backed replay
+            buffer. Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -371,6 +382,7 @@ class Collector(BaseCollector):
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+        compact_obs: bool = False,
         **kwargs,
     ):
         self.closed = True
@@ -460,6 +472,10 @@ class Collector(BaseCollector):
 
         # Set up postproc
         self._setup_postproc(postproc)
+
+        # Set up compact_obs: keys to drop from ("next", ...) to avoid
+        # storing two copies of each observation. See `_setup_compact_obs`.
+        self._setup_compact_obs(compact_obs)
 
         # Calculate frames per batch
         self._setup_frames_per_batch(frames_per_batch)
@@ -929,6 +945,36 @@ class Collector(BaseCollector):
             if postproc is not self.postproc and postproc is not None:
                 self.postproc = postproc
 
+    def _setup_compact_obs(self, compact_obs: bool) -> None:
+        """Resolve the ``("next", ...)`` keys to drop when ``compact_obs=True``.
+
+        When enabled, the collector drops the observation and state keys from
+        the ``("next", ...)`` sub-tensordict before stacking. These keys are
+        bit-for-bit identical to the root keys of the next step (modulo the
+        last frame of the rollout), so storing both copies wastes memory.
+
+        ``("next", "reward")``, ``("next", "done")`` and ``("next", "truncated")``
+        are left in place since they cannot be reconstructed from the root keys.
+
+        The user can re-hydrate the dropped keys at sampling time with
+        :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+        when consuming a ``SliceSampler``-backed replay buffer.
+        """
+        self.compact_obs = bool(compact_obs)
+        if not self.compact_obs:
+            self._compact_next_keys: tuple = ()
+            return
+        leaf_keys = list(self.env._observation_keys_step_mdp) + list(
+            self.env._state_keys_step_mdp
+        )
+        compact: list[tuple] = []
+        for k in leaf_keys:
+            if isinstance(k, tuple):
+                compact.append(("next", *k))
+            else:
+                compact.append(("next", k))
+        self._compact_next_keys = tuple(compact)
+
     def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
         """Calculate and validate frames per batch."""
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
@@ -1010,6 +1056,10 @@ class Collector(BaseCollector):
         if make_rollout:
             with torch.no_grad():
                 self._final_rollout = self.env.fake_tensordict()
+            if self._compact_next_keys:
+                self._final_rollout = self._final_rollout.exclude(
+                    *self._compact_next_keys
+                )
 
             # If storing device is not None, we use this to cast the storage.
             # If it is None and the env and policy are on the same device,
@@ -1693,13 +1743,21 @@ class Collector(BaseCollector):
                         next_data.clear_device_()
                     self._carrier.set("next", next_data)
 
+                # When compact_obs is enabled, drop the obs/state keys from
+                # ("next", ...) before persisting the per-step td. The dropped
+                # keys are recoverable from the root keys of the next step.
+                if self._compact_next_keys:
+                    carrier_for_out = self._carrier.exclude(*self._compact_next_keys)
+                else:
+                    carrier_for_out = self._carrier
+
                 if (
                     self.replay_buffer is not None
                     and not self._ignore_rb
                     and not self.extend_buffer
                 ):
-                    self.replay_buffer.add(self._carrier)
-                    if self._increment_frames(self._carrier.numel()):
+                    self.replay_buffer.add(carrier_for_out)
+                    if self._increment_frames(carrier_for_out.numel()):
                         return
                 else:
                     if self.storing_device is not None:
@@ -1707,14 +1765,14 @@ class Collector(BaseCollector):
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
                         tensordicts.append(
-                            self._carrier.to(
+                            carrier_for_out.to(
                                 self.storing_device, non_blocking=non_blocking
                             )
                         )
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
-                        tensordicts.append(self._carrier)
+                        tensordicts.append(carrier_for_out)
 
                 if self.track_traj_ids:
                     # carry over collector data without messing up devices

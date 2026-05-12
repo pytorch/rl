@@ -70,6 +70,7 @@ def _main_async_collector(
     auto_register_policy_transforms: bool | None = None,
     pre_collect_hook: Callable[[], None] | None = None,
     post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+    compact_obs: bool = False,
 ) -> None:
     # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
     # Runs before any CUDA/torchrl work in the child process.
@@ -140,6 +141,7 @@ def _main_async_collector(
             auto_register_policy_transforms=auto_register_policy_transforms,
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
+            compact_obs=compact_obs,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
