@@ -1845,9 +1845,7 @@ class TestLSTMModule:
 
         with torch.no_grad():
             scan_out = vmap(make_call(scan_module))(obs, hidden0, hidden1, is_init)
-            triton_out = vmap(make_call(triton_module))(
-                obs, hidden0, hidden1, is_init
-            )
+            triton_out = vmap(make_call(triton_module))(obs, hidden0, hidden1, is_init)
         for s, t in zip(scan_out, triton_out):
             torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
 
@@ -1872,12 +1870,12 @@ class TestLSTMModule:
 
             return loss_fn
 
-        scan_grads = vmap(
-            grad(make_loss(scan_module), argnums=(0, 1, 2))
-        )(obs, hidden0, hidden1, is_init)
-        triton_grads = vmap(
-            grad(make_loss(triton_module), argnums=(0, 1, 2))
-        )(obs, hidden0, hidden1, is_init)
+        scan_grads = vmap(grad(make_loss(scan_module), argnums=(0, 1, 2)))(
+            obs, hidden0, hidden1, is_init
+        )
+        triton_grads = vmap(grad(make_loss(triton_module), argnums=(0, 1, 2)))(
+            obs, hidden0, hidden1, is_init
+        )
         for s, t in zip(scan_grads, triton_grads):
             torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
 
@@ -2952,19 +2950,16 @@ class TestGRUModule:
                 )
                 with set_recurrent_mode(True):
                     out = module(data)
-                return (
-                    out["feat"].pow(2).sum()
-                    + out["next", "hidden"].pow(2).sum()
-                )
+                return out["feat"].pow(2).sum() + out["next", "hidden"].pow(2).sum()
 
             return loss_fn
 
-        scan_grads = vmap(
-            grad(make_loss(scan_module), argnums=(0, 1))
-        )(obs, hidden, is_init)
-        triton_grads = vmap(
-            grad(make_loss(triton_module), argnums=(0, 1))
-        )(obs, hidden, is_init)
+        scan_grads = vmap(grad(make_loss(scan_module), argnums=(0, 1)))(
+            obs, hidden, is_init
+        )
+        triton_grads = vmap(grad(make_loss(triton_module), argnums=(0, 1)))(
+            obs, hidden, is_init
+        )
         for s, t in zip(scan_grads, triton_grads):
             torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
 
