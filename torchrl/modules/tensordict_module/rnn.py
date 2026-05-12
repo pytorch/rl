@@ -38,20 +38,25 @@ else:
 
 
 def _check_triton_available() -> bool:
-    """True if Triton is installed and exposes the API the kernels need.
+    """True if Triton + PyTorch expose the API the kernels need.
 
     Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
-    The backend requires ``triton.language.extra.libdevice`` which is only
-    available from Triton 2.2 onwards. Older Triton builds fall back to the
-    scan / pad backends. The version is read from package metadata to avoid
-    eagerly importing Triton (or its missing ``triton.language.extra`` parent)
-    at torchrl import time.
+    Requires Triton >= 2.2 (``triton.language.extra.libdevice``) and PyTorch
+    >= 2.4 (``torch.library.custom_op`` family). Older installations fall
+    back to the scan / pad backends. The Triton version is read from package
+    metadata to avoid eagerly importing the (potentially missing)
+    ``triton.language.extra`` parent at torchrl import time.
     """
     try:
         triton_version = importlib.metadata.version("triton")
     except importlib.metadata.PackageNotFoundError:
         return False
-    return version.parse(triton_version) >= version.parse("2.2")
+    if version.parse(triton_version) < version.parse("2.2"):
+        return False
+    return all(
+        hasattr(torch.library, name)
+        for name in ("custom_op", "register_autograd", "register_fake")
+    )
 
 
 _has_triton = _check_triton_available()
@@ -532,6 +537,13 @@ class LSTMModule(ModuleBase):
             projections and bidirectional layers. ``"auto"`` uses ``"pad"``
             in eager mode and ``"scan"`` when called under
             :func:`torch.compile`. Default: ``"pad"``.
+
+            .. note::
+                ``"triton"`` is opaque to ``torch.compile``;
+                ``mode="reduce-overhead"`` / CUDA graph capture gains only
+                ~1-3%. ``"scan"`` is launch-bound and gains ~1.6x-1.9x, so
+                under compile+CUDA graphs it may beat ``"triton"`` on wider
+                LSTM stacks.
         recurrent_compute_dtype: dtype used for the recurrent matmul inside the
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
@@ -650,8 +662,8 @@ class LSTMModule(ModuleBase):
             )
         if recurrent_backend == "triton" and not _has_triton:
             raise RuntimeError(
-                "recurrent_backend='triton' requires the triton package. "
-                "Install it with `pip install triton`."
+                "recurrent_backend='triton' requires Triton (>= 2.2) and "
+                "PyTorch with torch.library.custom_op (>= 2.4)."
             )
         if lstm is not None:
             if not lstm.batch_first:
@@ -1693,6 +1705,13 @@ class GRUModule(ModuleBase):
             and bidirectional layers.
             ``"auto"`` uses ``"pad"`` in eager mode and ``"scan"`` when called
             under :func:`torch.compile`. Default: ``"pad"``.
+
+            .. note::
+                ``"triton"`` is opaque to ``torch.compile``;
+                ``mode="reduce-overhead"`` / CUDA graph capture gains only
+                ~1-3%. ``"scan"`` is launch-bound and gains ~1.6x-1.9x, so
+                under compile+CUDA graphs it may match or beat ``"triton"``
+                on wider stacks.
         recurrent_compute_dtype: dtype used for the recurrent matmul inside the
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
@@ -1836,8 +1855,8 @@ class GRUModule(ModuleBase):
             )
         if recurrent_backend == "triton" and not _has_triton:
             raise RuntimeError(
-                "recurrent_backend='triton' requires the triton package. "
-                "Install it with `pip install triton`."
+                "recurrent_backend='triton' requires Triton (>= 2.2) and "
+                "PyTorch with torch.library.custom_op (>= 2.4)."
             )
         if gru is not None:
             if not gru.batch_first:

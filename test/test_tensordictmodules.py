@@ -50,6 +50,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 from torchrl.modules.models.decision_transformer import _has_transformers
+from torchrl.modules.tensordict_module import _rnn_triton
 from torchrl.modules.tensordict_module.common import (
     ensure_tensordict_compatible,
     is_tensordict_compatible,
@@ -77,18 +78,26 @@ import importlib.util as _importlib_util  # noqa: E402
 def _has_triton_backend() -> bool:
     """Mirror of the triton-availability check inside the RNN backend.
 
-    Triton must be installed, CUDA must be available, and the Triton build
-    must expose the ``triton.language.extra.libdevice`` submodule
-    (Triton >= 2.2). Older Triton installations are routed to scan/pad
-    backends, so the triton-specific tests are skipped there.
+    Requires Triton >= 2.2 (``triton.language.extra.libdevice``), CUDA, and
+    PyTorch with the ``torch.library.custom_op`` family (>= 2.4). Older
+    PyTorch / Triton installations are routed to scan/pad backends.
     """
     if _importlib_util.find_spec("triton") is None or not torch.cuda.is_available():
         return False
-    return _importlib_util.find_spec("triton.language.extra.libdevice") is not None
+    if _importlib_util.find_spec("triton.language.extra.libdevice") is None:
+        return False
+    return all(
+        hasattr(torch.library, name)
+        for name in ("custom_op", "register_autograd", "register_fake")
+    )
 
 
 _has_triton = _has_triton_backend()
-_triton_skip_reason = "requires triton (>= 2.2) and CUDA"
+_triton_skip_reason = (
+    "requires Triton (>= 2.2), CUDA, and PyTorch with torch.library.custom_op "
+    "(>= 2.4)"
+)
+_has_compile = hasattr(torch, "compile")
 
 _has_functorch = False
 try:
@@ -96,10 +105,58 @@ try:
         from torch import vmap
     except ImportError:
         from functorch import vmap
+    try:
+        from torch.func import grad
+    except ImportError:
+        from functorch import grad
 
     _has_functorch = True
 except ImportError:
     pass
+
+
+def _probe_vmap_grad_supported() -> bool:
+    """True if ``vmap(grad(<custom_op>))`` works on the installed torch.
+
+    Some PyTorch nightlies ship ``torch.library.register_autograd`` in a state
+    where the auto-generated ``autograd.Function`` lacks ``setup_context``,
+    which makes ``vmap(grad(custom_op_call(...)))`` raise:
+        "... must override the setup_context staticmethod ..."
+    Probe once at collection so the affected tests skip cleanly on those
+    builds rather than failing outright. Requires CUDA + Triton + functorch.
+    """
+    if not _has_triton or not _has_functorch or not torch.cuda.is_available():
+        return False
+    try:
+        # Use the actual ``gru_triton`` op so the probe exercises the same
+        # register_autograd path the tests do. Padded H is 16 (the minimum),
+        # so use H=4 for a small payload.
+        x = torch.zeros(2, 1, 1, 1, device="cuda")
+        hidden = torch.zeros(2, 1, 1, 4, device="cuda")
+        w_ih = torch.zeros(12, 1, device="cuda")
+        w_hh = torch.zeros(12, 4, device="cuda")
+        b_ih = torch.zeros(12, device="cuda")
+        b_hh = torch.zeros(12, device="cuda")
+        is_init = torch.zeros(2, 1, 1, dtype=torch.bool, device="cuda")
+
+        def loss(x, hidden):
+            out, _ = _rnn_triton.gru_triton(
+                x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return out.sum()
+
+        vmap(grad(loss, argnums=(0, 1)))(x, hidden)
+        return True
+    except Exception:
+        return False
+
+
+_vmap_grad_works = _probe_vmap_grad_supported()
+_vmap_grad_skip_reason = (
+    "vmap(grad(...)) is broken on this torch build (custom_op autograd.Function "
+    "missing setup_context, or torch._higher_order_ops.scan assertion); the "
+    "forward-only vmap path is still covered above"
+)
 
 
 class TestTDModule:
@@ -1471,6 +1528,152 @@ class TestLSTMModule:
             )
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(not _has_compile, reason="requires torch.compile")
+    def test_lstm_triton_custom_op_compile_forward_backward(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 3, 5, 4, 16
+        inputs = (
+            torch.randn(B, T, F, device=device),
+            torch.randn(B, T, H, device=device),
+            torch.randn(B, T, H, device=device),
+            torch.randn(4 * H, F, device=device),
+            torch.randn(4 * H, H, device=device),
+            torch.randn(4 * H, device=device),
+            torch.randn(4 * H, device=device),
+            torch.zeros(B, T, dtype=torch.bool, device=device),
+        )
+        inputs[-1][1, 3] = True
+
+        def clone_inputs():
+            return tuple(
+                tensor.detach().clone().requires_grad_(tensor.is_floating_point())
+                for tensor in inputs
+            )
+
+        def loss_fn(x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, c_steps, h_final, c_final = _rnn_triton.lstm_triton(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return (
+                h_steps.pow(2).sum()
+                + c_steps.pow(2).sum()
+                + h_final.pow(2).sum()
+                + c_final.pow(2).sum()
+            )
+
+        eager_inputs = clone_inputs()
+        eager_loss = loss_fn(*eager_inputs)
+        eager_loss.backward()
+        eager_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in eager_inputs
+        ]
+
+        compiled_inputs = clone_inputs()
+        compiled_loss = torch.compile(loss_fn, fullgraph=True)(*compiled_inputs)
+        compiled_loss.backward()
+        compiled_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in compiled_inputs
+        ]
+
+        torch.testing.assert_close(eager_loss, compiled_loss, atol=5e-3, rtol=5e-3)
+        for eager_grad, compiled_grad in zip(eager_grads, compiled_grads):
+            if eager_grad is None:
+                assert compiled_grad is None
+            else:
+                torch.testing.assert_close(
+                    eager_grad, compiled_grad, atol=5e-3, rtol=5e-3
+                )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    def test_lstm_triton_custom_op_vmap_matches_loop(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        V, B, T, F, H = 2, 3, 5, 4, 16
+        x = torch.randn(V, B, T, F, device=device)
+        hidden = torch.randn(V, B, T, H, device=device)
+        cell = torch.randn(V, B, T, H, device=device)
+        w_ih = torch.randn(4 * H, F, device=device)
+        w_hh = torch.randn(4 * H, H, device=device)
+        b_ih = torch.randn(4 * H, device=device)
+        b_hh = torch.randn(4 * H, device=device)
+        is_init = torch.zeros(V, B, T, dtype=torch.bool, device=device)
+        is_init[:, 1, 3] = True
+
+        def call(x, hidden, cell, is_init):
+            return _rnn_triton.lstm_triton(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+
+        vmapped = vmap(call)(x, hidden, cell, is_init)
+        looped = tuple(
+            torch.stack(
+                [call(x[i], hidden[i], cell[i], is_init[i])[j] for i in range(V)]
+            )
+            for j in range(4)
+        )
+        for actual, expected in zip(vmapped, looped):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        # Mixed in_dims: ``hidden`` and ``is_init`` shared across V; ``x``
+        # and ``cell`` batched. Exercises the broadcast branch of the flatten
+        # vmap rule.
+        hidden_shared = torch.randn(B, T, H, device=device)
+        is_init_shared = torch.zeros(B, T, dtype=torch.bool, device=device)
+        is_init_shared[1, 3] = True
+        vmapped_bc = vmap(call, in_dims=(0, None, 0, None))(
+            x, hidden_shared, cell, is_init_shared
+        )
+        looped_bc = tuple(
+            torch.stack(
+                [
+                    call(x[i], hidden_shared, cell[i], is_init_shared)[j]
+                    for i in range(V)
+                ]
+            )
+            for j in range(4)
+        )
+        for actual, expected in zip(vmapped_bc, looped_bc):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        def loss_fn(x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, c_steps, h_final, c_final = _rnn_triton.lstm_triton(
+                x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return (
+                h_steps.pow(2).sum()
+                + c_steps.pow(2).sum()
+                + h_final.pow(2).sum()
+                + c_final.pow(2).sum()
+            )
+
+        if not _vmap_grad_works:
+            pytest.skip(_vmap_grad_skip_reason)
+
+        grad_fn = grad(loss_fn, argnums=(0, 1, 2, 3, 4, 5, 6))
+        vmapped_grads = vmap(grad_fn, in_dims=(0, 0, 0, None, None, None, None, 0))(
+            x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init
+        )
+        looped_grads = tuple(
+            torch.stack(
+                [
+                    grad_fn(
+                        x[i], hidden[i], cell[i], w_ih, w_hh, b_ih, b_hh, is_init[i]
+                    )[j]
+                    for i in range(V)
+                ]
+            )
+            for j in range(7)
+        )
+        for actual, expected in zip(vmapped_grads, looped_grads):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
         [
@@ -1633,6 +1836,105 @@ class TestLSTMModule:
             torch.testing.assert_close(
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_scan_vs_triton_under_vmap(self, num_layers):
+        """Cross-backend vmap parity for LSTMModule.
+
+        Anchors the triton backend's custom vmap rule against the scan
+        backend, which goes through standard PyTorch op dispatch (no
+        custom_op). Catches regressions in the flatten / unflatten path that
+        a self-referential loop comparison would miss.
+        """
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        V, B, T, F, H = 2, 3, 5, 4, 16
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            "device": device,
+        }
+        scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
+        triton_module = LSTMModule(**kwargs, recurrent_backend="triton")
+        triton_module.load_state_dict(scan_module.state_dict())
+
+        obs = torch.randn(V, B, T, F, device=device)
+        hidden0 = torch.randn(V, B, T, num_layers, H, device=device)
+        hidden1 = torch.randn(V, B, T, num_layers, H, device=device)
+        is_init = torch.zeros(V, B, T, 1, dtype=torch.bool, device=device)
+        is_init[:, 0, 3] = True
+        is_init[:, 1, 2] = True
+
+        def make_call(module):
+            def call(obs, hidden0, hidden1, is_init):
+                data = TensorDict(
+                    {
+                        "obs": obs,
+                        "hidden0": hidden0,
+                        "hidden1": hidden1,
+                        "is_init": is_init,
+                    },
+                    obs.shape[:2],
+                )
+                with set_recurrent_mode(True):
+                    out = module(data)
+                return (
+                    out["feat"],
+                    out["next", "hidden0"],
+                    out["next", "hidden1"],
+                )
+
+            return call
+
+        with torch.no_grad():
+            scan_out = vmap(make_call(scan_module))(obs, hidden0, hidden1, is_init)
+            triton_out = vmap(make_call(triton_module))(obs, hidden0, hidden1, is_init)
+        for s, t in zip(scan_out, triton_out):
+            torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
+
+        def make_loss(module):
+            def loss_fn(obs, hidden0, hidden1, is_init):
+                data = TensorDict(
+                    {
+                        "obs": obs,
+                        "hidden0": hidden0,
+                        "hidden1": hidden1,
+                        "is_init": is_init,
+                    },
+                    obs.shape[:2],
+                )
+                with set_recurrent_mode(True):
+                    out = module(data)
+                return (
+                    out["feat"].pow(2).sum()
+                    + out["next", "hidden0"].pow(2).sum()
+                    + out["next", "hidden1"].pow(2).sum()
+                )
+
+            return loss_fn
+
+        if not _vmap_grad_works:
+            pytest.skip(_vmap_grad_skip_reason)
+
+        scan_grads = vmap(grad(make_loss(scan_module), argnums=(0, 1, 2)))(
+            obs, hidden0, hidden1, is_init
+        )
+        triton_grads = vmap(grad(make_loss(triton_module), argnums=(0, 1, 2)))(
+            obs, hidden0, hidden1, is_init
+        )
+        for s, t in zip(scan_grads, triton_grads):
+            torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
 
 
 class TestGRUModule:
@@ -2389,6 +2691,124 @@ class TestGRUModule:
             )
 
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(not _has_compile, reason="requires torch.compile")
+    def test_gru_triton_custom_op_compile_forward_backward(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 3, 5, 4, 16
+        inputs = (
+            torch.randn(B, T, F, device=device),
+            torch.randn(B, T, H, device=device),
+            torch.randn(3 * H, F, device=device),
+            torch.randn(3 * H, H, device=device),
+            torch.randn(3 * H, device=device),
+            torch.randn(3 * H, device=device),
+            torch.zeros(B, T, dtype=torch.bool, device=device),
+        )
+        inputs[-1][1, 3] = True
+
+        def clone_inputs():
+            return tuple(
+                tensor.detach().clone().requires_grad_(tensor.is_floating_point())
+                for tensor in inputs
+            )
+
+        def loss_fn(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, h_final = _rnn_triton.gru_triton(
+                x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return h_steps.pow(2).sum() + h_final.pow(2).sum()
+
+        eager_inputs = clone_inputs()
+        eager_loss = loss_fn(*eager_inputs)
+        eager_loss.backward()
+        eager_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in eager_inputs
+        ]
+
+        compiled_inputs = clone_inputs()
+        compiled_loss = torch.compile(loss_fn, fullgraph=True)(*compiled_inputs)
+        compiled_loss.backward()
+        compiled_grads = [
+            tensor.grad.detach().clone() if tensor.grad is not None else None
+            for tensor in compiled_inputs
+        ]
+
+        torch.testing.assert_close(eager_loss, compiled_loss, atol=5e-3, rtol=5e-3)
+        for eager_grad, compiled_grad in zip(eager_grads, compiled_grads):
+            if eager_grad is None:
+                assert compiled_grad is None
+            else:
+                torch.testing.assert_close(
+                    eager_grad, compiled_grad, atol=5e-3, rtol=5e-3
+                )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    def test_gru_triton_custom_op_vmap_matches_loop(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        V, B, T, F, H = 2, 3, 5, 4, 16
+        x = torch.randn(V, B, T, F, device=device)
+        hidden = torch.randn(V, B, T, H, device=device)
+        w_ih = torch.randn(3 * H, F, device=device)
+        w_hh = torch.randn(3 * H, H, device=device)
+        b_ih = torch.randn(3 * H, device=device)
+        b_hh = torch.randn(3 * H, device=device)
+        is_init = torch.zeros(V, B, T, dtype=torch.bool, device=device)
+        is_init[:, 1, 3] = True
+
+        def call(x, hidden, is_init):
+            return _rnn_triton.gru_triton(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init)
+
+        vmapped = vmap(call)(x, hidden, is_init)
+        looped = tuple(
+            torch.stack([call(x[i], hidden[i], is_init[i])[j] for i in range(V)])
+            for j in range(2)
+        )
+        for actual, expected in zip(vmapped, looped):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        # Mixed in_dims: ``hidden`` shared across V, ``x`` and ``is_init``
+        # batched. Exercises the broadcast branch of the flatten vmap rule.
+        hidden_shared = torch.randn(B, T, H, device=device)
+        vmapped_bc = vmap(call, in_dims=(0, None, 0))(x, hidden_shared, is_init)
+        looped_bc = tuple(
+            torch.stack([call(x[i], hidden_shared, is_init[i])[j] for i in range(V)])
+            for j in range(2)
+        )
+        for actual, expected in zip(vmapped_bc, looped_bc):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+        def loss_fn(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init):
+            h_steps, h_final = _rnn_triton.gru_triton(
+                x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+            )
+            return h_steps.pow(2).sum() + h_final.pow(2).sum()
+
+        if not _vmap_grad_works:
+            pytest.skip(_vmap_grad_skip_reason)
+
+        grad_fn = grad(loss_fn, argnums=(0, 1, 2, 3, 4, 5))
+        vmapped_grads = vmap(grad_fn, in_dims=(0, 0, None, None, None, None, 0))(
+            x, hidden, w_ih, w_hh, b_ih, b_hh, is_init
+        )
+        looped_grads = tuple(
+            torch.stack(
+                [
+                    grad_fn(x[i], hidden[i], w_ih, w_hh, b_ih, b_hh, is_init[i])[j]
+                    for i in range(V)
+                ]
+            )
+            for j in range(6)
+        )
+        for actual, expected in zip(vmapped_grads, looped_grads):
+            torch.testing.assert_close(actual, expected, atol=5e-3, rtol=5e-3)
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
         [
@@ -2525,6 +2945,86 @@ class TestGRUModule:
             torch.testing.assert_close(
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.skipif(
+        not _has_functorch, reason="vmap can only be used with functorch"
+    )
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_module_scan_vs_triton_under_vmap(self, num_layers):
+        """Cross-backend vmap parity for GRUModule.
+
+        Anchors the triton backend's custom vmap rule against the scan
+        backend, which goes through standard PyTorch op dispatch (no
+        custom_op). Catches regressions in the flatten / unflatten path that
+        a self-referential loop comparison would miss.
+        """
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        V, B, T, F, H = 2, 3, 5, 4, 16
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+            "device": device,
+        }
+        scan_module = GRUModule(**kwargs, recurrent_backend="scan")
+        triton_module = GRUModule(**kwargs, recurrent_backend="triton")
+        triton_module.load_state_dict(scan_module.state_dict())
+
+        obs = torch.randn(V, B, T, F, device=device)
+        hidden = torch.randn(V, B, T, num_layers, H, device=device)
+        is_init = torch.zeros(V, B, T, 1, dtype=torch.bool, device=device)
+        is_init[:, 0, 3] = True
+        is_init[:, 1, 2] = True
+
+        def make_call(module):
+            def call(obs, hidden, is_init):
+                data = TensorDict(
+                    {"obs": obs, "hidden": hidden, "is_init": is_init},
+                    obs.shape[:2],
+                )
+                with set_recurrent_mode(True):
+                    out = module(data)
+                return out["feat"], out["next", "hidden"]
+
+            return call
+
+        with torch.no_grad():
+            scan_out = vmap(make_call(scan_module))(obs, hidden, is_init)
+            triton_out = vmap(make_call(triton_module))(obs, hidden, is_init)
+        for s, t in zip(scan_out, triton_out):
+            torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
+
+        def make_loss(module):
+            def loss_fn(obs, hidden, is_init):
+                data = TensorDict(
+                    {"obs": obs, "hidden": hidden, "is_init": is_init},
+                    obs.shape[:2],
+                )
+                with set_recurrent_mode(True):
+                    out = module(data)
+                return out["feat"].pow(2).sum() + out["next", "hidden"].pow(2).sum()
+
+            return loss_fn
+
+        if not _vmap_grad_works:
+            pytest.skip(_vmap_grad_skip_reason)
+
+        scan_grads = vmap(grad(make_loss(scan_module), argnums=(0, 1)))(
+            obs, hidden, is_init
+        )
+        triton_grads = vmap(grad(make_loss(triton_module), argnums=(0, 1)))(
+            obs, hidden, is_init
+        )
+        for s, t in zip(scan_grads, triton_grads):
+            torch.testing.assert_close(s, t, atol=5e-3, rtol=5e-3)
 
 
 def test_safe_specs():
