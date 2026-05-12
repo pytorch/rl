@@ -4,12 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import importlib.util
+import importlib.metadata
 import typing
 from typing import Any
 
 import torch
 import torch.nn.functional as F
+from packaging import version
 from tensordict import TensorDict, TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
@@ -25,7 +26,11 @@ from torchrl._utils import (
 )
 from torchrl.data.tensor_specs import Unbounded
 
-_has_torch_scan = importlib.util.find_spec("torch._higher_order_ops.scan") is not None
+# ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. Gate the
+# import on the runtime torch version: probing via ``importlib.util.find_spec``
+# would eagerly import the (missing) ``torch._higher_order_ops`` parent on
+# older builds and crash this module at load time.
+_has_torch_scan = version.parse(torch.__version__) >= version.parse("2.6.0")
 if _has_torch_scan:
     from torch._higher_order_ops import scan as _torch_scan
 else:
@@ -38,11 +43,15 @@ def _check_triton_available() -> bool:
     Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
     Requires Triton >= 2.2 (``triton.language.extra.libdevice``) and PyTorch
     >= 2.4 (``torch.library.custom_op`` family). Older installations fall
-    back to the scan / pad backends.
+    back to the scan / pad backends. The Triton version is read from package
+    metadata to avoid eagerly importing the (potentially missing)
+    ``triton.language.extra`` parent at torchrl import time.
     """
-    if importlib.util.find_spec("triton") is None:
+    try:
+        triton_version = importlib.metadata.version("triton")
+    except importlib.metadata.PackageNotFoundError:
         return False
-    if importlib.util.find_spec("triton.language.extra.libdevice") is None:
+    if version.parse(triton_version) < version.parse("2.2"):
         return False
     return all(
         hasattr(torch.library, name)

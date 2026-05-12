@@ -78,7 +78,12 @@ class TestDelta:
         assert (d.log_prob(d.mode) == float("inf")).all()
 
     def test_tanhdelta_inv_ones(self, device):
-        x = torch.randn(1000000, 4, device=device)
+        # Float32 ``tanh`` saturates well before the ``SafeTanhTransform`` clamp
+        # limit (1 - finfo.resolution = 1 - 1e-6), so values where
+        # ``|x| > atanh(1 - 1e-6) ≈ 7.25`` cannot roundtrip through inv∘fwd.
+        # Seed for determinism and bound the inputs to the non-saturated region.
+        torch.manual_seed(0)
+        x = torch.randn(1000000, 4, device=device).clamp(-6.0, 6.0)
         d = TanhDelta(x, -torch.ones_like(x), torch.ones_like(x), atol=1e-4, rtol=1e-4)
         xinv = d.transforms[0].inv(d.mode)
         assert d.base_dist._is_equal(xinv).all()
