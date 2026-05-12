@@ -481,7 +481,7 @@ rollout), so storing both copies wastes memory. <code class="docutils literal no
 <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> and <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;truncated&quot;)</span></code> are preserved
 because they cannot be reconstructed from the root keys. The dropped
 keys can be re-hydrated at sampling time with
-<code class="xref py py-class docutils literal notranslate"><span class="pre">NextStateReconstructor</span></code>
+<a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html#torchrl.envs.transforms.NextStateReconstructor" title="torchrl.envs.transforms.rb_transforms.NextStateReconstructor"><code class="xref py py-class docutils literal notranslate"><span class="pre">NextStateReconstructor</span></code></a>
 when consuming a <code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code>-backed replay
 buffer. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
 </ul>

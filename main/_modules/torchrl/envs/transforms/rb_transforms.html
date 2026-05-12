@@ -1,0 +1,982 @@
+
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>torchrl.envs.transforms.rb_transforms &mdash; torchrl main documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+
+  
+  
+    
+
+  
+
+  <link rel="stylesheet" href="../../../../_static/pytorch.css" type="text/css" />
+  <!-- <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" /> -->
+  <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-binder.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-dataframe.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sg_gallery-rendered-html.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/sphinx-design.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../_static/css/custom.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+
+  
+  <script src="../../../../_static/js/modernizr.min.js"></script>
+</head>
+
+<div class="container-fluid header-holder tutorials-header" id="header-holder">
+  <div class="container">
+    <div class="header-container">
+      <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/features">Features</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+
+      <a class="main-menu-open-button" href="#" data-behavior="open-mobile-menu"></a>
+    </div>
+
+  </div>
+</div>
+
+
+<body class="pytorch-body">
+
+   
+  <div>
+
+    
+
+    <div class="table-of-contents-link-wrapper">
+      <span>Table of Contents</span>
+      <a href="#" class="toggle-table-of-contents" data-behavior="toggle-table-of-contents"></a>
+    </div>
+
+    <nav data-toggle="wy-nav-shift" class="pytorch-left-menu" id="pytorch-left-menu">
+      <div class="pytorch-side-scroll">
+        <div class="pytorch-menu pytorch-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          <div class="pytorch-left-menu-search">
+            
+    <div class="version">
+      <a href="../../../../../versions.html"><span style="font-size:110%">main (0.12.0) &#x25BC</span></a>
+    </div>
+    
+
+
+  
+
+
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search Docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          </div>
+
+          
+            
+            
+              
+            
+            
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-0.html">Get started with Environments, TED and transforms</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-1.html">Get started with TorchRL’s modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-2.html">Getting started with model optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-3.html">Get started with data collection and storage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-4.html">Get started with logging</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/getting-started-5.html">Get started with your own first training loop</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ppo.html">Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pendulum.html">Pendulum: Writing your environment and transforms with TorchRL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_demo.html">Introduction to TorchRL</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_ppo.html">Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/torchrl_envs.html">TorchRL envs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/pretrained_models.html">Using pretrained models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/dqn_with_rnn.html">Recurrent DQN: Training recurrent policies</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/collector_trajectory_assembly.html">Collectors Deep Dive: Trajectory Assembly</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/evaluator.html">Using the Evaluator</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/rb_tutorial.html">Using Replay Buffers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/export.html">Exporting TorchRL modules</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/multi_task.html">Task-specific policy in multi-task environments</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_ddpg.html">TorchRL objectives: Coding a DDPG loss</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../tutorials/coding_dqn.html">TorchRL trainer: A DQN example</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/index.html">API Reference</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../reference/knowledge_base.html">Knowledge Base</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <div class="pytorch-container">
+
+      <section data-toggle="wy-nav-shift" class="pytorch-content-wrap">
+        <div class="pytorch-page-level-bar" id="pytorch-page-level-bar">
+          <div class="pytorch-breadcrumbs-wrapper">
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="pytorch-breadcrumbs">
+    
+      <li>
+        <a href="../../../../index.html">
+          
+            Docs
+          
+        </a> &gt;
+      </li>
+
+        
+          <li><a href="../../../index.html">Module code</a> &gt;</li>
+        
+      <li>torchrl.envs.transforms.rb_transforms</li>
+    
+    
+      <li class="pytorch-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+</div>
+          </div>
+
+          <div class="pytorch-shortcuts-wrapper" id="pytorch-shortcuts-wrapper">
+            Shortcuts
+          </div>
+        </div>
+
+        <div class="pytorch-content-left">
+    
+    
+          
+          <div class="rst-content">
+          
+            <div role="main" class="main-content" itemscope="itemscope" itemtype="http://schema.org/Article">
+             <article itemprop="articleBody" class="pytorch-article">
+              
+  <h1>Source code for torchrl.envs.transforms.rb_transforms</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.postprocs.postprocs</span> <span class="kn">import</span> <span class="n">_multi_step_func</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms.transforms</span> <span class="kn">import</span> <span class="n">Transform</span>
+
+
+<span class="k">def</span> <span class="nf">_under_next</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return the ``(&quot;next&quot;, *key)`` variant of a nested key.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="o">*</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">MultiStepTransform</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A MultiStep transformation for ReplayBuffers.</span>
+
+<span class="sd">    This transform keeps the previous ``n_steps`` observations in a local buffer.</span>
+<span class="sd">    The inverse transform (called during :meth:`~torchrl.data.ReplayBuffer.extend`)</span>
+<span class="sd">    outputs the transformed previous ``n_steps`` with the ``T-n_steps`` current</span>
+<span class="sd">    frames.</span>
+
+<span class="sd">    All entries in the ``&quot;next&quot;`` tensordict that are not part of the ``done_keys``</span>
+<span class="sd">    or ``reward_keys`` will be mapped to their respective ``t + n_steps - 1``</span>
+<span class="sd">    correspondent.</span>
+
+<span class="sd">    This transform is a more hyperparameter resistant version of</span>
+<span class="sd">    :class:`~torchrl.data.postprocs.postprocs.MultiStep`:</span>
+<span class="sd">    the replay buffer transform will make the multi-step transform insensitive</span>
+<span class="sd">    to the collectors hyperparameters, whereas the post-process</span>
+<span class="sd">    version will output results that are sensitive to these</span>
+<span class="sd">    (because collectors have no memory of previous output).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        n_steps (int): Number of steps in multi-step. The number of steps can be</span>
+<span class="sd">            dynamically changed by changing the ``n_steps`` attribute of this</span>
+<span class="sd">            transform.</span>
+<span class="sd">        gamma (:obj:`float`): Discount factor.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        reward_keys (list of NestedKey, optional): the reward keys in the input tensordict.</span>
+<span class="sd">            The reward entries indicated by these keys will be accumulated and discounted</span>
+<span class="sd">            across ``n_steps`` steps in the future. A corresponding ``&lt;reward_key&gt;_orig``</span>
+<span class="sd">            entry will be written in the ``&quot;next&quot;`` entry of the output tensordict</span>
+<span class="sd">            to keep track of the original value of the reward.</span>
+<span class="sd">            Defaults to ``[&quot;reward&quot;]``.</span>
+<span class="sd">        done_key (NestedKey, optional): the done key in the input tensordict, used to indicate</span>
+<span class="sd">            an end of trajectory.</span>
+<span class="sd">            Defaults to ``&quot;done&quot;``.</span>
+<span class="sd">        done_keys (list of NestedKey, optional): the list of end keys in the input tensordict.</span>
+<span class="sd">            All the entries indicated by these keys will be left untouched by the transform.</span>
+<span class="sd">            Defaults to ``[&quot;done&quot;, &quot;truncated&quot;, &quot;terminated&quot;]``.</span>
+<span class="sd">        mask_key (NestedKey, optional): the mask key in the input tensordict.</span>
+<span class="sd">            The mask represents the valid frames in the input tensordict and</span>
+<span class="sd">            should have a shape that allows the input tensordict to be masked</span>
+<span class="sd">            with.</span>
+<span class="sd">            Defaults to ``&quot;mask&quot;``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import GymEnv, TransformedEnv, StepCounter, MultiStepTransform, SerialEnv</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer, LazyTensorStorage</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(</span>
+<span class="sd">        ...     storage=LazyTensorStorage(100, ndim=2),</span>
+<span class="sd">        ...     transform=MultiStepTransform(n_steps=3, gamma=0.95)</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; base_env = SerialEnv(2, lambda: GymEnv(&quot;CartPole&quot;))</span>
+<span class="sd">        &gt;&gt;&gt; env = TransformedEnv(base_env, StepCounter())</span>
+<span class="sd">        &gt;&gt;&gt; _ = env.set_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; _ = torch.manual_seed(0)</span>
+<span class="sd">        &gt;&gt;&gt; tdreset = env.reset()</span>
+<span class="sd">        &gt;&gt;&gt; for _ in range(100):</span>
+<span class="sd">        ...     rollout = env.rollout(max_steps=50, break_when_any_done=False,</span>
+<span class="sd">        ...         tensordict=tdreset, auto_reset=False)</span>
+<span class="sd">        ...     indices = rb.extend(rollout)</span>
+<span class="sd">        ...     tdreset = rollout[..., -1][&quot;next&quot;]</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;step_count&quot;, rb[:][&quot;step_count&quot;][:, :5])</span>
+<span class="sd">        step_count tensor([[[ 9],</span>
+<span class="sd">                 [10],</span>
+<span class="sd">                 [11],</span>
+<span class="sd">                 [12],</span>
+<span class="sd">                 [13]],</span>
+<span class="sd">        &lt;BLANKLINE&gt;</span>
+<span class="sd">                [[12],</span>
+<span class="sd">                 [13],</span>
+<span class="sd">                 [14],</span>
+<span class="sd">                 [15],</span>
+<span class="sd">                 [16]]])</span>
+<span class="sd">        &gt;&gt;&gt; # The next step_count is 3 steps in the future</span>
+<span class="sd">        &gt;&gt;&gt; print(&quot;next step_count&quot;, rb[:][&quot;next&quot;, &quot;step_count&quot;][:, :5])</span>
+<span class="sd">        next step_count tensor([[[13],</span>
+<span class="sd">                 [14],</span>
+<span class="sd">                 [15],</span>
+<span class="sd">                 [16],</span>
+<span class="sd">                 [17]],</span>
+<span class="sd">        &lt;BLANKLINE&gt;</span>
+<span class="sd">                [[16],</span>
+<span class="sd">                 [17],</span>
+<span class="sd">                 [18],</span>
+<span class="sd">                 [19],</span>
+<span class="sd">                 [20]]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">ENV_ERR</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;The MultiStepTransform is only an inverse transform and can &quot;</span>
+        <span class="s2">&quot;be applied exclusively to replay buffers.&quot;</span>
+    <span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_steps</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reward_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">done_keys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">mask_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span> <span class="o">=</span> <span class="n">n_steps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_keys</span> <span class="o">=</span> <span class="n">reward_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span> <span class="o">=</span> <span class="n">done_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mask_key</span> <span class="o">=</span> <span class="n">mask_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">gamma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">n_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The look ahead window of the transform.</span>
+
+<span class="sd">        This value can be dynamically edited during training.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_steps</span>
+
+    <span class="nd">@n_steps</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">n_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="n">value</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;The value of n_steps must be a strictly positive integer.&quot;</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_steps</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">done_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done_key</span>
+
+    <span class="nd">@done_key</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">done_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_done_key</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">done_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span>
+
+    <span class="nd">@done_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">done_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;done&quot;</span><span class="p">,</span> <span class="s2">&quot;terminated&quot;</span><span class="p">,</span> <span class="s2">&quot;truncated&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_done_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">reward_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span>
+
+    <span class="nd">@reward_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">reward_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="s2">&quot;reward&quot;</span><span class="p">,</span>
+            <span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reward_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">mask_key</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mask_key</span>
+
+    <span class="nd">@mask_key</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">mask_key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="s2">&quot;mask&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mask_key</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">_validate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ENV_ERR</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">_inv_call</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_validated</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate</span><span class="p">()</span>
+
+        <span class="n">total_cat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_append_tensordict</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">total_cat</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span><span class="p">:</span>
+            <span class="n">out</span> <span class="o">=</span> <span class="n">_multi_step_func</span><span class="p">(</span>
+                <span class="n">total_cat</span><span class="p">,</span>
+                <span class="n">done_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">,</span>
+                <span class="n">done_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">done_keys</span><span class="p">,</span>
+                <span class="n">reward_keys</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reward_keys</span><span class="p">,</span>
+                <span class="n">mask_key</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mask_key</span><span class="p">,</span>
+                <span class="n">n_steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span><span class="p">,</span>
+                <span class="n">gamma</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">out</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_append_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">total_cat</span> <span class="o">=</span> <span class="n">data</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span> <span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">total_cat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span><span class="p">,</span> <span class="n">data</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_buffer</span> <span class="o">=</span> <span class="n">total_cat</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">n_steps</span> <span class="p">:]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">total_cat</span>
+
+
+<div class="viewcode-block" id="NextStateReconstructor">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.NextStateReconstructor.html#torchrl.envs.transforms.NextStateReconstructor">[docs]</a>
+<span class="k">class</span> <span class="nc">NextStateReconstructor</span><span class="p">(</span><span class="n">Transform</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Re-hydrate ``(&quot;next&quot;, obs)`` keys at sampling time by shifting along the batch.</span>
+
+<span class="sd">    Pairs with :class:`~torchrl.collectors.SyncDataCollector` configured with</span>
+<span class="sd">    ``compact_obs=True`` (and the analogous flag on the multi-process collectors):</span>
+<span class="sd">    the collector drops the observation and state keys from the</span>
+<span class="sd">    ``(&quot;next&quot;, ...)`` sub-tensordict before stacking because those values are</span>
+<span class="sd">    bit-for-bit identical to the root keys at ``t + 1`` within the same</span>
+<span class="sd">    trajectory; this transform rebuilds them on the consumer side.</span>
+
+<span class="sd">    **Core rule.** For each registered root key ``k`` and each position ``i``</span>
+<span class="sd">    of the flat sampled batch:</span>
+
+<span class="sd">    - if position ``i + 1`` is in the batch *and* belongs to the same</span>
+<span class="sd">      trajectory as position ``i``, write</span>
+<span class="sd">      ``data[(&quot;next&quot;, k)][i] = data[k][i + 1]``;</span>
+<span class="sd">    - otherwise write ``data[(&quot;next&quot;, k)][i] = fill_value`` (``NaN`` by</span>
+<span class="sd">      default).</span>
+
+<span class="sd">    &quot;Same trajectory&quot; is decided from a trajectory id key in the sample,</span>
+<span class="sd">    by default ``(&quot;collector&quot;, &quot;traj_ids&quot;)`` — the key that</span>
+<span class="sd">    :class:`~torchrl.collectors.SyncDataCollector` populates when</span>
+<span class="sd">    ``track_traj_ids=True`` (the default). The semantics fall out cleanly for</span>
+<span class="sd">    every common sampler:</span>
+
+<span class="sd">    - :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` with</span>
+<span class="sd">      ``traj_key``: positions inside a slice mirror to the next position;</span>
+<span class="sd">      slice boundaries differ in trajectory id and become ``NaN``.</span>
+<span class="sd">    - A full rollout sampled as one contiguous batch: every transition inside</span>
+<span class="sd">      a trajectory is reconstructed; trajectory ends become ``NaN``.</span>
+<span class="sd">    - :class:`~torchrl.data.replay_buffers.samplers.RandomSampler` and similar:</span>
+<span class="sd">      adjacent batch positions almost never share a trajectory id, so the</span>
+<span class="sd">      result is mostly ``NaN``. This is correct — the next observation is</span>
+<span class="sd">      genuinely not available in the sampled batch — and it makes the</span>
+<span class="sd">      mis-use loud rather than silent.</span>
+
+<span class="sd">    The trajectory-id check alone is *not* enough: a sampler is allowed to</span>
+<span class="sd">    place two slices of the *same* trajectory back-to-back in one batch</span>
+<span class="sd">    (e.g. :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` sampling</span>
+<span class="sd">    with replacement when there are fewer trajectories than slices). In that</span>
+<span class="sd">    case the two positions across the splice would share a trajectory id</span>
+<span class="sd">    without being consecutive in time. The transform therefore also consults</span>
+<span class="sd">    ``(&quot;next&quot;, &quot;done&quot;)`` (if present): when ``done[i]`` is ``True`` the</span>
+<span class="sd">    trajectory ended at step ``i``, so position ``i + 1`` is never the next</span>
+<span class="sd">    step of trajectory ``traj_id[i]`` no matter what.</span>
+
+<span class="sd">    An additional, stricter ``step_count_key`` cross-check is available for</span>
+<span class="sd">    setups where neither ``traj_id`` nor ``done`` are bulletproof — see below.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        keys (sequence of NestedKey, optional): the root keys whose</span>
+<span class="sd">            ``(&quot;next&quot;, k)`` counterparts should be reconstructed. Defaults to</span>
+<span class="sd">            ``(&quot;observation&quot;,)``. For environments with nested observation</span>
+<span class="sd">            specs, pass the full leaf list, e.g.</span>
+<span class="sd">            ``[(&quot;agents&quot;, &quot;pos&quot;), (&quot;agents&quot;, &quot;vel&quot;)]``.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        traj_key (NestedKey, optional): key carrying the trajectory id used</span>
+<span class="sd">            to detect boundaries. Defaults to ``(&quot;collector&quot;, &quot;traj_ids&quot;)``.</span>
+<span class="sd">            Set to ``None`` to skip the trajectory check and treat the entire</span>
+<span class="sd">            sampled batch as one trajectory (only the very last position is</span>
+<span class="sd">            then filled with ``fill_value``).</span>
+<span class="sd">        done_key (NestedKey, optional): key whose ``True`` entries indicate</span>
+<span class="sd">            that the trajectory terminated at position ``i``, so position</span>
+<span class="sd">            ``i + 1`` is not the next step. Defaults to ``(&quot;next&quot;, &quot;done&quot;)``.</span>
+<span class="sd">            Set to ``None`` to disable the check.</span>
+<span class="sd">        step_count_key (NestedKey, optional): if not ``None``, also require</span>
+<span class="sd">            ``data[step_count_key][i + 1] == data[step_count_key][i] + 1`` to</span>
+<span class="sd">            consider position ``i + 1`` as the canonical next step. The</span>
+<span class="sd">            collector populates ``(&quot;collector&quot;, &quot;step_count&quot;)`` only when a</span>
+<span class="sd">            :class:`~torchrl.envs.transforms.StepCounter` is in the env</span>
+<span class="sd">            transform chain. Defaults to ``None``.</span>
+<span class="sd">        fill_value (float, optional): value written wherever the next</span>
+<span class="sd">            observation is not available. Defaults to ``float(&quot;nan&quot;)``. For</span>
+<span class="sd">            integer-typed observation keys, NaN cannot be represented; pass</span>
+<span class="sd">            an explicit integer (e.g. ``0``).</span>
+<span class="sd">        strict (bool, optional): if ``True`` (default) and any configured</span>
+<span class="sd">            marker key (``traj_key``, ``done_key``, ``step_count_key``) is</span>
+<span class="sd">            missing from the sampled batch, raise. If ``False``, silently</span>
+<span class="sd">            drop that check.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import ReplayBuffer, LazyTensorStorage</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data.replay_buffers.samplers import SliceSampler</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.transforms.rb_transforms import (</span>
+<span class="sd">        ...     NextStateReconstructor,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; rb = ReplayBuffer(</span>
+<span class="sd">        ...     storage=LazyTensorStorage(100),</span>
+<span class="sd">        ...     sampler=SliceSampler(</span>
+<span class="sd">        ...         slice_len=4, traj_key=(&quot;collector&quot;, &quot;traj_ids&quot;),</span>
+<span class="sd">        ...     ),</span>
+<span class="sd">        ...     transform=NextStateReconstructor(),</span>
+<span class="sd">        ...     batch_size=8,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; # populate `rb` with a collector configured with `compact_obs=True`</span>
+<span class="sd">        &gt;&gt;&gt; # so that ``(&quot;next&quot;, &quot;observation&quot;)`` is absent from storage:</span>
+<span class="sd">        &gt;&gt;&gt; data = TensorDict({</span>
+<span class="sd">        ...     &quot;observation&quot;: torch.arange(8, dtype=torch.float32).view(8, 1),</span>
+<span class="sd">        ...     (&quot;next&quot;, &quot;reward&quot;): torch.zeros(8, 1),</span>
+<span class="sd">        ...     (&quot;next&quot;, &quot;done&quot;): torch.tensor([[False]] * 7 + [[True]]),</span>
+<span class="sd">        ...     (&quot;collector&quot;, &quot;traj_ids&quot;): torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),</span>
+<span class="sd">        ... }, batch_size=[8])</span>
+<span class="sd">        &gt;&gt;&gt; rb.extend(data)</span>
+<span class="sd">        &gt;&gt;&gt; sample = rb.sample()  # (&#39;next&#39;, &#39;observation&#39;) is reconstructed</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">keys</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">NestedKey</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;observation&quot;</span><span class="p">,),</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">traj_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;collector&quot;</span><span class="p">,</span> <span class="s2">&quot;traj_ids&quot;</span><span class="p">),</span>
+        <span class="n">done_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;done&quot;</span><span class="p">),</span>
+        <span class="n">step_count_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">fill_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">),</span>
+        <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keys</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">keys</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span> <span class="o">=</span> <span class="n">traj_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="o">=</span> <span class="n">done_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_count_key</span> <span class="o">=</span> <span class="n">step_count_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fill_value</span> <span class="o">=</span> <span class="n">fill_value</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strict</span> <span class="o">=</span> <span class="n">strict</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_flatten_marker</span><span class="p">(</span><span class="n">t</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reduce a marker tensor of shape ``(B, ...)`` to ``(B,)`` along trailing dims.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">B</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;NextStateReconstructor: marker tensor has leading dim </span><span class="si">{</span><span class="n">t</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;but sample batch size is </span><span class="si">{</span><span class="n">B</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">t</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">t</span>
+        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[:,</span> <span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_fetch_marker</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">key</span><span class="p">:</span> <span class="n">NestedKey</span><span class="p">,</span>
+        <span class="n">what</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_flatten_marker</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">),</span> <span class="n">B</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">strict</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;NextStateReconstructor: </span><span class="si">{</span><span class="n">what</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2"> is not present in the &quot;</span>
+                <span class="s2">&quot;sampled batch. Pass the corresponding constructor kwarg &quot;</span>
+                <span class="s2">&quot;explicitly (or `None` to disable), or `strict=False` to drop &quot;</span>
+                <span class="s2">&quot;the check silently.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_valid_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a ``(B,)`` bool tensor where ``True`` means ``i + 1`` is a usable next step.&quot;&quot;&quot;</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">tensordict</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">B</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">valid</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">traj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_marker</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">traj_key</span><span class="p">,</span> <span class="s2">&quot;trajectory key&quot;</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">traj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">valid</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;=</span> <span class="n">traj</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">traj</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">done</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_marker</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">done_key</span><span class="p">,</span> <span class="s2">&quot;done key&quot;</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">done</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">valid</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">done</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_count_key</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fetch_marker</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">step_count_key</span><span class="p">,</span> <span class="s2">&quot;step-count key&quot;</span><span class="p">,</span> <span class="n">B</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="n">sc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">valid</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;=</span> <span class="n">sc</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">sc</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">valid</span>
+
+<div class="viewcode-block" id="NextStateReconstructor.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.transforms.NextStateReconstructor.html#torchrl.envs.transforms.NextStateReconstructor.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_dims</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;NextStateReconstructor expects a flat ``(B,)`` sample. Got &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;batch_size=</span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="si">}</span><span class="s2">. Reshape or use a &quot;</span>
+                <span class="s2">&quot;1-d storage / sampler combination.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">B</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">batch_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">B</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tensordict</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_valid_mask</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+        <span class="n">invalid</span> <span class="o">=</span> <span class="o">~</span><span class="n">valid</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">:</span>
+            <span class="n">next_k</span> <span class="o">=</span> <span class="n">_under_next</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+            <span class="n">root</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="ow">not</span> <span class="n">root</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">()</span>
+                <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fill_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">math</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fill_value</span><span class="p">)</span>
+            <span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;NextStateReconstructor: root key </span><span class="si">{</span><span class="n">k</span><span class="si">!r}</span><span class="s2"> has non-floating &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;dtype </span><span class="si">{</span><span class="n">root</span><span class="o">.</span><span class="n">dtype</span><span class="si">}</span><span class="s2">; pass an explicit integer `fill_value` &quot;</span>
+                    <span class="s2">&quot;for this key (NaN cannot be represented).&quot;</span>
+                <span class="p">)</span>
+            <span class="n">next_view</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">B</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">next_view</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">root</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+            <span class="c1"># Whatever sat at [-1] is overwritten below via the mask</span>
+            <span class="c1"># (it is always invalid: no i+1 in the batch).</span>
+            <span class="n">invalid_expanded</span> <span class="o">=</span> <span class="n">invalid</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="o">*</span><span class="p">([</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">root</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span>
+                <span class="n">root</span>
+            <span class="p">)</span>
+            <span class="n">next_view</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">invalid_expanded</span><span class="p">,</span> <span class="n">root</span><span class="o">.</span><span class="n">new_full</span><span class="p">((),</span> <span class="bp">self</span><span class="o">.</span><span class="n">fill_value</span><span class="p">),</span> <span class="n">next_view</span>
+            <span class="p">)</span>
+            <span class="n">tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">next_k</span><span class="p">,</span> <span class="n">next_view</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict</span></div>
+</div>
+
+</pre></div>
+
+             </article>
+             
+            </div>
+            <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2022, Meta.
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+          </div>
+
+
+        </div>
+
+        <div class="pytorch-content-right" id="pytorch-content-right">
+          <div class="pytorch-right-menu" id="pytorch-right-menu">
+            <div class="pytorch-side-scroll" id="pytorch-side-scroll-right">
+              
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../../../',
+            VERSION:'main',
+            LANGUAGE:'en',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true,
+            SOURCELINK_SUFFIX: '.txt'
+        };
+    </script>
+      <script type="text/javascript" src="../../../../_static/documentation_options.js"></script>
+      <script type="text/javascript" src="../../../../_static/doctools.js"></script>
+      <script type="text/javascript" src="../../../../_static/sphinx_highlight.js"></script>
+      <script type="text/javascript" src="../../../../_static/sg-tags.js"></script>
+      <script type="text/javascript" src="../../../../_static/design-tabs.js"></script>
+
+  
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/popper.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/vendor/bootstrap.min.js"></script>
+  <script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+     
+    <script type="text/javascript">
+      $(document).ready(function() {
+	  var downloadNote = $(".sphx-glr-download-link-note.admonition.note");
+	  if (downloadNote.length >= 1) {
+	      var tutorialUrl = $("#tutorial-type").text();
+	      var githubLink = "https://github.com/pytorch/rl/blob/main/tutorials/sphinx-"  + tutorialUrl + ".py",
+		  notebookLink = $(".sphx-glr-download-jupyter").find(".download.reference")[0].href,
+		  notebookDownloadPath = notebookLink.split('_downloads')[1],
+		  colabLink = "https://colab.research.google.com/github/pytorch/rl/blob/gh-pages/main/_downloads" + notebookDownloadPath;
+
+	      $(".pytorch-call-to-action-links a[data-response='Run in Google Colab']").attr("href", colabLink);
+	      $(".pytorch-call-to-action-links a[data-response='View on Github']").attr("href", githubLink);
+	  }
+
+          var overwrite = function(_) {
+              if ($(this).length > 0) {
+                  $(this)[0].href = "https://github.com/pytorch/rl"
+              }
+          }
+          // PC
+          $(".main-menu a:contains('GitHub')").each(overwrite);
+          // Mobile
+          $(".main-menu a:contains('Github')").each(overwrite);
+      });
+
+      
+       $(window).ready(function() {
+           var original = window.sideMenus.bind;
+           var startup = true;
+           window.sideMenus.bind = function() {
+               original();
+               if (startup) {
+                   $("#pytorch-right-menu a.reference.internal").each(function(i) {
+                       if (this.classList.contains("not-expanded")) {
+                           this.nextElementSibling.style.display = "block";
+                           this.classList.remove("not-expanded");
+                           this.classList.add("expanded");
+                       }
+                   });
+                   startup = false;
+               }
+           };
+       });
+    </script>
+
+    
+
+
+  <!-- Begin Footer -->
+
+  <div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+    <div class="container">
+      <div class="row">
+        <div class="col-md-4 text-center">
+          <h2>Docs</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/docs/stable/index.html">View Docs</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Tutorials</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://pytorch.org/tutorials">View Tutorials</a>
+        </div>
+
+        <div class="col-md-4 text-center">
+          <h2>Resources</h2>
+          <p>Lorem ipsum dolor sit amet, consectetur</p>
+          <a class="with-right-arrow" href="https://shiftlab.github.io/pytorch/resources">View Resources</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-logo-wrapper">
+        <a href="https://shiftlab.github.io/pytorch/" class="footer-logo"></a>
+      </div>
+
+      <div class="footer-links-wrapper">
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/">PyTorch</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/get-started">Get Started</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/features">Features</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/ecosystem">Ecosystem</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/blog/">Blog</a></li>
+            <li><a href="https://shiftlab.github.io/pytorch/resources">Resources</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col">
+          <ul>
+            <li class="list-title"><a href="https://shiftlab.github.io/pytorch/support">Support</a></li>
+            <li><a href="https://pytorch.org/tutorials">Tutorials</a></li>
+            <li><a href="https://pytorch.org/docs/stable/index.html">Docs</a></li>
+            <li><a href="https://discuss.pytorch.org" target="_blank">Discuss</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/issues" target="_blank">Github Issues</a></li>
+            <li><a href="https://pytorch.slack.com" target="_blank">Slack</a></li>
+            <li><a href="https://github.com/pytorch/pytorch/blob/master/CONTRIBUTING.md" target="_blank">Contributing</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-links-col follow-us-col">
+          <ul>
+            <li class="list-title">Follow Us</li>
+            <li>
+              <div id="mc_embed_signup">
+                <form
+                  action="https://twitter.us14.list-manage.com/subscribe/post?u=75419c71fe0a935e53dfa4a3f&id=91d0dccd39"
+                  method="post"
+                  id="mc-embedded-subscribe-form"
+                  name="mc-embedded-subscribe-form"
+                  class="email-subscribe-form validate"
+                  target="_blank"
+                  novalidate>
+                  <div id="mc_embed_signup_scroll" class="email-subscribe-form-fields-wrapper">
+                    <div class="mc-field-group">
+                      <label for="mce-EMAIL" style="display:none;">Email Address</label>
+                      <input type="email" value="" name="EMAIL" class="required email" id="mce-EMAIL" placeholder="Email Address">
+                    </div>
+
+                    <div id="mce-responses" class="clear">
+                      <div class="response" id="mce-error-response" style="display:none"></div>
+                      <div class="response" id="mce-success-response" style="display:none"></div>
+                    </div>    <!-- real people should not fill this in and expect good things - do not remove this or risk form bot signups-->
+
+                    <div style="position: absolute; left: -5000px;" aria-hidden="true"><input type="text" name="b_75419c71fe0a935e53dfa4a3f_91d0dccd39" tabindex="-1" value=""></div>
+
+                    <div class="clear">
+                      <input type="submit" value="" name="subscribe" id="mc-embedded-subscribe" class="button email-subscribe-button">
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+            </li>
+          </ul>
+
+          <div class="footer-social-icons">
+            <a href="https://www.facebook.com/pytorch" target="_blank" class="facebook"></a>
+            <a href="https://twitter.com/pytorch" target="_blank" class="twitter"></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- End Footer -->
+
+  <!-- Begin Mobile Menu -->
+
+  <div class="mobile-main-menu">
+    <div class="container-fluid">
+      <div class="container">
+        <div class="mobile-main-menu-header-container">
+          <a class="header-logo" href="https://shiftlab.github.io/pytorch/" aria-label="PyTorch"></a>
+          <a class="main-menu-close-button" href="#" data-behavior="close-mobile-menu"></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-main-menu-links-container">
+      <div class="main-menu">
+        <ul>
+          <li>
+            <a href="#">Get Started</a>
+          </li>
+
+          <li>
+            <a href="#">Features</a>
+          </li>
+
+          <li>
+            <a href="#">Ecosystem</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/blog/">Blog</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/tutorials">Tutorials</a>
+          </li>
+
+          <li>
+            <a href="https://pytorch.org/docs/stable/index.html">Docs</a>
+          </li>
+
+          <li>
+            <a href="https://shiftlab.github.io/pytorch/resources">Resources</a>
+          </li>
+
+          <li>
+            <a href="https://github.com/pytorch/pytorch">Github</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Mobile Menu -->
+
+  <script type="text/javascript" src="../../../../_static/js/vendor/anchor.min.js"></script>
+
+  <script type="text/javascript">
+    mobileMenu.bind();
+    mobileTOC.bind();
+    pytorchAnchors.bind();
+
+    $(window).on("load", function() {
+      sideMenus.bind();
+      scrollToAnchor.bind();
+      highlightNavigation.bind();
+    })
+
+    // Add class to links that have code blocks, since we cannot create links in code blocks
+    $("article.pytorch-article a span.pre").each(function(e) {
+      $(this).closest("a").addClass("has-code");
+    });
+  </script>
+</body>
+</html>
