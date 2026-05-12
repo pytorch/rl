@@ -10,18 +10,21 @@ import sys
 
 import pytest
 import torch
-
 import torchrl.modules
-
+from _modules_common import (
+    _has_functorch,
+    _has_triton,
+    _triton_skip_reason,
+    TORCH_VERSION,
+)
 from packaging import version
-from tensordict import LazyStackedTensorDict, pad, TensorDict, unravel_key_list
-from tensordict.nn import InteractionType, TensorDictModule, TensorDictSequential
+from tensordict import pad, TensorDict
+from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.utils import assert_close
 from torch import nn
+
 from torchrl.collectors import SyncDataCollector
-from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs import (
-    CatFrames,
     Compose,
     EnvCreator,
     InitTracker,
@@ -30,657 +33,233 @@ from torchrl.envs import (
     TensorDictPrimer,
     TransformedEnv,
 )
-from torchrl.envs.utils import set_exploration_type, step_mdp
+from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
-    AdditiveGaussianModule,
     ConsistentDropoutModule,
-    DecisionTransformerInferenceWrapper,
-    DTActor,
+    GRU,
+    GRUCell,
     GRUModule,
+    LSTM,
+    LSTMCell,
     LSTMModule,
     MLP,
-    MultiStepActorWrapper,
-    NormalParamExtractor,
-    OnlineDTActor,
     ProbabilisticActor,
-    SafeModule,
     set_recurrent_mode,
-    TanhDelta,
-    TanhNormal,
-    ValueOperator,
 )
-from torchrl.modules.models.decision_transformer import _has_transformers
-from torchrl.modules.tensordict_module.common import (
-    ensure_tensordict_compatible,
-    is_tensordict_compatible,
-    VmapModule,
-)
-from torchrl.modules.tensordict_module.probabilistic import (
-    SafeProbabilisticModule,
-    SafeProbabilisticTensorDictSequential,
-)
-from torchrl.modules.tensordict_module.sequence import SafeSequential
 from torchrl.modules.utils import (
     get_env_transforms_from_module,
     get_primers_from_module,
 )
 from torchrl.modules.utils.utils import _compute_missing_env_transforms
-from torchrl.objectives import DDPGLoss
 
+from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
 
-TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
-
-import importlib.util as _importlib_util  # noqa: E402
-
-
-def _has_triton_backend() -> bool:
-    """Mirror of the triton-availability check inside the RNN backend.
-
-    Triton must be installed, CUDA must be available, and the Triton build
-    must expose the ``triton.language.extra.libdevice`` submodule
-    (Triton >= 2.2). Older Triton installations are routed to scan/pad
-    backends, so the triton-specific tests are skipped there.
-    """
-    if _importlib_util.find_spec("triton") is None or not torch.cuda.is_available():
-        return False
-    return _importlib_util.find_spec("triton.language.extra.libdevice") is not None
-
-
-_has_triton = _has_triton_backend()
-_triton_skip_reason = "requires triton (>= 2.2) and CUDA"
-
-_has_functorch = False
-try:
+if _has_functorch:
     try:
         from torch import vmap
     except ImportError:
         from functorch import vmap
 
-    _has_functorch = True
-except ImportError:
-    pass
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+def test_python_lstm_cell(device, bias):
+    lstm_cell1 = LSTMCell(10, 20, device=device, bias=bias)
+    lstm_cell2 = nn.LSTMCell(10, 20, device=device, bias=bias)
+
+    lstm_cell1.load_state_dict(lstm_cell2.state_dict())
+
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(
+        lstm_cell1.named_parameters(), lstm_cell2.named_parameters()
+    ):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
+
+    # Run loop
+    input = torch.randn(2, 3, 10, device=device)
+    h0 = torch.randn(3, 20, device=device)
+    c0 = torch.randn(3, 20, device=device)
+    with torch.no_grad():
+        for i in range(input.size()[0]):
+            h1, c1 = lstm_cell1(input[i], (h0, c0))
+            h2, c2 = lstm_cell2(input[i], (h0, c0))
+
+            # Make sure the final hidden states have the same shape
+            assert h1.shape == h2.shape
+            assert c1.shape == c2.shape
+            torch.testing.assert_close(h1, h2)
+            torch.testing.assert_close(c1, c2)
+            h0 = h1
+            c0 = c1
 
 
-class TestTDModule:
-    def test_multiple_output(self):
-        class MultiHeadLinear(nn.Module):
-            def __init__(self, in_1, out_1, out_2, out_3):
-                super().__init__()
-                self.linear_1 = nn.Linear(in_1, out_1)
-                self.linear_2 = nn.Linear(in_1, out_2)
-                self.linear_3 = nn.Linear(in_1, out_3)
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+def test_python_gru_cell(device, bias):
+    gru_cell1 = GRUCell(10, 20, device=device, bias=bias)
+    gru_cell2 = nn.GRUCell(10, 20, device=device, bias=bias)
 
-            def forward(self, x):
-                return self.linear_1(x), self.linear_2(x), self.linear_3(x)
+    gru_cell2.load_state_dict(gru_cell1.state_dict())
 
-        tensordict_module = SafeModule(
-            MultiHeadLinear(5, 4, 3, 2),
-            in_keys=["input"],
-            out_keys=["out_1", "out_2", "out_3"],
-        )
-        td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
-        td = tensordict_module(td)
-        assert td.shape == torch.Size([3])
-        assert "input" in td.keys()
-        assert "out_1" in td.keys()
-        assert "out_2" in td.keys()
-        assert "out_3" in td.keys()
-        assert td.get("out_3").shape == torch.Size([3, 2])
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(
+        gru_cell1.named_parameters(), gru_cell2.named_parameters()
+    ):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (v1 == v2).all()
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-        # Using "_" key to ignore some output
-        tensordict_module = SafeModule(
-            MultiHeadLinear(5, 4, 3, 2),
-            in_keys=["input"],
-            out_keys=["_", "_", "out_3"],
-        )
-        td = TensorDict({"input": torch.randn(3, 5)}, batch_size=[3])
-        td = tensordict_module(td)
-        assert td.shape == torch.Size([3])
-        assert "input" in td.keys()
-        assert "out_3" in td.keys()
-        assert "_" not in td.keys()
-        assert td.get("out_3").shape == torch.Size([3, 2])
+    # Run loop
+    input = torch.randn(2, 3, 10, device=device)
+    h0 = torch.zeros(3, 20, device=device)
+    with torch.no_grad():
+        for i in range(input.size()[0]):
+            h1 = gru_cell1(input[i], h0)
+            h2 = gru_cell2(input[i], h0)
 
-    def test_spec_key_warning(self):
-        class MultiHeadLinear(nn.Module):
-            def __init__(self, in_1, out_1, out_2):
-                super().__init__()
-                self.linear_1 = nn.Linear(in_1, out_1)
-                self.linear_2 = nn.Linear(in_1, out_2)
+            # Make sure the final hidden states have the same shape
+            assert h1.shape == h2.shape
+            torch.testing.assert_close(h1, h2)
+            h0 = h1
 
-            def forward(self, x):
-                return self.linear_1(x), self.linear_2(x)
 
-        spec_dict = {
-            "_": Unbounded((4,)),
-            "out_2": Unbounded((3,)),
-        }
-
-        # warning due to "_" in spec keys
-        with pytest.warns(UserWarning, match='got a spec with key "_"'):
-            tensordict_module = SafeModule(
-                MultiHeadLinear(5, 4, 3),
-                in_keys=["input"],
-                out_keys=["_", "out_2"],
-                spec=Composite(**spec_dict),
-            )
-
-    @pytest.mark.parametrize("safe", [True, False])
-    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("lazy", [True, False])
-    def test_stateful(self, safe, spec_type, lazy):
-        torch.manual_seed(0)
-        param_multiplier = 1
-        if lazy:
-            net = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net = nn.Linear(3, 4 * param_multiplier)
-
-        if spec_type is None:
-            spec = None
-        elif spec_type == "bounded":
-            spec = Bounded(-0.1, 0.1, 4)
-        elif spec_type == "unbounded":
-            spec = Unbounded(4)
-
-        if safe and spec is None:
-            with pytest.raises(
-                RuntimeError,
-                match="is not a valid configuration as the tensor specs are not "
-                "specified",
-            ):
-                tensordict_module = SafeModule(
-                    module=net,
-                    spec=spec,
-                    in_keys=["in"],
-                    out_keys=["out"],
-                    safe=safe,
-                )
-            return
-        else:
-            tensordict_module = SafeModule(
-                module=net,
-                spec=spec,
-                in_keys=["in"],
-                out_keys=["out"],
-                safe=safe,
-            )
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tensordict_module(td)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-        # test bounds
-        if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any(), td.get("out")
-        elif safe and spec_type == "bounded":
-            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
-
-    @pytest.mark.parametrize("safe", [True, False])
-    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("out_keys", [["loc", "scale"], ["loc_1", "scale_1"]])
-    @pytest.mark.parametrize("lazy", [True, False])
-    @pytest.mark.parametrize(
-        "exp_mode", [InteractionType.DETERMINISTIC, InteractionType.RANDOM, None]
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("batch_first", [True, False])
+@pytest.mark.parametrize("dropout", [0.0, 0.5])
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_python_lstm(device, bias, dropout, batch_first, num_layers):
+    B = 5
+    T = 3
+    lstm1 = LSTM(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
     )
-    def test_stateful_probabilistic(self, safe, spec_type, lazy, exp_mode, out_keys):
-        torch.manual_seed(0)
-        param_multiplier = 2
-        if lazy:
-            net = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net = nn.Linear(3, 4 * param_multiplier)
-
-        in_keys = ["in"]
-        net = SafeModule(
-            module=nn.Sequential(net, NormalParamExtractor()),
-            spec=None,
-            in_keys=in_keys,
-            out_keys=out_keys,
-        )
-
-        if spec_type is None:
-            spec = None
-        elif spec_type == "bounded":
-            spec = Bounded(-0.1, 0.1, 4)
-        elif spec_type == "unbounded":
-            spec = Unbounded(4)
-        else:
-            raise NotImplementedError
-
-        kwargs = {"distribution_class": TanhNormal}
-        if out_keys == ["loc", "scale"]:
-            dist_in_keys = ["loc", "scale"]
-        elif out_keys == ["loc_1", "scale_1"]:
-            dist_in_keys = {"loc": "loc_1", "scale": "scale_1"}
-        else:
-            raise NotImplementedError
-
-        if safe and spec is None:
-            with pytest.raises(
-                RuntimeError,
-                match="is not a valid configuration as the tensor specs are not "
-                "specified",
-            ):
-                prob_module = SafeProbabilisticModule(
-                    in_keys=dist_in_keys,
-                    out_keys=["out"],
-                    spec=spec,
-                    safe=safe,
-                    **kwargs,
-                )
-            return
-        else:
-            prob_module = SafeProbabilisticModule(
-                in_keys=dist_in_keys,
-                out_keys=["out"],
-                spec=spec,
-                safe=safe,
-                **kwargs,
-            )
-
-        tensordict_module = SafeProbabilisticTensorDictSequential(net, prob_module)
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        with set_exploration_type(exp_mode):
-            tensordict_module(td)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-        # test bounds
-        if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
-
-
-class TestTDSequence:
-    # Temporarily disabling this test until 473 is merged in tensordict
-    # def test_in_key_warning(self):
-    #     with pytest.warns(UserWarning, match='key "_" is for ignoring output'):
-    #         tensordict_module = SafeModule(
-    #             nn.Linear(3, 4), in_keys=["_"], out_keys=["out1"]
-    #         )
-    #     with pytest.warns(UserWarning, match='key "_" is for ignoring output'):
-    #         tensordict_module = SafeModule(
-    #             nn.Linear(3, 4), in_keys=["_", "key2"], out_keys=["out1"]
-    #         )
-
-    @pytest.mark.parametrize("safe", [True, False])
-    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("lazy", [True, False])
-    def test_stateful(self, safe, spec_type, lazy):
-        torch.manual_seed(0)
-        param_multiplier = 1
-        if lazy:
-            net1 = nn.LazyLinear(4)
-            dummy_net = nn.LazyLinear(4)
-            net2 = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net1 = nn.Linear(3, 4)
-            dummy_net = nn.Linear(4, 4)
-            net2 = nn.Linear(4, 4 * param_multiplier)
-
-        if spec_type is None:
-            spec = None
-        elif spec_type == "bounded":
-            spec = Bounded(-0.1, 0.1, 4)
-        elif spec_type == "unbounded":
-            spec = Unbounded(4)
-
-        kwargs = {}
-
-        if safe and spec is None:
-            pytest.skip("safe and spec is None is checked elsewhere")
-        else:
-            tdmodule1 = SafeModule(
-                net1,
-                spec=None,
-                in_keys=["in"],
-                out_keys=["hidden"],
-                safe=False,
-            )
-            dummy_tdmodule = SafeModule(
-                dummy_net,
-                spec=None,
-                in_keys=["hidden"],
-                out_keys=["hidden"],
-                safe=False,
-            )
-            tdmodule2 = SafeModule(
-                spec=spec,
-                module=net2,
-                in_keys=["hidden"],
-                out_keys=["out"],
-                safe=False,
-                **kwargs,
-            )
-            tdmodule = SafeSequential(tdmodule1, dummy_tdmodule, tdmodule2)
-
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 3
-        tdmodule[1] = tdmodule2
-        assert len(tdmodule) == 3
-
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 3
-        del tdmodule[2]
-        assert len(tdmodule) == 2
-
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-        # test bounds
-        if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
-
-    @pytest.mark.parametrize("safe", [True, False])
-    @pytest.mark.parametrize("spec_type", [None, "bounded", "unbounded"])
-    @pytest.mark.parametrize("lazy", [True, False])
-    def test_stateful_probabilistic(self, safe, spec_type, lazy):
-        torch.manual_seed(0)
-        param_multiplier = 2
-        if lazy:
-            net1 = nn.LazyLinear(4)
-            dummy_net = nn.LazyLinear(4)
-            net2 = nn.LazyLinear(4 * param_multiplier)
-        else:
-            net1 = nn.Linear(3, 4)
-            dummy_net = nn.Linear(4, 4)
-            net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = nn.Sequential(net2, NormalParamExtractor())
-
-        if spec_type is None:
-            spec = None
-        elif spec_type == "bounded":
-            spec = Bounded(-0.1, 0.1, 4)
-        elif spec_type == "unbounded":
-            spec = Unbounded(4)
-        else:
-            raise NotImplementedError
-
-        kwargs = {"distribution_class": TanhNormal}
-
-        if safe and spec is None:
-            pytest.skip("safe and spec is None is checked elsewhere")
-        else:
-            tdmodule1 = SafeModule(
-                net1,
-                in_keys=["in"],
-                out_keys=["hidden"],
-                spec=None,
-                safe=False,
-            )
-            dummy_tdmodule = SafeModule(
-                dummy_net,
-                in_keys=["hidden"],
-                out_keys=["hidden"],
-                spec=None,
-                safe=False,
-            )
-            tdmodule2 = SafeModule(
-                module=net2,
-                in_keys=["hidden"],
-                out_keys=["loc", "scale"],
-                spec=None,
-                safe=False,
-            )
-
-            prob_module = SafeProbabilisticModule(
-                spec=spec,
-                in_keys=["loc", "scale"],
-                out_keys=["out"],
-                safe=False,
-                **kwargs,
-            )
-            tdmodule = SafeProbabilisticTensorDictSequential(
-                tdmodule1, dummy_tdmodule, tdmodule2, prob_module
-            )
-
-        assert hasattr(tdmodule, "__setitem__")
-        assert len(tdmodule) == 4
-        tdmodule[1] = tdmodule2
-        tdmodule[2] = prob_module
-        assert len(tdmodule) == 4
-
-        assert hasattr(tdmodule, "__delitem__")
-        assert len(tdmodule) == 4
-        del tdmodule[3]
-        assert len(tdmodule) == 3
-
-        assert hasattr(tdmodule, "__getitem__")
-        assert tdmodule[0] is tdmodule1
-        assert tdmodule[1] is tdmodule2
-        assert tdmodule[2] is prob_module
-
-        td = TensorDict({"in": torch.randn(3, 3)}, [3])
-        tdmodule(td)
-        assert td.shape == torch.Size([3])
-        assert td.get("out").shape == torch.Size([3, 4])
-
-        dist = tdmodule.get_dist(td)
-        assert dist.rsample().shape[: td.ndimension()] == td.shape
-
-        # test bounds
-        if not safe and spec_type == "bounded":
-            assert ((td.get("out") > 0.1) | (td.get("out") < -0.1)).any()
-        elif safe and spec_type == "bounded":
-            assert ((td.get("out") < 0.1) | (td.get("out") > -0.1)).all()
-
-    def test_submodule_sequence(self):
-        td_module_1 = SafeModule(
-            nn.Linear(3, 2),
-            in_keys=["in"],
-            out_keys=["hidden"],
-        )
-        td_module_2 = SafeModule(
-            nn.Linear(2, 4),
-            in_keys=["hidden"],
-            out_keys=["out"],
-        )
-        td_module = SafeSequential(td_module_1, td_module_2)
-
-        td_1 = TensorDict({"in": torch.randn(5, 3)}, [5])
-        sub_seq_1 = td_module.select_subsequence(out_keys=["hidden"])
-        sub_seq_1(td_1)
-        assert "hidden" in td_1.keys()
-        assert "out" not in td_1.keys()
-        td_2 = TensorDict({"hidden": torch.randn(5, 2)}, [5])
-        sub_seq_2 = td_module.select_subsequence(in_keys=["hidden"])
-        sub_seq_2(td_2)
-        assert "out" in td_2.keys()
-        assert td_2.get("out").shape == torch.Size([5, 4])
-
-    @pytest.mark.parametrize("stack", [True, False])
-    def test_sequential_partial(self, stack):
-        torch.manual_seed(0)
-        param_multiplier = 2
-
-        net1 = nn.Linear(3, 4)
-
-        net2 = nn.Linear(4, 4 * param_multiplier)
-        net2 = nn.Sequential(net2, NormalParamExtractor())
-        net2 = SafeModule(net2, in_keys=["b"], out_keys=["loc", "scale"])
-
-        net3 = nn.Linear(4, 4 * param_multiplier)
-        net3 = nn.Sequential(net3, NormalParamExtractor())
-        net3 = SafeModule(net3, in_keys=["c"], out_keys=["loc", "scale"])
-
-        spec = Bounded(-0.1, 0.1, 4)
-
-        kwargs = {"distribution_class": TanhNormal}
-
-        tdmodule1 = SafeModule(
-            net1,
-            in_keys=["a"],
-            out_keys=["hidden"],
-            spec=None,
-            safe=False,
-        )
-        tdmodule2 = SafeProbabilisticTensorDictSequential(
-            net2,
-            SafeProbabilisticModule(
-                in_keys=["loc", "scale"],
-                out_keys=["out"],
-                spec=spec,
-                safe=True,
-                **kwargs,
-            ),
-        )
-        tdmodule3 = SafeProbabilisticTensorDictSequential(
-            net3,
-            SafeProbabilisticModule(
-                in_keys=["loc", "scale"],
-                out_keys=["out"],
-                spec=spec,
-                safe=True,
-                **kwargs,
-            ),
-        )
-        tdmodule = SafeSequential(
-            tdmodule1, tdmodule2, tdmodule3, partial_tolerant=True
-        )
-
-        if stack:
-            td = LazyStackedTensorDict.maybe_dense_stack(
-                [
-                    TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, []),
-                    TensorDict({"a": torch.randn(3), "c": torch.randn(4)}, []),
-                ],
-                0,
-            )
-            tdmodule(td)
-            assert "loc" in td.keys()
-            assert "scale" in td.keys()
-            assert "out" in td.keys()
-            assert td["out"].shape[0] == 2
-            assert td["loc"].shape[0] == 2
-            assert td["scale"].shape[0] == 2
-            assert "b" not in td.keys()
-            assert "b" in td[0].keys()
-        else:
-            td = TensorDict({"a": torch.randn(3), "b": torch.randn(4)}, [])
-            tdmodule(td)
-            assert "loc" in td.keys()
-            assert "scale" in td.keys()
-            assert "out" in td.keys()
-            assert "b" in td.keys()
-
-
-def test_is_tensordict_compatible():
-    class MultiHeadLinear(nn.Module):
-        def __init__(self, in_1, out_1, out_2, out_3):
-            super().__init__()
-            self.linear_1 = nn.Linear(in_1, out_1)
-            self.linear_2 = nn.Linear(in_1, out_2)
-            self.linear_3 = nn.Linear(in_1, out_3)
-
-        def forward(self, x):
-            return self.linear_1(x), self.linear_2(x), self.linear_3(x)
-
-    td_module = SafeModule(
-        MultiHeadLinear(5, 4, 3, 2),
-        in_keys=["in_1", "in_2"],
-        out_keys=["out_1", "out_2"],
+    lstm2 = nn.LSTM(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
     )
-    assert is_tensordict_compatible(td_module)
 
-    class MockCompatibleModule(nn.Module):
-        def __init__(self, in_keys, out_keys):
-            self.in_keys = in_keys
-            self.out_keys = out_keys
+    lstm2.load_state_dict(lstm1.state_dict())
 
-        def forward(self, tensordict):
-            pass
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(lstm1.named_parameters(), lstm2.named_parameters()):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-    compatible_nn_module = MockCompatibleModule(
-        in_keys=["in_1", "in_2"],
-        out_keys=["out_1", "out_2"],
+    if batch_first:
+        input = torch.randn(B, T, 10, device=device)
+    else:
+        input = torch.randn(T, B, 10, device=device)
+
+    h0 = torch.randn(num_layers, 5, 20, device=device)
+    c0 = torch.randn(num_layers, 5, 20, device=device)
+
+    # Test without hidden states
+    with torch.no_grad():
+        output1, (h1, c1) = lstm1(input)
+        output2, (h2, c2) = lstm2(input)
+
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
+
+    # Test with hidden states
+    with torch.no_grad():
+        output1, (h1, c1) = lstm1(input, (h0, c0))
+        output2, (h2, c2) = lstm1(input, (h0, c0))
+
+    assert h1.shape == h2.shape
+    assert c1.shape == c2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
+        torch.testing.assert_close(c1, c2)
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+@pytest.mark.parametrize("bias", [True, False])
+@pytest.mark.parametrize("batch_first", [True, False])
+@pytest.mark.parametrize("dropout", [0.0, 0.5])
+@pytest.mark.parametrize("num_layers", [1, 2])
+def test_python_gru(device, bias, dropout, batch_first, num_layers):
+    B = 5
+    T = 3
+    gru1 = GRU(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
     )
-    assert is_tensordict_compatible(compatible_nn_module)
-
-    class MockIncompatibleModuleNoKeys(nn.Module):
-        def forward(self, input):
-            pass
-
-    incompatible_nn_module_no_keys = MockIncompatibleModuleNoKeys()
-    assert not is_tensordict_compatible(incompatible_nn_module_no_keys)
-
-    class MockIncompatibleModuleMultipleArgs(nn.Module):
-        def __init__(self, in_keys, out_keys):
-            self.in_keys = in_keys
-            self.out_keys = out_keys
-
-        def forward(self, input_1, input_2):
-            pass
-
-    incompatible_nn_module_multi_args = MockIncompatibleModuleMultipleArgs(
-        in_keys=["in_1", "in_2"],
-        out_keys=["out_1", "out_2"],
+    gru2 = nn.GRU(
+        input_size=10,
+        hidden_size=20,
+        num_layers=num_layers,
+        device=device,
+        bias=bias,
+        batch_first=batch_first,
     )
-    with pytest.raises(TypeError):
-        is_tensordict_compatible(incompatible_nn_module_multi_args)
+    gru2.load_state_dict(gru1.state_dict())
 
+    # Make sure parameters match
+    for (k1, v1), (k2, v2) in zip(gru1.named_parameters(), gru2.named_parameters()):
+        assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
+        torch.testing.assert_close(v1, v2)
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
-def test_ensure_tensordict_compatible():
-    class MultiHeadLinear(nn.Module):
-        def __init__(self, in_1, out_1, out_2, out_3):
-            super().__init__()
-            self.linear_1 = nn.Linear(in_1, out_1)
-            self.linear_2 = nn.Linear(in_1, out_2)
-            self.linear_3 = nn.Linear(in_1, out_3)
+    if batch_first:
+        input = torch.randn(B, T, 10, device=device)
+    else:
+        input = torch.randn(T, B, 10, device=device)
 
-        def forward(self, x):
-            return self.linear_1(x), self.linear_2(x), self.linear_3(x)
+    h0 = torch.randn(num_layers, 5, 20, device=device)
 
-    td_module = SafeModule(
-        MultiHeadLinear(5, 4, 3, 2),
-        in_keys=["in_1", "in_2"],
-        out_keys=["out_1", "out_2"],
-    )
-    ensured_module = ensure_tensordict_compatible(td_module)
-    assert ensured_module is td_module
-    with pytest.raises(TypeError):
-        ensure_tensordict_compatible(td_module, in_keys=["input"])
-    with pytest.raises(TypeError):
-        ensure_tensordict_compatible(td_module, out_keys=["output"])
+    # Test without hidden states
+    with torch.no_grad():
+        output1, h1 = gru1(input)
+        output2, h2 = gru2(input)
 
-    class NonNNModule:
-        def __init__(self):
-            pass
+    assert h1.shape == h2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
 
-        def forward(self, x):
-            pass
+    # Test with hidden states
+    with torch.no_grad():
+        output1, h1 = gru1(input, h0)
+        output2, h2 = gru2(input, h0)
 
-    non_nn_module = NonNNModule()
-    with pytest.raises(TypeError):
-        ensure_tensordict_compatible(non_nn_module)
-
-    class ErrorNNModule(nn.Module):
-        def forward(self, in_1, in_2):
-            pass
-
-    error_nn_module = ErrorNNModule()
-    with pytest.raises(TypeError):
-        ensure_tensordict_compatible(error_nn_module, in_keys=["input"])
-
-    nn_module = MultiHeadLinear(5, 4, 3, 2)
-    ensured_module = ensure_tensordict_compatible(
-        nn_module,
-        in_keys=["x"],
-        out_keys=["out_1", "out_2", "out_3"],
-    )
-    assert set(unravel_key_list(ensured_module.in_keys)) == {"x"}
-    assert isinstance(ensured_module, TensorDictModule)
+    assert h1.shape == h2.shape
+    assert output1.shape == output2.shape
+    if dropout == 0.0:
+        torch.testing.assert_close(output1, output2)
+        torch.testing.assert_close(h1, h2)
 
 
 class TestLSTMModule:
@@ -2525,218 +2104,6 @@ class TestGRUModule:
             torch.testing.assert_close(
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
-
-
-def test_safe_specs():
-
-    out_key = ("a", "b")
-    spec = Composite(Composite({out_key: Unbounded()}))
-    original_spec = spec.clone()
-    mod = SafeModule(
-        module=nn.Linear(3, 1),
-        spec=spec,
-        out_keys=[out_key, ("other", "key")],
-        in_keys=[],
-    )
-    assert original_spec == spec
-    assert original_spec[out_key] == mod.spec[out_key]
-
-
-def test_actor_critic_specs():
-    action_key = ("agents", "action")
-    spec = Composite(Composite({action_key: Unbounded(shape=(3,))}))
-    policy_module = TensorDictModule(
-        nn.Linear(3, 1),
-        in_keys=[("agents", "observation")],
-        out_keys=[action_key],
-    )
-    original_spec = spec.clone()
-    module = TensorDictSequential(
-        policy_module, AdditiveGaussianModule(spec=spec, action_key=action_key)
-    )
-    value_module = ValueOperator(
-        module=module,
-        in_keys=[("agents", "observation"), action_key],
-        out_keys=[("agents", "state_action_value")],
-    )
-    assert original_spec == spec
-    assert module[1].spec == spec
-    DDPGLoss(actor_network=module, value_network=value_module)
-    assert original_spec == spec
-    assert module[1].spec == spec
-
-
-def test_vmapmodule():
-    lam = TensorDictModule(lambda x: x[0], in_keys=["x"], out_keys=["y"])
-    sample_in = torch.ones((10, 3, 2))
-    sample_in_td = TensorDict({"x": sample_in}, batch_size=[10])
-    lam(sample_in)
-    vm = VmapModule(lam, 0)
-    vm(sample_in_td)
-    assert (sample_in_td["x"][:, 0] == sample_in_td["y"]).all()
-
-
-@pytest.mark.skipif(
-    not _has_transformers, reason="transformers needed to test DT classes"
-)
-class TestDecisionTransformerInferenceWrapper:
-    @pytest.mark.parametrize("online", [True, False])
-    def test_dt_inference_wrapper(self, online):
-        action_key = ("nested", ("action",))
-        if online:
-            dtactor = OnlineDTActor(
-                state_dim=4, action_dim=2, transformer_config=DTActor.default_config()
-            )
-            in_keys = ["loc", "scale"]
-            actor_module = TensorDictModule(
-                dtactor,
-                in_keys=["observation", action_key, "return_to_go"],
-                out_keys=in_keys,
-            )
-            dist_class = TanhNormal
-        else:
-            dtactor = DTActor(
-                state_dim=4, action_dim=2, transformer_config=DTActor.default_config()
-            )
-            in_keys = ["param"]
-            actor_module = TensorDictModule(
-                dtactor,
-                in_keys=["observation", action_key, "return_to_go"],
-                out_keys=in_keys,
-            )
-            dist_class = TanhDelta
-        dist_kwargs = {
-            "low": -1.0,
-            "high": 1.0,
-        }
-        actor = ProbabilisticActor(
-            in_keys=in_keys,
-            out_keys=[action_key],
-            module=actor_module,
-            distribution_class=dist_class,
-            distribution_kwargs=dist_kwargs,
-        )
-        inference_actor = DecisionTransformerInferenceWrapper(actor)
-        sequence_length = 20
-        td = TensorDict(
-            {
-                "observation": torch.randn(1, sequence_length, 4),
-                action_key: torch.randn(1, sequence_length, 2),
-                "return_to_go": torch.randn(1, sequence_length, 1),
-            },
-            [1],
-        )
-        with pytest.raises(
-            ValueError,
-            match="The value of out_action_key",
-        ):
-            result = inference_actor(td)
-        inference_actor.set_tensor_keys(action=action_key, out_action=action_key)
-        result = inference_actor(td)
-        # checks that the seq length has disappeared
-        assert result.get(action_key).shape == torch.Size([1, 2])
-        assert inference_actor.out_keys == unravel_key_list(
-            sorted([action_key, *in_keys, "observation", "return_to_go"], key=str)
-        )
-        assert set(result.keys(True, True)) - set(td.keys(True, True)) == set(
-            inference_actor.out_keys
-        ) - set(inference_actor.in_keys)
-
-
-class TestBatchedActor:
-    def test_batched_actor_exceptions(self):
-        time_steps = 5
-        actor_base = TensorDictModule(
-            lambda x: torch.ones(
-                x.shape[0], time_steps, 1, device=x.device, dtype=x.dtype
-            ),
-            in_keys=["observation_cat"],
-            out_keys=["action"],
-        )
-        with pytest.raises(ValueError, match="Only a single init_key can be passed"):
-            MultiStepActorWrapper(actor_base, n_steps=time_steps, init_key=["init_key"])
-
-        batch = 2
-
-        # The second env has frequent resets, the first none
-        base_env = SerialEnv(
-            batch,
-            [lambda: CountingEnv(max_steps=5000), lambda: CountingEnv(max_steps=5)],
-        )
-        env = TransformedEnv(
-            base_env,
-            CatFrames(
-                N=time_steps,
-                in_keys=["observation"],
-                out_keys=["observation_cat"],
-                dim=-1,
-            ),
-        )
-        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
-        with pytest.raises(KeyError, match="No init key was passed"):
-            env.rollout(2, actor)
-
-        env = TransformedEnv(
-            base_env,
-            Compose(
-                InitTracker(),
-                CatFrames(
-                    N=time_steps,
-                    in_keys=["observation"],
-                    out_keys=["observation_cat"],
-                    dim=-1,
-                ),
-            ),
-        )
-        td = env.rollout(10)[..., -1]["next"]
-        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
-        with pytest.raises(RuntimeError, match="Cannot initialize the wrapper"):
-            env.rollout(10, actor, tensordict=td, auto_reset=False)
-
-        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps - 1)
-        with pytest.raises(RuntimeError, match="The action's time dimension"):
-            env.rollout(10, actor)
-
-    @pytest.mark.parametrize("time_steps", [3, 5])
-    def test_batched_actor_simple(self, time_steps):
-
-        batch = 2
-
-        # The second env has frequent resets, the first none
-        base_env = SerialEnv(
-            batch,
-            [lambda: CountingEnv(max_steps=5000), lambda: CountingEnv(max_steps=5)],
-        )
-        env = TransformedEnv(
-            base_env,
-            Compose(
-                InitTracker(),
-                CatFrames(
-                    N=time_steps,
-                    in_keys=["observation"],
-                    out_keys=["observation_cat"],
-                    dim=-1,
-                ),
-            ),
-        )
-
-        actor_base = TensorDictModule(
-            lambda x: torch.ones(
-                x.shape[0], time_steps, 1, device=x.device, dtype=x.dtype
-            ),
-            in_keys=["observation_cat"],
-            out_keys=["action"],
-        )
-        actor = MultiStepActorWrapper(actor_base, n_steps=time_steps)
-        # rollout = env.rollout(100, break_when_any_done=False)
-        rollout = env.rollout(50, actor, break_when_any_done=False)
-        unique = rollout[0]["observation"].unique()
-        predicted = torch.arange(unique.numel())
-        assert (unique == predicted).all()
-        assert (
-            rollout[1]["observation"]
-            == (torch.arange(50) % 6).reshape_as(rollout[1]["observation"])
-        ).all()
 
 
 def test_get_primers_from_module():
