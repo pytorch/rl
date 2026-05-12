@@ -268,14 +268,24 @@ class Collector(BaseCollector):
         compact_obs (bool, optional): if ``True``, the collector drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking per-step data. Those keys are bit-for-bit identical
-            to the root keys of the next step (modulo the last frame of the
-            rollout), so storing both copies wastes memory. ``("next", "reward")``,
-            ``("next", "done")`` and ``("next", "truncated")`` are preserved
-            because they cannot be reconstructed from the root keys. The dropped
-            keys can be re-hydrated at sampling time with
-            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
-            when consuming a :class:`~torchrl.data.SliceSampler`-backed replay
-            buffer. Defaults to ``False``.
+            to the root keys of the next step (modulo the last frame of each
+            trajectory), so storing both copies roughly doubles the observation
+            footprint for nothing. ``("next", "reward")``, ``("next", "done")``
+            and ``("next", "truncated")`` are preserved because they cannot be
+            reconstructed from the root keys. The dropped keys can be
+            re-hydrated at sampling time with
+            :class:`~torchrl.envs.transforms.NextStateReconstructor`; trajectory
+            ends will carry ``NaN`` for the missing ``("next", obs)`` and the
+            value-estimator forward pass substitutes a finite placeholder so
+            GAE / TD targets stay numerically defined (see
+            :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`).
+            Default is ``False`` because the canonical ``("next", obs)`` is
+            still required by some downstream losses — most notably
+            :class:`~torchrl.envs.transforms.MultiStepTransform`, which uses
+            the n-step ``("next", obs)`` (and its in-trajectory fallback at
+            the last ``n - 1`` frames) and cannot reconstruct that from root
+            obs alone. See also the *Memory-efficient RL training* tutorial
+            for an end-to-end pipeline. Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
