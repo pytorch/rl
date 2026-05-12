@@ -34,10 +34,11 @@ Limitations of this prototype:
 """
 from __future__ import annotations
 
-import importlib.util
+import importlib.metadata
 
 import torch
 import torch.nn.functional as F
+from packaging import version
 
 
 def _check_triton_available() -> bool:
@@ -45,14 +46,18 @@ def _check_triton_available() -> bool:
 
     The backend's kernels rely on ``triton.language.extra.libdevice.tanh``
     (Triton >= 2.2) and on a backward path that uses ``tl.atomic_add`` with
-    a 2-D mask, which older Triton compilers reject. Probing the lazy
-    ``libdevice`` submodule import at module-load time is a reliable proxy
-    for "Triton is new enough"; older installations fall back transparently
-    to the ``scan`` / ``pad`` backends.
+    a 2-D mask, which older Triton compilers reject. The version is read
+    from package metadata rather than probing
+    ``triton.language.extra.libdevice`` via ``find_spec`` because older
+    Triton builds lack the ``triton.language.extra`` parent and that probe
+    would raise ``ModuleNotFoundError`` at torchrl import time. Older
+    installations fall back transparently to the ``scan`` / ``pad`` backends.
     """
-    if importlib.util.find_spec("triton") is None:
+    try:
+        triton_version = importlib.metadata.version("triton")
+    except importlib.metadata.PackageNotFoundError:
         return False
-    return importlib.util.find_spec("triton.language.extra.libdevice") is not None
+    return version.parse(triton_version) >= version.parse("2.2")
 
 
 _has_triton = _check_triton_available()

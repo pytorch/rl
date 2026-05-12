@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import importlib.util
+import importlib.metadata
 import typing
 from typing import Any
 
@@ -41,12 +41,17 @@ def _check_triton_available() -> bool:
     """True if Triton is installed and exposes the API the kernels need.
 
     Mirrors the probe in :mod:`torchrl.modules.tensordict_module._rnn_triton`.
-    Checks for the ``triton.language.extra.libdevice`` submodule (Triton
-    >= 2.2). Older Triton builds fall back to the scan / pad backends.
+    The backend requires ``triton.language.extra.libdevice`` which is only
+    available from Triton 2.2 onwards. Older Triton builds fall back to the
+    scan / pad backends. The version is read from package metadata to avoid
+    eagerly importing Triton (or its missing ``triton.language.extra`` parent)
+    at torchrl import time.
     """
-    if importlib.util.find_spec("triton") is None:
+    try:
+        triton_version = importlib.metadata.version("triton")
+    except importlib.metadata.PackageNotFoundError:
         return False
-    return importlib.util.find_spec("triton.language.extra.libdevice") is not None
+    return version.parse(triton_version) >= version.parse("2.2")
 
 
 _has_triton = _check_triton_available()
