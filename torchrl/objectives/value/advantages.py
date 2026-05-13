@@ -634,7 +634,12 @@ class TD0Estimator(ValueEstimatorBase):
             only one time step (which is not the case with multi-step value
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+            parameters are to be used). For recurrent policies or compact
+            rollouts, the input should contain long, contiguous trajectory
+            windows with valid boundary next states; short partial rollouts
+            that drop the final next observation can bias bootstrapping. In
+            that case, keep or reconstruct boundary next states, or use
+            ``shifted=False``. Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -873,7 +878,12 @@ class TD1Estimator(ValueEstimatorBase):
             only one time step (which is not the case with multi-step value
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+            parameters are to be used). For recurrent policies or compact
+            rollouts, the input should contain long, contiguous trajectory
+            windows with valid boundary next states; short partial rollouts
+            that drop the final next observation can bias bootstrapping. In
+            that case, keep or reconstruct boundary next states, or use
+            ``shifted=False``. Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1106,7 +1116,12 @@ class TDLambdaEstimator(ValueEstimatorBase):
             only one time step (which is not the case with multi-step value
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+            parameters are to be used). For recurrent policies or compact
+            rollouts, the input should contain long, contiguous trajectory
+            windows with valid boundary next states; short partial rollouts
+            that drop the final next observation can bias bootstrapping. In
+            that case, keep or reconstruct boundary next states, or use
+            ``shifted=False``. Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1376,7 +1391,12 @@ class GAE(ValueEstimatorBase):
             only one time step (which is not the case with multi-step value
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+            parameters are to be used). For recurrent policies or compact
+            rollouts, the input should contain long, contiguous trajectory
+            windows with valid boundary next states; short partial rollouts
+            that drop the final next observation can bias bootstrapping. In
+            that case, keep or reconstruct boundary next states, or use
+            ``shifted=False``. Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1761,7 +1781,12 @@ class VTrace(ValueEstimatorBase):
             only one time step (which is not the case with multi-step value
             estimation, for instance) and (2) when the parameters used at time
             ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+            parameters are to be used). For recurrent policies or compact
+            rollouts, the input should contain long, contiguous trajectory
+            windows with valid boundary next states; short partial rollouts
+            that drop the final next observation can bias bootstrapping. In
+            that case, keep or reconstruct boundary next states, or use
+            ``shifted=False``. Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
