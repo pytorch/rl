@@ -1665,6 +1665,53 @@ class TestLSTMModule:
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
     )
+    def test_lstm_module_scan_compile_no_aliasing(self):
+        # Under torch.compile, scan's HOP tracer walks the FakeTensor graph
+        # and rejects shared storage on inputs. nn.LSTM with cuDNN flattens
+        # its parameters into a single storage, so the per-layer weight
+        # views alias each other — `_lstm_scan_with_resets` must clone
+        # them before closing the scan body over them. This test pins
+        # that contract so the clones are not silently removed again.
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 6, 3, 8, 1
+        scan_module = LSTMModule(
+            input_size=F_in,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            recurrent_backend="scan",
+        )
+
+        obs = torch.randn(B, T, F_in)
+        hidden0 = torch.zeros(B, T, L, H)
+        hidden1 = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        prev = torch._dynamo.config.capture_scalar_outputs
+        torch._dynamo.config.capture_scalar_outputs = True
+        try:
+
+            @torch.compile(fullgraph=False)
+            def call(td):
+                with set_recurrent_mode(True):
+                    return scan_module(td)
+
+            with torch.no_grad():
+                out = call(data.clone())
+        finally:
+            torch._dynamo.config.capture_scalar_outputs = prev
+        assert "feat" in out.keys(True, True)
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
     def test_lstm_module_three_backends_ppo_advantage_parity(self):
         # End-to-end pin: feeding the LSTM output through a value head and
         # GAE should produce identical advantages across all backends. The

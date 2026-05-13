@@ -1247,16 +1247,23 @@ class LSTMModule(ModuleBase):
                 "LSTMModule(recurrent_backend='scan') does not support bidirectional LSTMs yet."
             )
 
+        # nn.LSTM with cuDNN flattens its parameters: weight_ih_l*,
+        # weight_hh_l*, bias_ih_l*, bias_hh_l* are views into a single
+        # flat storage. Closing the scan body over them as-is fails with
+        # "input-to-input aliasing" under torch.compile (the HOP tracer
+        # walks the FakeTensor graph and rejects shared storage on inputs).
+        # Cloning produces independent allocations; gradients still flow
+        # back to the parameters.
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.lstm.num_layers):
             weights = self.lstm._all_weights[layer]
-            weight_ihs.append(getattr(self.lstm, weights[0]))
-            weight_hhs.append(getattr(self.lstm, weights[1]))
+            weight_ihs.append(getattr(self.lstm, weights[0]).clone())
+            weight_hhs.append(getattr(self.lstm, weights[1]).clone())
             bias_ihs.append(
-                getattr(self.lstm, weights[2]) if self.lstm.bias else None
+                getattr(self.lstm, weights[2]).clone() if self.lstm.bias else None
             )
             bias_hhs.append(
-                getattr(self.lstm, weights[3]) if self.lstm.bias else None
+                getattr(self.lstm, weights[3]).clone() if self.lstm.bias else None
             )
 
         input = input.transpose(0, 1)
@@ -2366,16 +2373,19 @@ class GRUModule(ModuleBase):
                 "GRUModule(recurrent_backend='scan') does not support bidirectional GRUs yet."
             )
 
+        # See _lstm_scan_with_resets: cuDNN flattens GRU parameters into a
+        # single storage, so the views alias each other and the scan tracer
+        # rejects them as inputs. Cloning produces independent allocations.
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
-            weight_ihs.append(getattr(self.gru, weights[0]))
-            weight_hhs.append(getattr(self.gru, weights[1]))
+            weight_ihs.append(getattr(self.gru, weights[0]).clone())
+            weight_hhs.append(getattr(self.gru, weights[1]).clone())
             bias_ihs.append(
-                getattr(self.gru, weights[2]) if self.gru.bias else None
+                getattr(self.gru, weights[2]).clone() if self.gru.bias else None
             )
             bias_hhs.append(
-                getattr(self.gru, weights[3]) if self.gru.bias else None
+                getattr(self.gru, weights[3]).clone() if self.gru.bias else None
             )
 
         input = input.transpose(0, 1)
