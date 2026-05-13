@@ -62,6 +62,7 @@ from torchrl.data.replay_buffers.samplers import (
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
+    Sampler,
     SamplerEnsemble,
     SamplerWithoutReplacement,
     SliceSampler,
@@ -4691,6 +4692,130 @@ class TestSamplers:
         assert (
             (s2["index"].unsqueeze(0) == s["index"].unsqueeze(1)).all(-1).any(0).all()
         )
+
+    def test_replacement_kwarg_random(self):
+        # RandomSampler(replacement=True) is a regular RandomSampler
+        s = RandomSampler()
+        assert type(s) is RandomSampler
+        s = RandomSampler(replacement=True)
+        assert type(s) is RandomSampler
+
+        # RandomSampler(replacement=False) dispatches to SamplerWithoutReplacement
+        s = RandomSampler(replacement=False)
+        assert type(s) is SamplerWithoutReplacement
+        # default kwargs propagate
+        assert s.drop_last is False
+        assert s.shuffle is True
+
+        # Extra kwargs are forwarded to SamplerWithoutReplacement
+        s = RandomSampler(replacement=False, drop_last=True, shuffle=False)
+        assert type(s) is SamplerWithoutReplacement
+        assert s.drop_last is True
+        assert s.shuffle is False
+
+        # isinstance is preserved
+        assert isinstance(s, Sampler)
+        assert isinstance(s, SamplerWithoutReplacement)
+
+    def test_replacement_kwarg_slice(self):
+        # SliceSampler(replacement=True) is a regular SliceSampler
+        s = SliceSampler(slice_len=5)
+        assert type(s) is SliceSampler
+        s = SliceSampler(replacement=True, slice_len=5)
+        assert type(s) is SliceSampler
+
+        # SliceSampler(replacement=False) dispatches to SliceSamplerWithoutReplacement
+        s = SliceSampler(replacement=False, slice_len=5)
+        assert type(s) is SliceSamplerWithoutReplacement
+        assert s.slice_len == 5
+        assert s.drop_last is False
+        assert s.shuffle is True
+
+        # Extra without-replacement kwargs forward correctly
+        s = SliceSampler(
+            replacement=False,
+            slice_len=5,
+            drop_last=True,
+            shuffle=False,
+            traj_key="episode",
+            strict_length=False,
+        )
+        assert type(s) is SliceSamplerWithoutReplacement
+        assert s.slice_len == 5
+        assert s.drop_last is True
+        assert s.shuffle is False
+        assert s.traj_key == "episode"
+        assert s.strict_length is False
+
+        # isinstance preserves the SliceSampler hierarchy
+        assert isinstance(s, SliceSampler)
+        assert isinstance(s, SamplerWithoutReplacement)
+
+    def test_replacement_kwarg_subclass_unaffected(self):
+        # PrioritizedSliceSampler inherits from SliceSampler but should NOT dispatch
+        s = PrioritizedSliceSampler(
+            slice_len=5, max_capacity=10, alpha=0.5, beta=0.5
+        )
+        assert type(s) is PrioritizedSliceSampler
+
+        # SamplerWithoutReplacement(replacement=...) is a no-op pop
+        s = SamplerWithoutReplacement(replacement=False, drop_last=True)
+        assert type(s) is SamplerWithoutReplacement
+        assert s.drop_last is True
+        s = SliceSamplerWithoutReplacement(replacement=False, slice_len=5)
+        assert type(s) is SliceSamplerWithoutReplacement
+        assert s.slice_len == 5
+
+    def test_replacement_kwarg_no_variant_errors(self):
+        # PrioritizedSampler has no without-replacement variant -> TypeError
+        with pytest.raises(TypeError, match="no without-replacement variant"):
+            PrioritizedSampler(
+                max_capacity=10, alpha=0.5, beta=0.5, replacement=False
+            )
+
+    def test_replacement_kwarg_in_replay_buffer(self):
+        # End-to-end: a buffer using RandomSampler(replacement=False) should
+        # exhaust the storage without duplicate indices (like SamplerWithoutReplacement).
+        torch.manual_seed(0)
+        data = TensorDict({"a": torch.arange(11)}, batch_size=[11])
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(11),
+            sampler=RandomSampler(replacement=False, drop_last=False),
+            batch_size=3,
+        )
+        rb.extend(data)
+        seen = set()
+        for _ in range(4):
+            seen.update(rb.sample()["a"].tolist())
+        assert seen == set(range(11))
+
+    def test_replacement_kwarg_slice_in_replay_buffer(self):
+        # End-to-end: SliceSampler(replacement=False) returns sub-trajectories
+        torch.manual_seed(0)
+        episodes = torch.zeros(60, dtype=torch.long)
+        episodes[:20] = 0
+        episodes[20:40] = 1
+        episodes[40:] = 2
+        data = TensorDict(
+            {"episode": episodes, "obs": torch.arange(60)},
+            batch_size=[60],
+        )
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(60),
+            sampler=SliceSampler(
+                replacement=False,
+                slice_len=5,
+                traj_key="episode",
+                strict_length=True,
+            ),
+            batch_size=10,
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        # batch_size=10, slice_len=5 -> 2 slices of 5 contiguous obs each
+        obs = sample["obs"].view(2, 5)
+        diffs = obs[:, 1:] - obs[:, :-1]
+        assert (diffs == 1).all(), obs
 
 
 class TestStalenessAwareSampler:
