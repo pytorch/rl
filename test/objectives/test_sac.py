@@ -436,7 +436,7 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -611,7 +611,7 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -636,7 +636,7 @@ class TestSAC(LossModuleTestBase):
             **kwargs,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -1671,7 +1671,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             action_space="one-hot",
             **kwargs,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -1790,7 +1790,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             deactivate_vmap=False,
             **kwargs,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -1818,7 +1818,7 @@ class TestDiscreteSAC(LossModuleTestBase):
             deactivate_vmap=True,
             **kwargs,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -2466,7 +2466,7 @@ class TestCrossQ(LossModuleTestBase):
             loss_function="l2",
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -2567,7 +2567,7 @@ class TestCrossQ(LossModuleTestBase):
             deactivate_vmap=False,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -2590,7 +2590,7 @@ class TestCrossQ(LossModuleTestBase):
             deactivate_vmap=True,
         )
 
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -3300,7 +3300,7 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -3687,7 +3687,7 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -3704,7 +3704,7 @@ class TestREDQ(LossModuleTestBase):
             loss_function="l2",
             delay_qvalue=delay_qvalue,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
             with pytest.raises(NotImplementedError):
                 loss_fn_deprec.make_value_estimator(td_est)
             return

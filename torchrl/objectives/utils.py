@@ -60,6 +60,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    MAGAE = "Multi-agent generalized advantage estimate"
     VTrace = "V-trace"
 
 
@@ -80,6 +81,8 @@ def default_value_kwargs(value_type: ValueEstimators):
     elif value_type == ValueEstimators.TD0:
         return {"gamma": 0.99, "differentiable": True}
     elif value_type == ValueEstimators.GAE:
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.MAGAE:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}

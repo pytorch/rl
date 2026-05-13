@@ -1721,6 +1721,163 @@ class GAE(ValueEstimatorBase):
         return value_target
 
 
+class MultiAgentGAE(GAE):
+    """Multi-agent Generalized Advantage Estimator.
+
+    Drop-in replacement for :class:`GAE` when the value network produces per-agent
+    state values (shape ``[*B, T, n_agents, 1]``) but the reward / done /
+    terminated signals are shared across agents at the team level
+    (shape ``[*B, T, 1]``) — the standard cooperative-MARL layout in torchrl
+    (see e.g. ``torchrl/envs/libs/vmas.py`` and
+    ``torchrl/envs/libs/pettingzoo.py``).
+
+    The estimator detects whether the reward/done/terminated tensors are missing
+    the agent dimension relative to the value tensor, and broadcasts them along
+    that dimension before running the standard vectorised GAE recursion. If the
+    reward is already per-agent (e.g. a competitive setting), it is passed
+    through unchanged.
+
+    The output ``"advantage"`` and ``"value_target"`` entries match the shape
+    of the value tensor (``[*B, T, n_agents, 1]``), which is what
+    :class:`~torchrl.objectives.multiagent.MAPPOLoss` expects.
+
+    Keyword Args:
+        agent_dim (int, optional): the dimension that holds the agent index in
+            the value tensor. Negative dimensions are taken modulo
+            ``value.ndim``. Defaults to ``-2`` (penultimate), matching the
+            convention used by :class:`~torchrl.modules.MultiAgentMLP`.
+
+    Other args/kwargs are forwarded to :class:`GAE`.
+    """
+
+    def __init__(self, *, agent_dim: int = -2, **kwargs):
+        super().__init__(**kwargs)
+        self.agent_dim = agent_dim
+
+    @staticmethod
+    def _broadcast_to_agents(
+        tensor: torch.Tensor, target: torch.Tensor, agent_dim: int
+    ) -> torch.Tensor:
+        """Expand ``tensor`` along ``agent_dim`` to match ``target``'s shape.
+
+        If ``tensor`` already has the same number of dims as ``target`` we
+        assume it is per-agent and return it unchanged. Otherwise we unsqueeze
+        at ``agent_dim`` and expand.
+        """
+        if tensor.ndim == target.ndim:
+            return tensor
+        if tensor.ndim != target.ndim - 1:
+            raise ValueError(
+                f"MultiAgentGAE expected the reward/done/terminated tensor to "
+                f"have either the same number of dims as the value tensor "
+                f"(per-agent) or one fewer (team-shared). Got "
+                f"tensor.shape={tuple(tensor.shape)}, "
+                f"value.shape={tuple(target.shape)}."
+            )
+        dim = agent_dim if agent_dim >= 0 else target.ndim + agent_dim
+        n_agents = target.shape[dim]
+        unsqueezed = tensor.unsqueeze(dim)
+        expand_shape = list(unsqueezed.shape)
+        expand_shape[dim] = n_agents
+        return unsqueezed.expand(expand_shape)
+
+    @_self_set_skip_existing
+    @_self_set_grad_enabled
+    @dispatch
+    def forward(
+        self,
+        tensordict: TensorDictBase,
+        *,
+        params: list[Tensor] | None = None,
+        target_params: list[Tensor] | None = None,
+        time_dim: int | None = None,
+    ) -> TensorDictBase:
+        if tensordict.batch_dims < 1:
+            raise RuntimeError(
+                "Expected input tensordict to have at least one dimension, got "
+                f"tensordict.batch_size = {tensordict.batch_size}"
+            )
+        reward = tensordict.get(("next", self.tensor_keys.reward))
+        device = reward.device
+        if self.gamma.device != device:
+            self.gamma = self.gamma.to(device)
+        gamma = self.gamma
+        if self.lmbda.device != device:
+            self.lmbda = self.lmbda.to(device)
+        lmbda = self.lmbda
+
+        if self.value_network is not None:
+            if params is not None:
+                params = params.detach()
+                if target_params is None:
+                    target_params = params.clone(False)
+            with hold_out_net(self.value_network) if (
+                params is None and target_params is None
+            ) else nullcontext():
+                value, next_value = self._call_value_nets(
+                    data=tensordict,
+                    params=params,
+                    next_params=target_params,
+                    single_call=self.shifted,
+                    value_key=self.tensor_keys.value,
+                    detach_next=True,
+                    vmap_randomness=self.vmap_randomness,
+                )
+        else:
+            value = tensordict.get(self.tensor_keys.value)
+            next_value = tensordict.get(("next", self.tensor_keys.value))
+            if value is None:
+                raise ValueError(
+                    f"The tensor with key {self.tensor_keys.value} is missing, "
+                    "and no value network was provided."
+                )
+            if next_value is None:
+                raise ValueError(
+                    f"The tensor with key {('next', self.tensor_keys.value)} "
+                    "is missing, and no value network was provided."
+                )
+
+        done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
+
+        # Broadcast team-shared signals along the agent dim if needed.
+        reward = self._broadcast_to_agents(reward, value, self.agent_dim)
+        done = self._broadcast_to_agents(done, value, self.agent_dim)
+        terminated = self._broadcast_to_agents(terminated, value, self.agent_dim)
+
+        time_dim = self._get_time_dim(time_dim, tensordict)
+        if self.auto_reset_env:
+            truncated = tensordict.get(("next", "truncated"))
+            truncated = self._broadcast_to_agents(truncated, value, self.agent_dim)
+            if truncated.any():
+                reward = reward + gamma * value * truncated
+
+        adv, value_target = vec_generalized_advantage_estimate(
+            gamma,
+            lmbda,
+            value,
+            next_value,
+            reward,
+            done=done,
+            terminated=terminated if not self.auto_reset_env else done,
+            time_dim=time_dim,
+        )
+
+        if self.average_gae:
+            # Normalise over batch+time only, leaving agent dim independent.
+            agent_dim = (
+                self.agent_dim if self.agent_dim >= 0 else adv.ndim + self.agent_dim
+            )
+            reduce_dims = [d for d in range(adv.ndim) if d != agent_dim]
+            loc = adv.mean(dim=reduce_dims, keepdim=True)
+            scale = adv.std(dim=reduce_dims, keepdim=True).clamp_min(1e-4)
+            adv = (adv - loc) / scale
+
+        tensordict.set(self.tensor_keys.advantage, adv)
+        tensordict.set(self.tensor_keys.value_target, value_target)
+        return tensordict
+
+
 class VTrace(ValueEstimatorBase):
     """A class wrapper around V-Trace estimate functional.
 
