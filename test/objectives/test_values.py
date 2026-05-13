@@ -214,8 +214,12 @@ class TestValues:
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     @pytest.mark.parametrize("module", ["lstm", "gru"])
-    def test_gae_recurrent(self, module):
-        # Checks that shifted=True and False provide the same result in GAE when an LSTM is used
+    @pytest.mark.parametrize("vectorized", [False, True])
+    def test_gae_recurrent(self, module, vectorized):
+        # Checks that shifted=True and False produce the same advantages
+        # when an RNN value net is used, across both vectorized and
+        # non-vectorized GAE — vectorized and shifted are orthogonal and
+        # should all agree.
         env = SerialEnv(
             2,
             [
@@ -268,6 +272,7 @@ class TestValues:
             lmbda=0.99,
             value_network=value_net,
             shifted=True,
+            vectorized=vectorized,
         )
         with set_recurrent_mode(True):
             r0 = gae_shifted(vals.copy())
@@ -278,6 +283,7 @@ class TestValues:
             lmbda=0.99,
             value_network=value_net,
             shifted=False,
+            vectorized=vectorized,
             deactivate_vmap=True,
         )
         with pytest.raises(
