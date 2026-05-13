@@ -171,6 +171,58 @@ class TestValues:
         torch.testing.assert_close(vt[..., -1, :], reward[..., -1, :])
         torch.testing.assert_close(adv[..., -1, :], reward[..., -1, :] - v_s)
 
+    @pytest.mark.parametrize(
+        "estimator_cls,kwargs",
+        [
+            (TD0Estimator, {"gamma": 0.9}),
+            (TD1Estimator, {"gamma": 0.9}),
+            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.95}),
+            (GAE, {"gamma": 0.9, "lmbda": 0.95}),
+        ],
+    )
+    def test_missing_next_obs_compact_shifted_is_safe(self, estimator_cls, kwargs):
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1, bias=False),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        B, T, F = 2, 5, 3
+        obs = torch.randn(B, T, F)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, 2] = True
+        done[:, -1] = True
+        reward = torch.ones(B, T, 1)
+        td_compact = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        )
+
+        next_obs = torch.empty_like(obs)
+        next_obs[:, :-1] = obs[:, 1:]
+        next_obs[:, -1] = float("nan")
+        next_obs[done.expand_as(next_obs)] = float("nan")
+        td_reference = td_compact.clone()
+        td_reference["next", "obs"] = next_obs
+
+        est = estimator_cls(**kwargs, value_network=value_net, shifted=True)
+        td_actual = td_compact.clone()
+        actual = est(td_actual)
+        expected = est(td_reference.clone())
+
+        assert td_actual.get(("next", "obs"), default=None) is None
+        torch.testing.assert_close(actual["advantage"], expected["advantage"])
+        torch.testing.assert_close(actual["value_target"], expected["value_target"])
+        assert torch.isfinite(actual["advantage"]).all()
+        assert torch.isfinite(actual["value_target"]).all()
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):
 

@@ -431,7 +431,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @staticmethod
     def _sanitize_next_obs_nan(
-        data: TensorDictBase, in_keys: list[NestedKey]
+        data: TensorDictBase,
+        in_keys: list[NestedKey],
     ) -> TensorDictBase:
         """Replace ``NaN`` entries in ``("next", k)`` with the corresponding root ``k``.
 
@@ -473,6 +474,23 @@ class ValueEstimatorBase(TensorDictModuleBase):
             data.set(next_k, torch.where(nan_mask, root, nxt))
         return data
 
+    @staticmethod
+    def _fill_missing_next_inputs(
+        next_data: TensorDictBase, root_data: TensorDictBase, in_keys: list[NestedKey]
+    ) -> TensorDictBase:
+        copied = False
+        for key in in_keys:
+            if next_data.get(key, default=None) is not None:
+                continue
+            value = root_data.get(key, default=None)
+            if value is None:
+                continue
+            if not copied:
+                next_data = next_data.copy()
+                copied = True
+            next_data.set(key, value)
+        return next_data
+
     def _call_value_nets(
         self,
         data: TensorDictBase,
@@ -488,6 +506,18 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if value_net is None:
             value_net = self.value_network
         in_keys = value_net.in_keys
+        if single_call:
+            try:
+                ndim = list(data.names).index("time") + 1
+            except ValueError:
+                if rl_warnings():
+                    logger.warning(
+                        "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
+                        "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
+                    )
+                ndim = data.ndim
+        else:
+            ndim = None
         data = self._sanitize_next_obs_nan(data, in_keys)
 
         def _call_value_net(data_in: TensorDictBase) -> torch.Tensor:
@@ -505,15 +535,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
             #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
             #  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data
             #  accordingly and process each of them independently.
-            try:
-                ndim = list(data.names).index("time") + 1
-            except ValueError:
-                if rl_warnings():
-                    logger.warning(
-                        "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
-                        "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
-                    )
-                ndim = data.ndim
             data_copy = data.copy()
             # we are going to modify the done so let's clone it
             done = data_copy["next", "done"].clone()
@@ -555,11 +576,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 # To get the indices of the extra data, we can mask indices with done_view and add 1
                 indices_interleaved = indices[done_view] + 1
                 # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
-                data_in[indices_interleaved] = (
-                    data_copy_view[done_view]
-                    .get("next")
-                    .select(*in_keys, value_key, strict=False)
+                root_done_data = data_copy_view[done_view]
+                next_done_data = root_done_data.get("next").select(
+                    *in_keys, value_key, strict=False
                 )
+                next_done_data = self._fill_missing_next_inputs(
+                    next_done_data, root_done_data, in_keys
+                )
+                data_in[indices_interleaved] = next_done_data
                 if next_params is not None and next_params is not params:
                     raise ValueError(
                         "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
