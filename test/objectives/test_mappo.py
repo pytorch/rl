@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Tests for MAPPOLoss, IPPOLoss, MultiAgentGAE, and ValueNorm.
+"""Tests for MAPPOLoss, IPPOLoss, MultiAgentGAE, and the ValueNorm family.
 
 These tests use synthetic tensordicts so they don't depend on any external
 MARL env (VMAS / PettingZoo). They follow the layout pattern from
@@ -16,7 +16,13 @@ import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 
-from torchrl.modules import MultiAgentMLP, ProbabilisticActor, ValueNorm
+from torchrl.modules import (
+    MultiAgentMLP,
+    PopArtValueNorm,
+    ProbabilisticActor,
+    RunningValueNorm,
+    ValueNorm,
+)
 from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
 from torchrl.objectives import IPPOLoss, MAPPOLoss
 from torchrl.objectives.utils import ValueEstimators
@@ -154,14 +160,20 @@ class TestMultiAgentGAE:
 
 
 # --------------------------------------------------------------------------
-# ValueNorm
+# ValueNorm — abstract base + the two concrete implementations
 # --------------------------------------------------------------------------
 
 
-class TestValueNorm:
+class TestValueNormBase:
+    def test_abstract_base_is_not_instantiable(self):
+        with pytest.raises(TypeError):
+            ValueNorm(shape=1)  # type: ignore[abstract]
+
+
+class TestPopArtValueNorm:
     def test_running_stats_converge(self):
         torch.manual_seed(0)
-        vn = ValueNorm(shape=1)
+        vn = PopArtValueNorm(shape=1)
         x = torch.randn(4096, 1) * 5.0 + 2.0
         for _ in range(200):
             vn.update(x)
@@ -171,7 +183,7 @@ class TestValueNorm:
 
     def test_denormalize_inverts_normalize(self):
         torch.manual_seed(0)
-        vn = ValueNorm(shape=1)
+        vn = PopArtValueNorm(shape=1)
         x = torch.randn(512, 1) * 3.0 + 1.0
         for _ in range(50):
             vn.update(x)
@@ -180,9 +192,44 @@ class TestValueNorm:
         torch.testing.assert_close(recovered, y, rtol=1e-4, atol=1e-4)
 
     def test_bad_shape_raises(self):
-        vn = ValueNorm(shape=1)
+        vn = PopArtValueNorm(shape=1)
         with pytest.raises(ValueError, match="trailing shape"):
             vn.update(torch.randn(4, 8))  # trailing 8 != 1
+
+
+class TestRunningValueNorm:
+    def test_running_stats_converge(self):
+        """Exact running stats should be very tight even after few updates."""
+        torch.manual_seed(0)
+        vn = RunningValueNorm(shape=1)
+        x = torch.randn(4096, 1) * 5.0 + 2.0
+        for _ in range(20):
+            vn.update(x)
+        assert abs(vn.mean.item() - 2.0) < 0.1
+        assert abs(vn._var().sqrt().item() - 5.0) < 0.1
+
+    def test_denormalize_inverts_normalize(self):
+        torch.manual_seed(0)
+        vn = RunningValueNorm(shape=1)
+        for _ in range(10):
+            vn.update(torch.randn(256, 1) * 3.0 + 1.0)
+        y = torch.randn(64, 1) * 3.0 + 1.0
+        recovered = vn.denormalize(vn.normalize(y))
+        torch.testing.assert_close(recovered, y, rtol=1e-4, atol=1e-4)
+
+    def test_no_decay(self):
+        """RunningValueNorm should not be biased by sample order (no EMA)."""
+        torch.manual_seed(0)
+        vn = RunningValueNorm(shape=1)
+        # Feed two batches with very different scales; running stats should
+        # land at the true combined mean rather than getting dominated by
+        # whichever batch came last (which is what an EMA would do).
+        a = torch.full((1000, 1), 1.0)
+        b = torch.full((1000, 1), 5.0)
+        vn.update(a)
+        vn.update(b)
+        # Combined mean of 1000 ones + 1000 fives = 3.0 exactly.
+        assert abs(vn.mean.item() - 3.0) < 1e-4
 
 
 # --------------------------------------------------------------------------
@@ -254,11 +301,11 @@ class TestMAPPOLoss:
         assert out["loss_objective"].shape == torch.Size([])
 
     def test_value_norm_round_trip(self):
-        """With ValueNorm, critic loss should remain bounded across many updates."""
+        """With PopArtValueNorm, critic loss should remain bounded across many updates."""
         torch.manual_seed(0)
         actor = _make_actor()
         critic = _make_critic(centralized=True)
-        vn = ValueNorm(shape=1)
+        vn = PopArtValueNorm(shape=1)
         loss_mod = MAPPOLoss(actor, critic, value_norm=vn)
         loss_mod.set_keys(value=("agents", "state_value"), action=("agents", "action"))
 

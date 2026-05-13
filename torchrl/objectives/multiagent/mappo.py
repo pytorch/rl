@@ -148,8 +148,10 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
     - ``normalize_advantage_exclude_dims`` defaults to ``(-2,)`` so the agent
       dim is excluded when standardising advantages.
     - An optional :class:`~torchrl.modules.ValueNorm` can be supplied via
-      ``value_norm=ValueNorm(shape=1)`` to stabilise the critic loss; the
-      MAPPO paper reports this is load-bearing on SMAC (their Table 13).
+      ``value_norm=PopArtValueNorm(shape=1)`` to stabilise the critic loss;
+      the MAPPO paper reports this is load-bearing on SMAC (their Table 13).
+      :class:`~torchrl.modules.RunningValueNorm` is a no-decay alternative
+      for stationary reward scales.
 
     Args:
         actor_network (ProbabilisticTensorDictSequential): per-agent policy
@@ -195,7 +197,7 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.modules import (
-        ...     MultiAgentMLP, ProbabilisticActor, ValueNorm,
+        ...     MultiAgentMLP, PopArtValueNorm, ProbabilisticActor,
         ... )
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
         >>> from torchrl.objectives.multiagent import MAPPOLoss
@@ -230,7 +232,7 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         ...     in_keys=[("agents", "observation")],
         ...     out_keys=[("agents", "state_value")],
         ... )
-        >>> loss = MAPPOLoss(actor, critic, value_norm=ValueNorm(shape=1))
+        >>> loss = MAPPOLoss(actor, critic, value_norm=PopArtValueNorm(shape=1))
         >>> loss.set_keys(value=("agents", "state_value"), action=("agents", "action"))
     """
 

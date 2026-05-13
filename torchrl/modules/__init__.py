@@ -100,7 +100,7 @@ from .tensordict_module.exploration import (
     set_exploration_modules_spec_from_env,
 )
 from .utils import get_env_transforms_from_module, get_primers_from_module
-from .value_norm import ValueNorm
+from .value_norm import PopArtValueNorm, RunningValueNorm, ValueNorm
 from .planners import CEMPlanner, MPCPlannerBase, MPPIPlanner  # usort:skip
 from .mcts import (  # usort:skip
     EXP3Score,
@@ -176,6 +176,7 @@ __all__ = [
     "Ordinal",
     "OrnsteinUhlenbeckProcessModule",
     "OrnsteinUhlenbeckProcessWrapper",
+    "PopArtValueNorm",
     "ProbabilisticActor",
     "PUCTScore",
     "QMixer",
@@ -187,6 +188,7 @@ __all__ = [
     "RSSMPrior",
     "RSSMRollout",
     "ReparamGradientStrategy",
+    "RunningValueNorm",
     "SafeModule",
     "SafeProbabilisticModule",
     "SafeProbabilisticTensorDictSequential",

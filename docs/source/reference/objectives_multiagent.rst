@@ -27,9 +27,11 @@ that:
   computing returns;
 - default ``normalize_advantage_exclude_dims`` to ``(-2,)`` so the agent dim
   is excluded from advantage standardisation;
-- optionally accept a :class:`~torchrl.modules.ValueNorm` (PopArt-style
-  running normaliser) to stabilise the critic loss when reward scales drift
-  during training — the trick the MAPPO paper credits for its strong SMAC
+- optionally accept a :class:`~torchrl.modules.ValueNorm` subclass — either
+  :class:`~torchrl.modules.PopArtValueNorm` (EMA, recommended for drifting
+  reward scales) or :class:`~torchrl.modules.RunningValueNorm` (exact
+  Welford running stats, recommended for stationary scales) — to stabilise
+  the critic loss. The MAPPO paper credits this trick for its strong SMAC
   results.
 
 See ``sota-implementations/multiagent/mappo_ippo.py`` for a hydra-configured

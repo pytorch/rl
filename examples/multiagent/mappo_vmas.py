@@ -35,7 +35,12 @@ from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs import RewardSum, TransformedEnv
-from torchrl.modules import MultiAgentMLP, ProbabilisticActor, TanhNormal, ValueNorm
+from torchrl.modules import (
+    MultiAgentMLP,
+    PopArtValueNorm,
+    ProbabilisticActor,
+    TanhNormal,
+)
 from torchrl.objectives import IPPOLoss, MAPPOLoss
 
 
@@ -127,7 +132,9 @@ def main(args: argparse.Namespace) -> None:
     critic = make_critic(env, centralized=centralised)
 
     LossCls = MAPPOLoss if args.algo == "mappo" else IPPOLoss
-    value_norm = ValueNorm(shape=1, device=device) if args.algo == "mappo" else None
+    value_norm = (
+        PopArtValueNorm(shape=1, device=device) if args.algo == "mappo" else None
+    )
     loss_module = LossCls(
         actor_network=actor,
         critic_network=critic,
