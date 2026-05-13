@@ -57,6 +57,28 @@ def _check_triton_available() -> bool:
 _has_triton = _check_triton_available()
 
 
+def _canonical_stride(shape: typing.Sequence[int]) -> tuple[int, ...]:
+    strides: list[int] = []
+    running = 1
+    for size in reversed(shape):
+        strides.append(running)
+        running *= size
+    strides.reverse()
+    return tuple(strides)
+
+
+def _canonical_contiguous(value: Tensor) -> Tensor:
+    # torch._higher_order_ops.scan and the triton RNN kernels read strides
+    # directly and reject inputs whose strides don't match the canonical
+    # row-major layout. A size-1 dim left behind by indexing+transposing a
+    # hidden-state buffer can pass is_contiguous() while having non-canonical
+    # strides — re-materialize then.
+    if tuple(value.stride()) == _canonical_stride(value.shape):
+        return value
+    result = torch.empty_like(value, memory_format=torch.contiguous_format)
+    return result.copy_(value)
+
+
 @implement_for("torch", None, "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:
     raise NotImplementedError(
@@ -1029,8 +1051,8 @@ class LSTMModule(ModuleBase):
         _hidden0_in = hidden0_in[..., 0, :, :]
         _hidden1_in = hidden1_in[..., 0, :, :]
         hidden = (
-            _hidden0_in.transpose(-3, -2).contiguous(),
-            _hidden1_in.transpose(-3, -2).contiguous(),
+            _canonical_contiguous(_hidden0_in.transpose(-3, -2)),
+            _canonical_contiguous(_hidden1_in.transpose(-3, -2)),
         )
 
         if is_init is not None and backend == "triton":
@@ -1110,8 +1132,8 @@ class LSTMModule(ModuleBase):
                 b_ih = zeros if b_ih is None else b_ih
                 b_hh = zeros if b_hh is None else b_hh
 
-            hidden_per_step = hidden0_in[..., layer, :]
-            cell_per_step = hidden1_in[..., layer, :]
+            hidden_per_step = _canonical_contiguous(hidden0_in[..., layer, :])
+            cell_per_step = _canonical_contiguous(hidden1_in[..., layer, :])
 
             h_steps, c_steps, _, _ = lstm_triton(
                 layer_input,
@@ -1228,19 +1250,23 @@ class LSTMModule(ModuleBase):
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.lstm.num_layers):
             weights = self.lstm._all_weights[layer]
-            weight_ihs.append(getattr(self.lstm, weights[0]).clone())
-            weight_hhs.append(getattr(self.lstm, weights[1]).clone())
+            weight_ihs.append(getattr(self.lstm, weights[0]))
+            weight_hhs.append(getattr(self.lstm, weights[1]))
             bias_ihs.append(
-                getattr(self.lstm, weights[2]).clone() if self.lstm.bias else None
+                getattr(self.lstm, weights[2]) if self.lstm.bias else None
             )
             bias_hhs.append(
-                getattr(self.lstm, weights[3]).clone() if self.lstm.bias else None
+                getattr(self.lstm, weights[3]) if self.lstm.bias else None
             )
 
         input = input.transpose(0, 1)
         is_init = is_init.transpose(0, 1)
-        reset_hidden0 = hidden0_in.transpose(0, 1).transpose(-3, -2).contiguous()
-        reset_hidden1 = hidden1_in.transpose(0, 1).transpose(-3, -2).contiguous()
+        reset_hidden0 = _canonical_contiguous(
+            hidden0_in.transpose(0, 1).transpose(-3, -2)
+        )
+        reset_hidden1 = _canonical_contiguous(
+            hidden1_in.transpose(0, 1).transpose(-3, -2)
+        )
         num_layers = self.lstm.num_layers
 
         def step(carry, inputs):
@@ -1266,8 +1292,14 @@ class LSTMModule(ModuleBase):
                 new_h.append(h_new)
                 new_c.append(c_new)
                 x_t = h_new
-            new_h = torch.stack(new_h, 0).clone()
-            new_c = torch.stack(new_c, 0).clone()
+            # torch.stack already allocates a fresh tensor, so the carry
+            # outputs need no extra clone. The per-step outputs are derived
+            # from the carry via view-style ops (transpose+flatten), which
+            # scan's HOP tracer treats as aliasing the carry even though
+            # they copy at runtime — clone these and x_t (which aliases the
+            # last layer's pre-stack hidden) to break the aliasing edge.
+            new_h = torch.stack(new_h, 0)
+            new_c = torch.stack(new_c, 0)
             hidden0_out = new_h.transpose(0, 1).flatten(1).clone()
             hidden1_out = new_c.transpose(0, 1).flatten(1).clone()
             return (new_h, new_c), (x_t.clone(), hidden0_out, hidden1_out)
@@ -2179,7 +2211,7 @@ class GRUModule(ModuleBase):
 
         # we only need the first hidden state
         _hidden_in = hidden_in[:, 0]
-        hidden = _hidden_in.transpose(-3, -2).contiguous()
+        hidden = _canonical_contiguous(_hidden_in.transpose(-3, -2))
 
         if is_init is not None and backend == "triton":
             return self._gru_triton_with_resets(input, hidden_in, is_init)
@@ -2245,7 +2277,7 @@ class GRUModule(ModuleBase):
                 b_ih = zeros if b_ih is None else b_ih
                 b_hh = zeros if b_hh is None else b_hh
 
-            hidden_per_step = hidden_in[..., layer, :]
+            hidden_per_step = _canonical_contiguous(hidden_in[..., layer, :])
             h_steps, _ = gru_triton(
                 layer_input,
                 hidden_per_step,
@@ -2337,18 +2369,18 @@ class GRUModule(ModuleBase):
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
-            weight_ihs.append(getattr(self.gru, weights[0]).clone())
-            weight_hhs.append(getattr(self.gru, weights[1]).clone())
+            weight_ihs.append(getattr(self.gru, weights[0]))
+            weight_hhs.append(getattr(self.gru, weights[1]))
             bias_ihs.append(
-                getattr(self.gru, weights[2]).clone() if self.gru.bias else None
+                getattr(self.gru, weights[2]) if self.gru.bias else None
             )
             bias_hhs.append(
-                getattr(self.gru, weights[3]).clone() if self.gru.bias else None
+                getattr(self.gru, weights[3]) if self.gru.bias else None
             )
 
         input = input.transpose(0, 1)
         is_init = is_init.transpose(0, 1)
-        reset_hidden = hidden_in.permute(1, 2, 0, 3).contiguous()
+        reset_hidden = _canonical_contiguous(hidden_in.permute(1, 2, 0, 3))
         num_layers = self.gru.num_layers
 
         def step(carry, inputs):
@@ -2369,9 +2401,12 @@ class GRUModule(ModuleBase):
                 )
                 new_h.append(h_new)
                 x_t = h_new
-            # scan returns both carry and per-step outputs; clone to avoid
-            # aliasing between those two pytrees under torch.compile.
-            new_h = torch.stack(new_h, 0).clone()
+            # torch.stack allocates a fresh tensor, so the carry needs no
+            # extra clone. The per-step output is derived from the carry
+            # via transpose+flatten (view-style at the HOP tracer level
+            # even though it copies at runtime) — clone it and x_t to
+            # break the carry/output aliasing scan would otherwise flag.
+            new_h = torch.stack(new_h, 0)
             hidden_out = new_h.transpose(0, 1).flatten(1).clone()
             return new_h, (x_t.clone(), hidden_out)
 
