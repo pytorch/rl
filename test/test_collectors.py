@@ -1425,6 +1425,119 @@ if __name__ == "__main__":
             root_shifted = ref_data.get(k)[..., 1:, :]
             torch.testing.assert_close(ref_next[mask], root_shifted[mask])
 
+    def test_final_obs_requires_compact_obs(self):
+        """``final_obs=True`` without ``compact_obs=True`` must raise."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        with pytest.raises(ValueError, match="requires compact_obs=True"):
+            Collector(
+                create_env_fn=make_env,
+                policy=RandomPolicy(make_env().action_spec),
+                frames_per_batch=10,
+                total_frames=10,
+                compact_obs=False,
+                final_obs=True,
+            )
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_final_obs_matches_compact_off(self, use_buffers):
+        """``final_obs=True`` carries the same boundary obs as a non-compact run.
+
+        Runs two rollouts with identical seeds: one with
+        ``compact_obs=False`` (full ``('next', obs)`` retained at every step)
+        and one with ``compact_obs=True, final_obs=True`` (boundary obs
+        stored under ``('final', obs)`` as
+        :class:`~tensordict.UnbatchedTensor`). The two must agree on the
+        boundary obs (non-done envs only — at done envs the bootstrap is
+        masked downstream so the value there is unconstrained).
+        """
+        from tensordict import UnbatchedTensor
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        dummy_env = make_env()
+        obs_keys = list(dummy_env._observation_keys_step_mdp)
+        dummy_env.close()
+
+        def run(compact, final):
+            torch.manual_seed(0)
+            return Collector(
+                create_env_fn=make_env,
+                policy=RandomPolicy(make_env().action_spec),
+                frames_per_batch=20,
+                total_frames=20,
+                use_buffers=use_buffers,
+                compact_obs=compact,
+                final_obs=final,
+            )
+
+        ref = run(False, False)
+        ref_data = next(iter(ref))
+        ref.shutdown()
+        del ref
+
+        comp = run(True, True)
+        comp_data = next(iter(comp))
+        comp.shutdown()
+        del comp
+
+        # Batch shape preserved (no time dim leakage from the UnbatchedTensor).
+        assert comp_data.batch_size == ref_data.batch_size
+
+        # ('final', k) is present and is an UnbatchedTensor.
+        for k in obs_keys:
+            full_final = ("final", *k) if isinstance(k, tuple) else ("final", k)
+            assert full_final in comp_data.keys(True, True), (
+                f"missing {full_final}"
+            )
+            val = comp_data.get(full_final)
+            assert isinstance(val, UnbatchedTensor), type(val)
+
+            # Compare against the reference's ('next', k) at the last step,
+            # masked to non-done envs.
+            full_next = ("next", *k) if isinstance(k, tuple) else ("next", k)
+            ref_last_next = ref_data.get(full_next)[..., -1, :]
+            done_last = ref_data.get(("next", "done"))[..., -1, :].squeeze(-1)
+            mask = ~done_last
+            torch.testing.assert_close(val[mask], ref_last_next[mask])
+
+    def test_final_obs_unbatched_survives_indexing(self):
+        """The ``("final", obs)`` UnbatchedTensor must not collapse on reshape.
+
+        Closes (a): if the leaf were a regular tensor, indexing or reshaping
+        the rollout along the time axis would either drop the time dim or
+        propagate a shape mismatch into a contiguous-storage replay buffer.
+        """
+        from tensordict import UnbatchedTensor
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            compact_obs=True,
+            final_obs=True,
+        )
+        data = next(iter(c))
+        c.shutdown()
+
+        original = data.get(("final", "observation"))
+        # Slicing along time must preserve the same underlying tensor.
+        sliced = data[..., :5].get(("final", "observation"))
+        assert isinstance(sliced, UnbatchedTensor)
+        assert torch.equal(original, sliced)
+        # exclude("final") must yield a td whose batch shape reshapes cleanly.
+        without = data.exclude("final")
+        assert "final" not in without.keys()
+        flat = without.reshape(-1)
+        assert flat.batch_size.numel() == 20
+
     @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
     def test_initial_obs_consistency(self, env_class, seed=1):
         # non regression test on #938
