@@ -446,16 +446,33 @@ jobs:
 
           # Update versions.html if it exists
           if [[ -f "versions.html" ]]; then
-            # Update the "(stable release)" marker
-            # Remove old stable marker
+            # Remove the old stable marker from whichever version currently has it
             sed -i 's/ (stable release)//g' versions.html
 
-            # Add new stable marker to the current version
+            # Insert a new <li> entry for this version if it's not already listed.
+            # Anchor the insertion right after the "main (unstable)" <li>...</li>
+            # block so the newest version sits at the top of the dropdown.
+            if ! grep -q "href=\"$VERSION_MAJOR_MINOR/\"" versions.html; then
+              awk -v ver="$VERSION_MAJOR_MINOR" '
+                { print }
+                /href="main\/">main \(unstable\)<\/a>/ { in_main = 1; next }
+                in_main && /<\/li>/ {
+                  print "        <li class=\"toctree-l1\">"
+                  print "          <a class=\"reference internal\" href=\"" ver "/\">v" ver "</a>"
+                  print "        </li>"
+                  in_main = 0
+                }
+              ' versions.html > versions.html.new && mv versions.html.new versions.html
+              echo "Inserted v$VERSION_MAJOR_MINOR entry into versions.html"
+            fi
+
+            # Add the "(stable release)" marker to this version's entry
             sed -i "s|href=\"$VERSION_MAJOR_MINOR/\">v$VERSION_MAJOR_MINOR|href=\"$VERSION_MAJOR_MINOR/\">v$VERSION_MAJOR_MINOR (stable release)|g" versions.html
 
-            # Check if this version is in versions.html
-            if ! grep -q "\"$VERSION_MAJOR_MINOR\"" versions.html; then
-              echo "::notice::Version $VERSION_MAJOR_MINOR not in versions.html, may need manual update"
+            # Sanity check: the entry must exist now
+            if ! grep -q "href=\"$VERSION_MAJOR_MINOR/\"" versions.html; then
+              echo "::error::Failed to insert v$VERSION_MAJOR_MINOR into versions.html"
+              exit 1
             fi
           fi
 
