@@ -360,7 +360,9 @@ class MaskedCategorical(D.Categorical):
                         original_value_shape = value.shape
                         value = value.flatten()
                     logits = logits.unsqueeze(0).expand(value.shape + logits.shape)
-                result = -torch.nn.functional.cross_entropy(logits, value, reduction="none")
+                result = -torch.nn.functional.cross_entropy(
+                    logits, value, reduction="none"
+                )
                 if original_value_shape is not None:
                     result = result.unflatten(0, original_value_shape)
             else:
