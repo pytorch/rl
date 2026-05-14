@@ -440,6 +440,7 @@ def _make_fake_training_batch(
             "policy": torch.zeros(*batch_shape, obs_dim, device=device),
             "action": torch.zeros(*batch_shape, action_dim, device=device),
             "sample_log_prob": torch.zeros(batch_shape, device=device),
+            "action_log_prob": torch.zeros(batch_shape, device=device),
             "advantage": torch.zeros(feature_shape, device=device),
             "value_target": torch.zeros(feature_shape, device=device),
             "recurrent_state_h": torch.zeros(recurrent_shape, device=device),
