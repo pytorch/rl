@@ -223,6 +223,37 @@ class TestValues:
         assert torch.isfinite(actual["advantage"]).all()
         assert torch.isfinite(actual["value_target"]).all()
 
+    def test_shifted_gae_accepts_noncanonical_strides(self):
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1, bias=False),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        B, T, F = 2, 5, 3
+        obs = torch.randn(B, T, F)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, -1] = True
+        reward = torch.ones(B, T, 1)
+        td = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "obs": torch.randn(B, T, F),
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        ).transpose(0, 1)
+
+        assert not td["obs"].is_contiguous()
+        est = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=True)
+        out = est(td)
+        assert torch.isfinite(out["advantage"]).all()
+        assert torch.isfinite(out["value_target"]).all()
+
     @pytest.mark.parametrize(
         "estimator_cls,kwargs",
         [
@@ -301,17 +332,15 @@ class TestValues:
         # Must match the non-compact reference exactly at the boundary
         # (and everywhere else).
         torch.testing.assert_close(out_compact["advantage"], out_ref["advantage"])
-        torch.testing.assert_close(
-            out_compact["value_target"], out_ref["value_target"]
-        )
+        torch.testing.assert_close(out_compact["value_target"], out_ref["value_target"])
 
         # Drop must have happened — the rollout is now safe to extend into a
         # contiguous-storage RB.
         out_inplace = td_compact.clone()
         est(out_inplace)
-        assert "final" not in out_inplace.keys(), (
-            "('final', ...) should have been consumed and dropped"
-        )
+        assert (
+            "final" not in out_inplace.keys()
+        ), "('final', ...) should have been consumed and dropped"
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):

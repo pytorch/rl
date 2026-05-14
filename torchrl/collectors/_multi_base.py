@@ -1335,6 +1335,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
+                    "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
@@ -2079,6 +2080,25 @@ also that the state dict is synchronised across processes if needed."""
             # Return cached weights for this device
             return self._policy_weights_dict.get(policy_device)
         return None
+
+    def _maybe_fallback_update(
+        self,
+        policy_or_weights: TensorDictBase | nn.Module | dict | None = None,
+        *,
+        model_id: str | None = None,
+    ) -> None:
+        if any(self.policy_factory):
+            raise RuntimeError(
+                "Cannot update weights for a multiprocess collector built with "
+                "`policy_factory` unless `weight_sync_schemes` or `weight_updater` "
+                "is configured. Pass a central `policy` with a weight sync scheme, "
+                "or pass an explicit updater."
+            )
+        if policy_or_weights is not None:
+            raise RuntimeError(
+                "Cannot update weights for a multiprocess collector without "
+                "`weight_sync_schemes` or `weight_updater`."
+            )
 
     def _weight_update_impl(
         self,

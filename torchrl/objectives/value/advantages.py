@@ -527,12 +527,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if B_total == 0 or T == 0:
             return next_done_data
         device = done_view.device
-        last_step_positions = (
-            torch.arange(B_total, device=device) * T + (T - 1)
-        )
-        last_step_mask_flat = torch.zeros(
-            B_total * T, dtype=torch.bool, device=device
-        )
+        last_step_positions = torch.arange(B_total, device=device) * T + (T - 1)
+        last_step_mask_flat = torch.zeros(B_total * T, dtype=torch.bool, device=device)
         last_step_mask_flat[last_step_positions] = True
         last_step_in_done = last_step_mask_flat[done_view]
         if not bool(last_step_in_done.any()):
@@ -626,61 +622,59 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 truncated[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
             data_copy["next", "done"] = done
             data_copy["next", "truncated"] = truncated
-            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
-            with data_copy.view(-1) as data_copy_view:
-                # Interleave next data when done
-                data_copy_select = data_copy_view.select(
-                    *in_keys, value_key, strict=False
+            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states.
+            # Use reshape, not view: replay-buffer and memmap reads can expose non-canonical strides.
+            data_copy_view = data_copy.reshape(-1)
+            # Interleave next data when done
+            data_copy_select = data_copy_view.select(*in_keys, value_key, strict=False)
+            total_elts = (
+                data_copy_view.shape[0] + data_copy_view["next", "done"].sum().item()
+            )
+            data_in = data_copy_select.new_zeros((total_elts,))
+            # we can get the indices of non-done data by adding the shifted done cumsum to an arange
+            #    traj = [0, 0, 0, 1, 1, 2, 2]
+            #  arange = [0, 1, 2, 3, 4, 5, 6]
+            #    done = [0, 0, 1, 0, 1, 0, 1]
+            # done_cs = [0, 0, 0, 1, 1, 2, 2]
+            # indices = [0, 1, 2, 4, 5, 7, 8]
+            done_view = data_copy_view["next", "done"]
+            if done_view.shape[-1] == 1:
+                done_view = done_view.squeeze(-1)
+            else:
+                done_view = done_view.any(-1)
+            done_cs = done_view.cumsum(0)
+            done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
+            indices = torch.arange(done_cs.shape[0], device=done_cs.device)
+            indices = indices + done_cs
+            data_in[indices] = data_copy_select
+            # To get the indices of the extra data, we can mask indices with done_view and add 1
+            indices_interleaved = indices[done_view] + 1
+            # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
+            root_done_data = data_copy_view[done_view]
+            next_done_data = root_done_data.get("next").select(
+                *in_keys, value_key, strict=False
+            )
+            next_done_data = self._fill_missing_next_inputs(
+                next_done_data, root_done_data, in_keys
+            )
+            # When the collector ran with `final_obs=True`, override the
+            # synthetic-done last-step entries with the true next obs
+            # carried under ("final", k), otherwise shifted-GAE would
+            # bootstrap with V(s_{T-1}) at every window boundary.
+            next_done_data = self._apply_final_obs_to_next_done(
+                next_done_data, data, done_view, in_keys, ndim
+            )
+            data_in[indices_interleaved] = next_done_data
+            if next_params is not None and next_params is not params:
+                raise ValueError(
+                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
                 )
-                total_elts = (
-                    data_copy_view.shape[0]
-                    + data_copy_view["next", "done"].sum().item()
-                )
-                data_in = data_copy_select.new_zeros((total_elts,))
-                # we can get the indices of non-done data by adding the shifted done cumsum to an arange
-                #    traj = [0, 0, 0, 1, 1, 2, 2]
-                #  arange = [0, 1, 2, 3, 4, 5, 6]
-                #    done = [0, 0, 1, 0, 1, 0, 1]
-                # done_cs = [0, 0, 0, 1, 1, 2, 2]
-                # indices = [0, 1, 2, 4, 5, 7, 8]
-                done_view = data_copy_view["next", "done"]
-                if done_view.shape[-1] == 1:
-                    done_view = done_view.squeeze(-1)
-                else:
-                    done_view = done_view.any(-1)
-                done_cs = done_view.cumsum(0)
-                done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
-                indices = torch.arange(done_cs.shape[0], device=done_cs.device)
-                indices = indices + done_cs
-                data_in[indices] = data_copy_select
-                # To get the indices of the extra data, we can mask indices with done_view and add 1
-                indices_interleaved = indices[done_view] + 1
-                # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
-                root_done_data = data_copy_view[done_view]
-                next_done_data = root_done_data.get("next").select(
-                    *in_keys, value_key, strict=False
-                )
-                next_done_data = self._fill_missing_next_inputs(
-                    next_done_data, root_done_data, in_keys
-                )
-                # When the collector ran with `final_obs=True`, override the
-                # synthetic-done last-step entries with the true next obs
-                # carried under ("final", k) — otherwise shifted-GAE would
-                # bootstrap with V(s_{T-1}) at every window boundary.
-                next_done_data = self._apply_final_obs_to_next_done(
-                    next_done_data, data, done_view, in_keys, ndim
-                )
-                data_in[indices_interleaved] = next_done_data
-                if next_params is not None and next_params is not params:
-                    raise ValueError(
-                        "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
-                    )
-                if params is not None:
-                    with params.to_module(value_net):
-                        value_est = _call_value_net(data_in)
-                else:
+            if params is not None:
+                with params.to_module(value_net):
                     value_est = _call_value_net(data_in)
-                value, value_ = value_est[indices], value_est[indices + 1]
+            else:
+                value_est = _call_value_net(data_in)
+            value, value_ = value_est[indices], value_est[indices + 1]
             value = value.view_as(done)
             value_ = value_.view_as(done)
         else:

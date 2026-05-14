@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import functools
 import sys
+import threading
 
 import pytest
 import torch
@@ -65,7 +66,7 @@ from torchrl.modules.utils import (
     get_primers_from_module,
 )
 from torchrl.modules.utils.utils import _compute_missing_env_transforms
-from torchrl.objectives import ClipPPOLoss, DDPGLoss
+from torchrl.objectives import DDPGLoss
 from torchrl.objectives.value.advantages import GAE
 
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
@@ -793,6 +794,26 @@ class TestLSTMModule:
                 assert not lstm_module.recurrent_mode
             assert lstm_module.recurrent_mode
         assert lstm_module.recurrent_mode is bool(default_val)
+
+    def test_set_recurrent_mode_is_thread_local(self):
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        values = []
+
+        def worker():
+            values.append(lstm_module.recurrent_mode)
+
+        with set_recurrent_mode(True):
+            thread = threading.Thread(target=worker)
+            thread.start()
+            thread.join()
+            assert lstm_module.recurrent_mode
+        assert values == [False]
 
     def test_python_cudnn(self):
         lstm_module = LSTMModule(
@@ -1635,6 +1656,81 @@ class TestLSTMModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("backend", ["scan", "triton"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_backends_non_contiguous_recurrent_inputs(self, backend):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H, L = 4, 6, 3, 8, 1
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            "device": device,
+        }
+        pad_module = LSTMModule(**kwargs)
+        module = LSTMModule(**kwargs, recurrent_backend=backend)
+        module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(T, B, F, device=device)
+        hidden0_source = torch.randn(T, B, L, H, device=device)
+        hidden1_source = torch.randn(T, B, L, H, device=device)
+        is_init_source = torch.zeros(T, B, 1, dtype=torch.bool, device=device)
+        is_init_source[0] = True
+        is_init_source[2, 1] = True
+        is_init_source[4, 3] = True
+
+        def make_data():
+            obs_base = obs_source.detach().clone().requires_grad_()
+            hidden0_base = hidden0_source.detach().clone().requires_grad_()
+            hidden1_base = hidden1_source.detach().clone().requires_grad_()
+            obs = obs_base.transpose(0, 1)
+            hidden0 = hidden0_base.transpose(0, 1)
+            hidden1 = hidden1_base.transpose(0, 1)
+            is_init = is_init_source.transpose(0, 1)
+            assert not obs.is_contiguous()
+            assert not is_init.is_contiguous()
+            return (
+                TensorDict(
+                    {
+                        "obs": obs,
+                        "hidden0": hidden0,
+                        "hidden1": hidden1,
+                        "is_init": is_init,
+                    },
+                    [B, T],
+                ),
+                obs_base,
+                hidden0_base,
+                hidden1_base,
+            )
+
+        pad_data, pad_obs, pad_hidden0, pad_hidden1 = make_data()
+        data, obs, hidden0, hidden1 = make_data()
+        with set_recurrent_mode(True):
+            pad_out = pad_module(pad_data)
+            out = module(data)
+
+        tol = 5e-3
+        for key in ["feat", ("next", "hidden0"), ("next", "hidden1")]:
+            torch.testing.assert_close(pad_out[key], out[key], atol=tol, rtol=tol)
+
+        pad_out["feat"].square().mean().backward()
+        out["feat"].square().mean().backward()
+        torch.testing.assert_close(pad_obs.grad, obs.grad, atol=tol, rtol=tol)
+        torch.testing.assert_close(pad_hidden0.grad, hidden0.grad, atol=tol, rtol=tol)
+        torch.testing.assert_close(pad_hidden1.grad, hidden1.grad, atol=tol, rtol=tol)
+        for (_, pad_param), (_, param) in zip(
+            pad_module.named_parameters(), module.named_parameters()
+        ):
+            torch.testing.assert_close(pad_param.grad, param.grad, atol=tol, rtol=tol)
+
     def test_canonical_contiguous_helper(self):
         # _canonical_contiguous must be a no-op when the input strides match
         # the C-canonical layout, and must materialize a fresh canonical
@@ -1712,6 +1808,46 @@ class TestLSTMModule:
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
     )
+    def test_gru_module_scan_compile_no_aliasing(self):
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 6, 3, 8, 1
+        scan_module = GRUModule(
+            input_size=F_in,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+        )
+
+        obs = torch.randn(B, T, F_in)
+        hidden = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init},
+            [B, T],
+        )
+
+        prev = torch._dynamo.config.capture_scalar_outputs
+        torch._dynamo.config.capture_scalar_outputs = True
+        try:
+
+            @torch.compile(fullgraph=False)
+            def call(td):
+                with set_recurrent_mode(True):
+                    return scan_module(td)
+
+            with torch.no_grad():
+                out = call(data.clone())
+        finally:
+            torch._dynamo.config.capture_scalar_outputs = prev
+        assert "feat" in out.keys(True, True)
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
     def test_lstm_module_three_backends_ppo_advantage_parity(self):
         # End-to-end pin: feeding the LSTM output through a value head and
         # GAE should produce identical advantages across all backends. The
@@ -1720,13 +1856,13 @@ class TestLSTMModule:
         # contract so a regression in either step is caught.
         torch.manual_seed(0)
         B, T, F_in, H, L = 4, 7, 3, 16, 1
-        kwargs = dict(
-            input_size=F_in,
-            hidden_size=H,
-            num_layers=L,
-            in_keys=["obs", "hidden0", "hidden1"],
-            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
-        )
+        kwargs = {
+            "input_size": F_in,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+        }
         pad_module = LSTMModule(**kwargs)
         scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
         scan_module.load_state_dict(pad_module.state_dict())
@@ -1813,13 +1949,13 @@ class TestLSTMModule:
         # Isaac PPO run) must not break the scan backend.
         torch.manual_seed(0)
         B, T, F, H, L = 4, 6, 3, 8, 1
-        kwargs = dict(
-            input_size=F,
-            hidden_size=H,
-            num_layers=L,
-            in_keys=["obs", "hidden0", "hidden1"],
-            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
-        )
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+        }
         pad_module = LSTMModule(**kwargs)
         scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
         scan_module.load_state_dict(pad_module.state_dict())
@@ -1833,9 +1969,7 @@ class TestLSTMModule:
         h_storage = torch.randn(B * L * H)
         # Lay out so that hidden_buf[:, 0] -> [B, L, H] indexing then
         # transposing yields the size-1-dim non-canonical stride pattern.
-        hidden_buf = torch.empty_strided(
-            (B, T, L, H), (L * H, L * H, H, 1)
-        )
+        hidden_buf = torch.empty_strided((B, T, L, H), (L * H, L * H, H, 1))
         hidden_buf.zero_()
         hidden_buf[:, 0] = h_storage.view(B, L, H)
         # sanity check that the runtime path does see a non-canonical view
@@ -2773,6 +2907,71 @@ class TestGRUModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("backend", ["scan", "triton"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_module_backends_non_contiguous_recurrent_inputs(self, backend):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H, L = 4, 6, 3, 8, 1
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+            "device": device,
+        }
+        pad_module = GRUModule(**kwargs)
+        module = GRUModule(**kwargs, recurrent_backend=backend)
+        module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(T, B, F, device=device)
+        hidden_source = torch.randn(T, B, L, H, device=device)
+        is_init_source = torch.zeros(T, B, 1, dtype=torch.bool, device=device)
+        is_init_source[0] = True
+        is_init_source[2, 1] = True
+        is_init_source[4, 3] = True
+
+        def make_data():
+            obs_base = obs_source.detach().clone().requires_grad_()
+            hidden_base = hidden_source.detach().clone().requires_grad_()
+            obs = obs_base.transpose(0, 1)
+            hidden = hidden_base.transpose(0, 1)
+            is_init = is_init_source.transpose(0, 1)
+            assert not obs.is_contiguous()
+            assert not is_init.is_contiguous()
+            return (
+                TensorDict(
+                    {"obs": obs, "hidden": hidden, "is_init": is_init},
+                    [B, T],
+                ),
+                obs_base,
+                hidden_base,
+            )
+
+        pad_data, pad_obs, pad_hidden = make_data()
+        data, obs, hidden = make_data()
+        with set_recurrent_mode(True):
+            pad_out = pad_module(pad_data)
+            out = module(data)
+
+        tol = 5e-3
+        for key in ["feat", ("next", "hidden")]:
+            torch.testing.assert_close(pad_out[key], out[key], atol=tol, rtol=tol)
+
+        pad_out["feat"].square().mean().backward()
+        out["feat"].square().mean().backward()
+        torch.testing.assert_close(pad_obs.grad, obs.grad, atol=tol, rtol=tol)
+        torch.testing.assert_close(pad_hidden.grad, hidden.grad, atol=tol, rtol=tol)
+        for (_, pad_param), (_, param) in zip(
+            pad_module.named_parameters(), module.named_parameters()
+        ):
+            torch.testing.assert_close(pad_param.grad, param.grad, atol=tol, rtol=tol)
+
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
@@ -2781,13 +2980,13 @@ class TestGRUModule:
         # GRU counterpart of test_lstm_module_scan_non_canonical_hidden_strides.
         torch.manual_seed(0)
         B, T, F, H, L = 4, 6, 3, 8, 1
-        kwargs = dict(
-            input_size=F,
-            hidden_size=H,
-            num_layers=L,
-            in_keys=["obs", "hidden"],
-            out_keys=["feat", ("next", "hidden")],
-        )
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+        }
         pad_module = GRUModule(**kwargs)
         scan_module = GRUModule(**kwargs, recurrent_backend="scan")
         scan_module.load_state_dict(pad_module.state_dict())

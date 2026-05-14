@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextvars
 import importlib.metadata
 import typing
 from typing import Any
@@ -1116,7 +1117,8 @@ class LSTMModule(ModuleBase):
                 "Triton LSTM layer composition expects unidirectional weights."
             )
 
-        layer_input = input
+        layer_input = _canonical_contiguous(input)
+        is_init = _canonical_contiguous(is_init)
         hidden0_layers = []
         hidden1_layers = []
         for layer in range(self.lstm.num_layers):
@@ -1266,8 +1268,8 @@ class LSTMModule(ModuleBase):
                 getattr(self.lstm, weights[3]).clone() if self.lstm.bias else None
             )
 
-        input = input.transpose(0, 1)
-        is_init = is_init.transpose(0, 1)
+        input = _canonical_contiguous(input.transpose(0, 1))
+        is_init = _canonical_contiguous(is_init.transpose(0, 1))
         reset_hidden0 = _canonical_contiguous(
             hidden0_in.transpose(0, 1).transpose(-3, -2)
         )
@@ -2269,7 +2271,8 @@ class GRUModule(ModuleBase):
                 "Triton GRU layer composition expects unidirectional weights."
             )
 
-        layer_input = input
+        layer_input = _canonical_contiguous(input)
+        is_init = _canonical_contiguous(is_init)
         hidden_layers = []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
@@ -2388,8 +2391,8 @@ class GRUModule(ModuleBase):
                 getattr(self.gru, weights[3]).clone() if self.gru.bias else None
             )
 
-        input = input.transpose(0, 1)
-        is_init = is_init.transpose(0, 1)
+        input = _canonical_contiguous(input.transpose(0, 1))
+        is_init = _canonical_contiguous(is_init.transpose(0, 1))
         reset_hidden = _canonical_contiguous(hidden_in.permute(1, 2, 0, 3))
         num_layers = self.gru.num_layers
 
@@ -2439,7 +2442,21 @@ class GRUModule(ModuleBase):
 
 
 # Recurrent mode manager
-recurrent_mode_state_manager = _ContextManager()
+class _RecurrentModeContextManager(_ContextManager):
+    def __init__(self):
+        super().__init__()
+        self._context_mode = contextvars.ContextVar(
+            "torchrl_recurrent_mode", default=None
+        )
+
+    def get_mode(self) -> bool | None:
+        return self._context_mode.get()
+
+    def set_mode(self, mode: bool | None) -> None:
+        self._context_mode.set(mode)
+
+
+recurrent_mode_state_manager = _RecurrentModeContextManager()
 
 
 def recurrent_mode() -> bool | None:
