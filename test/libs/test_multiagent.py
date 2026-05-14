@@ -19,7 +19,11 @@ from torch import nn
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.envs.libs.meltingpot import MeltingpotEnv, MeltingpotWrapper
-from torchrl.envs.libs.pettingzoo import _has_pettingzoo, PettingZooEnv
+from torchrl.envs.libs.pettingzoo import (
+    _has_pettingzoo,
+    PettingZooEnv,
+    PettingZooWrapper,
+)
 from torchrl.envs.libs.smacv2 import _has_smacv2, SMACv2Env
 from torchrl.envs.transforms import ActionMask, TransformedEnv
 from torchrl.envs.utils import check_env_specs, MarlGroupMapType
@@ -108,6 +112,90 @@ class TestPettingZoo:
             assert done[
                 ~mask
             ].all()  # When mask is false (dead agent), all agents are done
+
+    def test_action_mask_parallel_dead_agents(self):
+        """Regression test for #3702.
+
+        Parallel env + per-agent action mask + ``done_on_any=False``: when an
+        agent is removed from ``env.agents`` mid-episode, PettingZoo also drops
+        it from the observation dict, so ``_update_action_mask`` must skip
+        agents missing from ``observation_dict`` instead of indexing it blindly.
+        No stock PettingZoo env exercises this combination, so we use a tiny
+        custom ``ParallelEnv``.
+        """
+        import numpy as np
+        from gymnasium import spaces
+        from pettingzoo.utils.env import ParallelEnv
+
+        class _MaskedParallelEnv(ParallelEnv):
+            metadata = {"name": "masked_parallel_v0", "is_parallelizable": True}
+
+            def __init__(self):
+                self.possible_agents = ["a_0", "a_1", "a_2"]
+                self.agents = list(self.possible_agents)
+                self._n_actions = 2
+                self._obs_space = spaces.Dict(
+                    {
+                        "observation": spaces.Box(
+                            low=0.0, high=1.0, shape=(3,), dtype=np.float32
+                        ),
+                        "action_mask": spaces.MultiBinary(self._n_actions),
+                    }
+                )
+                self._act_space = spaces.Discrete(self._n_actions)
+                self._step_count = 0
+
+            def observation_space(self, agent):
+                return self._obs_space
+
+            def action_space(self, agent):
+                return self._act_space
+
+            def _agent_obs(self):
+                return {
+                    "observation": np.zeros(3, dtype=np.float32),
+                    "action_mask": np.ones(self._n_actions, dtype=np.int8),
+                }
+
+            def reset(self, seed=None, options=None):
+                self.agents = list(self.possible_agents)
+                self._step_count = 0
+                obs = {a: self._agent_obs() for a in self.agents}
+                infos = {a: {} for a in self.agents}
+                return obs, infos
+
+            def step(self, actions):
+                self._step_count += 1
+                # Drop a_0 starting from the 2nd step — mirrors PettingZoo's
+                # behavior when an agent terminates: it disappears from
+                # self.agents and from every per-agent dict returned by step.
+                if self._step_count >= 2 and "a_0" in self.agents:
+                    self.agents.remove("a_0")
+                obs = {a: self._agent_obs() for a in self.agents}
+                rewards = {a: 0.0 for a in self.agents}
+                terms = {a: False for a in self.agents}
+                truncs = {a: False for a in self.agents}
+                infos = {a: {} for a in self.agents}
+                return obs, rewards, terms, truncs, infos
+
+        env = PettingZooWrapper(
+            env=_MaskedParallelEnv(),
+            use_mask=True,
+            done_on_any=False,
+            seed=0,
+        )
+        try:
+            assert env.has_action_mask["a"]
+            # Pre-fix this rollout raises KeyError inside _update_action_mask
+            # the first time a_0 is missing from observation_dict.
+            td = env.rollout(max_steps=3, break_when_any_done=False)
+            # a_0 (index 0) is alive in step 1, dead in steps 2 and 3.
+            assert td["next", "a", "mask"][0, 0]
+            assert not td["next", "a", "mask"][1:, 0].any()
+            # The two surviving agents are alive throughout.
+            assert td["next", "a", "mask"][:, 1:].all()
+        finally:
+            env.close()
 
     @pytest.mark.parametrize(
         "wins_player_0",
