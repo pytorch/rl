@@ -191,9 +191,6 @@ linkedin = "https://www.linkedin.com/company/torchrl"
 discord = "https://discord.gg/cZs26Qq3Dd"
 benchmark = "https://docs.pytorch.org/rl/dev/bench/"
 
-[tool.uv]
-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
-
 [tool.setuptools_scm]
 # Use SETUPTOOLS_SCM_PRETEND_VERSION=M.Major.Minor to set the version for stable releases.
 version_scheme = "post-release"

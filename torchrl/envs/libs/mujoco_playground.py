@@ -349,10 +349,6 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
 
     Args:
         env (mujoco_playground._src.mjx_env.MjxEnv): the environment to wrap.
-        categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
-            Defaults to ``False``.
         agent_mapping (:class:`MujocoPlaygroundAgentMapping` or str, optional):
             if provided, the environment is decomposed into a cooperative
             multi-agent task. Can be either a :class:`MujocoPlaygroundAgentMapping`
@@ -449,7 +445,6 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
     def __init__(
         self,
         env=None,
-        categorical_action_encoding: bool = False,
         agent_mapping: MujocoPlaygroundAgentMapping | str | None = None,
         **kwargs,
     ):
@@ -463,7 +458,6 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         if env is not None:
             kwargs["env"] = env
         self._seed_calls_reset = None
-        self._categorical_action_encoding = categorical_action_encoding
         self._agent_mapping = agent_mapping
         super().__init__(**kwargs)
         if not self.device:
@@ -860,10 +854,6 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
             If ``None``, the default configuration is used. Defaults to ``None``.
         config_overrides (dict, optional): overrides to apply on top of ``config``.
             Defaults to ``None``.
-        categorical_action_encoding (bool, optional): if ``True``, categorical
-            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),
-            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).
-            Defaults to ``False``.
         agent_mapping (:class:`MujocoPlaygroundAgentMapping` or str, optional):
             if provided, the environment is decomposed into a cooperative
             multi-agent task. Can be either a :class:`MujocoPlaygroundAgentMapping`
