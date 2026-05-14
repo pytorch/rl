@@ -454,6 +454,7 @@ def _make_fake_training_batch(
                 "done": done.clone(),
                 "terminated": done.clone(),
                 "truncated": done.clone(),
+                "is_init": is_init.clone(),
                 "recurrent_state_h": torch.zeros(recurrent_shape, device=device),
                 "recurrent_state_c": torch.zeros(recurrent_shape, device=device),
             },
