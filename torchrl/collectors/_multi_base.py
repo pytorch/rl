@@ -321,6 +321,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        compact_obs (bool, optional): if ``True``, each worker drops the
+            observation and state keys from the ``("next", ...)`` sub-tensordict
+            before stacking. See
+            :class:`~torchrl.collectors.SyncDataCollector` for details and the
+            pairing with
+            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+            at sampling time.
+            Defaults to ``False``.
         worker_idx (int, optional): the index of the worker.
 
     Examples:
@@ -407,6 +415,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+        compact_obs: bool = False,
     ):
         self.closed = True
         self.worker_idx = worker_idx
@@ -517,6 +526,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
         self.reset_at_each_iter = reset_at_each_iter
         self.postproc = postproc
+        self.compact_obs = bool(compact_obs)
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -1312,6 +1322,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
+                    "compact_obs": self.compact_obs,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,

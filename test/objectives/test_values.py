@@ -104,6 +104,73 @@ class TestValues:
         torch.testing.assert_close(actual["advantage"], expected["advantage"])
         torch.testing.assert_close(actual["value_target"], expected["value_target"])
 
+    @pytest.mark.parametrize(
+        "estimator_cls,kwargs",
+        [
+            (TD0Estimator, {"gamma": 0.9}),
+            (TD1Estimator, {"gamma": 0.9}),
+            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.95}),
+            (GAE, {"gamma": 0.9, "lmbda": 0.95}),
+        ],
+    )
+    @pytest.mark.parametrize("shifted", [False, True])
+    def test_nan_next_obs_at_done_is_safe(self, estimator_cls, kwargs, shifted):
+        """``("next", obs)`` may be ``NaN`` at trajectory ends.
+
+        That happens by design when the buffer is fed by
+        :class:`~torchrl.collectors.SyncDataCollector` configured with
+        ``compact_obs=True`` and rehydrated via
+        :class:`~torchrl.envs.transforms.NextStateReconstructor`. Without the
+        sanitizer in
+        :meth:`~torchrl.objectives.value.advantages.ValueEstimatorBase._call_value_nets`,
+        ``V(NaN) = NaN`` propagates through the TD / GAE kernels because
+        ``0 * NaN = NaN`` in IEEE 754 (the canonical ``(1 - done) * V_next``
+        masking does not save us). Assert that the advantage and value target
+        are finite everywhere, and that the terminated step gets the
+        no-bootstrap target ``reward - V(s)``.
+        """
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1, bias=False),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        B, T, F = 2, 5, 3
+        obs = torch.randn(B, T, F)
+        next_obs = torch.empty(B, T, F)
+        next_obs[:, :-1] = obs[:, 1:]
+        next_obs[:, -1] = float("nan")  # mimic NextStateReconstructor at traj end
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, -1] = True
+        reward = torch.ones(B, T, 1)
+        td = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "obs": next_obs,
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        )
+
+        est = estimator_cls(**kwargs, value_network=value_net, shifted=shifted)
+        out = est(td.clone())
+        adv = out["advantage"]
+        vt = out["value_target"]
+        assert torch.isfinite(adv).all(), f"advantage contains non-finite: {adv}"
+        assert torch.isfinite(vt).all(), f"value_target contains non-finite: {vt}"
+
+        # At the terminated step the bootstrap is masked out: value_target
+        # equals reward (advantage = reward - V(s)). Use the (uncorrupted)
+        # raw value net to compute the expected V(s) at the last step.
+        with torch.no_grad():
+            v_s = value_net(td[..., -1].clone()).get("state_value")
+        torch.testing.assert_close(vt[..., -1, :], reward[..., -1, :])
+        torch.testing.assert_close(adv[..., -1, :], reward[..., -1, :] - v_s)
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):
 

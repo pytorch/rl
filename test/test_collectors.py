@@ -1351,6 +1351,80 @@ if __name__ == "__main__":
         dummy_env.close()
         del collector
 
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            Collector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+        ],
+    )
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_compact_obs_drops_next_obs(self, collector_class, use_buffers):
+        """``compact_obs=True`` drops obs/state keys from ``('next', ...)``.
+
+        Verifies that the rollout output has the observation keys dropped under
+        ``('next', ...)`` while ``('next', 'reward'/'done'/'truncated')`` are
+        preserved and root keys are intact. Also checks the round-trip identity
+        ``data[obs][..., 1:] == ref_data[('next', obs)][..., :-1]`` against a
+        parallel non-compact reference.
+        """
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        dummy_env = make_env()
+        obs_keys = list(dummy_env._observation_keys_step_mdp)
+        state_keys = list(dummy_env._state_keys_step_mdp)
+        assert obs_keys, "test env must expose at least one observation key"
+        dummy_env.close()
+
+        collector_kwargs = {
+            "create_env_fn": make_env,
+            "policy": RandomPolicy(dummy_env.action_spec),
+            "frames_per_batch": 30,
+            "total_frames": 30,
+            "use_buffers": use_buffers,
+        }
+        if collector_class is not Collector:
+            collector_kwargs["create_env_fn"] = [make_env for _ in range(2)]
+            collector_kwargs["frames_per_batch"] = 60
+
+        # Reference: non-compact rollout
+        ref = collector_class(compact_obs=False, **collector_kwargs)
+        ref_data = next(iter(ref))
+        ref.shutdown()
+        del ref
+
+        # Compact rollout
+        comp = collector_class(compact_obs=True, **collector_kwargs)
+        comp_data = next(iter(comp))
+        comp.shutdown()
+        del comp
+
+        comp_keys = set(comp_data.keys(True, True))
+        ref_keys = set(ref_data.keys(True, True))
+
+        # All obs/state keys gone from ('next', ...)
+        for k in obs_keys + state_keys:
+            full = ("next", *k) if isinstance(k, tuple) else ("next", k)
+            assert full not in comp_keys, f"{full} should be dropped"
+            assert full in ref_keys, f"{full} should be present in reference"
+            # Root key preserved
+            assert k in comp_keys, f"root key {k} dropped unexpectedly"
+
+        # Reward/done/truncated under ('next', ...) preserved
+        for k in ("reward", "done", "terminated"):
+            assert ("next", k) in comp_keys, f"('next', {k!r}) dropped unexpectedly"
+
+        # Identity: root obs at t+1 == ref ('next', obs) at t (within trajectory)
+        for k in obs_keys:
+            full = ("next", *k) if isinstance(k, tuple) else ("next", k)
+            done = ref_data.get(("next", "done")).squeeze(-1)
+            mask = ~done[..., :-1]
+            ref_next = ref_data.get(full)[..., :-1, :]
+            root_shifted = ref_data.get(k)[..., 1:, :]
+            torch.testing.assert_close(ref_next[mask], root_shifted[mask])
+
     @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
     def test_initial_obs_consistency(self, env_class, seed=1):
         # non regression test on #938

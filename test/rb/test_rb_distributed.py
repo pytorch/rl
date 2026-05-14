@@ -9,16 +9,22 @@ import os
 
 import sys
 import time
+from functools import partial
 
 import pytest
 import torch
 import torch.distributed.rpc as rpc
 import torch.multiprocessing as mp
+from _rb_common import _has_ray
 from tensordict import TensorDict
 from torchrl._utils import logger as torchrl_logger
+from torchrl.data import RayReplayBuffer
 from torchrl.data.replay_buffers import RemoteTensorDictReplayBuffer
-from torchrl.data.replay_buffers.samplers import RandomSampler
-from torchrl.data.replay_buffers.storages import LazyMemmapStorage
+from torchrl.data.replay_buffers.samplers import (
+    RandomSampler,
+    SamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
 
 RETRY_COUNT = 3
@@ -137,6 +143,84 @@ def _sample_from_buffer(buffer, batch_size):
     return rpc.rpc_sync(
         buffer.owner(), ReplayBufferNode.sample, args=(buffer, batch_size)
     )
+
+
+@pytest.mark.skipif(not _has_ray, reason="ray required for this test.")
+class TestRayRB:
+    @pytest.fixture(autouse=True, scope="module")
+    def cleanup(self):
+        import ray
+
+        ray.shutdown()
+        torchrl_logger.info("Initializing Ray.")
+        ray.init(num_cpus=1)
+        yield
+        torchrl_logger.info("Shutting down Ray.")
+        ray.shutdown()
+
+    def test_ray_rb(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            rb.extend(
+                TensorDict(
+                    {"x": torch.ones(100, 2), "y": torch.ones(100, 2)}, batch_size=100
+                )
+            )
+            assert rb.write_count == 100
+            assert len(rb) == 100
+            assert rb.sample(2).shape == (2,)
+        finally:
+            rb.close()
+
+    def test_ray_rb_iter(self):
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100),
+            ray_init_config={"num_cpus": 1},
+            sampler=SamplerWithoutReplacement,
+            batch_size=25,
+        )
+        try:
+            rb.extend(
+                TensorDict(
+                    {
+                        "x": torch.ones(
+                            100,
+                        ),
+                        "y": torch.ones(
+                            100,
+                        ),
+                    },
+                    batch_size=100,
+                )
+            )
+            for _ in range(2):
+                for d in rb:
+                    torchrl_logger.info(f"d: {d}")
+                    assert d is not None
+                    assert d.shape == (25,)
+        finally:
+            rb.close()
+
+    def test_ray_rb_serialization(self):
+        import ray
+
+        class Worker:
+            def __init__(self, rb):
+                self.rb = rb
+
+            def run(self):
+                self.rb.extend(TensorDict({"x": torch.ones(100)}, batch_size=100))
+
+        rb = RayReplayBuffer(
+            storage=partial(LazyTensorStorage, 100), ray_init_config={"num_cpus": 1}
+        )
+        try:
+            remote_worker = ray.remote(Worker).remote(rb)
+            ray.get(remote_worker.run.remote())
+        finally:
+            rb.close()
 
 
 if __name__ == "__main__":

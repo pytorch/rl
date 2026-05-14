@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import textwrap
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from collections import OrderedDict
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
@@ -55,7 +55,48 @@ except ImportError:
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
 
-class Sampler(ABC):
+# Maps a "with replacement" sampler class to its "without replacement" counterpart.
+# Populated at module import time after the relevant classes are defined.
+# Consumed by :class:`_SamplerMeta` to dispatch ``Cls(replacement=False, ...)`` calls
+# to ``_REPLACEMENT_DISPATCH[Cls](...)``.
+_REPLACEMENT_DISPATCH: dict[type, type] = {}
+
+
+class _SamplerMeta(ABCMeta):
+    """Metaclass enabling ``replacement=False`` dispatch on with-replacement samplers.
+
+    When a class registered in :data:`_REPLACEMENT_DISPATCH` (e.g.
+    :class:`RandomSampler`, :class:`SliceSampler`) is instantiated with
+    ``replacement=False``, the call is dispatched to its without-replacement
+    counterpart (:class:`SamplerWithoutReplacement` or
+    :class:`SliceSamplerWithoutReplacement`).
+
+    Calls with ``replacement=True`` (the default) behave exactly like a normal
+    instantiation: the ``replacement`` kwarg is popped before the constructor
+    runs, so existing ``__init__`` signatures don't need to be changed.
+
+    Passing ``replacement=False`` to a sampler that has no without-replacement
+    variant raises :class:`TypeError`. Passing ``replacement=False`` to a
+    sampler that is itself already a without-replacement variant is allowed
+    and treated as a no-op.
+    """
+
+    def __call__(cls, *args, **kwargs):
+        if "replacement" in kwargs:
+            replacement = kwargs.pop("replacement")
+            if not replacement:
+                alt = _REPLACEMENT_DISPATCH.get(cls)
+                if alt is not None:
+                    return alt(*args, **kwargs)
+                if cls not in _REPLACEMENT_DISPATCH.values():
+                    raise TypeError(
+                        f"{cls.__name__} has no without-replacement variant; "
+                        "cannot be instantiated with replacement=False."
+                    )
+        return super().__call__(*args, **kwargs)
+
+
+class Sampler(ABC, metaclass=_SamplerMeta):
     """A generic sampler base class for composable Replay Buffers."""
 
     # Some samplers - mainly those without replacement -
@@ -133,9 +174,23 @@ class Sampler(ABC):
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers.
 
-    Args:
-        batch_size (int, optional): if provided, the batch size to be used by
-            the replay buffer when calling :meth:`ReplayBuffer.sample`.
+    Keyword Args:
+        replacement (bool, optional): if ``False``, the call is dispatched to
+            :class:`SamplerWithoutReplacement`, and any additional keyword
+            arguments (e.g. ``drop_last``, ``shuffle``) are forwarded to its
+            constructor. Defaults to ``True``.
+
+    Examples:
+        >>> from torchrl.data import RandomSampler, SamplerWithoutReplacement
+        >>> isinstance(RandomSampler(), RandomSampler)
+        True
+        >>> isinstance(RandomSampler(replacement=False), SamplerWithoutReplacement)
+        True
+        >>> isinstance(
+        ...     RandomSampler(replacement=False, drop_last=True),
+        ...     SamplerWithoutReplacement,
+        ... )
+        True
 
     """
 
@@ -1154,12 +1209,19 @@ class SliceSampler(Sampler):
 
     This class samples sub-trajectories with replacement. For a version without
     replacement, see :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`.
+    Equivalently, ``SliceSampler(replacement=False, ...)`` dispatches to
+    :class:`SliceSamplerWithoutReplacement` and forwards the remaining keyword
+    arguments (including ``drop_last`` and ``shuffle``).
 
     .. note:: `SliceSampler` can be slow to retrieve the trajectory indices. To accelerate
         its execution, prefer using `end_key` over `traj_key`, and consider the following
         keyword arguments: :attr:`compile`, :attr:`cache_values` and :attr:`use_gpu`.
 
     Keyword Args:
+        replacement (bool, optional): if ``False``, the call is dispatched to
+            :class:`SliceSamplerWithoutReplacement` (which accepts the same
+            keyword arguments as well as ``drop_last`` and ``shuffle``).
+            Defaults to ``True``.
         num_slices (int): the number of slices to be sampled. The batch-size
             must be greater or equal to the ``num_slices`` argument. Exclusive
             with ``slice_len``.
@@ -3173,3 +3235,14 @@ class SamplerEnsemble(Sampler):
     def __repr__(self):
         samplers = textwrap.indent(f"samplers={self._samplers}", " " * 4)
         return f"{self.__class__.__name__}(\n{samplers})"
+
+
+# Register without-replacement dispatch targets. Importing this module makes
+# ``RandomSampler(replacement=False)`` dispatch to ``SamplerWithoutReplacement``
+# and ``SliceSampler(replacement=False)`` to ``SliceSamplerWithoutReplacement``.
+_REPLACEMENT_DISPATCH.update(
+    {
+        RandomSampler: SamplerWithoutReplacement,
+        SliceSampler: SliceSamplerWithoutReplacement,
+    }
+)
