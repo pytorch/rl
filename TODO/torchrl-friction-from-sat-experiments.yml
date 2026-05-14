@@ -407,7 +407,7 @@ items:
       hits a confusing failure at first write.
 
     evidence: >-
-      Hit during SAC v37 design. We pre-emptively set ``buffer_device=cpu``
+      Hit during SAC v37 design. We preemptively set ``buffer_device=cpu``
       after reading shared-memory caveats; without that hint the failure
       mode would have been opaque.
 
@@ -418,8 +418,9 @@ items:
     proposed_solutions:
       - >-
         At construction, if ``shared=True`` and the storage device is
-        not ``cpu``, raise: ``"shared=True requires storage device='cpu';
-        got device=<x>. Pass storage=LazyTensorStorage(..., device='cpu')."``
+        not ``cpu``, raise preemptively: ``"shared=True requires storage
+        device='cpu'; got device=<x>. Pass storage=LazyTensorStorage(
+        ..., device='cpu')."``
 
     estimated_effort: 15 min.
 

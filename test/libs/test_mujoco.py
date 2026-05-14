@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 import torch
+
+from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
     HopperEnv,
@@ -28,14 +30,12 @@ from torchrl.envs.custom.mujoco._backends import (
 from torchrl.envs.custom.mujoco._math import (
     cmg_jacobian,
     pyramid_4cmg_geometry,
+    quat_conj,
     quat_log,
     quat_mul,
-    quat_conj,
     random_unit_quat,
 )
 from torchrl.envs.utils import check_env_specs
-
-from tensordict import TensorDict
 
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
@@ -120,9 +120,7 @@ class TestMujoco:
         env = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
         env.reset()
         state = env._state_td()
-        action = torch.zeros(
-            env.action_spec.shape, dtype=env.dtype, device=env.device
-        )
+        action = torch.zeros(env.action_spec.shape, dtype=env.dtype, device=env.device)
         action[0, 0] = torch.finfo(env.dtype).max
         with pytest.raises(RuntimeError, match="reward/control_cost"):
             env._compute_reward(state, action, state)
@@ -144,9 +142,7 @@ class TestMujoco:
         td_zero = env_zero.step(td_zero.set("action", zero_action))["next"]
         td_one = env_one.step(td_one.set("action", one_action))["next"]
 
-        assert not torch.allclose(
-            td_zero["gimbal_angles"], td_one["gimbal_angles"]
-        )
+        assert not torch.allclose(td_zero["gimbal_angles"], td_one["gimbal_angles"])
 
     def test_quat_log_uses_short_arc(self):
         q = random_unit_quat((1024,), generator=torch.Generator().manual_seed(0))
@@ -176,9 +172,7 @@ class TestMujoco:
     def _make_sat(backend: str, n: int = 2, **kwargs) -> SatelliteEnv:
         if backend == "mujoco":
             n = 1
-        return SatelliteEnv(
-            num_cmgs=4, num_envs=n, seed=0, backend=backend, **kwargs
-        )
+        return SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend, **kwargs)
 
     @staticmethod
     def _bus_quat(env: SatelliteEnv) -> torch.Tensor:
@@ -280,9 +274,7 @@ class TestMujoco:
         # quat_err observation = quat_log(init^-1 * target).
         target_q_norm = target_q / target_q.norm(dim=-1, keepdim=True)
         expected_qerr = quat_log(quat_mul(quat_conj(init_q_norm), target_q_norm))
-        torch.testing.assert_close(
-            td["quat_err"], expected_qerr, rtol=1e-4, atol=1e-4
-        )
+        torch.testing.assert_close(td["quat_err"], expected_qerr, rtol=1e-4, atol=1e-4)
 
     @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
     def test_satellite_quat_err_is_zero_at_target(self, backend):
@@ -302,9 +294,9 @@ class TestMujoco:
         )
         # Reset noise is RESET_NOISE_SCALE = 1e-3 on qpos, so quat_err
         # should be small (a few mrad) but not exactly zero.
-        assert td["quat_err"].abs().max().item() < 5e-2, (
-            f"quat_err = {td['quat_err']} when init == target; expected near zero."
-        )
+        assert (
+            td["quat_err"].abs().max().item() < 5e-2
+        ), f"quat_err = {td['quat_err']} when init == target; expected near zero."
 
     @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
     def test_satellite_180deg_target_gives_pi_attitude_error(self, backend):
@@ -358,9 +350,7 @@ class TestMujoco:
         )
         env.reset(TensorDict({"init_bus_quat": identity}, batch_size=env.batch_size))
 
-        action = torch.zeros(
-            env.action_spec.shape, dtype=env.dtype, device=env.device
-        )
+        action = torch.zeros(env.action_spec.shape, dtype=env.dtype, device=env.device)
         action[..., 0] = 1.0  # only CMG 1
         td = TensorDict({"action": action}, batch_size=env.batch_size)
         for _ in range(20):
@@ -406,9 +396,7 @@ class TestMujoco:
         approximately ``-0.5 / 1.0 = -0.5`` per step (control cost is
         zero, attitude error is at the reset-noise floor).
         """
-        env = self._make_sat(
-            backend, n=2, action_scale=3.0, singularity_weight=0.5
-        )
+        env = self._make_sat(backend, n=2, action_scale=3.0, singularity_weight=0.5)
         q = torch.tensor(
             [[1.0, 0.0, 0.0, 0.0], [0.5, 0.5, 0.5, 0.5]],
             dtype=env.dtype,
@@ -437,9 +425,7 @@ class TestMujoco:
         should equal ``-pi - singularity_weight/manip_norm`` per step,
         i.e. about ``-3.64`` for the default weights.
         """
-        env = self._make_sat(
-            backend, n=2, action_scale=3.0, singularity_weight=0.5
-        )
+        env = self._make_sat(backend, n=2, action_scale=3.0, singularity_weight=0.5)
         identity = torch.tensor(
             [[1.0, 0.0, 0.0, 0.0]] * env.num_envs,
             dtype=env.dtype,
@@ -464,7 +450,9 @@ class TestMujoco:
         reward = td["next", "reward"].squeeze(-1)
         expected = -torch.pi - 0.5
         # Bus has barely moved in 1 step, so attitude error stays near pi.
-        assert (reward > expected - 0.2).all() and (reward < expected + 0.2).all(), (
+        assert (reward > expected - 0.2).all() and (
+            reward < expected + 0.2
+        ).all(), (
             f"Reward at 180-deg error = {reward.tolist()}; expected ~{expected:.2f}."
         )
 
@@ -505,9 +493,7 @@ class TestMujoco:
         # gimbal_angles is concat([sin, cos]) over the gimbal qpos.
         gimbals = qpos[..., gimbal_idx]
         expected = torch.cat([gimbals.sin(), gimbals.cos()], dim=-1)
-        torch.testing.assert_close(
-            td["gimbal_angles"], expected, rtol=1e-5, atol=1e-5
-        )
+        torch.testing.assert_close(td["gimbal_angles"], expected, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
     def test_satellite_reset_is_reproducible(self, backend):

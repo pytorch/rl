@@ -325,9 +325,7 @@ class SatelliteEnv(MujocoEnv):
             )
             self._target_quat[mask] = new_targets
         # Refresh manipulability cache only for the masked rows.
-        new_manip = self._compute_manip_from_qpos(
-            self._backend.qpos.to(self.dtype)
-        )
+        new_manip = self._compute_manip_from_qpos(self._backend.qpos.to(self.dtype))
         self._last_manip[mask] = new_manip[mask]
 
     # ------------------------------------------------------------------
@@ -358,9 +356,7 @@ class SatelliteEnv(MujocoEnv):
         self._assert_finite("reset/manipulability", manip)
         return manip.unsqueeze(-1)
 
-    def _make_obs_split(
-        self, state: TensorDictBase
-    ) -> dict[str, torch.Tensor]:
+    def _make_obs_split(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         """Return the observation as a dict of named sub-keys.
 
         Replaces the legacy single-tensor ``_make_obs``. Downstream
@@ -434,7 +430,7 @@ class SatelliteEnv(MujocoEnv):
         # default ``singularity_weight=0.5`` yields ~0.5 / O(1) ≈ 0.5
         # contribution on the nominal cluster, growing as the cluster
         # approaches a singular configuration.
-        manip_norm = manip / (self._rotor_h ** 3)
+        manip_norm = manip / (self._rotor_h**3)
         # Cache the *unnormalized* metric for the obs (so logging
         # remains physically interpretable across rotor speeds), but
         # use the normalized one for the penalty.
@@ -448,7 +444,7 @@ class SatelliteEnv(MujocoEnv):
         # crossing instant.
         qvel = next_state["qvel"].to(self.dtype)
         bus_omega = qvel[..., 3:6]
-        omega_cost = (bus_omega ** 2).sum(dim=-1)
+        omega_cost = (bus_omega**2).sum(dim=-1)
         self._assert_finite("reward/omega_cost", omega_cost)
         if self.singularity_mode == "exp":
             # Bounded smooth penalty: ``w * exp(-k * manip_norm)`` saturates
