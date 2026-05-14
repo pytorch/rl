@@ -95,6 +95,10 @@
   - changed-files:
     - any-glob-to-any-file: ['torchrl/data/datasets/roboset.py']
 
+"Data/tdmpc2":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/data/datasets/tdmpc2.py']
+
 "Data/vd4rl":
   - changed-files:
     - any-glob-to-any-file: ['torchrl/data/datasets/vd4rl.py']
