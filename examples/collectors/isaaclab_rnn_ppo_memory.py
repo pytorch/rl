@@ -112,9 +112,9 @@ def _parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=None,
         help=(
-            "Compile the GAE/value-network path. Defaults to --compile-update so "
-            "scan/triton recurrent backends do not pay a scan body compile on "
-            "every advantage call."
+            "Compile the value network used by GAE. Defaults to --compile-update "
+            "so scan/triton recurrent backends do not pay a scan body compile on "
+            "every value-network call."
         ),
     )
     parser.add_argument(
@@ -297,10 +297,14 @@ def main() -> None:
         critic_coeff=args.critic_coeff,
         normalize_advantage=True,
     )
+    gae_value_network = full_value
+    if compile_gae:
+        gae_value_network = torch.compile(full_value, mode=args.compile_mode)
+
     adv_module = GAE(
         gamma=args.gamma,
         lmbda=args.gae_lambda,
-        value_network=full_value,
+        value_network=gae_value_network,
         average_gae=False,
         shifted=args.shifted_gae,
         vectorized=args.vectorized_gae,
@@ -336,11 +340,6 @@ def main() -> None:
         loss_out.set("grad_norm_critic", critic_grad_norm.detach())
         loss_out.set("grad_norm_total", grad_norm.detach())
         return loss_out
-
-    if compile_gae:
-        compute_advantages = compile_with_warmup(
-            compute_advantages, mode=args.compile_mode, warmup=1
-        )
 
     if args.compile_update:
         update = compile_with_warmup(update, mode=args.compile_mode, warmup=1)
@@ -551,6 +550,7 @@ def main() -> None:
             "debug_data_flow": args.debug_data_flow,
             "training_precompile": args.precompile_training,
             "training_compile_gae": compile_gae,
+            "training_compile_gae_target": "value_network" if compile_gae else "none",
             "training_precompile_gae_calls": 2 if compile_gae else 1,
             "training_precompile_update_calls": precompile_update_calls,
         }
