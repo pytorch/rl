@@ -15,6 +15,14 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "a3c_atari": """python sota-implementations/a3c/a3c_atari.py \
+  collector.total_frames=80 \
+  collector.frames_per_batch=20 \
+  loss.mini_batch_size=20 \
+  logger.backend= \
+  env.backend=gym \
+  multiprocessing.num_workers=4
+""",
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
   replay_buffer.dataset= \
