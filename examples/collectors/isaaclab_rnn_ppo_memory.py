@@ -119,6 +119,16 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cudagraph-trees", action=argparse.BooleanOptionalAction, default=True
     )
+    parser.add_argument(
+        "--precompile-training",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Run GAE and update once on fake [B, T] data before the collector is "
+            "started, so compilation/cudagraph capture does not pollute the first "
+            "real batches."
+        ),
+    )
     parser.add_argument("--empty-cache-after-warmup", action="store_true")
     parser.add_argument("--train-device", default="cuda:1")
     parser.add_argument("--seed", type=int, default=0)
@@ -168,6 +178,7 @@ from isaaclab_rnn_ppo_memory_utils import (
     _assert_time_batch_shape,
     _batch_metrics,
     _log_iteration_metrics,
+    _make_fake_training_batch,
     _make_storage,
     make_actor,
     make_actor_from_modules,
@@ -263,6 +274,7 @@ def main() -> None:
     )
     actor_params = tuple(actor.parameters())
     critic_params = tuple(critic.parameters())
+    model_params = (*actor_params, *critic_params)
     loss_module = ClipPPOLoss(
         actor_network=actor,
         critic_network=full_value,
@@ -317,6 +329,102 @@ def main() -> None:
 
     sample_num_slices = max(1, args.mini_batch_steps // args.rollout_steps)
     sample_seq_len = args.rollout_steps
+
+    def _make_warmup_minibatch() -> TensorDictBase:
+        mini_batch = _make_fake_training_batch(
+            batch_size=sample_num_slices,
+            seq_len=sample_seq_len,
+            obs_dim=args.obs_dim,
+            action_dim=args.action_dim,
+            hidden_size=args.hidden_size,
+            device=train_device,
+        )
+        with torch.no_grad(), set_recurrent_mode(True):
+            value_data = full_value(mini_batch.clone())
+        state_value = value_data.get(loss_module.tensor_keys.value, None)
+        if state_value is None:
+            raise KeyError(
+                f"Could not find value key {loss_module.tensor_keys.value} in "
+                "the fake warmup value-network output."
+            )
+        mini_batch.set(loss_module.tensor_keys.value_target, state_value.detach())
+        mini_batch.set(loss_module.tensor_keys.advantage, torch.zeros_like(state_value))
+        return mini_batch
+
+    def _restore_after_precompile(
+        param_snapshots: tuple[torch.Tensor, ...],
+    ) -> None:
+        with torch.no_grad():
+            for param, snapshot in zip(model_params, param_snapshots):
+                param.copy_(snapshot)
+        for state in optim.state.values():
+            for key, value in state.items():
+                if torch.is_tensor(value):
+                    value.zero_()
+                elif isinstance(value, int):
+                    state[key] = 0
+                elif isinstance(value, float):
+                    state[key] = 0.0
+        optim.zero_grad(set_to_none=True)
+
+    def _precompile_training() -> int:
+        if not args.precompile_training:
+            return 0
+        update_calls = 0
+        if args.cudagraph_update:
+            update_calls = args.cudagraph_warmup
+        elif args.compile_update:
+            update_calls = 2
+        torchrl_logger.info(
+            {
+                "phase": "training_precompile_start",
+                "gae_batch_shape": f"{args.num_envs}x{args.rollout_steps}",
+                "update_batch_shape": f"{sample_num_slices}x{sample_seq_len}",
+                "update_calls": update_calls,
+            }
+        )
+        param_snapshots = tuple(param.detach().clone() for param in model_params)
+        with timeit("training_precompile_s"):
+            fake_rollout = _make_fake_training_batch(
+                batch_size=args.num_envs,
+                seq_len=args.rollout_steps,
+                obs_dim=args.obs_dim,
+                action_dim=args.action_dim,
+                hidden_size=args.hidden_size,
+                device=train_device,
+            )
+            with torch.no_grad(), set_recurrent_mode(True):
+                _assert_time_batch_shape(
+                    fake_rollout,
+                    args.num_envs,
+                    args.rollout_steps,
+                    "fake_gae_batch",
+                )
+                adv_module(fake_rollout)
+            del fake_rollout
+            if update_calls:
+                fake_minibatch = _make_warmup_minibatch()
+                _assert_time_batch_shape(
+                    fake_minibatch,
+                    sample_num_slices,
+                    sample_seq_len,
+                    "fake_mini_batch",
+                )
+                for _ in range(update_calls):
+                    update(fake_minibatch)
+                del fake_minibatch
+            _restore_after_precompile(param_snapshots)
+            if train_device.type == "cuda":
+                torch.cuda.synchronize(train_device)
+        torchrl_logger.info(
+            {
+                "phase": "training_precompile_done",
+                "update_calls": update_calls,
+            }
+        )
+        return update_calls
+
+    precompile_update_calls = _precompile_training()
     train_buffer = ReplayBuffer(
         storage=_make_storage(args, train_device, args.num_envs, ndim=1),
         sampler=SamplerWithoutReplacement(
@@ -407,6 +515,8 @@ def main() -> None:
             if args.collector_backend != "single"
             else "single_process_fallback",
             "debug_data_flow": args.debug_data_flow,
+            "training_precompile": args.precompile_training,
+            "training_precompile_update_calls": precompile_update_calls,
         }
     )
     experiment_logger = None

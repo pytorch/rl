@@ -14,7 +14,7 @@ import isaaclab_tasks  # noqa: F401
 import torch
 import torch.nn as nn
 from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import (
     AddStateIndependentNormalScale,
     TensorDictModule,
@@ -418,6 +418,49 @@ def _assert_time_batch_shape(
         raise AssertionError(
             f"{label} must have batch shape [B, T] = {expected}, got {actual}."
         )
+
+
+def _make_fake_training_batch(
+    *,
+    batch_size: int,
+    seq_len: int,
+    obs_dim: int,
+    action_dim: int,
+    hidden_size: int,
+    device: torch.device,
+) -> TensorDict:
+    batch_shape = (batch_size, seq_len)
+    feature_shape = (*batch_shape, 1)
+    recurrent_shape = (*batch_shape, 1, hidden_size)
+    is_init = torch.zeros(feature_shape, dtype=torch.bool, device=device)
+    is_init[:, 0] = True
+    done = torch.zeros(feature_shape, dtype=torch.bool, device=device)
+    return TensorDict(
+        {
+            "policy": torch.zeros(*batch_shape, obs_dim, device=device),
+            "action": torch.zeros(*batch_shape, action_dim, device=device),
+            "sample_log_prob": torch.zeros(batch_shape, device=device),
+            "advantage": torch.zeros(feature_shape, device=device),
+            "value_target": torch.zeros(feature_shape, device=device),
+            "recurrent_state_h": torch.zeros(recurrent_shape, device=device),
+            "recurrent_state_c": torch.zeros(recurrent_shape, device=device),
+            "is_init": is_init,
+            "done": done,
+            "terminated": done.clone(),
+            "truncated": done.clone(),
+            "next": {
+                "policy": torch.zeros(*batch_shape, obs_dim, device=device),
+                "reward": torch.zeros(feature_shape, device=device),
+                "done": done.clone(),
+                "terminated": done.clone(),
+                "truncated": done.clone(),
+                "recurrent_state_h": torch.zeros(recurrent_shape, device=device),
+                "recurrent_state_c": torch.zeros(recurrent_shape, device=device),
+            },
+        },
+        batch_size=batch_shape,
+        device=device,
+    )
 
 
 def _key_name(key) -> str:
