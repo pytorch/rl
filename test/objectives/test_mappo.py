@@ -160,6 +160,90 @@ class TestMultiAgentGAE:
 
 
 # --------------------------------------------------------------------------
+# Value-estimator registry
+# --------------------------------------------------------------------------
+
+
+class TestValueEstimatorRegistry:
+    def test_all_builtins_registered(self):
+        """Every ValueEstimators enum member must have a registry entry."""
+        from torchrl.objectives.utils import (
+            _VALUE_ESTIMATOR_REGISTRY,
+            get_value_estimator_entry,
+        )
+
+        for member in ValueEstimators:
+            assert member in _VALUE_ESTIMATOR_REGISTRY, f"missing: {member}"
+            entry = get_value_estimator_entry(member)
+            assert entry.cls is not None
+            assert "gamma" in entry.default_kwargs
+
+    def test_string_alias_resolves(self):
+        from torchrl.objectives.utils import get_value_estimator_entry
+
+        assert (
+            get_value_estimator_entry("gae").cls
+            is get_value_estimator_entry(ValueEstimators.GAE).cls
+        )
+        assert (
+            get_value_estimator_entry("magae").cls
+            is get_value_estimator_entry(ValueEstimators.MAGAE).cls
+        )
+
+    def test_unknown_alias_raises(self):
+        from torchrl.objectives.utils import get_value_estimator_entry
+
+        with pytest.raises(KeyError, match="Unknown value estimator alias"):
+            get_value_estimator_entry("not_a_real_estimator")
+
+    def test_unknown_type_raises(self):
+        from torchrl.objectives.utils import get_value_estimator_entry
+
+        with pytest.raises(TypeError, match="must be a ValueEstimators"):
+            get_value_estimator_entry(42)
+
+    def test_register_and_dispatch_custom_estimator(self):
+        """Adding a new estimator must not require touching any loss file."""
+        from enum import Enum
+
+        from torchrl.objectives.utils import (
+            _VALUE_ESTIMATOR_REGISTRY,
+            register_value_estimator,
+        )
+        from torchrl.objectives.value.advantages import GAE
+
+        # We have to extend the enum at runtime for this test. Python's Enum
+        # forbids appending, so we monkey-patch the registry directly with a
+        # sentinel key — that's the path a third-party custom enum would take.
+        class _Custom(Enum):
+            FAKE = "fake"
+
+        # Pretend we registered against a "real" entry by abusing _Custom.
+        @register_value_estimator(
+            _Custom.FAKE, default_kwargs={"gamma": 0.99, "lmbda": 0.5}
+        )
+        class _MyGAE(GAE):
+            pass
+
+        try:
+            entry = _VALUE_ESTIMATOR_REGISTRY[_Custom.FAKE]
+            assert entry.cls is _MyGAE
+            assert entry.default_kwargs == {"gamma": 0.99, "lmbda": 0.5}
+        finally:
+            _VALUE_ESTIMATOR_REGISTRY.pop(_Custom.FAKE, None)
+
+    def test_default_value_kwargs_reads_registry(self):
+        """Back-compat shim must agree with the registry."""
+        from torchrl.objectives.utils import (
+            _VALUE_ESTIMATOR_REGISTRY,
+            default_value_kwargs,
+        )
+
+        for member, entry in _VALUE_ESTIMATOR_REGISTRY.items():
+            assert default_value_kwargs(member) == entry.default_kwargs
+
+
+# --------------------------------------------------------------------------
 # ValueNorm — abstract base + the two concrete implementations
 # --------------------------------------------------------------------------
 

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -24,19 +23,11 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
-    default_value_kwargs,
+    build_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    GAE,
-    MultiAgentGAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-    VTrace,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class ReinforceLoss(LossModule):
@@ -489,40 +480,12 @@ class ReinforceLoss(LossModule):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
 
         self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
+        hp = dict(hyperparams)
         if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.MAGAE:
-            self._value_estimator = MultiAgentGAE(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
+            hp.setdefault("gamma", self.gamma)
+        # Registry-driven dispatch — adding a new estimator only needs
+        # @register_value_estimator on the class, not edits here.
+        self._value_estimator = build_value_estimator(self, value_type, **hp)
 
         tensor_keys = {
             "advantage": self.tensor_keys.advantage,

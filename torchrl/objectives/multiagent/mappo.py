@@ -24,20 +24,7 @@ from tensordict.nn.probabilistic import ProbabilisticTensorDictSequential
 
 from torchrl.modules.value_norm import ValueNorm
 from torchrl.objectives.ppo import ClipPPOLoss
-from torchrl.objectives.utils import (
-    _GAMMA_LMBDA_DEPREC_ERROR,
-    default_value_kwargs,
-    distance_loss,
-    ValueEstimators,
-)
-from torchrl.objectives.value import (
-    GAE,
-    MultiAgentGAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    VTrace,
-)
+from torchrl.objectives.utils import distance_loss, ValueEstimators
 
 
 class _MultiAgentPPOMixin:
@@ -47,6 +34,11 @@ class _MultiAgentPPOMixin:
 
     1. Default the value estimator to :class:`MultiAgentGAE` so per-agent value
        outputs broadcast cleanly against team-shared reward / done signals.
+       Dispatch goes through
+       :func:`~torchrl.objectives.utils.build_value_estimator`, so we no
+       longer need a ``make_value_estimator`` override here — the registry
+       resolves ``ValueEstimators.MAGAE`` to :class:`MultiAgentGAE`
+       automatically.
     2. Wrap the parent's :meth:`loss_critic` so that, when a
        :class:`~torchrl.modules.ValueNorm` is attached, the running value
        target stats are updated and both target and prediction are
@@ -55,31 +47,6 @@ class _MultiAgentPPOMixin:
     """
 
     default_value_estimator = ValueEstimators.MAGAE
-
-    def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
-        if value_type is None:
-            value_type = self.default_value_estimator
-        if value_type != ValueEstimators.MAGAE:
-            # Fall through to the parent for non-multi-agent estimators (the
-            # user is opting out of per-agent broadcasting).
-            return super().make_value_estimator(value_type, **hyperparams)
-
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        self._value_estimator = MultiAgentGAE(value_network=self.critic_network, **hp)
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
 
     def loss_critic(self, tensordict: TensorDictBase):
         # Delegate to ClipPPOLoss; if no value_norm is attached this is a
@@ -322,15 +289,3 @@ class IPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         self.value_norm = value_norm
         if value_norm is not None:
             self.add_module("_value_norm_module", value_norm)
-
-
-# Silence unused-import linters: the imports below are needed in case a user
-# overrides ``make_value_estimator`` to fall back to non-multi-agent estimators.
-_ = (
-    GAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    VTrace,
-    _GAMMA_LMBDA_DEPREC_ERROR,
-)
