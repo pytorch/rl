@@ -403,16 +403,16 @@ def main() -> None:
                 adv_module(fake_rollout)
             del fake_rollout
             if update_calls:
-                fake_minibatch = _make_warmup_minibatch()
-                _assert_time_batch_shape(
-                    fake_minibatch,
-                    sample_num_slices,
-                    sample_seq_len,
-                    "fake_mini_batch",
-                )
                 for _ in range(update_calls):
+                    fake_minibatch = _make_warmup_minibatch()
+                    _assert_time_batch_shape(
+                        fake_minibatch,
+                        sample_num_slices,
+                        sample_seq_len,
+                        "fake_mini_batch",
+                    )
                     update(fake_minibatch)
-                del fake_minibatch
+                    del fake_minibatch
             _restore_after_precompile(param_snapshots)
             if train_device.type == "cuda":
                 torch.cuda.synchronize(train_device)
