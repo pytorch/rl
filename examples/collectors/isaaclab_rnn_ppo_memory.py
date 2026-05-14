@@ -205,6 +205,13 @@ DATA_FLOW_KEYS = (
     "advantage",
     "value_target",
 )
+INTEGER_DTYPES = (
+    torch.uint8,
+    torch.int8,
+    torch.int16,
+    torch.int32,
+    torch.int64,
+)
 
 
 def _apply_preset(args: argparse.Namespace) -> argparse.Namespace:
@@ -492,13 +499,69 @@ def _add_batch_stats(
             metrics[f"{name}/fraction"] = float(value.float().mean().detach().cpu())
 
 
-def _batch_metrics(batch: TensorDictBase) -> dict[str, float | int | str]:
+def _policy_version_int(version: int | str | None) -> int | None:
+    if isinstance(version, int):
+        return version
+    if isinstance(version, str):
+        try:
+            return int(version)
+        except ValueError:
+            return None
+    return None
+
+
+def _add_policy_version_metrics(
+    metrics: dict[str, float | int | str],
+    batch: TensorDictBase,
+    collector_policy_version: int | str | None,
+) -> None:
+    policy_version = batch.get(("next", "policy_version"), None)
+    if policy_version is None:
+        policy_version = batch.get("policy_version", None)
+    if not torch.is_tensor(policy_version):
+        return
+    policy_version = policy_version.detach().reshape(-1)
+    if policy_version.numel() == 0 or policy_version.dtype not in INTEGER_DTYPES:
+        return
+
+    policy_version_min = int(policy_version.min().cpu())
+    policy_version_max = int(policy_version.max().cpu())
+    policy_version_mean = float(policy_version.to(torch.float64).mean().cpu())
+    metrics["batch/policy_version/min"] = policy_version_min
+    metrics["batch/policy_version/max"] = policy_version_max
+    metrics["batch/policy_version/mean"] = policy_version_mean
+    if policy_version_min == policy_version_max:
+        metrics["batch/policy_version"] = policy_version_min
+
+    collector_policy_version_int = _policy_version_int(collector_policy_version)
+    if collector_policy_version_int is None:
+        return
+    metrics["batch/policy_staleness/min"] = (
+        collector_policy_version_int - policy_version_max
+    )
+    metrics["batch/policy_staleness/max"] = (
+        collector_policy_version_int - policy_version_min
+    )
+    metrics["batch/policy_staleness/mean"] = (
+        collector_policy_version_int - policy_version_mean
+    )
+    if policy_version_min == policy_version_max:
+        metrics["batch/policy_staleness"] = (
+            collector_policy_version_int - policy_version_min
+        )
+
+
+def _batch_metrics(
+    batch: TensorDictBase,
+    collector_policy_version: int | str | None,
+) -> dict[str, float | int | str]:
     metrics: dict[str, float | int | str] = {
         "batch/numel": batch.numel(),
         "batch/ndim": batch.ndim,
         "batch/device": str(batch.device),
     }
     _add_batch_stats(metrics, batch)
+    _add_policy_version_metrics(metrics, batch, collector_policy_version)
     return metrics
 
 
@@ -532,6 +595,12 @@ def _add_data_flow_metrics(
             )
             metrics[f"{prefix}/{name}/mean"] = float(value.float().mean().cpu())
             metrics[f"{prefix}/{name}/std"] = float(value.float().std().cpu())
+        elif value.dtype in INTEGER_DTYPES:
+            metrics[f"{prefix}/{name}/min"] = int(value.min().cpu())
+            metrics[f"{prefix}/{name}/max"] = int(value.max().cpu())
+            metrics[f"{prefix}/{name}/mean"] = float(
+                value.to(torch.float64).mean().cpu()
+            )
         elif value.dtype == torch.bool:
             metrics[f"{prefix}/{name}/true_fraction"] = float(
                 value.float().mean().cpu()
@@ -586,6 +655,7 @@ def _log_iteration_metrics(
     loss_count: int,
     collector_generation: int | None = None,
     collector_policy_version: int | str | None = None,
+    collector_frames: int | None = None,
     collector_direct_replay_buffer: bool = False,
 ) -> None:
     metrics: dict[str, float | int | str] = {
@@ -618,11 +688,17 @@ def _log_iteration_metrics(
         metrics["collector/generation"] = collector_generation
     if collector_policy_version is not None:
         metrics["collector/policy_version"] = collector_policy_version
+    if collector_frames is not None:
+        metrics["collector/frames"] = collector_frames
     if collector_direct_replay_buffer:
         metrics["collector/direct_replay_buffer"] = 1.0
 
     metrics.update(_all_cuda_stats(collector_device, train_device))
     iter_s = timing_metrics.get("time/iter_s", 0.0)
+    collect_or_sample_s = timing_metrics.get("time/collect_or_sample_s", 0.0)
+    batch_frames = metrics.get("batch/numel", frames_per_batch)
+    if not isinstance(batch_frames, int):
+        batch_frames = frames_per_batch
 
     metrics["training/optimizer_steps"] = loss_count
     metrics["training/optimizer_steps_per_second"] = (
@@ -630,6 +706,12 @@ def _log_iteration_metrics(
     )
     metrics["training/rollout_frames_per_second_wall"] = (
         frames_per_batch / iter_s if iter_s > 0 else 0.0
+    )
+    metrics["collector/frames_per_second_wall"] = (
+        batch_frames / iter_s if iter_s > 0 else 0.0
+    )
+    metrics["collector/frames_per_second_blocking"] = (
+        batch_frames / collect_or_sample_s if collect_or_sample_s > 0 else 0.0
     )
     metrics["training/sample_frames_per_second_update"] = (
         loss_count * args.mini_batch_steps / update_s if update_s > 0 else 0.0
@@ -875,6 +957,7 @@ def main() -> None:
 
     global_step = 0
     active_generation = 0
+    collector_frames = 0
     total_iterations = args.iterations + args.warmup_iterations
     completed_iterations = 0
     current_iteration = -1
@@ -918,7 +1001,8 @@ def main() -> None:
                             "collector yielded data despite being given a replay buffer"
                         )
                     current_phase = "collector_replay_buffer_read"
-                    data = collector_replay_buffer[:]
+                    # Clone the data to avoid race conditions with the collector
+                    data = collector_replay_buffer[:].clone()
                 torchrl_logger.info(
                     {
                         "phase": "collector_batch_ready",
@@ -928,33 +1012,12 @@ def main() -> None:
                         "batch_ndim": data.ndim,
                     }
                 )
+                collector_frames += data.numel()
                 current_phase = "batch_metrics"
-                batch_metrics = _batch_metrics(data)
+                batch_metrics = _batch_metrics(data, collector_policy_version)
                 if args.debug_data_flow:
                     _add_data_flow_metrics(batch_metrics, "data_flow/source", data)
                 current_phase = "batch_to_train_device"
-                data = data.to(train_device)
-                torchrl_logger.info({"phase": "gae_start", "iteration": iteration})
-                current_phase = "gae"
-                with timeit("adv_s"), torch.no_grad(), set_recurrent_mode(True):
-                    data = adv_module(data)
-                torchrl_logger.info({"phase": "gae_done", "iteration": iteration})
-                if args.debug_data_flow:
-                    _add_data_flow_metrics(batch_metrics, "data_flow/gae", data)
-                current_phase = "train_buffer_extend"
-                with timeit("collector_to_train_buffer_s"):
-                    train_buffer.empty()
-                    train_buffer.extend(data)
-                torchrl_logger.info(
-                    {"phase": "train_buffer_ready", "iteration": iteration}
-                )
-                if args.debug_data_flow:
-                    stored_data = train_buffer[:]
-                    _add_data_flow_metrics(
-                        batch_metrics, "data_flow/train_buffer", stored_data
-                    )
-                    _add_buffer_compare_metrics(batch_metrics, data, stored_data)
-                del data
 
                 loss_acc = None
                 loss_count = 0
@@ -968,9 +1031,56 @@ def main() -> None:
                                 "epoch": epoch,
                             }
                         )
+                        torchrl_logger.info(
+                            {
+                                "phase": "gae_start",
+                                "iteration": iteration,
+                                "epoch": epoch,
+                            }
+                        )
+                        current_phase = "gae"
+                        with (
+                            timeit(name="adv_s"),
+                            torch.no_grad(),
+                            set_recurrent_mode(True),
+                        ):
+                            assert data.ndim == 2
+                            epoch_data = data.to(train_device)
+                            epoch_data = adv_module(epoch_data)
+                        torchrl_logger.info(
+                            {
+                                "phase": "gae_done",
+                                "iteration": iteration,
+                                "epoch": epoch,
+                            }
+                        )
+                        if args.debug_data_flow and epoch == 0:
+                            _add_data_flow_metrics(
+                                batch_metrics, "data_flow/gae", epoch_data
+                            )
+                        current_phase = "train_buffer_extend"
+                        with timeit("collector_to_train_buffer_s"):
+                            train_buffer.empty()
+                            train_buffer.extend(epoch_data)
+                        torchrl_logger.info(
+                            {
+                                "phase": "train_buffer_ready",
+                                "iteration": iteration,
+                                "epoch": epoch,
+                            }
+                        )
+                        if args.debug_data_flow and epoch == 0:
+                            stored_data = train_buffer[:]
+                            _add_data_flow_metrics(
+                                batch_metrics, "data_flow/train_buffer", stored_data
+                            )
+                            _add_buffer_compare_metrics(
+                                batch_metrics, epoch_data, stored_data
+                            )
                         for mini_batch in train_buffer:
                             current_phase = "update_minibatch"
                             mini_batch = mini_batch.to(train_device)
+                            assert mini_batch.ndim == 2
                             loss = update(mini_batch)
                             loss_acc = loss if loss_acc is None else loss_acc + loss
                             loss_count += 1
@@ -988,6 +1098,7 @@ def main() -> None:
                             "loss_count": loss_count,
                         }
                     )
+                del data
 
             timing_metrics = timeit.todict(percall=False, prefix="time")
 
@@ -1008,6 +1119,7 @@ def main() -> None:
                 loss_count=loss_count,
                 collector_generation=active_generation,
                 collector_policy_version=collector_policy_version,
+                collector_frames=collector_frames,
                 collector_direct_replay_buffer=args.double_buffer_collector,
             )
             global_step += 1
