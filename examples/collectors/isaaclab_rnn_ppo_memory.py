@@ -165,6 +165,7 @@ from isaaclab_rnn_ppo_memory_utils import (
     _add_buffer_compare_metrics,
     _add_data_flow_metrics,
     _apply_preset,
+    _assert_time_batch_shape,
     _batch_metrics,
     _log_iteration_metrics,
     _make_storage,
@@ -513,7 +514,12 @@ def main() -> None:
                             torch.no_grad(),
                             set_recurrent_mode(True),
                         ):
-                            assert data.ndim == 2
+                            _assert_time_batch_shape(
+                                data,
+                                args.num_envs,
+                                args.rollout_steps,
+                                "gae_batch",
+                            )
                             epoch_data = data.to(train_device)
                             epoch_data = adv_module(epoch_data)
                         torchrl_logger.info(
@@ -549,7 +555,12 @@ def main() -> None:
                         for mini_batch in train_buffer:
                             current_phase = "update_minibatch"
                             mini_batch = mini_batch.to(train_device)
-                            assert mini_batch.ndim == 2
+                            _assert_time_batch_shape(
+                                mini_batch,
+                                sample_num_slices,
+                                sample_seq_len,
+                                "mini_batch",
+                            )
                             loss = update(mini_batch)
                             loss_acc = loss if loss_acc is None else loss_acc + loss
                             loss_count += 1

@@ -406,6 +406,20 @@ def _batch_metrics(
     return metrics
 
 
+def _assert_time_batch_shape(
+    data: TensorDictBase,
+    expected_batch_size: int,
+    expected_seq_len: int,
+    label: str,
+) -> None:
+    expected = (expected_batch_size, expected_seq_len)
+    actual = tuple(data.batch_size)
+    if actual != expected:
+        raise AssertionError(
+            f"{label} must have batch shape [B, T] = {expected}, got {actual}."
+        )
+
+
 def _key_name(key) -> str:
     if isinstance(key, tuple):
         return "/".join(key)
