@@ -1396,6 +1396,25 @@ class TestLSTMModule:
         for k in grads_full:
             torch.testing.assert_close(grads_full[k], grads_rc[k], atol=1e-5, rtol=1e-5)
 
+    def test_resolve_save_gates(self):
+        """Save_gates must be False under recompute / no_grad / no-track inputs.
+
+        Avoids the dead allocation of save_i/f/g/o/save_tanhc buffers that
+        would otherwise be captured by the CUDA caching allocator / cudagraph
+        private pool even when backward will never read them.
+        """
+        from torchrl.modules.tensordict_module._rnn_triton import _resolve_save_gates
+
+        x = torch.randn(2, 3, 4, requires_grad=True)
+        x_nograd = x.detach()
+        assert _resolve_save_gates(False, x) is True
+        assert _resolve_save_gates(True, x) is False
+        assert _resolve_save_gates(False, x_nograd) is False
+        with torch.no_grad():
+            assert _resolve_save_gates(False, x) is False
+        # ``None`` entries (optional biases) must not break the check.
+        assert _resolve_save_gates(False, x, None) is True
+
 
 class TestGRUModule:
     def test_errs(self):
