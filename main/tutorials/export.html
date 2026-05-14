@@ -409,7 +409,7 @@ later.</p>
 </section>
 <section id="exporting-a-tensordictmodule-based-policy">
 <h2>Exporting a TensorDictModule-based policy<a class="headerlink" href="#exporting-a-tensordictmodule-based-policy" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> allowed us to build a policy with a great flexibility: from a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> that
+<p><code class="docutils literal notranslate"><span class="pre">TensorDict</span></code> allowed us to build a policy with a great flexibility: from a regular <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> that
 outputs action values from an observation, we added a <a class="reference internal" href="../reference/generated/torchrl.modules.QValueModule.html#torchrl.modules.QValueModule" title="torchrl.modules.QValueModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">QValueModule</span></code></a> module that
 read these values and computed an action using some heuristic (e.g., an argmax call).</p>
 <p>However, there’s a small technical catch in our case: the environment (the actual Atari game) doesn’t return
@@ -418,7 +418,7 @@ the images can be read by the model. We can see that, from the training perspect
 and model is blurry, but at execution time things are much clearer: the model should take care of transforming
 the input data (images) to the format that can be processed by our CNN.</p>
 <p>Here again, the magic of tensordict will unblock us: it happens that most of local (non-recursive) TorchRL’s
-transforms can be used both as environment transforms or preprocessing blocks within a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
+transforms can be used both as environment transforms or preprocessing blocks within a <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a>
 instance. Let’s see how we can prepend them to our policy:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy_transform</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictSequential</span></a><span class="p">(</span>
     <span class="n">env</span><span class="o">.</span><span class="n">transform</span><span class="p">[</span>
@@ -430,7 +430,7 @@ instance. Let’s see how we can prepend them to our policy:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>We create a fake input, and pass it to <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> with the policy. This will give a “raw” python
+<p>We create a fake input, and pass it to <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> with the policy. This will give a “raw” python
 function that will read our input tensor and output an action without any reference to TorchRL or tensordict modules.</p>
 <p>A good practice is to call <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential.select_out_keys" title="(in tensordict v0.12)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">select_out_keys()</span></code></a> to let the model know that
 we only want a certain set of outputs (in case the policy returns more than one tensor).</p>
@@ -656,7 +656,7 @@ class GraphModule(torch.nn.Module):
 <h2>Working with recurrent policies<a class="headerlink" href="#working-with-recurrent-policies" title="Link to this heading">¶</a></h2>
 <p>Another typical use case is a recurrent policy that will output an action as well as a one or more recurrent state.
 LSTM and GRU are CuDNN-based modules, which means that they will behave differently than regular
-<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> instances (export utils may not trace them well). Fortunately, TorchRL provides a python
+<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> instances (export utils may not trace them well). Fortunately, TorchRL provides a python
 implementation of these modules that can be swapped with the CuDNN version when desired.</p>
 <p>To show this, let us write a prototypical policy that relies on an RNN:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a>
@@ -672,7 +672,7 @@ implementation of these modules that can be swapped with the CuDNN version when 
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>If the LSTM module is not python based but CuDNN (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.11)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTM</span></code></a>), the <a class="reference internal" href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule.make_python_based" title="torchrl.modules.LSTMModule.make_python_based"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_python_based()</span></code></a>
+<p>If the LSTM module is not python based but CuDNN (<a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTM</span></code></a>), the <a class="reference internal" href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule.make_python_based" title="torchrl.modules.LSTMModule.make_python_based"><code class="xref py py-meth docutils literal notranslate"><span class="pre">make_python_based()</span></code></a>
 method can be used to use the python version.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">lstm</span> <span class="o">=</span> <span class="n">lstm</span><span class="o">.</span><span class="n">make_python_based</span><span class="p">()</span>
 </pre></div>
@@ -703,7 +703,7 @@ with the LSTM and an MLP.</p>
 recurrent policy output keys: [&#39;action&#39;, &#39;hidden0&#39;, &#39;hidden1&#39;]
 </pre></div>
 </div>
-<p>We are now ready to export. To do this, we build fake inputs and pass them to <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.11)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a>:</p>
+<p>We are now ready to export. To do this, we build fake inputs and pass them to <a class="reference external" href="https://docs.pytorch.org/docs/stable/user_guide/torch_compiler/export/api_reference.html#torch.export.export" title="(in PyTorch v2.12)"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a>:</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_obs</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">32</span><span class="p">)</span>
 <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_hidden0</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
 <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">fake_hidden1</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
@@ -879,7 +879,7 @@ This is particularly useful when you need to deploy your model on devices or pla
 <span class="nb">print</span><span class="p">(</span><span class="n">compiled_module</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">pixels</span></a><span class="p">))</span>
 </pre></div>
 </div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>pkg_path /tmp/tmpml_1hxth/model.pt2
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>pkg_path /tmp/tmpotei32x5/model.pt2
 tensor(1)
 </pre></div>
 </div>
@@ -997,8 +997,8 @@ Text(0.5, 1.0, &#39;Screen rendering of Pong game.&#39;)
 [torch.onnx] Translate the graph into ONNX... ✅
 [torch.onnx] Optimize the ONNX graph...
 [torch.onnx] Optimize the ONNX graph... ✅
-ONNX rollout took 650.7349 msec (total =  0.6507 sec since last reset).
-TorchRL version took 2117.7833 msec (total =  2.1178 sec since last reset).
+ONNX rollout took 704.2873 msec (total =  0.7043 sec since last reset).
+TorchRL version took 2121.0911 msec (total =  2.1211 sec since last reset).
 </pre></div>
 </div>
 <p>Note that ONNX also offers the possibility of optimizing models directly, but this is beyond the scope of this
@@ -1025,7 +1025,7 @@ information.</p></li>
 <li><p>Experiment with deploying exported models on different devices.</p></li>
 <li><p>Explore optimization techniques for ONNX models to improve performance.</p></li>
 </ul>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 24.104 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 23.981 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-export-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">export.ipynb</span></code></a></p>

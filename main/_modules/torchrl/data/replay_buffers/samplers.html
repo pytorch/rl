@@ -248,7 +248,7 @@
 <span class="kn">import</span> <span class="nn">json</span>
 <span class="kn">import</span> <span class="nn">textwrap</span>
 <span class="kn">import</span> <span class="nn">warnings</span>
-<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">ABCMeta</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
 <span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
 <span class="kn">from</span> <span class="nn">multiprocessing.context</span> <span class="kn">import</span> <span class="n">get_spawning_popen</span>
@@ -296,9 +296,50 @@
 <span class="n">_EMPTY_STORAGE_ERROR</span> <span class="o">=</span> <span class="s2">&quot;Cannot sample from an empty storage.&quot;</span>
 
 
+<span class="c1"># Maps a &quot;with replacement&quot; sampler class to its &quot;without replacement&quot; counterpart.</span>
+<span class="c1"># Populated at module import time after the relevant classes are defined.</span>
+<span class="c1"># Consumed by :class:`_SamplerMeta` to dispatch ``Cls(replacement=False, ...)`` calls</span>
+<span class="c1"># to ``_REPLACEMENT_DISPATCH[Cls](...)``.</span>
+<span class="n">_REPLACEMENT_DISPATCH</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">type</span><span class="p">,</span> <span class="nb">type</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">class</span> <span class="nc">_SamplerMeta</span><span class="p">(</span><span class="n">ABCMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass enabling ``replacement=False`` dispatch on with-replacement samplers.</span>
+
+<span class="sd">    When a class registered in :data:`_REPLACEMENT_DISPATCH` (e.g.</span>
+<span class="sd">    :class:`RandomSampler`, :class:`SliceSampler`) is instantiated with</span>
+<span class="sd">    ``replacement=False``, the call is dispatched to its without-replacement</span>
+<span class="sd">    counterpart (:class:`SamplerWithoutReplacement` or</span>
+<span class="sd">    :class:`SliceSamplerWithoutReplacement`).</span>
+
+<span class="sd">    Calls with ``replacement=True`` (the default) behave exactly like a normal</span>
+<span class="sd">    instantiation: the ``replacement`` kwarg is popped before the constructor</span>
+<span class="sd">    runs, so existing ``__init__`` signatures don&#39;t need to be changed.</span>
+
+<span class="sd">    Passing ``replacement=False`` to a sampler that has no without-replacement</span>
+<span class="sd">    variant raises :class:`TypeError`. Passing ``replacement=False`` to a</span>
+<span class="sd">    sampler that is itself already a without-replacement variant is allowed</span>
+<span class="sd">    and treated as a no-op.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;replacement&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">replacement</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;replacement&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">replacement</span><span class="p">:</span>
+                <span class="n">alt</span> <span class="o">=</span> <span class="n">_REPLACEMENT_DISPATCH</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">alt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">alt</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">cls</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_REPLACEMENT_DISPATCH</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> has no without-replacement variant; &quot;</span>
+                        <span class="s2">&quot;cannot be instantiated with replacement=False.&quot;</span>
+                    <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="Sampler">
 <a class="viewcode-back" href="../../../../reference/generated/torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler">[docs]</a>
-<span class="k">class</span> <span class="nc">Sampler</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="k">class</span> <span class="nc">Sampler</span><span class="p">(</span><span class="n">ABC</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_SamplerMeta</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A generic sampler base class for composable Replay Buffers.&quot;&quot;&quot;</span>
 
     <span class="c1"># Some samplers - mainly those without replacement -</span>
@@ -379,9 +420,23 @@
 <span class="k">class</span> <span class="nc">RandomSampler</span><span class="p">(</span><span class="n">Sampler</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;A uniformly random sampler for composable replay buffers.</span>
 
-<span class="sd">    Args:</span>
-<span class="sd">        batch_size (int, optional): if provided, the batch size to be used by</span>
-<span class="sd">            the replay buffer when calling :meth:`ReplayBuffer.sample`.</span>
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        replacement (bool, optional): if ``False``, the call is dispatched to</span>
+<span class="sd">            :class:`SamplerWithoutReplacement`, and any additional keyword</span>
+<span class="sd">            arguments (e.g. ``drop_last``, ``shuffle``) are forwarded to its</span>
+<span class="sd">            constructor. Defaults to ``True``.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import RandomSampler, SamplerWithoutReplacement</span>
+<span class="sd">        &gt;&gt;&gt; isinstance(RandomSampler(), RandomSampler)</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; isinstance(RandomSampler(replacement=False), SamplerWithoutReplacement)</span>
+<span class="sd">        True</span>
+<span class="sd">        &gt;&gt;&gt; isinstance(</span>
+<span class="sd">        ...     RandomSampler(replacement=False, drop_last=True),</span>
+<span class="sd">        ...     SamplerWithoutReplacement,</span>
+<span class="sd">        ... )</span>
+<span class="sd">        True</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
@@ -1418,12 +1473,19 @@
 
 <span class="sd">    This class samples sub-trajectories with replacement. For a version without</span>
 <span class="sd">    replacement, see :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`.</span>
+<span class="sd">    Equivalently, ``SliceSampler(replacement=False, ...)`` dispatches to</span>
+<span class="sd">    :class:`SliceSamplerWithoutReplacement` and forwards the remaining keyword</span>
+<span class="sd">    arguments (including ``drop_last`` and ``shuffle``).</span>
 
 <span class="sd">    .. note:: `SliceSampler` can be slow to retrieve the trajectory indices. To accelerate</span>
 <span class="sd">        its execution, prefer using `end_key` over `traj_key`, and consider the following</span>
 <span class="sd">        keyword arguments: :attr:`compile`, :attr:`cache_values` and :attr:`use_gpu`.</span>
 
 <span class="sd">    Keyword Args:</span>
+<span class="sd">        replacement (bool, optional): if ``False``, the call is dispatched to</span>
+<span class="sd">            :class:`SliceSamplerWithoutReplacement` (which accepts the same</span>
+<span class="sd">            keyword arguments as well as ``drop_last`` and ``shuffle``).</span>
+<span class="sd">            Defaults to ``True``.</span>
 <span class="sd">        num_slices (int): the number of slices to be sampled. The batch-size</span>
 <span class="sd">            must be greater or equal to the ``num_slices`` argument. Exclusive</span>
 <span class="sd">            with ``slice_len``.</span>
@@ -3447,6 +3509,17 @@
         <span class="n">samplers</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">indent</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;samplers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_samplers</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(</span><span class="se">\n</span><span class="si">{</span><span class="n">samplers</span><span class="si">}</span><span class="s2">)&quot;</span></div>
 
+
+
+<span class="c1"># Register without-replacement dispatch targets. Importing this module makes</span>
+<span class="c1"># ``RandomSampler(replacement=False)`` dispatch to ``SamplerWithoutReplacement``</span>
+<span class="c1"># and ``SliceSampler(replacement=False)`` to ``SliceSamplerWithoutReplacement``.</span>
+<span class="n">_REPLACEMENT_DISPATCH</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="n">RandomSampler</span><span class="p">:</span> <span class="n">SamplerWithoutReplacement</span><span class="p">,</span>
+        <span class="n">SliceSampler</span><span class="p">:</span> <span class="n">SliceSamplerWithoutReplacement</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">)</span>
 </pre></div>
 
              </article>

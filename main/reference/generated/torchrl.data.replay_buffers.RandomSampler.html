@@ -253,14 +253,29 @@
 <h1>RandomSampler<a class="headerlink" href="#randomsampler" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.data.replay_buffers.RandomSampler">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">RandomSampler</span></span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers.html#RandomSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RandomSampler" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.data.replay_buffers.</span></span><span class="sig-name descname"><span class="pre">RandomSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/data/replay_buffers/samplers.html#RandomSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.data.replay_buffers.RandomSampler" title="Link to this definition">¶</a></dt>
 <dd><p>A uniformly random sampler for composable replay buffers.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>batch_size</strong> (<em>int</em><em>, </em><em>optional</em>) – if provided, the batch size to be used by
-the replay buffer when calling <code class="xref py py-meth docutils literal notranslate"><span class="pre">ReplayBuffer.sample()</span></code>.</p>
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>replacement</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">False</span></code>, the call is dispatched to
+<a class="reference internal" href="torchrl.data.replay_buffers.SamplerWithoutReplacement.html#torchrl.data.replay_buffers.SamplerWithoutReplacement" title="torchrl.data.replay_buffers.SamplerWithoutReplacement"><code class="xref py py-class docutils literal notranslate"><span class="pre">SamplerWithoutReplacement</span></code></a>, and any additional keyword
+arguments (e.g. <code class="docutils literal notranslate"><span class="pre">drop_last</span></code>, <code class="docutils literal notranslate"><span class="pre">shuffle</span></code>) are forwarded to its
+constructor. Defaults to <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p>
 </dd>
 </dl>
+<p class="rubric">Examples</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">RandomSampler</span><span class="p">,</span> <span class="n">SamplerWithoutReplacement</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">RandomSampler</span><span class="p">(),</span> <span class="n">RandomSampler</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span><span class="n">RandomSampler</span><span class="p">(</span><span class="n">replacement</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">SamplerWithoutReplacement</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">isinstance</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">RandomSampler</span><span class="p">(</span><span class="n">replacement</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">drop_last</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+<span class="gp">... </span>    <span class="n">SamplerWithoutReplacement</span><span class="p">,</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
 </dd></dl>
 
 </section>
