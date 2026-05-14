@@ -105,6 +105,16 @@ def _parser() -> argparse.ArgumentParser:
         default="cudnn",
     )
     parser.add_argument(
+        "--gae-rnn-backend",
+        choices=["auto", "same", "cudnn", "scan", "triton"],
+        default="auto",
+        help=(
+            "Recurrent backend used for the no-grad GAE value pass. 'auto' uses "
+            "a synced cudnn/pad value backbone for scan/triton training runs to "
+            "avoid repeated scan-HOP compile cost in advantage estimation."
+        ),
+    )
+    parser.add_argument(
         "--compile-update", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
@@ -271,6 +281,25 @@ def main() -> None:
     )
     critic = make_critic_head(args.hidden_size, train_device)
     full_value = make_full_value(backbone, critic)
+    gae_rnn_backend = args.gae_rnn_backend
+    if gae_rnn_backend == "auto":
+        gae_rnn_backend = (
+            "cudnn" if args.rnn_backend in ("scan", "triton") else args.rnn_backend
+        )
+    elif gae_rnn_backend == "same":
+        gae_rnn_backend = args.rnn_backend
+    gae_backbone = None
+    gae_full_value = full_value
+    if gae_rnn_backend != args.rnn_backend:
+        gae_backbone = make_backbone(
+            args.obs_dim,
+            args.hidden_size,
+            gae_rnn_backend,
+            train_device,
+        )
+        gae_full_value = make_full_value(gae_backbone, critic)
+    compile_gae_value_network = compile_gae and gae_backbone is None
+    gae_precompile_calls = 2 if compile_gae_value_network else 1
 
     optim = group_optimizers(
         torch.optim.Adam(
@@ -297,9 +326,9 @@ def main() -> None:
         critic_coeff=args.critic_coeff,
         normalize_advantage=True,
     )
-    gae_value_network = full_value
-    if compile_gae:
-        gae_value_network = torch.compile(full_value, mode=args.compile_mode)
+    gae_value_network = gae_full_value
+    if compile_gae_value_network:
+        gae_value_network = torch.compile(gae_full_value, mode=args.compile_mode)
 
     adv_module = GAE(
         gamma=args.gamma,
@@ -314,6 +343,8 @@ def main() -> None:
 
     def compute_advantages(batch: TensorDictBase):
         with torch.no_grad(), set_recurrent_mode(True):
+            if gae_backbone is not None:
+                gae_backbone.load_state_dict(backbone.state_dict())
             return adv_module(batch)
 
     def compute_loss(batch: TensorDictBase):
@@ -412,19 +443,18 @@ def main() -> None:
             update_calls = args.cudagraph_warmup
         elif args.compile_update:
             update_calls = 2
-        gae_calls = 2 if compile_gae else 1
         torchrl_logger.info(
             {
                 "phase": "training_precompile_start",
                 "gae_batch_shape": f"{args.num_envs}x{args.rollout_steps}",
                 "update_batch_shape": f"{sample_num_slices}x{sample_seq_len}",
-                "gae_calls": gae_calls,
+                "gae_calls": gae_precompile_calls,
                 "update_calls": update_calls,
             }
         )
         param_snapshots = tuple(param.detach().clone() for param in model_params)
         with timeit("training_precompile_s"):
-            for _ in range(gae_calls):
+            for _ in range(gae_precompile_calls):
                 fake_rollout = _make_warmup_rollout()
                 _assert_time_batch_shape(
                     fake_rollout,
@@ -451,7 +481,7 @@ def main() -> None:
         torchrl_logger.info(
             {
                 "phase": "training_precompile_done",
-                "gae_calls": gae_calls,
+                "gae_calls": gae_precompile_calls,
                 "update_calls": update_calls,
             }
         )
@@ -536,6 +566,8 @@ def main() -> None:
             "frames_per_batch": frames_per_batch,
             "per_collector_envs": per_collector_envs,
             "collector_rnn_backend": collector_rnn_backend,
+            "training_rnn_backend": args.rnn_backend,
+            "training_gae_rnn_backend": gae_rnn_backend,
             "updates_per_epoch": updates_per_epoch,
             "storing_device": str(storing_device)
             if storing_device is not None
@@ -549,9 +581,12 @@ def main() -> None:
             else "single_process_fallback",
             "debug_data_flow": args.debug_data_flow,
             "training_precompile": args.precompile_training,
-            "training_compile_gae": compile_gae,
-            "training_compile_gae_target": "value_network" if compile_gae else "none",
-            "training_precompile_gae_calls": 2 if compile_gae else 1,
+            "training_compile_gae_requested": compile_gae,
+            "training_compile_gae": compile_gae_value_network,
+            "training_compile_gae_target": "value_network"
+            if compile_gae_value_network
+            else "none",
+            "training_precompile_gae_calls": gae_precompile_calls,
             "training_precompile_update_calls": precompile_update_calls,
         }
     )
