@@ -53,6 +53,7 @@ INTEGER_DTYPES = (
     torch.int32,
     torch.int64,
 )
+_CANONICAL_CONTIGUOUS: bool | None = None
 
 
 def _apply_preset(args: argparse.Namespace) -> argparse.Namespace:
@@ -418,6 +419,18 @@ def _assert_time_batch_shape(
         raise AssertionError(
             f"{label} must have batch shape [B, T] = {expected}, got {actual}."
         )
+
+
+def _canonicalize_batch(data: TensorDictBase) -> TensorDictBase:
+    global _CANONICAL_CONTIGUOUS
+    if _CANONICAL_CONTIGUOUS is not False:
+        try:
+            result = data.contiguous(canonical=True)
+            _CANONICAL_CONTIGUOUS = True
+            return result
+        except TypeError:
+            _CANONICAL_CONTIGUOUS = False
+    return data.contiguous()
 
 
 def _make_fake_training_batch(

@@ -108,6 +108,16 @@ def _parser() -> argparse.ArgumentParser:
         "--compile-update", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
+        "--compile-gae",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Compile the GAE/value-network path. Defaults to --compile-update so "
+            "scan/triton recurrent backends do not pay a scan body compile on "
+            "every advantage call."
+        ),
+    )
+    parser.add_argument(
         "--compile-mode",
         choices=["default", "reduce-overhead", "max-autotune"],
         default="default",
@@ -177,6 +187,7 @@ from isaaclab_rnn_ppo_memory_utils import (
     _apply_preset,
     _assert_time_batch_shape,
     _batch_metrics,
+    _canonicalize_batch,
     _log_iteration_metrics,
     _make_fake_training_batch,
     _make_storage,
@@ -209,7 +220,10 @@ def main() -> None:
         raise ValueError("--compact-obs requires --shifted-gae for this script.")
     if args.num_envs % args.num_collectors:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
-    if args.compile_update:
+    compile_gae = args.compile_gae
+    if compile_gae is None:
+        compile_gae = args.compile_update
+    if args.compile_update or compile_gae:
         torch._dynamo.config.capture_scalar_outputs = True
     if args.compile_update and args.cudagraph_update:
         torch._inductor.config.triton.cudagraph_trees = args.cudagraph_trees
@@ -294,6 +308,10 @@ def main() -> None:
         device=train_device,
     )
 
+    def compute_advantages(batch: TensorDictBase):
+        with torch.no_grad(), set_recurrent_mode(True):
+            return adv_module(batch)
+
     def compute_loss(batch: TensorDictBase):
         with set_recurrent_mode(True):
             return loss_module(batch)
@@ -318,6 +336,11 @@ def main() -> None:
         loss_out.set("grad_norm_critic", critic_grad_norm.detach())
         loss_out.set("grad_norm_total", grad_norm.detach())
         return loss_out
+
+    if compile_gae:
+        compute_advantages = compile_with_warmup(
+            compute_advantages, mode=args.compile_mode, warmup=1
+        )
 
     if args.compile_update:
         update = compile_with_warmup(update, mode=args.compile_mode, warmup=1)
@@ -349,7 +372,22 @@ def main() -> None:
             )
         mini_batch.set(loss_module.tensor_keys.value_target, state_value.detach())
         mini_batch.set(loss_module.tensor_keys.advantage, torch.zeros_like(state_value))
-        return mini_batch
+        return _canonicalize_batch(mini_batch)
+
+    def _make_warmup_rollout() -> TensorDictBase:
+        fake_rollout = _make_fake_training_batch(
+            batch_size=args.num_envs,
+            seq_len=args.rollout_steps,
+            obs_dim=args.obs_dim,
+            action_dim=args.action_dim,
+            hidden_size=args.hidden_size,
+            device=train_device,
+        )
+        if args.compact_obs:
+            next_td = fake_rollout.get("next", None)
+            if next_td is not None and "policy" in next_td.keys():
+                next_td.del_("policy")
+        return _canonicalize_batch(fake_rollout)
 
     def _restore_after_precompile(
         param_snapshots: tuple[torch.Tensor, ...],
@@ -375,33 +413,28 @@ def main() -> None:
             update_calls = args.cudagraph_warmup
         elif args.compile_update:
             update_calls = 2
+        gae_calls = 2 if compile_gae else 1
         torchrl_logger.info(
             {
                 "phase": "training_precompile_start",
                 "gae_batch_shape": f"{args.num_envs}x{args.rollout_steps}",
                 "update_batch_shape": f"{sample_num_slices}x{sample_seq_len}",
+                "gae_calls": gae_calls,
                 "update_calls": update_calls,
             }
         )
         param_snapshots = tuple(param.detach().clone() for param in model_params)
         with timeit("training_precompile_s"):
-            fake_rollout = _make_fake_training_batch(
-                batch_size=args.num_envs,
-                seq_len=args.rollout_steps,
-                obs_dim=args.obs_dim,
-                action_dim=args.action_dim,
-                hidden_size=args.hidden_size,
-                device=train_device,
-            )
-            with torch.no_grad(), set_recurrent_mode(True):
+            for _ in range(gae_calls):
+                fake_rollout = _make_warmup_rollout()
                 _assert_time_batch_shape(
                     fake_rollout,
                     args.num_envs,
                     args.rollout_steps,
                     "fake_gae_batch",
                 )
-                adv_module(fake_rollout)
-            del fake_rollout
+                compute_advantages(fake_rollout)
+                del fake_rollout
             if update_calls:
                 for _ in range(update_calls):
                     fake_minibatch = _make_warmup_minibatch()
@@ -419,6 +452,7 @@ def main() -> None:
         torchrl_logger.info(
             {
                 "phase": "training_precompile_done",
+                "gae_calls": gae_calls,
                 "update_calls": update_calls,
             }
         )
@@ -516,6 +550,8 @@ def main() -> None:
             else "single_process_fallback",
             "debug_data_flow": args.debug_data_flow,
             "training_precompile": args.precompile_training,
+            "training_compile_gae": compile_gae,
+            "training_precompile_gae_calls": 2 if compile_gae else 1,
             "training_precompile_update_calls": precompile_update_calls,
         }
     )
@@ -619,19 +655,15 @@ def main() -> None:
                             }
                         )
                         current_phase = "gae"
-                        with (
-                            timeit(name="adv_s"),
-                            torch.no_grad(),
-                            set_recurrent_mode(True),
-                        ):
+                        with timeit(name="adv_s"):
                             _assert_time_batch_shape(
                                 data,
                                 args.num_envs,
                                 args.rollout_steps,
                                 "gae_batch",
                             )
-                            epoch_data = data.to(train_device)
-                            epoch_data = adv_module(epoch_data)
+                            epoch_data = _canonicalize_batch(data.to(train_device))
+                            epoch_data = compute_advantages(epoch_data)
                         torchrl_logger.info(
                             {
                                 "phase": "gae_done",
@@ -664,7 +696,9 @@ def main() -> None:
                             )
                         for mini_batch in train_buffer:
                             current_phase = "update_minibatch"
-                            mini_batch = mini_batch.to(train_device)
+                            mini_batch = _canonicalize_batch(
+                                mini_batch.to(train_device)
+                            )
                             _assert_time_batch_shape(
                                 mini_batch,
                                 sample_num_slices,
