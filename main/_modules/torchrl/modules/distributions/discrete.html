@@ -629,7 +629,9 @@
                         <span class="n">original_value_shape</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span>
                         <span class="n">value</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
                     <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-                <span class="n">result</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="n">result</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
+                    <span class="n">logits</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;none&quot;</span>
+                <span class="p">)</span>
                 <span class="k">if</span> <span class="n">original_value_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">original_value_shape</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -660,7 +662,7 @@
                     <span class="n">original_idx_shape</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">shape</span>
                     <span class="n">idx</span> <span class="o">=</span> <span class="n">idx</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
                 <span class="n">logits</span> <span class="o">=</span> <span class="n">logits</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-            <span class="n">ret</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">ret</span> <span class="o">=</span> <span class="o">-</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">original_idx_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">ret</span> <span class="o">=</span> <span class="n">ret</span><span class="o">.</span><span class="n">unflatten</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">original_idx_shape</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1112,7 +1114,10 @@
 
             <span class="c1"># Compute cross_entropy with ignore_index</span>
             <span class="n">log_probs_flat</span> <span class="o">=</span> <span class="o">-</span><span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
-                <span class="n">logits_flat</span><span class="p">,</span> <span class="n">value_flat</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span>
+                <span class="n">logits_flat</span><span class="p">,</span>
+                <span class="n">value_flat</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
+                <span class="n">ignore_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span><span class="p">,</span>
             <span class="p">)</span>
 
             <span class="c1"># Reshape back</span>
@@ -1121,7 +1126,7 @@
             <span class="n">log_probs</span> <span class="o">=</span> <span class="o">-</span><span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
                 <span class="n">logits</span><span class="p">,</span>
                 <span class="n">value</span><span class="p">,</span>
-                <span class="n">reduce</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
                 <span class="n">ignore_index</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">ignore_index</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">log_probs</span>
