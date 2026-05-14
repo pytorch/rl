@@ -1431,6 +1431,7 @@ class InitTracker(Transform):
         return self.parent._filtered_reset_keys
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        native_autoreset = self.parent.__dict__.get("_torchrl_native_autoreset", False)
         for init_key in self.init_keys:
             done_key = _replace_last(init_key, "done")
             if init_key not in next_tensordict.keys(True, True):
@@ -1438,9 +1439,13 @@ class InitTracker(Transform):
                 if device is None:
                     device = torch.device("cpu")
                 shape = self.parent.full_done_spec[done_key].shape
+                if native_autoreset and done_key in next_tensordict.keys(True, True):
+                    init = next_tensordict.get(done_key).clone()
+                else:
+                    init = torch.zeros(shape, device=device, dtype=torch.bool)
                 next_tensordict.set(
                     init_key,
-                    torch.zeros(shape, device=device, dtype=torch.bool),
+                    init,
                 )
         return next_tensordict
 

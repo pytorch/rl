@@ -60,6 +60,7 @@ class CollectorConfig(BaseCollectorConfig):
     track_policy_version: bool = False
     worker_idx: int | None = None
     trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
 
     _target_: str = "torchrl.collectors.Collector"
     _partial_: bool = False
@@ -180,6 +181,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     track_policy_version: bool = False
     worker_idx: int | None = None
     trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
     init_fn: Any = None
 
     _target_: str = "torchrl.collectors.MultiSyncCollector"
@@ -245,6 +247,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     track_policy_version: bool = False
     worker_idx: int | None = None
     trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
     init_fn: Any = None
 
     _target_: str = "torchrl.collectors.MultiAsyncCollector"

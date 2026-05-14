@@ -22,6 +22,39 @@ _NON_NN_POLICY_WEIGHTS = (
 )
 
 
+def _log_prob_key_from_sample_key(key: NestedKey) -> NestedKey:
+    if isinstance(key, tuple):
+        return (*key[:-1], f"{key[-1]}_log_prob")
+    return f"{key}_log_prob"
+
+
+def _ensure_derived_policy_output_keys(policy: Callable | None) -> None:
+    """Restore derived policy-output metadata after policy serialization.
+
+    Collectors already discover declared policy-produced keys, including
+    arbitrary non-action metadata, with the initial policy dry-run. Some
+    modules derive additional output-key metadata at construction time. If
+    serialization drops that metadata, the first dry-run cannot see those
+    outputs, so restore the known derived keys before collection starts.
+    """
+    if policy is None:
+        return
+    modules = policy.modules() if isinstance(policy, nn.Module) else (policy,)
+    for module in modules:
+        if not getattr(module, "return_log_prob", False):
+            continue
+        try:
+            log_prob_keys = module.log_prob_keys
+        except AttributeError:
+            continue
+        if log_prob_keys:
+            continue
+        out_keys = getattr(module, "out_keys", None)
+        if not out_keys:
+            continue
+        module.log_prob_keys = [_log_prob_key_from_sample_key(key) for key in out_keys]
+
+
 def _stack_output(fun) -> Callable:
     def stacked_output_fun(*args, **kwargs):
         out = fun(*args, **kwargs)
@@ -433,10 +466,16 @@ def _traj_ingest(
             "split_trajs=False (the default)."
         )
 
-    unique_ids = traj_ids.unique()
-    for tid_tensor in unique_ids:
+    order = torch.argsort(traj_ids.reshape(-1), stable=True)
+    flat = flat[order]
+    traj_ids = traj_ids.reshape(-1)[order]
+    unique_ids, counts = traj_ids.unique_consecutive(return_counts=True)
+    start = 0
+    for tid_tensor, count in zip(unique_ids, counts):
         tid = tid_tensor.item()
-        chunk = flat[traj_ids == tid_tensor]
+        stop = start + count.item()
+        chunk = flat[start:stop]
+        start = stop
 
         if tid in partial_trajs:
             partial_trajs[tid].append(chunk)
@@ -492,4 +531,5 @@ def _make_policy_factory(
         )
         # Synchronize initial weights
         weight_sync_scheme.connect(worker_idx=worker_idx)
+    _ensure_derived_policy_output_keys(policy)
     return policy

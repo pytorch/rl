@@ -169,6 +169,11 @@ class Collector(BaseCollector):
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
             information.
             Defaults to ``False``.
+        track_traj_ids (bool, optional): if ``False``, the collector will not
+            write ``("collector", "traj_ids")`` in the rollout nor update
+            trajectory identifiers at every environment step. This is useful
+            when trajectory splitting or trajectory-aware replay sampling is not
+            needed. Defaults to ``True``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
@@ -260,6 +265,17 @@ class Collector(BaseCollector):
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        compact_obs (bool, optional): if ``True``, the collector drops the
+            observation and state keys from the ``("next", ...)`` sub-tensordict
+            before stacking per-step data. Those keys are bit-for-bit identical
+            to the root keys of the next step (modulo the last frame of the
+            rollout), so storing both copies wastes memory. ``("next", "reward")``,
+            ``("next", "done")`` and ``("next", "truncated")`` are preserved
+            because they cannot be reconstructed from the root keys. The dropped
+            keys can be re-hydrated at sampling time with
+            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+            when consuming a :class:`~torchrl.data.SliceSampler`-backed replay
+            buffer. Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -341,6 +357,7 @@ class Collector(BaseCollector):
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         split_trajs: bool | None = None,
+        track_traj_ids: bool = True,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         return_same_td: bool = False,
         reset_when_done: bool = True,
@@ -361,14 +378,17 @@ class Collector(BaseCollector):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+        compact_obs: bool = False,
         **kwargs,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self.trajs_per_write = trajs_per_write
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -453,6 +473,10 @@ class Collector(BaseCollector):
         # Set up postproc
         self._setup_postproc(postproc)
 
+        # Set up compact_obs: keys to drop from ("next", ...) to avoid
+        # storing two copies of each observation. See `_setup_compact_obs`.
+        self._setup_compact_obs(compact_obs)
+
         # Calculate frames per batch
         self._setup_frames_per_batch(frames_per_batch)
 
@@ -463,15 +487,12 @@ class Collector(BaseCollector):
         self.return_same_td = return_same_td
         self.set_truncated = set_truncated
 
-        # Create shuttle and rollout buffers
-        self._make_shuttle()
-        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
-        self._set_truncated_keys()
-
         # Set split trajectories option
         if split_trajs is None:
             split_trajs = False
         elif split_trajs:
+            if not track_traj_ids:
+                raise ValueError("split_trajs=True requires track_traj_ids=True.")
             warnings.warn(
                 "split_trajs=True produces a (N_traj, T_max) zero-padded "
                 "tensordict with a 'mask' key. For sequence training, prefer "
@@ -485,7 +506,13 @@ class Collector(BaseCollector):
                 stacklevel=2,
             )
         self.split_trajs = split_trajs
+        self.track_traj_ids = track_traj_ids
         self._exclude_private_keys = True
+
+        # Create shuttle and rollout buffers
+        self._make_shuttle()
+        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
+        self._set_truncated_keys()
 
         # Set up interruptor and frame tracking
         self.interruptor = interruptor
@@ -918,6 +945,36 @@ class Collector(BaseCollector):
             if postproc is not self.postproc and postproc is not None:
                 self.postproc = postproc
 
+    def _setup_compact_obs(self, compact_obs: bool) -> None:
+        """Resolve the ``("next", ...)`` keys to drop when ``compact_obs=True``.
+
+        When enabled, the collector drops the observation and state keys from
+        the ``("next", ...)`` sub-tensordict before stacking. These keys are
+        bit-for-bit identical to the root keys of the next step (modulo the
+        last frame of the rollout), so storing both copies wastes memory.
+
+        ``("next", "reward")``, ``("next", "done")`` and ``("next", "truncated")``
+        are left in place since they cannot be reconstructed from the root keys.
+
+        The user can re-hydrate the dropped keys at sampling time with
+        :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+        when consuming a ``SliceSampler``-backed replay buffer.
+        """
+        self.compact_obs = bool(compact_obs)
+        if not self.compact_obs:
+            self._compact_next_keys: tuple = ()
+            return
+        leaf_keys = list(self.env._observation_keys_step_mdp) + list(
+            self.env._state_keys_step_mdp
+        )
+        compact: list[tuple] = []
+        for k in leaf_keys:
+            if isinstance(k, tuple):
+                compact.append(("next", *k))
+            else:
+                compact.append(("next", k))
+        self._compact_next_keys = tuple(compact)
+
     def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
         """Calculate and validate frames per batch."""
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
@@ -986,18 +1043,23 @@ class Collector(BaseCollector):
         else:
             self._shuttle_has_no_device = False
 
-        traj_ids = self._traj_pool.get_traj_and_increment(
-            self.n_env, device=self.storing_device
-        ).view(self.env.batch_size)
-        self._carrier.set(
-            ("collector", "traj_ids"),
-            traj_ids,
-        )
+        if self.track_traj_ids:
+            traj_ids = self._traj_pool.get_traj_and_increment(
+                self.n_env, device=self.storing_device
+            ).view(self.env.batch_size)
+            self._carrier.set(
+                ("collector", "traj_ids"),
+                traj_ids,
+            )
 
     def _maybe_make_final_rollout(self, make_rollout: bool):
         if make_rollout:
             with torch.no_grad():
                 self._final_rollout = self.env.fake_tensordict()
+            if self._compact_next_keys:
+                self._final_rollout = self._final_rollout.exclude(
+                    *self._compact_next_keys
+                )
 
             # If storing device is not None, we use this to cast the storage.
             # If it is None and the env and policy are on the same device,
@@ -1065,6 +1127,28 @@ class Collector(BaseCollector):
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
+            out_keys = getattr(_policy_to_check, "out_keys", ())
+            missing_out_keys = [
+                key for key in out_keys if key not in self._policy_output_keys
+            ]
+            if missing_out_keys:
+                with torch.no_grad():
+                    policy_input = self._carrier.copy()
+                    if self.policy_device:
+                        policy_input = policy_input.to(self.policy_device)
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
+                    policy_output = self._wrapped_policy(policy_input)
+                policy_output_keys = set(policy_output.keys(True, True))
+                missing_out_keys = [
+                    key for key in missing_out_keys if key in policy_output_keys
+                ]
+                if missing_out_keys:
+                    self._policy_output_keys.update(missing_out_keys)
+                    if make_rollout:
+                        self._final_rollout.update(
+                            policy_output.select(*missing_out_keys)
+                        )
         elif (
             not make_rollout
             and hasattr(
@@ -1178,16 +1262,17 @@ class Collector(BaseCollector):
                 .zero_()
             )
 
-            # in addition to outputs of the policy, we add traj_ids to
-            # _final_rollout which will be collected during rollout
-            self._final_rollout.set(
-                ("collector", "traj_ids"),
-                torch.zeros(
-                    *self._final_rollout.batch_size,
-                    dtype=torch.int64,
-                    device=self.storing_device,
-                ),
-            )
+            if self.track_traj_ids:
+                # in addition to outputs of the policy, we add traj_ids to
+                # _final_rollout which will be collected during rollout
+                self._final_rollout.set(
+                    ("collector", "traj_ids"),
+                    torch.zeros(
+                        *self._final_rollout.batch_size,
+                        dtype=torch.int64,
+                        device=self.storing_device,
+                    ),
+                )
             self._final_rollout.refine_names(..., "time")
 
     def _set_truncated_keys(self):
@@ -1573,7 +1658,7 @@ class Collector(BaseCollector):
             self._carrier.update(self.env.reset())
 
         # self._shuttle.fill_(("collector", "step_count"), 0)
-        if self._use_buffers:
+        if self._use_buffers and self.track_traj_ids:
             self._final_rollout.fill_(("collector", "traj_ids"), -1)
         else:
             pass
@@ -1658,13 +1743,21 @@ class Collector(BaseCollector):
                         next_data.clear_device_()
                     self._carrier.set("next", next_data)
 
+                # When compact_obs is enabled, drop the obs/state keys from
+                # ("next", ...) before persisting the per-step td. The dropped
+                # keys are recoverable from the root keys of the next step.
+                if self._compact_next_keys:
+                    carrier_for_out = self._carrier.exclude(*self._compact_next_keys)
+                else:
+                    carrier_for_out = self._carrier
+
                 if (
                     self.replay_buffer is not None
                     and not self._ignore_rb
                     and not self.extend_buffer
                 ):
-                    self.replay_buffer.add(self._carrier)
-                    if self._increment_frames(self._carrier.numel()):
+                    self.replay_buffer.add(carrier_for_out)
+                    if self._increment_frames(carrier_for_out.numel()):
                         return
                 else:
                     if self.storing_device is not None:
@@ -1672,22 +1765,24 @@ class Collector(BaseCollector):
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
                         tensordicts.append(
-                            self._carrier.to(
+                            carrier_for_out.to(
                                 self.storing_device, non_blocking=non_blocking
                             )
                         )
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
-                        tensordicts.append(self._carrier)
+                        tensordicts.append(carrier_for_out)
 
-                # carry over collector data without messing up devices
-                collector_data = self._carrier.get("collector").copy()
+                if self.track_traj_ids:
+                    # carry over collector data without messing up devices
+                    collector_data = self._carrier.get("collector").copy()
                 self._carrier = env_next_output
                 if self._shuttle_has_no_device:
                     self._carrier.clear_device_()
-                self._carrier.set("collector", collector_data)
-                self._update_traj_ids(env_output)
+                if self.track_traj_ids:
+                    self._carrier.set("collector", collector_data)
+                    self._update_traj_ids(env_output)
 
                 if (
                     self.interruptor is not None
@@ -1777,8 +1872,8 @@ class Collector(BaseCollector):
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
-        # metadata
-        collector_metadata = self._carrier.get("collector").clone()
+        if self.track_traj_ids:
+            collector_metadata = self._carrier.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -1798,10 +1893,11 @@ class Collector(BaseCollector):
             self._carrier.zero_()
 
         self._carrier.update(self.env.reset(**kwargs), inplace=True)
-        collector_metadata["traj_ids"] = (
-            collector_metadata["traj_ids"] - collector_metadata["traj_ids"].min()
-        )
-        self._carrier["collector"] = collector_metadata
+        if self.track_traj_ids:
+            collector_metadata["traj_ids"] = (
+                collector_metadata["traj_ids"] - collector_metadata["traj_ids"].min()
+            )
+            self._carrier["collector"] = collector_metadata
 
     def shutdown(
         self,

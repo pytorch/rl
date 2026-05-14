@@ -4,10 +4,20 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import math
+from collections.abc import Sequence
+
 import torch
 from tensordict import NestedKey, TensorDictBase
 from torchrl.data.postprocs.postprocs import _multi_step_func
 from torchrl.envs.transforms.transforms import Transform
+
+
+def _under_next(key: NestedKey) -> tuple:
+    """Return the ``("next", *key)`` variant of a nested key."""
+    if isinstance(key, tuple):
+        return ("next", *key)
+    return ("next", key)
 
 
 class MultiStepTransform(Transform):
@@ -212,3 +222,221 @@ class MultiStepTransform(Transform):
             total_cat = torch.cat([self._buffer, data], -1)
             self._buffer = total_cat[..., -self.n_steps :].copy()
         return total_cat
+
+
+class NextStateReconstructor(Transform):
+    """Re-hydrate ``("next", obs)`` keys at sampling time by shifting along the batch.
+
+    Pairs with :class:`~torchrl.collectors.SyncDataCollector` configured with
+    ``compact_obs=True`` (and the analogous flag on the multi-process collectors):
+    the collector drops the observation and state keys from the
+    ``("next", ...)`` sub-tensordict before stacking because those values are
+    bit-for-bit identical to the root keys at ``t + 1`` within the same
+    trajectory; this transform rebuilds them on the consumer side.
+
+    **Core rule.** For each registered root key ``k`` and each position ``i``
+    of the flat sampled batch:
+
+    - if position ``i + 1`` is in the batch *and* belongs to the same
+      trajectory as position ``i``, write
+      ``data[("next", k)][i] = data[k][i + 1]``;
+    - otherwise write ``data[("next", k)][i] = fill_value`` (``NaN`` by
+      default).
+
+    "Same trajectory" is decided from a trajectory id key in the sample,
+    by default ``("collector", "traj_ids")`` — the key that
+    :class:`~torchrl.collectors.SyncDataCollector` populates when
+    ``track_traj_ids=True`` (the default). The semantics fall out cleanly for
+    every common sampler:
+
+    - :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` with
+      ``traj_key``: positions inside a slice mirror to the next position;
+      slice boundaries differ in trajectory id and become ``NaN``.
+    - A full rollout sampled as one contiguous batch: every transition inside
+      a trajectory is reconstructed; trajectory ends become ``NaN``.
+    - :class:`~torchrl.data.replay_buffers.samplers.RandomSampler` and similar:
+      adjacent batch positions almost never share a trajectory id, so the
+      result is mostly ``NaN``. This is correct — the next observation is
+      genuinely not available in the sampled batch — and it makes the
+      mis-use loud rather than silent.
+
+    The trajectory-id check alone is *not* enough: a sampler is allowed to
+    place two slices of the *same* trajectory back-to-back in one batch
+    (e.g. :class:`~torchrl.data.replay_buffers.samplers.SliceSampler` sampling
+    with replacement when there are fewer trajectories than slices). In that
+    case the two positions across the splice would share a trajectory id
+    without being consecutive in time. The transform therefore also consults
+    ``("next", "done")`` (if present): when ``done[i]`` is ``True`` the
+    trajectory ended at step ``i``, so position ``i + 1`` is never the next
+    step of trajectory ``traj_id[i]`` no matter what.
+
+    An additional, stricter ``step_count_key`` cross-check is available for
+    setups where neither ``traj_id`` nor ``done`` are bulletproof — see below.
+
+    Args:
+        keys (sequence of NestedKey, optional): the root keys whose
+            ``("next", k)`` counterparts should be reconstructed. Defaults to
+            ``("observation",)``. For environments with nested observation
+            specs, pass the full leaf list, e.g.
+            ``[("agents", "pos"), ("agents", "vel")]``.
+
+    Keyword Args:
+        traj_key (NestedKey, optional): key carrying the trajectory id used
+            to detect boundaries. Defaults to ``("collector", "traj_ids")``.
+            Set to ``None`` to skip the trajectory check and treat the entire
+            sampled batch as one trajectory (only the very last position is
+            then filled with ``fill_value``).
+        done_key (NestedKey, optional): key whose ``True`` entries indicate
+            that the trajectory terminated at position ``i``, so position
+            ``i + 1`` is not the next step. Defaults to ``("next", "done")``.
+            Set to ``None`` to disable the check.
+        step_count_key (NestedKey, optional): if not ``None``, also require
+            ``data[step_count_key][i + 1] == data[step_count_key][i] + 1`` to
+            consider position ``i + 1`` as the canonical next step. The
+            collector populates ``("collector", "step_count")`` only when a
+            :class:`~torchrl.envs.transforms.StepCounter` is in the env
+            transform chain. Defaults to ``None``.
+        fill_value (float, optional): value written wherever the next
+            observation is not available. Defaults to ``float("nan")``. For
+            integer-typed observation keys, NaN cannot be represented; pass
+            an explicit integer (e.g. ``0``).
+        strict (bool, optional): if ``True`` (default) and any configured
+            marker key (``traj_key``, ``done_key``, ``step_count_key``) is
+            missing from the sampled batch, raise. If ``False``, silently
+            drop that check.
+
+    Example:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import ReplayBuffer, LazyTensorStorage
+        >>> from torchrl.data.replay_buffers.samplers import SliceSampler
+        >>> from torchrl.envs.transforms.rb_transforms import (
+        ...     NextStateReconstructor,
+        ... )
+        >>> rb = ReplayBuffer(
+        ...     storage=LazyTensorStorage(100),
+        ...     sampler=SliceSampler(
+        ...         slice_len=4, traj_key=("collector", "traj_ids"),
+        ...     ),
+        ...     transform=NextStateReconstructor(),
+        ...     batch_size=8,
+        ... )
+        >>> # populate `rb` with a collector configured with `compact_obs=True`
+        >>> # so that ``("next", "observation")`` is absent from storage:
+        >>> data = TensorDict({
+        ...     "observation": torch.arange(8, dtype=torch.float32).view(8, 1),
+        ...     ("next", "reward"): torch.zeros(8, 1),
+        ...     ("next", "done"): torch.tensor([[False]] * 7 + [[True]]),
+        ...     ("collector", "traj_ids"): torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+        ... }, batch_size=[8])
+        >>> rb.extend(data)
+        >>> sample = rb.sample()  # ('next', 'observation') is reconstructed
+    """
+
+    def __init__(
+        self,
+        keys: Sequence[NestedKey] = ("observation",),
+        *,
+        traj_key: NestedKey | None = ("collector", "traj_ids"),
+        done_key: NestedKey | None = ("next", "done"),
+        step_count_key: NestedKey | None = None,
+        fill_value: float = float("nan"),
+        strict: bool = True,
+    ):
+        super().__init__()
+        self.keys = tuple(keys)
+        self.traj_key = traj_key
+        self.done_key = done_key
+        self.step_count_key = step_count_key
+        self.fill_value = fill_value
+        self.strict = strict
+
+    @staticmethod
+    def _flatten_marker(t: torch.Tensor, B: int) -> torch.Tensor:
+        """Reduce a marker tensor of shape ``(B, ...)`` to ``(B,)`` along trailing dims."""
+        if t.shape[0] != B:
+            raise ValueError(
+                f"NextStateReconstructor: marker tensor has leading dim {t.shape[0]} "
+                f"but sample batch size is {B}."
+            )
+        if t.ndim == 1:
+            return t
+        return t.reshape(B, -1)[:, 0]
+
+    def _fetch_marker(
+        self,
+        tensordict: TensorDictBase,
+        key: NestedKey,
+        what: str,
+        B: int,
+    ) -> torch.Tensor | None:
+        if key in tensordict.keys(True, True):
+            return self._flatten_marker(tensordict.get(key), B)
+        if self.strict:
+            raise KeyError(
+                f"NextStateReconstructor: {what} {key!r} is not present in the "
+                "sampled batch. Pass the corresponding constructor kwarg "
+                "explicitly (or `None` to disable), or `strict=False` to drop "
+                "the check silently."
+            )
+        return None
+
+    def _valid_mask(self, tensordict: TensorDictBase, B: int) -> torch.Tensor:
+        """Return a ``(B,)`` bool tensor where ``True`` means ``i + 1`` is a usable next step."""
+        valid = torch.zeros(B, dtype=torch.bool, device=tensordict.device)
+        if B >= 2:
+            valid[:-1] = True
+        if self.traj_key is not None:
+            traj = self._fetch_marker(tensordict, self.traj_key, "trajectory key", B)
+            if traj is not None:
+                valid[:-1] &= traj[1:] == traj[:-1]
+        if self.done_key is not None:
+            done = self._fetch_marker(tensordict, self.done_key, "done key", B)
+            if done is not None:
+                valid[:-1] &= ~done[:-1].to(torch.bool)
+        if self.step_count_key is not None:
+            sc = self._fetch_marker(
+                tensordict, self.step_count_key, "step-count key", B
+            )
+            if sc is not None:
+                valid[:-1] &= sc[1:] == sc[:-1] + 1
+        return valid
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        if tensordict.batch_dims != 1:
+            raise ValueError(
+                "NextStateReconstructor expects a flat ``(B,)`` sample. Got "
+                f"batch_size={tuple(tensordict.batch_size)}. Reshape or use a "
+                "1-d storage / sampler combination."
+            )
+        B = tensordict.batch_size[0]
+        if B < 1:
+            return tensordict
+        valid = self._valid_mask(tensordict, B)
+        invalid = ~valid
+        for k in self.keys:
+            next_k = _under_next(k)
+            root = tensordict.get(k)
+            if (
+                not root.is_floating_point()
+                and isinstance(self.fill_value, float)
+                and math.isnan(self.fill_value)
+            ):
+                raise TypeError(
+                    f"NextStateReconstructor: root key {k!r} has non-floating "
+                    f"dtype {root.dtype}; pass an explicit integer `fill_value` "
+                    "for this key (NaN cannot be represented)."
+                )
+            next_view = torch.empty_like(root)
+            if B >= 2:
+                next_view[:-1] = root[1:]
+            # Whatever sat at [-1] is overwritten below via the mask
+            # (it is always invalid: no i+1 in the batch).
+            invalid_expanded = invalid.reshape(B, *([1] * (root.ndim - 1))).expand_as(
+                root
+            )
+            next_view = torch.where(
+                invalid_expanded, root.new_full((), self.fill_value), next_view
+            )
+            tensordict.set(next_k, next_view)
+        return tensordict

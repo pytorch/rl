@@ -818,6 +818,7 @@ def _is_from_pixels(env):
 class _GymAsyncMeta(_EnvPostInit):
     def __call__(cls, *args, **kwargs):
         missing_obs_value = kwargs.pop("missing_obs_value", None)
+        native_autoreset = kwargs.pop("native_autoreset", False)
         num_workers = kwargs.pop("num_workers", 1)
 
         if cls.__name__ == "GymEnv" and num_workers > 1:
@@ -846,7 +847,12 @@ class _GymAsyncMeta(_EnvPostInit):
                 if missing_obs_value is not None:
                     kwargs["missing_obs_value"] = missing_obs_value
                 if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
-                    return TransformedEnv(instance, VecGymEnvTransform(**kwargs))
+                    env = TransformedEnv(
+                        instance,
+                        VecGymEnvTransform(**kwargs, native_autoreset=native_autoreset),
+                    )
+                    env._torchrl_native_autoreset = native_autoreset
+                    return env
 
             if _has_sb3:
                 from stable_baselines3.common.vec_env.base_vec_env import VecEnv
@@ -944,6 +950,13 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             the environment is auto-resetting and missing observations cannot be found in the info dictionary
             (e.g., with IsaacLab). This argument is passed to :class:`~torchrl.envs.VecGymEnvTransform` by
             the metaclass.
+        native_autoreset (bool, optional): if ``True`` and the wrapped environment
+            is an Isaac Lab vectorized environment, uses the native auto-reset
+            observation returned by the environment as the next root observation
+            instead of calling reset from
+            :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`. The terminal
+            ``"next"`` observation is still invalid and filled with ``NaN`` for
+            floating point observations. Defaults to ``False``.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.

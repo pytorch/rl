@@ -321,6 +321,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
             the policy version.
             Defaults to `False`.
+        compact_obs (bool, optional): if ``True``, each worker drops the
+            observation and state keys from the ``("next", ...)`` sub-tensordict
+            before stacking. See
+            :class:`~torchrl.collectors.SyncDataCollector` for details and the
+            pairing with
+            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+            at sampling time.
+            Defaults to ``False``.
         worker_idx (int, optional): the index of the worker.
 
     Examples:
@@ -402,14 +410,17 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int | None = None,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+        compact_obs: bool = False,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self.trajs_per_write = trajs_per_write
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -464,7 +475,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
-        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up policy and weights
         if trust_policy is None:
@@ -480,39 +490,21 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise TypeError(
                 "Cannot specify both weight_sync_schemes and weight_updater."
             )
-        # Check if policy_factory entries are all the same (replicated from single factory)
-        # vs different factories per worker.
-        has_uniform_policy_factory = any(policy_factory) and all(
-            f is policy_factory[0] for f in policy_factory
-        )
-        has_distinct_policy_factory = (
-            any(policy_factory) and not has_uniform_policy_factory
-        )
         if (
             weight_sync_schemes is not None
             and not weight_sync_schemes
             and weight_updater is None
+            and isinstance(policy, nn.Module)
         ):
-            if isinstance(policy, nn.Module):
-                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
-            elif has_uniform_policy_factory:
-                _probe = policy_factory[0]()
-                if isinstance(_probe, nn.Module):
-                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
-                del _probe
-            elif has_distinct_policy_factory:
-                _probe = next(f() for f in policy_factory if f is not None)
-                if isinstance(_probe, nn.Module):
-                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
-                        per_worker_weights=True
-                    )
-                del _probe
+            weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
         # Store policy and policy_factory - temporary set to make them visible to the receiver
         self.policy = policy
         self.policy_factory = policy_factory
+
+        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
@@ -534,6 +526,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
         self.reset_at_each_iter = reset_at_each_iter
         self.postproc = postproc
+        self.compact_obs = bool(compact_obs)
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -972,6 +965,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
         if not is_init:
             storage = self.replay_buffer._storage
+            if self._should_init_replay_buffer_from_worker(storage):
+                self._enable_replay_buffer_worker_init(storage)
+                self.replay_buffer.share()
+                return
             if self.local_init_rb and getattr(storage, "shared_init", False):
                 # New behavior: storage handles all coordination itself
                 # Nothing to do here - the storage will coordinate during first write
@@ -987,6 +984,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td = self.create_env_fn[0](
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
+            fake_td = self._add_policy_outputs_to_fake_td(fake_td)
             if getattr(self, "_worker_trajs_per_batch", None) is not None:
                 # With trajs_per_batch, workers write flat 1-D timesteps to
                 # the buffer.  Initialise the storage as 1-D so that the
@@ -1003,6 +1001,43 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 # Use extend to avoid time-related transforms to fail
                 self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
+
+    def _should_init_replay_buffer_from_worker(self, storage):
+        return (
+            self.local_init_rb
+            and self.policy is None
+            and any(self.policy_factory)
+            and hasattr(storage, "shared_init")
+            and hasattr(storage, "_make_init_directory")
+        )
+
+    @staticmethod
+    def _enable_replay_buffer_worker_init(storage):
+        if getattr(storage, "_compilable", False):
+            raise RuntimeError(
+                "Cannot initialize a compilable replay-buffer storage from "
+                "multi-collector workers."
+            )
+        if getattr(storage, "shared_init", False):
+            return
+        storage.shared_init = True
+        storage._init_lock = mp.Lock()
+        storage._init_event = mp.Event()
+        storage._make_init_directory()
+
+    def _add_policy_outputs_to_fake_td(self, fake_td):
+        policy = getattr(self, "policy", None)
+        out_keys = getattr(policy, "out_keys", None)
+        if not out_keys:
+            return fake_td
+        with torch.no_grad():
+            policy_output = policy(fake_td.copy())
+        policy_output_keys = policy_output.keys(True, True)
+        for key in out_keys:
+            if key in fake_td.keys(True, True) or key not in policy_output_keys:
+                continue
+            fake_td.set(key, policy_output.get(key))
+        return fake_td
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
@@ -1282,10 +1317,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
                     "trajs_per_batch": self._worker_trajs_per_batch,
+                    "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
+                    "compact_obs": self.compact_obs,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,

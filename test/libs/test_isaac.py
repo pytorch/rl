@@ -5,13 +5,19 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import itertools
+import os
+import queue as queue_lib
 import time
+import traceback
 from functools import partial
 
 import pytest
 import torch
 import torch.distributed as dist
 import torchrl.testing.env_helper
+from tensordict import assert_allclose_td
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torch import multiprocessing as mp
 
@@ -21,7 +27,7 @@ from torchrl.collectors.distributed import RayCollector
 from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import InitTracker, StepCounter, TransformedEnv
+from torchrl.envs import InitTracker, StepCounter, TransformedEnv, VecNormV2
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import LSTMModule, MLP
 from torchrl.testing import get_default_devices
@@ -55,6 +61,151 @@ _isaac_env_maker_cuda1 = partial(
 # it can be used directly as a ``policy_factory``.
 _isaac_policy_maker = make_isaac_policy
 _isaac_policy_maker_cuda1 = partial(make_isaac_policy, device=torch.device("cuda:1"))
+
+
+class CountingVecNormV2(VecNormV2):
+    def __init__(self, *args, **kwargs):
+        self.step_calls = 0
+        self.reset_calls = 0
+        super().__init__(*args, **kwargs)
+
+    def _step(self, tensordict, next_tensordict):
+        self.step_calls += 1
+        return super()._step(tensordict, next_tensordict)
+
+    def _reset(self, tensordict, tensordict_reset):
+        self.reset_calls += 1
+        return super()._reset(tensordict, tensordict_reset)
+
+
+def _isaaclab_raw_env(env):
+    while isinstance(env, TransformedEnv):
+        env = env.base_env
+    return env._env.unwrapped
+
+
+def _force_isaaclab_next_step_done(env):
+    raw_env = _isaaclab_raw_env(env)
+    if not hasattr(raw_env, "episode_length_buf") or not hasattr(
+        raw_env, "max_episode_length"
+    ):
+        pytest.skip("Isaac Lab env does not expose episode length buffers.")
+    raw_env.episode_length_buf.zero_()
+    raw_env.episode_length_buf.reshape(-1)[0] = raw_env.max_episode_length - 1
+
+
+def _isaaclab_rollout_keys(rollout):
+    keys = [
+        "action",
+        "policy",
+        "done",
+        "terminated",
+        "truncated",
+        ("next", "policy"),
+        ("next", "reward"),
+        ("next", "done"),
+        ("next", "terminated"),
+        ("next", "truncated"),
+    ]
+    return [key for key in keys if key in rollout.keys(True, True)]
+
+
+def _isaaclab_rollout_in_process(
+    seed: int, *, native_autoreset: bool, max_steps: int = 4
+):
+    counter = itertools.count()
+
+    def seeded_random_policy(tensordict):
+        torch.manual_seed(seed + next(counter))
+        return env.full_action_spec.rand_update(tensordict)
+
+    os.environ["ACCEPT_EULA"] = "Y"
+    os.environ["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    os.environ["PRIVACY_CONSENT"] = "Y"
+    env = make_isaac_env(native_autoreset=native_autoreset)
+    try:
+        env.set_seed(seed, static_seed=True)
+        torch.manual_seed(seed)
+        tensordict = env.reset()
+        _force_isaaclab_next_step_done(env)
+        rollout = env.rollout(
+            max_steps,
+            policy=seeded_random_policy,
+            auto_reset=False,
+            tensordict=tensordict,
+            break_when_any_done=False,
+            return_contiguous=True,
+        )
+        return rollout.select(*_isaaclab_rollout_keys(rollout)).cpu()
+    finally:
+        env.close()
+
+
+def _isaaclab_rollout_worker(queue, seed: int, native_autoreset: bool, max_steps: int):
+    try:
+        buffer = io.BytesIO()
+        torch.save(
+            _isaaclab_rollout_in_process(
+                seed, native_autoreset=native_autoreset, max_steps=max_steps
+            ),
+            buffer,
+        )
+        queue.put(
+            (
+                "succeeded",
+                buffer.getvalue(),
+            )
+        )
+    except BaseException:
+        queue.put(("failed", traceback.format_exc()))
+        raise
+
+
+def _isaaclab_rollout(seed: int, *, native_autoreset: bool, max_steps: int = 4):
+    queue = mp.Queue(1)
+    proc = mp.Process(
+        target=_isaaclab_rollout_worker,
+        args=(queue, seed, native_autoreset, max_steps),
+    )
+    try:
+        proc.start()
+        deadline = time.monotonic() + 300
+        while True:
+            try:
+                status, result = queue.get(timeout=1)
+                break
+            except queue_lib.Empty:
+                if not proc.is_alive():
+                    proc.join()
+                    pytest.fail(
+                        f"Isaac Lab rollout worker exited with code {proc.exitcode} "
+                        "without returning a rollout."
+                    )
+                if time.monotonic() > deadline:
+                    proc.terminate()
+                    proc.join(timeout=30)
+                    pytest.fail("Isaac Lab rollout worker timed out.")
+        proc.join(timeout=30)
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=30)
+            pytest.fail("Isaac Lab rollout worker did not exit after returning.")
+        if status != "succeeded":
+            pytest.fail(f"Isaac Lab rollout worker failed:\n{result}")
+        if proc.exitcode:
+            pytest.fail(f"Isaac Lab rollout worker exited with code {proc.exitcode}.")
+        return torch.load(io.BytesIO(result), weights_only=False)
+    finally:
+        queue.close()
+        proc.join()
+
+
+def _isaaclab_native_rollout(seed: int, max_steps: int = 4):
+    return _isaaclab_rollout(seed, native_autoreset=True, max_steps=max_steps)
+
+
+def _isaaclab_transition_keys(rollout):
+    return _isaaclab_rollout_keys(rollout)
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
@@ -320,6 +471,82 @@ class TestIsaacLab:
 
         # Check that done obs are None
         assert not r["next", "policy"][r["next", "done"].squeeze(-1)].isfinite().any()
+
+    def test_isaaclab_native_autoreset_vecnorm_step_and_maybe_reset(self):
+        env = make_isaac_env(native_autoreset=True)
+        try:
+            obs_keys = list(env.full_observation_spec.keys(True, True))
+            obs_key = "policy" if "policy" in obs_keys else obs_keys[0]
+            vecnorm = CountingVecNormV2(
+                in_keys=[obs_key],
+                reduce_batch_dims=True,
+            )
+            env = TransformedEnv(env, vecnorm)
+            td = env.reset()
+            initial_step_calls = vecnorm.step_calls
+            initial_call_count = vecnorm.step_calls + vecnorm.reset_calls
+
+            isaac_env = env
+            while isinstance(isaac_env, TransformedEnv):
+                isaac_env = isaac_env.base_env
+            raw_env = isaac_env._env.unwrapped
+            if not hasattr(raw_env, "episode_length_buf") or not hasattr(
+                raw_env, "max_episode_length"
+            ):
+                pytest.skip("Isaac Lab env does not expose episode length buffers.")
+            raw_env.episode_length_buf.fill_(raw_env.max_episode_length - 1)
+
+            td = env.rand_action(td)
+            td, td_ = env.step_and_maybe_reset(td)
+
+            assert td["next", "done"].any()
+            done = td["next", "done"].squeeze(-1)
+            assert torch.isnan(td["next", obs_key][done]).all()
+            assert not td_["done"].any()
+            assert td_[obs_key][done].isfinite().all()
+            assert vecnorm.step_calls == initial_step_calls + 1
+            assert vecnorm.step_calls + vecnorm.reset_calls == initial_call_count + 1
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("seed", [0, 1])
+    def test_isaaclab_native_autoreset_rollout_seeded(self, seed):
+        rollout0 = _isaaclab_native_rollout(seed)
+        rollout1 = _isaaclab_native_rollout(seed)
+
+        assert rollout0["next", "done"].any()
+        assert_allclose_td(rollout0, rollout1, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.parametrize("seed", [0, 1])
+    def test_isaaclab_native_autoreset_rollout_matches_default_signals(self, seed):
+        rollout = _isaaclab_rollout(seed, native_autoreset=False)
+        rollout_native = _isaaclab_rollout(seed, native_autoreset=True)
+        keys = _isaaclab_transition_keys(rollout_native)
+
+        assert rollout_native["next", "done"].any()
+        done = rollout["next", "done"].squeeze(-1)
+        done_native = rollout_native["next", "done"].squeeze(-1)
+        assert torch.isnan(rollout["next", "policy"][done]).all()
+        assert torch.isnan(rollout_native["next", "policy"][done_native]).all()
+        assert_allclose_td(
+            rollout.select(*keys),
+            rollout_native.select(*keys),
+            rtol=1e-6,
+            atol=1e-6,
+        )
+
+    @pytest.mark.parametrize("seed", [0, 1])
+    def test_isaaclab_native_autoreset_rollout_reset_obs_continuity(self, seed):
+        rollout = _isaaclab_native_rollout(seed)
+        done = rollout["next", "done"].squeeze(-1)
+
+        assert done.any()
+        assert not rollout["done"].any()
+        if done[..., :-1].any():
+            assert torch.isnan(
+                rollout["next", "policy"][..., :-1, :][done[..., :-1]]
+            ).all()
+            assert rollout["policy"][..., 1:, :][done[..., :-1]].isfinite().all()
 
     def test_isaaclab_lstm(self, env):
         """Test that LSTM/RNN works with pre-vectorized IsaacLab environments (Issue #1493).

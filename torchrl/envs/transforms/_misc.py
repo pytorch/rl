@@ -405,14 +405,26 @@ class VecGymEnvTransform(Transform):
             Defaults to `"final"`.
         missing_obs_value (Any, optional): default value to use as placeholder for missing
             last observations. Defaults to `np.nan`.
+        native_autoreset (bool, optional): if ``True``, leaves the native
+            auto-reset observation available to the environment wrapper so it
+            can be cloned into the next root observation, while the terminal
+            floating point ``"next"`` observation is marked with ``NaN``.
+            Defaults to ``False``.
 
     .. note:: In general, this class should not be handled directly. It is
         created whenever a vectorized environment is placed within a :class:`GymWrapper`.
 
     """
 
-    def __init__(self, final_name: str = "final", missing_obs_value: Any = np.nan):
+    def __init__(
+        self,
+        final_name: str = "final",
+        missing_obs_value: Any = np.nan,
+        *,
+        native_autoreset: bool = False,
+    ):
         self.final_name = final_name
+        self.native_autoreset = native_autoreset
         super().__init__()
         self._memo = {}
         if not isinstance(missing_obs_value, torch.Tensor):
@@ -428,6 +440,8 @@ class VecGymEnvTransform(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if self.native_autoreset:
+            return next_tensordict
         # save the final info
         done = False
         for done_key in self.done_keys:
@@ -458,6 +472,9 @@ class VecGymEnvTransform(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
+        if self.native_autoreset:
+            tensordict_reset.pop(self.final_name, None)
+            return tensordict_reset
         done = self._memo.get("done", None)
         reset = tensordict.get("_reset", done)
         if done is not None:

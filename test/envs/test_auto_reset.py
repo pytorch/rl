@@ -27,7 +27,7 @@ from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
 from torchrl.data.tensor_specs import NonTensor
 from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
-from torchrl.envs.transforms import StepCounter, TransformedEnv
+from torchrl.envs.transforms import InitTracker, StepCounter, TransformedEnv, VecNormV2
 from torchrl.envs.transforms.transforms import (
     AutoResetEnv,
     AutoResetTransform,
@@ -49,6 +49,60 @@ from torchrl.testing.mocking_classes import (
 
 
 class TestAutoReset:
+    def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
+        class CountingVecNormV2(VecNormV2):
+            def __init__(self, *args, **kwargs):
+                self.step_calls = 0
+                self.reset_calls = 0
+                super().__init__(*args, **kwargs)
+
+            def _step(self, tensordict, next_tensordict):
+                self.step_calls += 1
+                return super()._step(tensordict, next_tensordict)
+
+            def _reset(self, tensordict, tensordict_reset):
+                self.reset_calls += 1
+                return super()._reset(tensordict, tensordict_reset)
+
+        env = TransformedEnv(AutoResettingCountingEnv(3), InitTracker())
+        env._torchrl_native_autoreset = True
+        vecnorm = CountingVecNormV2(in_keys=["observation"])
+        env = TransformedEnv(env, vecnorm)
+        env.full_observation_spec
+        tensordict = env.reset()
+
+        initial_step_calls = vecnorm.step_calls
+        initial_reset_calls = vecnorm.reset_calls
+        assert vecnorm.reset_calls == 1
+
+        for i in range(4):
+            tensordict.update(env.full_action_spec.zero().apply(lambda x: x + 1))
+            tensordict, tensordict_ = env.step_and_maybe_reset(
+                tensordict,
+            )
+            assert vecnorm.step_calls == initial_step_calls + i + 1
+            assert vecnorm.reset_calls == initial_reset_calls
+
+        assert tensordict["next", "done"].all()
+        assert not tensordict_["done"].any()
+        assert tensordict_["is_init"].all()
+
+    def test_native_auto_reset_step_and_maybe_reset(self):
+        env = TransformedEnv(AutoResettingCountingEnv(3), InitTracker())
+        env._torchrl_native_autoreset = True
+        tensordict = env.reset()
+
+        for _ in range(4):
+            tensordict.update(env.full_action_spec.zero().apply(lambda x: x + 1))
+            tensordict, tensordict_ = env.step_and_maybe_reset(
+                tensordict,
+            )
+
+        assert tensordict["next", "done"].all()
+        assert (tensordict["next", "observation"] == 0).all()
+        assert not tensordict_["done"].any()
+        assert tensordict_["is_init"].all()
+
     def test_auto_reset(self):
         policy = lambda td: td.set(
             "action", torch.ones((*td.shape, 1), dtype=torch.int64)

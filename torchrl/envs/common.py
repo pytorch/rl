@@ -3676,6 +3676,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         return self._step_mdp(next_tensordict)
 
+    def _native_autoreset_set_invalid_next_observation(
+        self, tensordict: TensorDictBase
+    ) -> dict[NestedKey, torch.Tensor]:
+        next_tensordict = tensordict.get("next")
+        done = False
+        for done_key in self.done_keys:
+            done = done | next_tensordict.get(done_key)
+        if done is False or not done.any():
+            return {}
+        done = done.squeeze(-1)
+
+        reset_observations = {}
+        for obs_key in self._observation_keys_step_mdp:
+            obs = next_tensordict.get(obs_key, None)
+            if obs is None or not isinstance(obs, torch.Tensor):
+                continue
+            reset_observations[obs_key] = obs.clone()
+            if obs.is_floating_point():
+                obs[done] = torch.nan
+            else:
+                obs[done] = 0
+        return reset_observations
+
     @property
     @_cache_value
     def _step_mdp(self) -> Callable[[TensorDictBase], TensorDictBase]:
@@ -3863,10 +3886,26 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
+        native_autoreset = self.__dict__.get("_torchrl_native_autoreset", False)
+        if native_autoreset:
+            reset_observations = self._native_autoreset_set_invalid_next_observation(
+                tensordict
+            )
         tensordict_ = self._step_mdp(tensordict)
         # if self._post_step_mdp_hooks is not None:
         # tensordict_ = self._post_step_mdp_hooks(tensordict_)
-        tensordict_ = self.maybe_reset(tensordict_)
+        if native_autoreset:
+            for obs_key, obs in reset_observations.items():
+                if obs_key in tensordict_.keys(True, True):
+                    tensordict_.set(obs_key, obs)
+            for done_key in self.done_keys:
+                done = tensordict_.get(done_key).clone()
+                init_key = _replace_last(done_key, "is_init")
+                if init_key in tensordict_.keys(True, True):
+                    tensordict_.set(init_key, done.clone())
+                tensordict_.set(done_key, done.zero_())
+        else:
+            tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
     # _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None

@@ -341,7 +341,10 @@ class ReplayBuffer:
             self._prefetch_executor = ThreadPoolExecutor(max_workers=self._prefetch_cap)
 
         if shared and prefetch:
-            raise ValueError("Cannot share prefetched replay buffers.")
+            raise ValueError(
+                "Cannot share prefetched replay buffers. Pass prefetch=0 or "
+                "shared=False."
+            )
         self.shared = shared
         self.share(self.shared)
 
@@ -724,6 +727,46 @@ class ReplayBuffer:
             with self._replay_lock:
                 self._storage[index] = value
         return
+
+    @_maybe_delay_init
+    def read_all_in_order(self, end: int | None = None) -> Any:
+        """Read storage contents in physical order.
+
+        This is equivalent to ``rb[:]`` when ``end`` is ``None``.
+
+        Args:
+            end (int, optional): Number of leading storage entries to read.
+                Defaults to the entire storage slice.
+
+        Returns:
+            A storage slice containing entries ``[:end]``.
+        """
+        if end is None:
+            return self[:]
+        return self[:end]
+
+    @_maybe_delay_init
+    def write_all(self, data: Any, end: int | None = None) -> None:
+        """Write data back to storage in physical order.
+
+        This is equivalent to ``rb[:end] = data``. If ``end`` is ``None``,
+        ``end`` defaults to ``data.shape[0]`` for tensor collections and
+        ``len(data)`` otherwise. If ``data`` spans the full storage, this is
+        equivalent to ``rb[:] = data``.
+
+        Args:
+            data: Data to write to storage.
+            end (int, optional): Number of leading storage entries to update.
+                Defaults to ``data.shape[0]`` for tensor collections and
+                ``len(data)`` otherwise.
+        """
+        if end is None:
+            max_size = getattr(self._storage, "max_size", None)
+            if max_size is not None and len(self) == max_size:
+                self[:] = data
+                return
+            end = data.shape[0] if is_tensor_collection(data) else len(data)
+        self[:end] = data
 
     @_maybe_delay_init
     def set_at_(self, key, value, index):
