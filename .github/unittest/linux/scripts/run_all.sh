@@ -361,13 +361,27 @@ run_non_distributed_tests() {
   # - Shard 1: test/transforms/ (transform tests)
   # - Shard 2: test/envs/, test_collectors.py (multiprocessing-heavy)
   # - Shard 3: Everything else (can use pytest-xdist for parallelism)
+  #
+  # Fine-grained override: TORCHRL_TEST_PATHS, if set, is passed verbatim to pytest
+  # as the argument list (short-circuiting the shard case below). Useful for local
+  # debugging and workflow_dispatch runs that want `pytest path/to/file.py -k expr`.
   local shard="${TORCHRL_TEST_SHARD:-all}"
   local common_ignores="--ignore test/test_rlhf.py --ignore test/test_distributed.py --ignore test/test_rb_distributed.py --ignore test/llm --ignore test/test_setup.py"
   local common_args="--instafail --durations 200 -vv --capture no --timeout=120 --mp_fork_if_no_cuda"
-  
+
   # JSON report output for flaky test tracking
   local json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
   local json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-shard-${shard}.json --json-report-indent=2"
+
+  if [ -n "${TORCHRL_TEST_PATHS:-}" ]; then
+    # shellcheck disable=SC2086  # intentional word-splitting of TORCHRL_TEST_PATHS
+    echo "Running explicit test paths: ${TORCHRL_TEST_PATHS}"
+    python .github/unittest/helpers/coverage_run_parallel.py -m pytest ${TORCHRL_TEST_PATHS} \
+      "${GPU_MARKER_FILTER[@]}" \
+      ${json_report_args} \
+      ${common_args}
+    return
+  fi
   
   # pytest-xdist parallelism: use -n auto for shard 3 (fewer multiprocessing tests)
   # Set TORCHRL_XDIST=0 to disable parallel execution

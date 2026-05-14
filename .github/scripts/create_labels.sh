@@ -55,6 +55,25 @@ gh label create "Data/openx" --repo "$REPO" --description "Triggers openx data t
 gh label create "Data/roboset" --repo "$REPO" --description "Triggers roboset data tests only" --color "$DATA_COLOR" --force
 gh label create "Data/vd4rl" --repo "$REPO" --description "Triggers vd4rl data tests only" --color "$DATA_COLOR" --force
 
+# =============================================================================
+# ciflow/* labels (grey) - opt-in escape hatches for selective PR CI
+# See .github/CI.md for the full list of tracks.
+# =============================================================================
+CIFLOW_COLOR="BFDADC"
+
+echo ""
+echo "Creating ciflow/* labels..."
+gh label create "ciflow/full"       --repo "$REPO" --description "Run the full Linux test matrix on the PR (all tracks, all Python versions, all shards)" --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/cpu-matrix" --repo "$REPO" --description "Run all Python versions on the CPU test job (3.10..3.14)"                               --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/gpu"        --repo "$REPO" --description "Run all three GPU test shards on the PR"                                               --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/stable"     --repo "$REPO" --description "Run tests-stable-gpu + tests-stable-gpu-distributed on the PR"                          --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/olddeps"    --repo "$REPO" --description "Run tests-olddeps on the PR"                                                            --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/optdeps"    --repo "$REPO" --description "Run tests-optdeps on the PR"                                                            --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/distributed" --repo "$REPO" --description "Run tests-gpu-distributed on the PR"                                                   --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/sota"       --repo "$REPO" --description "Run test-linux-sota on the PR"                                                          --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/tutorials"  --repo "$REPO" --description "Run test-linux-tutorials on the PR"                                                     --color "$CIFLOW_COLOR" --force
+gh label create "ciflow/windows"    --repo "$REPO" --description "Run test-windows-optdepts on the PR"                                                    --color "$CIFLOW_COLOR" --force
+
 echo ""
 echo "=============================================================="
 echo "Done! All CI granularity labels created/updated."
@@ -64,3 +83,6 @@ echo "  - 'Environments' → triggers ALL environment tests"
 echo "  - 'Environments/brax' → triggers only brax tests"
 echo "  - 'Data' → triggers ALL data tests"
 echo "  - 'Data/minari' → triggers only minari tests"
+echo "  - 'ciflow/full' → run the full Linux matrix on the PR"
+echo "  - 'ciflow/gpu' → run all 3 GPU shards on the PR"
+echo "  - see .github/CI.md for the complete ciflow/* list"
