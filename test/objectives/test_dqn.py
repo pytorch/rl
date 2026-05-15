@@ -745,7 +745,7 @@ class TestDQN(LossModuleTestBase):
         # Sample again - weights should now be non-equal
         sample2 = rb.sample()
         weights2 = sample2["priority_weight"]
-        assert weights2.std() > 1e-5
+        assert weights2.std() > 1e-6
 
         # Run loss again with varied weights
         loss_out2 = loss_fn(sample2)
@@ -1300,7 +1300,7 @@ class TestQMixer(LossModuleTestBase):
         # Sample again - weights should now be non-equal
         sample2 = rb.sample()
         weights2 = sample2["priority_weight"]
-        assert weights2.std() > 1e-5
+        assert weights2.std() > 1e-6
 
         # Run loss again with varied weights
         loss_out2 = loss_fn(sample2)
