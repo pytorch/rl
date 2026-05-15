@@ -11,7 +11,12 @@ from typing import Any
 
 import torch
 
-from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
+from tensordict import (
+    LazyStackedTensorDict,
+    TensorDict,
+    TensorDictBase,
+    UnbatchedTensor,
+)
 from tensordict.nn import CudaGraphModule, TensorDictModule, TensorDictModuleBase
 from torch import nn
 from torchrl import compile_with_warmup
@@ -261,10 +266,22 @@ class Collector(BaseCollector):
             RPCDataCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on the environment, tagging every collected frame with the current version
+            under the ``"policy_version"`` key. The transform's version is bumped exactly once
+            per :meth:`update_policy_weights_` call — for multi-process collectors this happens
+            in each worker after the new weights have actually been applied, so per-frame
+            tagging tracks real weight updates rather than rollout iterations.
+
+            The recommended path is ``track_policy_version=True``: let the collector own the
+            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
+            **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
+            a transform and passing it to a collector is supported but discouraged because it
+            invites a divergence between the transform on the env and the one the collector
+            increments.
+
+            Defaults to ``False``.
         compact_obs (bool, optional): if ``True``, the collector drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking per-step data. Those keys are bit-for-bit identical
@@ -275,7 +292,49 @@ class Collector(BaseCollector):
             keys can be re-hydrated at sampling time with
             :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
             when consuming a :class:`~torchrl.data.SliceSampler`-backed replay
-            buffer. Defaults to ``False``.
+            buffer.
+
+            ``compact_obs=True`` composes cleanly with
+            :class:`~torchrl.objectives.value.advantages.GAE` configured with
+            ``shifted=True``: shifted-GAE only needs the value at the boundary
+            between steps, which it reads via the root key of the next step
+            rather than the ``("next", "observation")`` mirror, so no rehydration
+            is required for the on-policy advantage pass. For vectorized
+            environments with large observations this is typically a sizeable
+            GPU-memory win at near-zero CPU cost. Defaults to ``False``.
+        final_obs (bool, optional): if ``True`` (and ``compact_obs=True``), the
+            collector additionally stores the true next-observation reached
+            after the last step of the rollout under a top-level ``("final", k)``
+            sub-tensordict for each observation/state key ``k`` that was
+            compacted away. The value is wrapped in
+            :class:`tensordict.UnbatchedTensor` (one obs per env, no time
+            dimension) so the rollout's batch shape ``[*envs, T]`` is preserved.
+
+            .. warning:: ``final_obs`` is experimental and may change or be
+                removed without notice. In practice, bootstrapping the last
+                step with the root observation of the same step (the default
+                fallback under ``compact_obs=True``) works well; ``final_obs``
+                exists for correctness when the bias matters.
+
+            This closes the bootstrap-correctness gap when running with short
+            rollout windows: under ``compact_obs=True``, the ``("next", obs)``
+            of the very last step of each window is dropped, and a shifted
+            value estimator (e.g. :class:`~torchrl.objectives.value.GAE`,
+            :class:`~torchrl.objectives.value.TD0Estimator`,
+            :class:`~torchrl.objectives.value.TD1Estimator`,
+            :class:`~torchrl.objectives.value.TDLambdaEstimator`,
+            :class:`~torchrl.objectives.value.VTrace`) falls back to
+            bootstrapping ``V(s_T) ≈ V(s_{T-1})`` for that step (a 1/T
+            fraction of corruption). With ``final_obs=True``, the value
+            estimator reads the true ``s_T`` from ``("final", obs)`` instead.
+
+            The pipeline assumption is:
+            ``collector -> value_estimator(shifted=True) -> ReplayBuffer.extend()``.
+            The value estimator consumes and drops ``("final", ...)`` from
+            the returned tensordict, so the downstream replay buffer never
+            sees an :class:`~tensordict.UnbatchedTensor` (which would
+            otherwise be incompatible with a contiguous storage).
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -383,6 +442,7 @@ class Collector(BaseCollector):
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
         compact_obs: bool = False,
+        final_obs: bool = False,
         **kwargs,
     ):
         self.closed = True
@@ -475,7 +535,11 @@ class Collector(BaseCollector):
 
         # Set up compact_obs: keys to drop from ("next", ...) to avoid
         # storing two copies of each observation. See `_setup_compact_obs`.
-        self._setup_compact_obs(compact_obs)
+        # `final_obs` (requires `compact_obs`) additionally captures the true
+        # next-observation after the last step as an UnbatchedTensor under
+        # ("final", ...) so GAE(shifted=True) can bootstrap correctly without
+        # re-storing every step's next obs.
+        self._setup_compact_obs(compact_obs, final_obs)
 
         # Calculate frames per batch
         self._setup_frames_per_batch(frames_per_batch)
@@ -512,6 +576,7 @@ class Collector(BaseCollector):
         # Create shuttle and rollout buffers
         self._make_shuttle()
         self._maybe_make_final_rollout(make_rollout=self._use_buffers)
+        self._setup_final_obs_buffer()
         self._set_truncated_keys()
 
         # Set up interruptor and frame tracking
@@ -945,7 +1010,7 @@ class Collector(BaseCollector):
             if postproc is not self.postproc and postproc is not None:
                 self.postproc = postproc
 
-    def _setup_compact_obs(self, compact_obs: bool) -> None:
+    def _setup_compact_obs(self, compact_obs: bool, final_obs: bool) -> None:
         """Resolve the ``("next", ...)`` keys to drop when ``compact_obs=True``.
 
         When enabled, the collector drops the observation and state keys from
@@ -959,21 +1024,68 @@ class Collector(BaseCollector):
         The user can re-hydrate the dropped keys at sampling time with
         :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
         when consuming a ``SliceSampler``-backed replay buffer.
+
+        If ``final_obs=True`` (requires ``compact_obs=True``), the corresponding
+        ``("final", ...)`` keys are resolved so the rollout can carry the true
+        next-observation after the last step as an
+        :class:`tensordict.UnbatchedTensor` (no time dim).
         """
         self.compact_obs = bool(compact_obs)
+        self.final_obs = bool(final_obs)
+        if self.final_obs and not self.compact_obs:
+            raise ValueError(
+                "final_obs=True requires compact_obs=True; otherwise the true "
+                "next observation is already stored at every step under "
+                "('next', ...)."
+            )
         if not self.compact_obs:
             self._compact_next_keys: tuple = ()
+            self._final_obs_keys: tuple = ()
             return
         leaf_keys = list(self.env._observation_keys_step_mdp) + list(
             self.env._state_keys_step_mdp
         )
         compact: list[tuple] = []
+        final: list[tuple] = []
         for k in leaf_keys:
             if isinstance(k, tuple):
                 compact.append(("next", *k))
+                final.append(("final", *k))
             else:
                 compact.append(("next", k))
+                final.append(("final", k))
         self._compact_next_keys = tuple(compact)
+        self._final_obs_keys = tuple(final) if self.final_obs else ()
+
+    def _setup_final_obs_buffer(self) -> None:
+        """Allocate the per-env buffer that holds the final next obs/state.
+
+        When ``final_obs=True``, the collector keeps a persistent buffer of
+        shape ``[*env.batch_size, *leaf_shape]`` (one entry per env, no time
+        dim) for each obs/state leaf that was compacted away. The buffer is
+        updated in-place from ``self._carrier["next"]`` each step; the final
+        value (after the last step) is wrapped in
+        :class:`tensordict.UnbatchedTensor` and attached to the rollout under
+        ``("final", *leaf)``.
+        """
+        if not self.final_obs:
+            self._final_obs_buffer = None
+            return
+        with torch.no_grad():
+            fake = self.env.fake_tensordict()
+        nxt = fake.get("next")
+        # Read inside ("next", ...). Single-element paths must be unwrapped
+        # to a plain str for TensorDict.get/select to behave consistently.
+        leaf_paths = []
+        for compact_k in self._compact_next_keys:
+            leaf = compact_k[1:]
+            leaf_paths.append(leaf[0] if len(leaf) == 1 else leaf)
+        buf = nxt.select(*leaf_paths, strict=False).clone()
+        if self.storing_device is not None:
+            buf = buf.to(self.storing_device, non_blocking=True)
+        else:
+            buf.clear_device_()
+        self._final_obs_buffer = buf
 
     def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
         """Calculate and validate frames per batch."""
@@ -1334,6 +1446,16 @@ class Collector(BaseCollector):
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
+
+        # Bump the local PolicyVersion transform (if track_policy_version is on).
+        # This is the canonical bump point for the leaf collector — it covers:
+        #   - User calls collector.update_policy_weights_() on a single-process
+        #     SyncDataCollector / Collector.
+        #   - The receiver-side WeightSyncScheme cascade in a multi-process
+        #     worker (which calls inner_collector.update_policy_weights_()
+        #     after applying weights). MultiCollector does not inherit from
+        #     Collector, so its update_policy_weights_ does NOT bump here.
+        self.increment_version()
 
     def _maybe_fallback_update(
         self,
@@ -1746,7 +1868,20 @@ class Collector(BaseCollector):
                 # When compact_obs is enabled, drop the obs/state keys from
                 # ("next", ...) before persisting the per-step td. The dropped
                 # keys are recoverable from the root keys of the next step.
+                # If final_obs is also on, snapshot the true next obs/state
+                # into the side buffer *before* the drop, so the last
+                # iteration's snapshot becomes the rollout's final obs.
                 if self._compact_next_keys:
+                    if self.final_obs:
+                        nxt = self._carrier.get("next")
+                        for compact_k in self._compact_next_keys:
+                            leaf = compact_k[1:]
+                            leaf = leaf[0] if len(leaf) == 1 else leaf
+                            dst = self._final_obs_buffer.get(leaf)
+                            src = nxt.get(leaf)
+                            if dst.device != src.device:
+                                src = src.to(dst.device, non_blocking=True)
+                            dst.copy_(src, non_blocking=True)
                     carrier_for_out = self._carrier.exclude(*self._compact_next_keys)
                 else:
                     carrier_for_out = self._carrier
@@ -1855,7 +1990,32 @@ class Collector(BaseCollector):
                     result = TensorDict.maybe_dense_stack(tensordicts, dim=-1)
                     result.refine_names(..., "time")
 
+        result = self._maybe_attach_final_obs(result)
         return self._maybe_set_truncated(result)
+
+    def _maybe_attach_final_obs(self, result):
+        """Attach ``("final", *leaf)`` entries on ``result`` as UnbatchedTensor.
+
+        No-op unless ``final_obs=True``. Wraps the tensors of the side buffer
+        (which holds the most-recent next-obs/state, in-place updated by the
+        rollout loop) into :class:`tensordict.UnbatchedTensor` so the
+        rollout's batch shape ``[*envs, T]`` is preserved. Downstream,
+        :class:`~torchrl.objectives.value.advantages.GAE` (shifted) consumes
+        and drops these before the rollout reaches the replay buffer.
+        """
+        if not self.final_obs:
+            return result
+        for final_k in self._final_obs_keys:
+            leaf = final_k[1:]
+            buf_path = leaf[0] if len(leaf) == 1 else leaf
+            val = self._final_obs_buffer.get(buf_path)
+            wrapped = UnbatchedTensor(val)
+            if result.is_locked:
+                with result.unlock_():
+                    result.set(final_k, wrapped)
+            else:
+                result.set(final_k, wrapped)
+        return result
 
     def _maybe_set_truncated(self, final_rollout):
         last_step = (slice(None),) * (final_rollout.ndim - 1) + (-1,)
@@ -1868,6 +2028,37 @@ class Collector(BaseCollector):
                 done | truncated
             )
         return final_rollout
+
+    @torch.no_grad()
+    def fake_tensordict(self) -> TensorDictBase:
+        """Return a zero-filled tensordict shaped like one batch from this collector.
+
+        The result mirrors what ``next(iter(collector))`` would yield:
+
+        - batch shape ``(*env.batch_size, frames_per_batch)`` with the last
+          dim named ``"time"``;
+        - env keys (observation / reward / done / terminated / truncated /
+          ``is_init`` when an :class:`~torchrl.envs.InitTracker` is on the
+          env), policy out-keys, and ``("collector", "traj_ids")`` when
+          trajectory tracking is enabled;
+        - ``compact_obs=True`` exclusions and ``final_obs=True``
+          ``("final", k)`` entries applied;
+        - ``set_truncated=True`` last-step ``truncated``/``done`` masking
+          applied;
+        - ``postproc`` / ``split_trajs`` / private-key exclusion applied,
+          mirroring :meth:`_postproc`.
+
+        Intended for storage initialization and ``torch.compile`` /
+        cudagraph warmup without having to step the environment first.
+        """
+        if getattr(self, "_final_rollout", None) is None:
+            # Build the rollout buffer on demand even when use_buffers=False
+            # so we have a structural template to clone from.
+            self._maybe_make_final_rollout(make_rollout=True)
+        result = self._final_rollout.clone().zero_()
+        result = self._maybe_attach_final_obs(result)
+        result = self._maybe_set_truncated(result)
+        return self._postproc(result)
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
