@@ -14,11 +14,11 @@ Key TorchRL features exercised:
 - :class:`~torchrl.collectors.MultiCollector` with ``policy_factory`` (each
   worker builds its own policy copy and receives weights via
   :class:`~torchrl.weight_update.MultiProcessWeightSyncScheme`).
-- ``compact_obs=True`` + ``final_obs=True`` to drop the redundant
-  ``("next", obs)`` and carry the boundary observation as an
-  ``UnbatchedTensor`` under ``("final", obs)``.
-- :class:`~torchrl.objectives.value.GAE` with ``shifted=True``: bootstraps
-  from the boundary obs without re-stepping the env.
+- ``compact_obs=True`` to drop the redundant ``("next", obs)``. Shifted
+  value estimation reconstructs next observations by shifting the root
+  observations when the next observations are absent.
+- :class:`~torchrl.objectives.value.GAE` with ``shifted=True``: uses the
+  root observation shift when compact rollouts omit ``("next", obs)``.
 - :class:`~torchrl.modules.LSTMModule` with a configurable
   ``recurrent_backend``: during collection (``set_recurrent_mode=False``)
   the LSTM auto-uses cuDNN regardless of the backend; the configured
@@ -226,7 +226,6 @@ def main() -> None:
         no_cuda_sync=True,
         trust_policy=True,
         compact_obs=True,
-        final_obs=True,
         init_fn=partial(_init_isaac_app, device=str(collector_device)),
         auto_register_policy_transforms=True,
         track_policy_version=True,
