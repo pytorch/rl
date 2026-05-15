@@ -247,6 +247,7 @@ Available Transforms
     TransformedEnv
     ActionDiscretizer
     ActionMask
+    ActionScaling
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
