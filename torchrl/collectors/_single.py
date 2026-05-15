@@ -298,20 +298,31 @@ class Collector(BaseCollector):
             :class:`tensordict.UnbatchedTensor` (one obs per env, no time
             dimension) so the rollout's batch shape ``[*envs, T]`` is preserved.
 
+            .. warning:: ``final_obs`` is experimental and may change or be
+                removed without notice. In practice, bootstrapping the last
+                step with the root observation of the same step (the default
+                fallback under ``compact_obs=True``) works well; ``final_obs``
+                exists for correctness when the bias matters.
+
             This closes the bootstrap-correctness gap when running with short
             rollout windows: under ``compact_obs=True``, the ``("next", obs)``
-            of the very last step of each window is dropped, and shifted-GAE
-            falls back to bootstrapping ``V(s_T) ≈ V(s_{T-1})`` for that step
-            (a 1/T fraction of corruption). With ``final_obs=True``, GAE reads
-            the true ``s_T`` from ``("final", obs)`` instead.
+            of the very last step of each window is dropped, and a shifted
+            value estimator (e.g. :class:`~torchrl.objectives.value.GAE`,
+            :class:`~torchrl.objectives.value.TD0Estimator`,
+            :class:`~torchrl.objectives.value.TD1Estimator`,
+            :class:`~torchrl.objectives.value.TDLambdaEstimator`,
+            :class:`~torchrl.objectives.value.VTrace`) falls back to
+            bootstrapping ``V(s_T) ≈ V(s_{T-1})`` for that step (a 1/T
+            fraction of corruption). With ``final_obs=True``, the value
+            estimator reads the true ``s_T`` from ``("final", obs)`` instead.
 
             The pipeline assumption is:
-            ``collector -> GAE(shifted=True) -> ReplayBuffer.extend()``.
-            :class:`~torchrl.objectives.value.advantages.GAE` consumes and
-            drops ``("final", ...)`` from the returned tensordict, so the
-            downstream replay buffer never sees an
-            :class:`~tensordict.UnbatchedTensor` (which would otherwise be
-            incompatible with a contiguous storage). Defaults to ``False``.
+            ``collector -> value_estimator(shifted=True) -> ReplayBuffer.extend()``.
+            The value estimator consumes and drops ``("final", ...)`` from
+            the returned tensordict, so the downstream replay buffer never
+            sees an :class:`~tensordict.UnbatchedTensor` (which would
+            otherwise be incompatible with a contiguous storage).
+            Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv

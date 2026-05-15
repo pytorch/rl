@@ -1119,6 +1119,13 @@ class LSTMModule(ModuleBase):
 
         layer_input = _canonical_contiguous(input)
         is_init = _canonical_contiguous(is_init)
+        # Canonicalize the full hidden buffers once. For num_layers=1
+        # (the common RL case) per-layer slicing then yields a canonical
+        # view for free; for num_layers>=2 adjacent layers are interleaved
+        # in the parent so per-layer slices still need a re-materialize
+        # below.
+        hidden0_in = _canonical_contiguous(hidden0_in)
+        hidden1_in = _canonical_contiguous(hidden1_in)
         hidden0_layers = []
         hidden1_layers = []
         for layer in range(self.lstm.num_layers):
@@ -2273,6 +2280,10 @@ class GRUModule(ModuleBase):
 
         layer_input = _canonical_contiguous(input)
         is_init = _canonical_contiguous(is_init)
+        # Canonicalize the full hidden buffer once; per-layer slices are
+        # canonical for free for num_layers=1, still need the re-materialize
+        # below for num_layers>=2 (adjacent layers interleaved in memory).
+        hidden_in = _canonical_contiguous(hidden_in)
         hidden_layers = []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]

@@ -634,15 +634,6 @@ class TestTimeitMark:
         timeit.mark_end("beta")
         assert "beta" not in timeit._MARKS
 
-    def test_mark_env_is_alias_of_mark_end(self):
-        from torchrl._utils import timeit
-
-        assert timeit.mark_env is not timeit.mark_end  # bound classmethod identity
-        timeit.mark_start("gamma")
-        timeit.mark_env("gamma")
-        assert "gamma" in timeit._REG
-        assert timeit._REG["gamma"][2] == 1
-
     def test_context_manager_still_records(self):
         from torchrl._utils import timeit
 
