@@ -14,11 +14,11 @@ Key TorchRL features exercised:
 - :class:`~torchrl.collectors.MultiCollector` with ``policy_factory`` (each
   worker builds its own policy copy and receives weights via
   :class:`~torchrl.weight_update.MultiProcessWeightSyncScheme`).
-- ``compact_obs=True`` + ``final_obs=True`` to drop the redundant
-  ``("next", obs)`` and carry the boundary observation as an
-  ``UnbatchedTensor`` under ``("final", obs)``.
-- :class:`~torchrl.objectives.value.GAE` with ``shifted=True``: bootstraps
-  from the boundary obs without re-stepping the env.
+- ``compact_obs=True`` to drop the redundant ``("next", obs)``. Shifted
+  value estimation reconstructs next observations by shifting the root
+  observations when the next observations are absent.
+- :class:`~torchrl.objectives.value.GAE` with ``shifted=True``: uses the
+  root observation shift when compact rollouts omit ``("next", obs)``.
 - :class:`~torchrl.modules.LSTMModule` with a configurable
   ``recurrent_backend``: during collection (``set_recurrent_mode=False``)
   the LSTM auto-uses cuDNN regardless of the backend; the configured
@@ -37,11 +37,13 @@ from __future__ import annotations
 import argparse
 import logging
 import math
-import sys
 from functools import partial
 
 import torch
 import torch.optim
+
+from isaaclab_rnn_ppo_memory_utils import _init_isaac_app, make_env, make_models
+from tensordict import TensorDictBase
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.collectors import MultiCollector
@@ -54,7 +56,148 @@ from torchrl.objectives.value.advantages import GAE
 from torchrl.record import WandbLogger
 from torchrl.weight_update import MultiProcessWeightSyncScheme
 
-from isaaclab_rnn_ppo_memory_utils import make_env, make_models
+
+_RECURRENT_STATE_KEYS = {
+    "recurrent_state_h",
+    "recurrent_state_c",
+    "('next', 'recurrent_state_h')",
+    "('next', 'recurrent_state_c')",
+}
+
+
+def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]:
+    return {
+        str(key): {
+            "shape": str(tuple(value.shape)),
+            "dtype": str(value.dtype),
+            "device": str(value.device),
+        }
+        for key, value in tensordict.items(include_nested=True, leaves_only=True)
+        if hasattr(value, "shape")
+    }
+
+
+def _metric_float(value) -> float:
+    if isinstance(value, torch.Tensor):
+        value = value.detach()
+        if value.numel() != 1:
+            value = value.float().mean()
+        return float(value.cpu())
+    return float(value)
+
+
+def _tensor_stats(prefix: str, value: torch.Tensor) -> dict[str, float]:
+    value = value.detach().float()
+    return {
+        f"{prefix}/mean": _metric_float(value.mean()),
+        f"{prefix}/std": _metric_float(value.std(unbiased=False)),
+        f"{prefix}/min": _metric_float(value.min()),
+        f"{prefix}/max": _metric_float(value.max()),
+    }
+
+
+def _loss_metrics(loss_acc: TensorDictBase, loss_count: int) -> dict[str, float]:
+    metrics = {}
+    for key, value in loss_acc.items():
+        value = value / loss_count
+        key = str(key)
+        if key.startswith("loss_"):
+            key = f"loss/{key.removeprefix('loss_')}"
+        elif key.startswith("grad_norm"):
+            key = key.replace("grad_norm", "grad_norm/")
+        metrics[f"training/{key}"] = _metric_float(value)
+    return metrics
+
+
+def _inference_metrics(
+    data: TensorDictBase,
+    *,
+    frames: int,
+) -> dict[str, float | int]:
+    metrics: dict[str, float | int] = {
+        "inference/frames": frames,
+        "inference/batch_numel": data.numel(),
+        "inference/batch_ndim": data.ndim,
+    }
+    reward = data.get(("next", "reward"), default=None)
+    if reward is not None:
+        metrics.update(_tensor_stats("inference/reward", reward))
+    episode_reward = data.get(("next", "episode_reward"), default=None)
+    done = data.get(("next", "done"), default=None)
+    if episode_reward is not None and done is not None:
+        episode_reward = episode_reward.squeeze(-1)
+        done = done.squeeze(-1).to(torch.bool)
+        end_of_traj_reward = episode_reward[done]
+        if end_of_traj_reward.numel():
+            metrics.update(
+                _tensor_stats(
+                    "inference/end_of_traj_episode_reward", end_of_traj_reward
+                )
+            )
+    return metrics
+
+
+def _cuda_metrics(prefix: str, device: torch.device) -> dict[str, float]:
+    if device.type != "cuda":
+        return {}
+    return {
+        f"telemetry/{prefix}/allocated_gb": torch.cuda.memory_allocated(device) / 1e9,
+        f"telemetry/{prefix}/reserved_gb": torch.cuda.memory_reserved(device) / 1e9,
+        f"telemetry/{prefix}/max_allocated_gb": torch.cuda.max_memory_allocated(device)
+        / 1e9,
+        f"telemetry/{prefix}/max_reserved_gb": torch.cuda.max_memory_reserved(device)
+        / 1e9,
+    }
+
+
+def _assert_rollout_shapes(
+    tensordict: TensorDictBase,
+    *,
+    expected_shape: torch.Size,
+    hidden_size: int,
+    phase: str,
+) -> None:
+    if tensordict.shape != expected_shape:
+        raise RuntimeError(
+            f"{phase}: expected TensorDict shape {expected_shape}, "
+            f"got {tensordict.shape}."
+        )
+    expected_state_shape = (*expected_shape, 1, hidden_size)
+    for key, value in tensordict.items(include_nested=True, leaves_only=True):
+        if not hasattr(value, "shape"):
+            continue
+        if value.shape[: len(expected_shape)] != expected_shape:
+            raise RuntimeError(
+                f"{phase}: key {key} has shape {tuple(value.shape)}, "
+                f"which does not start with {tuple(expected_shape)}."
+            )
+        if str(key) in _RECURRENT_STATE_KEYS and tuple(value.shape) != tuple(
+            expected_state_shape
+        ):
+            raise RuntimeError(
+                f"{phase}: key {key} has recurrent-state shape "
+                f"{tuple(value.shape)}, expected {tuple(expected_state_shape)}."
+            )
+
+
+def _normalize_rollout_batch(
+    tensordict: TensorDictBase, expected_shape: torch.Size
+) -> TensorDictBase:
+    if tensordict.shape == expected_shape:
+        return tensordict
+    if tensordict.shape == torch.Size((1, *expected_shape)):
+        return tensordict.squeeze(0)
+    if tensordict.ndim < 2 or tensordict.shape[-1] != expected_shape[-1]:
+        raise RuntimeError(
+            f"Expected collected batch ending in time shape {tuple(expected_shape)}, "
+            f"got {tuple(tensordict.shape)}."
+        )
+    if tensordict.shape[:-1].numel() != expected_shape[0]:
+        raise RuntimeError(
+            f"Expected collected batch with {expected_shape[0]} env elements before "
+            f"time, got shape {tuple(tensordict.shape)}."
+        )
+    return tensordict.reshape(expected_shape)
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,10 +215,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--action-dim", type=int, default=8)
     parser.add_argument(
         "--rnn-backend",
-        choices=["pad", "scan", "triton"],
+        choices=["cudnn", "pad", "scan", "triton"],
         default="scan",
         help=(
             "LSTM backend used during training (set_recurrent_mode=True). "
+            "'cudnn' is an alias for the pad/nn.LSTM path. "
             "Collection (set_recurrent_mode=False) always falls back to cuDNN."
         ),
     )
@@ -140,6 +284,7 @@ def main() -> None:
     per_collector_envs = args.num_envs // args.num_collectors
     frames_per_batch = args.num_envs * args.rollout_steps
     sample_num_slices = max(1, args.mini_batch_steps // args.rollout_steps)
+    expected_rollout_shape = torch.Size((args.num_envs, args.rollout_steps))
 
     # ---- Training model (lives on train_device, recurrent_mode=True path) ----
     actor, critic, full_value = make_models(
@@ -227,14 +372,13 @@ def main() -> None:
         no_cuda_sync=True,
         trust_policy=True,
         compact_obs=True,
-        final_obs=True,
+        init_fn=partial(_init_isaac_app, device=str(collector_device)),
         auto_register_policy_transforms=True,
-        track_policy_version=True,
         weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
     )
 
     train_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(args.num_envs, device=train_device, ndim=1),
+        storage=LazyTensorStorage(args.num_envs, device="cpu", ndim=1),
         sampler=SamplerWithoutReplacement(drop_last=True),
         batch_size=sample_num_slices,
     )
@@ -251,22 +395,56 @@ def main() -> None:
         experiment_logger.log_hparams(vars(args))
 
     # ---- Training loop ----
+    collector_iter = iter(collector)
     try:
-        for iteration, collected_batch in enumerate(collector):
-            if iteration >= args.iterations:
-                break
+        for iteration in range(args.iterations):
             timeit.erase()
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
-            with timeit("iteration"):
-                data = collected_batch.to(train_device)
+            with timeit("collector_next"):
+                collected_batch = next(collector_iter)
+            with timeit("training"):
+                data = _normalize_rollout_batch(collected_batch, expected_rollout_shape)
                 loss_acc = None
                 loss_count = 0
-                for _ in range(args.ppo_epochs):
+                for epoch in range(args.ppo_epochs):
+                    epoch_data = data.to(train_device)
+                    _assert_rollout_shapes(
+                        epoch_data,
+                        expected_shape=expected_rollout_shape,
+                        hidden_size=args.hidden_size,
+                        phase="before_gae",
+                    )
                     with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
-                        epoch_data = adv_module(data)
+                        epoch_data = adv_module(epoch_data)
+                    _assert_rollout_shapes(
+                        epoch_data,
+                        expected_shape=expected_rollout_shape,
+                        hidden_size=args.hidden_size,
+                        phase="after_gae",
+                    )
+                    if iteration == 0 and epoch == 0:
+                        torchrl_logger.info(
+                            {
+                                "phase": "pre_train_buffer_extend",
+                                "epoch_data_shape": tuple(epoch_data.shape),
+                                "epoch_data_leaf_shapes": _leaf_shape_summary(
+                                    epoch_data
+                                ),
+                                "epoch_data_0_shape": tuple(epoch_data[0].shape),
+                                "epoch_data_0_leaf_shapes": _leaf_shape_summary(
+                                    epoch_data[0]
+                                ),
+                            }
+                        )
                     train_buffer.empty()
                     train_buffer.extend(epoch_data)
+                    if train_buffer._storage._storage.shape != expected_rollout_shape:
+                        raise RuntimeError(
+                            "Expected train buffer storage shape "
+                            f"{expected_rollout_shape}, got "
+                            f"{train_buffer._storage._storage.shape}."
+                        )
                     for mini_batch in train_buffer:
                         with timeit("update"):
                             loss = update(mini_batch.to(train_device))
@@ -275,16 +453,22 @@ def main() -> None:
             if experiment_logger is not None:
                 metrics = timeit.todict(percall=False, prefix="time")
                 if loss_acc is not None and loss_count > 0:
-                    metrics.update(
-                        {f"loss/{k}": float(v / loss_count) for k, v in loss_acc.items()}
-                    )
+                    metrics.update(_loss_metrics(loss_acc, loss_count))
                 metrics.update(
                     {
-                        "iteration": iteration,
-                        "frames": (iteration + 1) * frames_per_batch,
-                        "updates_per_epoch": updates_per_epoch,
+                        "training/iteration": iteration,
+                        "training/updates_per_epoch": updates_per_epoch,
+                        "training/updates_total": loss_count,
                     }
                 )
+                metrics.update(
+                    _inference_metrics(
+                        data,
+                        frames=(iteration + 1) * frames_per_batch,
+                    )
+                )
+                metrics.update(_cuda_metrics("collector_cuda", collector_device))
+                metrics.update(_cuda_metrics("train_cuda", train_device))
                 experiment_logger.log_metrics(metrics, step=iteration)
             torchrl_logger.info({"phase": "iteration_done", "iteration": iteration})
     finally:

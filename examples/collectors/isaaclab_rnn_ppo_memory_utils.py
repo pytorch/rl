@@ -11,6 +11,7 @@ import cost.
 """
 from __future__ import annotations
 
+import argparse
 from typing import Literal
 
 import torch
@@ -20,7 +21,7 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from torchrl.envs import ExplorationType
+from torchrl.envs import ExplorationType, RewardSum, TransformedEnv
 from torchrl.modules import (
     LSTMModule,
     MLP,
@@ -29,7 +30,20 @@ from torchrl.modules import (
     ValueOperator,
 )
 
-RnnBackend = Literal["pad", "scan", "triton"]
+RnnBackend = Literal["cudnn", "pad", "scan", "triton"]
+
+
+def _init_isaac_app(device: str | None = None) -> None:
+    """Start Isaac Lab's AppLauncher in headless mode inside a worker."""
+    from isaaclab.app import AppLauncher
+
+    parser = argparse.ArgumentParser(description="TorchRL Isaac Lab env launcher.")
+    AppLauncher.add_app_launcher_args(parser)
+    launch_args = ["--headless"]
+    if device is not None:
+        launch_args.extend(["--device", device])
+    args_cli, _ = parser.parse_known_args(launch_args)
+    AppLauncher(args_cli)
 
 
 def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
@@ -56,7 +70,10 @@ def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
         env = gym.make(task, cfg=cfg)
     else:
         env = gym.make(task)
-    return IsaacLabWrapper(env, device=torch.device(device))
+    return TransformedEnv(
+        IsaacLabWrapper(env, device=torch.device(device)),
+        RewardSum(),
+    )
 
 
 def make_models(
@@ -79,6 +96,7 @@ def make_models(
         in_keys=["policy"],
         out_keys=["embed"],
     )
+    lstm_backend = "pad" if rnn_backend == "cudnn" else rnn_backend
     lstm = LSTMModule(
         input_size=hidden_size,
         hidden_size=hidden_size,
@@ -89,7 +107,7 @@ def make_models(
             ("next", "recurrent_state_h"),
             ("next", "recurrent_state_c"),
         ],
-        recurrent_backend=rnn_backend,
+        recurrent_backend=lstm_backend,
         device=device,
     )
     backbone = TensorDictSequential(embed, lstm)
@@ -122,7 +140,7 @@ def make_models(
         default_interaction_type=ExplorationType.RANDOM,
     )
 
-    # The value module re-uses the backbone (shared params, single LSTM call
+    # The value module reuses the backbone (shared params, single LSTM call
     # per GAE/update pass). An identity TDM caches the lstm_out under a
     # distinct key so the critic head and the actor head don't fight over
     # write semantics on a shared key.
