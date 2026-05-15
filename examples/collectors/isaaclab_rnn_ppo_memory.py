@@ -86,6 +86,79 @@ def _metric_float(value) -> float:
     return float(value)
 
 
+def _tensor_stats(prefix: str, value: torch.Tensor) -> dict[str, float]:
+    value = value.detach().float()
+    return {
+        f"{prefix}/mean": _metric_float(value.mean()),
+        f"{prefix}/std": _metric_float(value.std(unbiased=False)),
+        f"{prefix}/min": _metric_float(value.min()),
+        f"{prefix}/max": _metric_float(value.max()),
+    }
+
+
+def _loss_metrics(loss_acc: TensorDictBase, loss_count: int) -> dict[str, float]:
+    metrics = {}
+    for key, value in loss_acc.items():
+        value = value / loss_count
+        key = str(key)
+        if key.startswith("loss_"):
+            key = f"loss/{key.removeprefix('loss_')}"
+        elif key.startswith("grad_norm"):
+            key = key.replace("grad_norm", "grad_norm/")
+        metrics[f"training/{key}"] = _metric_float(value)
+    return metrics
+
+
+def _inference_metrics(
+    data: TensorDictBase,
+    *,
+    current_policy_version: int | None,
+    frames: int,
+) -> dict[str, float | int]:
+    metrics: dict[str, float | int] = {
+        "inference/frames": frames,
+        "inference/batch_numel": data.numel(),
+        "inference/batch_ndim": data.ndim,
+    }
+    reward = data.get(("next", "reward"), default=None)
+    if reward is not None:
+        metrics.update(_tensor_stats("inference/reward", reward))
+    episode_reward = data.get(("next", "episode_reward"), default=None)
+    done = data.get(("next", "done"), default=None)
+    if episode_reward is not None and done is not None:
+        episode_reward = episode_reward.squeeze(-1)
+        done = done.squeeze(-1).to(torch.bool)
+        end_of_traj_reward = episode_reward[done]
+        if end_of_traj_reward.numel():
+            metrics.update(
+                _tensor_stats(
+                    "inference/end_of_traj_episode_reward", end_of_traj_reward
+                )
+            )
+    policy_version = data.get("policy_version", default=None)
+    if policy_version is not None:
+        policy_version = policy_version.detach()
+        metrics.update(_tensor_stats("inference/policy_version", policy_version))
+        if current_policy_version is not None:
+            staleness = current_policy_version - policy_version
+            metrics.update(_tensor_stats("inference/policy_staleness", staleness))
+            metrics["inference/current_policy_version"] = current_policy_version
+    return metrics
+
+
+def _cuda_metrics(prefix: str, device: torch.device) -> dict[str, float]:
+    if device.type != "cuda":
+        return {}
+    return {
+        f"telemetry/{prefix}/allocated_gb": torch.cuda.memory_allocated(device) / 1e9,
+        f"telemetry/{prefix}/reserved_gb": torch.cuda.memory_reserved(device) / 1e9,
+        f"telemetry/{prefix}/max_allocated_gb": torch.cuda.max_memory_allocated(device)
+        / 1e9,
+        f"telemetry/{prefix}/max_reserved_gb": torch.cuda.max_memory_reserved(device)
+        / 1e9,
+    }
+
+
 def _assert_rollout_shapes(
     tensordict: TensorDictBase,
     *,
@@ -332,14 +405,16 @@ def main() -> None:
         experiment_logger.log_hparams(vars(args))
 
     # ---- Training loop ----
+    collector_iter = iter(collector)
     try:
-        for iteration, collected_batch in enumerate(collector):
-            if iteration >= args.iterations:
-                break
+        for iteration in range(args.iterations):
             timeit.erase()
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
-            with timeit("iteration"):
+            current_policy_version = collector.policy_version
+            with timeit("collector_next"):
+                collected_batch = next(collector_iter)
+            with timeit("training"):
                 data = _normalize_rollout_batch(collected_batch, expected_rollout_shape)
                 loss_acc = None
                 loss_count = 0
@@ -389,19 +464,23 @@ def main() -> None:
             if experiment_logger is not None:
                 metrics = timeit.todict(percall=False, prefix="time")
                 if loss_acc is not None and loss_count > 0:
-                    metrics.update(
-                        {
-                            f"loss/{k}": _metric_float(v / loss_count)
-                            for k, v in loss_acc.items()
-                        }
-                    )
+                    metrics.update(_loss_metrics(loss_acc, loss_count))
                 metrics.update(
                     {
-                        "iteration": iteration,
-                        "frames": (iteration + 1) * frames_per_batch,
-                        "updates_per_epoch": updates_per_epoch,
+                        "training/iteration": iteration,
+                        "training/updates_per_epoch": updates_per_epoch,
+                        "training/updates_total": loss_count,
                     }
                 )
+                metrics.update(
+                    _inference_metrics(
+                        data,
+                        current_policy_version=current_policy_version,
+                        frames=(iteration + 1) * frames_per_batch,
+                    )
+                )
+                metrics.update(_cuda_metrics("collector_cuda", collector_device))
+                metrics.update(_cuda_metrics("train_cuda", train_device))
                 experiment_logger.log_metrics(metrics, step=iteration)
             torchrl_logger.info({"phase": "iteration_done", "iteration": iteration})
     finally:

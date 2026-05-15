@@ -21,7 +21,7 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from torchrl.envs import ExplorationType
+from torchrl.envs import ExplorationType, RewardSum, TransformedEnv
 from torchrl.modules import (
     LSTMModule,
     MLP,
@@ -70,7 +70,10 @@ def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
         env = gym.make(task, cfg=cfg)
     else:
         env = gym.make(task)
-    return IsaacLabWrapper(env, device=torch.device(device))
+    return TransformedEnv(
+        IsaacLabWrapper(env, device=torch.device(device)),
+        RewardSum(),
+    )
 
 
 def make_models(
