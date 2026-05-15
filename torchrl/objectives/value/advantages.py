@@ -11,6 +11,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
+from typing import Literal
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
@@ -229,7 +230,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self,
         *,
         value_network: TensorDictModule,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         differentiable: bool = False,
         skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
@@ -252,7 +253,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
-        self.shifted = shifted
+        self.shifted = self._normalize_shifted(shifted)
 
         if advantage_key is not None:
             raise RuntimeError(
@@ -431,7 +432,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @staticmethod
     def _sanitize_next_obs_nan(
-        data: TensorDictBase, in_keys: list[NestedKey]
+        data: TensorDictBase,
+        in_keys: list[NestedKey],
     ) -> TensorDictBase:
         """Replace ``NaN`` entries in ``("next", k)`` with the corresponding root ``k``.
 
@@ -473,21 +475,269 @@ class ValueEstimatorBase(TensorDictModuleBase):
             data.set(next_k, torch.where(nan_mask, root, nxt))
         return data
 
+    @staticmethod
+    def _fill_missing_next_inputs(
+        next_data: TensorDictBase, root_data: TensorDictBase, in_keys: list[NestedKey]
+    ) -> TensorDictBase:
+        copied = False
+        for key in in_keys:
+            if next_data.get(key, default=None) is not None:
+                continue
+            value = root_data.get(key, default=None)
+            if value is None:
+                continue
+            if not copied:
+                next_data = next_data.copy()
+                copied = True
+            next_data.set(key, value)
+        return next_data
+
+    @staticmethod
+    def _apply_final_obs_to_next_done(
+        next_done_data: TensorDictBase,
+        data: TensorDictBase,
+        done_view: torch.Tensor,
+        in_keys: list[NestedKey],
+        ndim: int,
+    ) -> TensorDictBase:
+        """Override last-step entries of ``next_done_data`` with ``("final", k)``.
+
+        When the collector was configured with ``final_obs=True`` and
+        ``compact_obs=True``, the rollout carries a top-level ``("final", k)``
+        sub-tensordict (with :class:`~tensordict.UnbatchedTensor` leaves) that
+        holds the true next observation reached after the last step. Without
+        this fix, shifted-GAE bootstraps the last step's
+        ``V(s_{T+1})`` from the *root* obs of step ``T-1`` (via
+        :meth:`_fill_missing_next_inputs`) — a 1/T fraction of corruption.
+
+        This helper substitutes those entries with the true ``("final", k)``
+        values for each in-key that has one. No-op when ``("final", k)`` is
+        absent.
+        """
+        final_root = data.get("final", default=None)
+        if final_root is None:
+            return next_done_data
+        # Identify which of the K done positions are the synthetic last-step done.
+        # In flat order, last-step positions of a (..., T) tensor are
+        # ``i*T + (T-1)`` for i in range(B_total).
+        batch_dims = data.batch_size[: ndim - 1]
+        T = data.batch_size[ndim - 1]
+        B_total = 1
+        for d in batch_dims:
+            B_total *= int(d)
+        if B_total == 0 or T == 0:
+            return next_done_data
+        device = done_view.device
+        last_step_positions = torch.arange(B_total, device=device) * T + (T - 1)
+        last_step_mask_flat = torch.zeros(B_total * T, dtype=torch.bool, device=device)
+        last_step_mask_flat[last_step_positions] = True
+        last_step_in_done = last_step_mask_flat[done_view]
+        if not bool(last_step_in_done.any()):
+            return next_done_data
+        copied = False
+        for key in in_keys:
+            key_tuple = (key,) if isinstance(key, str) else tuple(key)
+            final_val = final_root.get(
+                key_tuple[0] if len(key_tuple) == 1 else key_tuple, default=None
+            )
+            if final_val is None:
+                continue
+            nxt_k = next_done_data.get(key, default=None)
+            if nxt_k is None:
+                continue
+            obs_shape = final_val.shape[ndim - 1 :]
+            final_flat = final_val.reshape(-1, *obs_shape)
+            if not copied:
+                next_done_data = next_done_data.copy()
+                copied = True
+            nxt_k = nxt_k.clone()
+            nxt_k[last_step_in_done] = final_flat
+            next_done_data.set(key, nxt_k)
+        return next_done_data
+
+    @staticmethod
+    def _maybe_drop_final_obs(tensordict: TensorDictBase) -> None:
+        """Drop the ``("final", ...)`` sub-tensordict from ``tensordict``.
+
+        The collector writes this sub-tensordict with
+        :class:`~tensordict.UnbatchedTensor` leaves when ``final_obs=True`` so
+        :meth:`_apply_final_obs_to_next_done` can bootstrap shifted-GAE
+        correctly. After consumption the entries are stale and would block
+        contiguous-storage replay buffers, so we strip them here in-place.
+        """
+        if "final" in tensordict.keys():
+            del tensordict["final"]
+
+    @staticmethod
+    def _normalize_shifted(
+        shifted: bool | Literal["compact", "legacy"],
+    ) -> Literal[False, "compact", "legacy"]:
+        """Normalize the ``shifted`` argument.
+
+        ``shifted=True`` is deprecated; users must opt in explicitly to
+        either ``"compact"`` (compile-friendly constant-shape single call,
+        small bias at trajectory boundaries) or ``"legacy"`` (current
+        flatten/interleave path, exact ``V(next_obs)`` but variable shape).
+        """
+        if shifted is False:
+            return False
+        if shifted is True:
+            warnings.warn(
+                "shifted=True is deprecated and will be removed in v0.15. "
+                "Pass shifted='legacy' to preserve the current "
+                "flatten/interleave behavior (exact V(next_obs), variable "
+                "shape, not compile-friendly), or shifted='compact' to opt "
+                "into the new constant-shape single-call path (small bias "
+                "at trajectory boundaries, compile-friendly). The default "
+                "for shifted=True is currently 'legacy'; this default will "
+                "be removed in v0.15.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            return "legacy"
+        if shifted in ("compact", "legacy"):
+            return shifted
+        raise ValueError(
+            f"shifted must be one of False, 'compact', 'legacy' (or the "
+            f"deprecated True), got {shifted!r}."
+        )
+
+    def _call_value_net_compact(
+        self,
+        data: TensorDictBase,
+        params: TensorDictBase | None,
+        next_params: TensorDictBase | None,
+        value_key: NestedKey,
+        ndim: int,
+        value_net: TensorDictModuleBase,
+        _call_value_net,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Compact single-call path: constant-shape value-net call.
+
+        Always runs ``value_net`` once on a ``[..., T+1]`` input along the
+        time dim. The boundary slot at ``T`` is filled per value-net
+        in-key with the first available of:
+
+        1. ``("final", k)``: explicit collector contract for the
+           rollout-boundary observation (most authoritative; set by
+           ``Collector(final_obs=True)``).
+        2. ``("next", k)[..., T-1:T]``: env-returned "next" value at the
+           last step. Present whenever the rollout is collected without
+           ``compact_obs=True``.
+        3. A duplicate of ``root[T-1]``: smoothness proxy used when
+           neither of the above is available (e.g. Isaac with
+           ``compact_obs=True`` and no ``final_obs=True``).
+
+        The duplication in case 3 is intentional for recurrent value
+        nets: feeding the RNN one extra step with the duplicated obs
+        advances the hidden state, so ``V(next_obs[T-1])`` is
+        approximated by ``f(obs_{T-1}, h_T)`` — not by a scalar copy of
+        ``V_T = f(obs_{T-1}, h_{T-1})``. The two coincide for
+        non-recurrent value nets.
+
+        For ``t < T-1``, ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` —
+        exact at non-trajectory-boundary steps, small bias at internal
+        truncations.
+
+        Shape and code path are constant within a training run (the
+        collector config determines availability of ``("final", ...)``
+        and ``("next", ...)`` deterministically across calls), so
+        ``torch.compile`` specializes once and stays specialized.
+        """
+        if next_params is not None and next_params is not params:
+            raise ValueError(
+                "the value at t and t+1 cannot be retrieved in a single call when both params and next params are passed."
+            )
+        in_keys = value_net.in_keys
+        time_idx = ndim - 1
+        T = data.shape[time_idx]
+        # Include value_key in the select so skip_existing on the value
+        # network can detect pre-filled values (matches legacy path).
+        root_part = data.select(*in_keys, value_key, strict=False)
+        boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
+        # Per-key boundary overrides. See docstring for priority.
+        final_root = data.get("final", default=None)
+        next_root = data.get("next", default=None)
+        boundary_overrides: dict = {}
+        for k in in_keys:
+            if root_part.get(k, default=None) is None:
+                continue
+            # 1. ("final", k): unbatched leaf, [..., *F] with no time dim.
+            if final_root is not None:
+                key_tuple = (k,) if isinstance(k, str) else tuple(k)
+                fv = final_root.get(
+                    key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                    default=None,
+                )
+                if fv is not None:
+                    boundary_overrides[k] = fv.unsqueeze(time_idx)
+                    continue
+            # 2. ("next", k)[..., T-1:T]: env-returned next at last step.
+            if next_root is not None:
+                nv = next_root.get(k, default=None)
+                if nv is not None:
+                    boundary_overrides[k] = nv[boundary_index]
+                    continue
+            # 3. (no override) — boundary_part keeps the duplicated
+            #    root[T-1] value below.
+        boundary_part = root_part[boundary_index].copy()
+        for k, v in boundary_overrides.items():
+            boundary_part.set(k, v)
+        data_in = torch.cat([root_part, boundary_part], dim=time_idx)
+        if params is not None:
+            with params.to_module(value_net):
+                values_full = _call_value_net(data_in)
+        else:
+            values_full = _call_value_net(data_in)
+        root_idx = (slice(None),) * time_idx + (slice(0, T),)
+        next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
+        value = values_full[root_idx]
+        value_ = values_full[next_idx]
+        done = data.get(("next", "done"), default=None)
+        if done is not None:
+            try:
+                value = value.view_as(done)
+                value_ = value_.view_as(done)
+            except RuntimeError:
+                # Value feat dim doesn't match done's trailing dim; leave
+                # shapes as produced by the network.
+                pass
+        return value, value_
+
     def _call_value_nets(
         self,
         data: TensorDictBase,
         params: TensorDictBase,
         next_params: TensorDictBase,
-        single_call: bool,
+        single_call: bool | Literal["compact", "legacy"],
         value_key: NestedKey,
         detach_next: bool,
         vmap_randomness: str = "error",
         *,
         value_net: TensorDictModuleBase | None = None,
     ):
+        # ``single_call`` is passed by callers as ``self.shifted`` and is
+        # one of ``False``, ``"compact"``, or ``"legacy"`` after
+        # normalization. ``True`` still arrives untransformed from a few
+        # direct callers — fold it into the legacy path for backwards
+        # compat (the constructor already warned).
+        if single_call is True:
+            single_call = "legacy"
         if value_net is None:
             value_net = self.value_network
         in_keys = value_net.in_keys
+        if single_call:
+            try:
+                ndim = list(data.names).index("time") + 1
+            except ValueError:
+                if rl_warnings():
+                    logger.warning(
+                        "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
+                        "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
+                    )
+                ndim = data.ndim
+        else:
+            ndim = None
         data = self._sanitize_next_obs_nan(data, in_keys)
 
         def _call_value_net(data_in: TensorDictBase) -> torch.Tensor:
@@ -499,21 +749,22 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 values.append(value_net(chunk).get(value_key))
             return torch.cat(values, dim=0)
 
-        if single_call:
+        if single_call == "compact":
+            value, value_ = self._call_value_net_compact(
+                data=data,
+                params=params,
+                next_params=next_params,
+                value_key=value_key,
+                ndim=ndim,
+                value_net=value_net,
+                _call_value_net=_call_value_net,
+            )
+        elif single_call:
             # We are going to flatten the data, then interleave the last observation of each trajectory in between its
             #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
             #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
             #  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data
             #  accordingly and process each of them independently.
-            try:
-                ndim = list(data.names).index("time") + 1
-            except ValueError:
-                if rl_warnings():
-                    logger.warning(
-                        "Got a tensordict without a time-marked dimension, assuming time is along the last dimension. "
-                        "This warning can be turned off by setting the environment variable RL_WARNINGS to False."
-                    )
-                ndim = data.ndim
             data_copy = data.copy()
             # we are going to modify the done so let's clone it
             done = data_copy["next", "done"].clone()
@@ -525,51 +776,59 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 truncated[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
             data_copy["next", "done"] = done
             data_copy["next", "truncated"] = truncated
-            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states
-            with data_copy.view(-1) as data_copy_view:
-                # Interleave next data when done
-                data_copy_select = data_copy_view.select(
-                    *in_keys, value_key, strict=False
+            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states.
+            # Use reshape, not view: replay-buffer and memmap reads can expose non-canonical strides.
+            data_copy_view = data_copy.reshape(-1)
+            # Interleave next data when done
+            data_copy_select = data_copy_view.select(*in_keys, value_key, strict=False)
+            total_elts = (
+                data_copy_view.shape[0] + data_copy_view["next", "done"].sum().item()
+            )
+            data_in = data_copy_select.new_zeros((total_elts,))
+            # we can get the indices of non-done data by adding the shifted done cumsum to an arange
+            #    traj = [0, 0, 0, 1, 1, 2, 2]
+            #  arange = [0, 1, 2, 3, 4, 5, 6]
+            #    done = [0, 0, 1, 0, 1, 0, 1]
+            # done_cs = [0, 0, 0, 1, 1, 2, 2]
+            # indices = [0, 1, 2, 4, 5, 7, 8]
+            done_view = data_copy_view["next", "done"]
+            if done_view.shape[-1] == 1:
+                done_view = done_view.squeeze(-1)
+            else:
+                done_view = done_view.any(-1)
+            done_cs = done_view.cumsum(0)
+            done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
+            indices = torch.arange(done_cs.shape[0], device=done_cs.device)
+            indices = indices + done_cs
+            data_in[indices] = data_copy_select
+            # To get the indices of the extra data, we can mask indices with done_view and add 1
+            indices_interleaved = indices[done_view] + 1
+            # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
+            root_done_data = data_copy_view[done_view]
+            next_done_data = root_done_data.get("next").select(
+                *in_keys, value_key, strict=False
+            )
+            next_done_data = self._fill_missing_next_inputs(
+                next_done_data, root_done_data, in_keys
+            )
+            # When the collector ran with `final_obs=True`, override the
+            # synthetic-done last-step entries with the true next obs
+            # carried under ("final", k), otherwise shifted-GAE would
+            # bootstrap with V(s_{T-1}) at every window boundary.
+            next_done_data = self._apply_final_obs_to_next_done(
+                next_done_data, data, done_view, in_keys, ndim
+            )
+            data_in[indices_interleaved] = next_done_data
+            if next_params is not None and next_params is not params:
+                raise ValueError(
+                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
                 )
-                total_elts = (
-                    data_copy_view.shape[0]
-                    + data_copy_view["next", "done"].sum().item()
-                )
-                data_in = data_copy_select.new_zeros((total_elts,))
-                # we can get the indices of non-done data by adding the shifted done cumsum to an arange
-                #    traj = [0, 0, 0, 1, 1, 2, 2]
-                #  arange = [0, 1, 2, 3, 4, 5, 6]
-                #    done = [0, 0, 1, 0, 1, 0, 1]
-                # done_cs = [0, 0, 0, 1, 1, 2, 2]
-                # indices = [0, 1, 2, 4, 5, 7, 8]
-                done_view = data_copy_view["next", "done"]
-                if done_view.shape[-1] == 1:
-                    done_view = done_view.squeeze(-1)
-                else:
-                    done_view = done_view.any(-1)
-                done_cs = done_view.cumsum(0)
-                done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
-                indices = torch.arange(done_cs.shape[0], device=done_cs.device)
-                indices = indices + done_cs
-                data_in[indices] = data_copy_select
-                # To get the indices of the extra data, we can mask indices with done_view and add 1
-                indices_interleaved = indices[done_view] + 1
-                # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
-                data_in[indices_interleaved] = (
-                    data_copy_view[done_view]
-                    .get("next")
-                    .select(*in_keys, value_key, strict=False)
-                )
-                if next_params is not None and next_params is not params:
-                    raise ValueError(
-                        "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
-                    )
-                if params is not None:
-                    with params.to_module(value_net):
-                        value_est = _call_value_net(data_in)
-                else:
+            if params is not None:
+                with params.to_module(value_net):
                     value_est = _call_value_net(data_in)
-                value, value_ = value_est[indices], value_est[indices + 1]
+            else:
+                value_est = _call_value_net(data_in)
+            value, value_ = value_est[indices], value_est[indices + 1]
             value = value.view_as(done)
             value_ = value_.view_as(done)
         else:
@@ -628,13 +887,36 @@ class TD0Estimator(ValueEstimatorBase):
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve
             the value estimates.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -670,7 +952,7 @@ class TD0Estimator(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         value_network: TensorDictModule,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: NestedKey = None,
@@ -801,6 +1083,7 @@ class TD0Estimator(ValueEstimatorBase):
         value_target = self.value_estimate(tensordict, next_value=next_value)
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._maybe_drop_final_obs(tensordict)
         return tensordict
 
     def value_estimate(
@@ -867,13 +1150,36 @@ class TD1Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -902,7 +1208,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1029,6 +1335,7 @@ class TD1Estimator(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._maybe_drop_final_obs(tensordict)
         return tensordict
 
     def value_estimate(
@@ -1100,13 +1407,36 @@ class TDLambdaEstimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1137,7 +1467,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1276,6 +1606,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._maybe_drop_final_obs(tensordict)
         return tensordict
 
     def value_estimate(
@@ -1370,13 +1701,36 @@ class GAE(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1434,7 +1788,7 @@ class GAE(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         auto_reset_env: bool = False,
@@ -1650,6 +2004,7 @@ class GAE(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._maybe_drop_final_obs(tensordict)
 
         return tensordict
 
@@ -1755,13 +2110,36 @@ class VTrace(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1799,7 +2177,7 @@ class VTrace(ValueEstimatorBase):
         advantage_key: NestedKey | None = None,
         value_target_key: NestedKey | None = None,
         value_key: NestedKey | None = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         value_chunk_size: int | None = None,
@@ -2024,6 +2402,7 @@ class VTrace(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._maybe_drop_final_obs(tensordict)
 
         return tensordict
 
