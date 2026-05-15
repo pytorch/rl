@@ -263,7 +263,10 @@ class TestValues:
             (GAE, {"gamma": 0.9, "lmbda": 0.95}),
         ],
     )
-    def test_final_obs_bootstrap_shifted(self, estimator_cls, kwargs):
+    @pytest.mark.parametrize("flatten_final_obs", [False, True])
+    def test_final_obs_bootstrap_shifted(
+        self, estimator_cls, kwargs, flatten_final_obs
+    ):
         """``("final", obs)`` carries the true bootstrap obs at the window edge.
 
         Without it, shifted-GAE under ``compact_obs=True`` falls back to
@@ -318,7 +321,11 @@ class TestValues:
                     "terminated": done.clone(),
                 },
                 "final": TensorDict(
-                    {"obs": UnbatchedTensor(final_obs)},
+                    {
+                        "obs": UnbatchedTensor(
+                            final_obs.reshape(-1) if flatten_final_obs else final_obs
+                        )
+                    },
                     batch_size=(B, T),
                 ),
             },

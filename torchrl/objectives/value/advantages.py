@@ -544,8 +544,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
             nxt_k = next_done_data.get(key, default=None)
             if nxt_k is None:
                 continue
-            obs_shape = final_val.shape[ndim - 1 :]
-            final_flat = final_val.reshape(-1, *obs_shape)
+            final_val = final_val.as_subclass(torch.Tensor)
+            final_flat = final_val.reshape(B_total, *nxt_k.shape[1:]).to(
+                device=nxt_k.device
+            )
             if not copied:
                 next_done_data = next_done_data.copy()
                 copied = True
