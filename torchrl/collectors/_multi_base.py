@@ -329,6 +329,13 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
             at sampling time.
             Defaults to ``False``.
+        final_obs (bool, optional): if ``True`` (requires ``compact_obs=True``),
+            each worker additionally stores the true next-observation reached
+            after the last step of its rollout under ``("final", k)`` as an
+            :class:`tensordict.UnbatchedTensor`. Closes the shifted-GAE
+            bootstrap-correctness gap at window boundaries. See
+            :class:`~torchrl.collectors.SyncDataCollector` for details.
+            Defaults to ``False``.
         worker_idx (int, optional): the index of the worker.
 
     Examples:
@@ -416,6 +423,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
         compact_obs: bool = False,
+        final_obs: bool = False,
     ):
         self.closed = True
         self.worker_idx = worker_idx
@@ -527,6 +535,13 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.reset_at_each_iter = reset_at_each_iter
         self.postproc = postproc
         self.compact_obs = bool(compact_obs)
+        self.final_obs = bool(final_obs)
+        if self.final_obs and not self.compact_obs:
+            raise ValueError(
+                "final_obs=True requires compact_obs=True; otherwise the true "
+                "next observation is already stored at every step under "
+                "('next', ...)."
+            )
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -1320,9 +1335,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
+                    "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
+                    "final_obs": self.final_obs,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
