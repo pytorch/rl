@@ -2008,6 +2008,37 @@ class Collector(BaseCollector):
         return final_rollout
 
     @torch.no_grad()
+    def fake_tensordict(self) -> TensorDictBase:
+        """Return a zero-filled tensordict shaped like one batch from this collector.
+
+        The result mirrors what ``next(iter(collector))`` would yield:
+
+        - batch shape ``(*env.batch_size, frames_per_batch)`` with the last
+          dim named ``"time"``;
+        - env keys (observation / reward / done / terminated / truncated /
+          ``is_init`` when an :class:`~torchrl.envs.InitTracker` is on the
+          env), policy out-keys, and ``("collector", "traj_ids")`` when
+          trajectory tracking is enabled;
+        - ``compact_obs=True`` exclusions and ``final_obs=True``
+          ``("final", k)`` entries applied;
+        - ``set_truncated=True`` last-step ``truncated``/``done`` masking
+          applied;
+        - ``postproc`` / ``split_trajs`` / private-key exclusion applied,
+          mirroring :meth:`_postproc`.
+
+        Intended for storage initialization and ``torch.compile`` /
+        cudagraph warmup without having to step the environment first.
+        """
+        if getattr(self, "_final_rollout", None) is None:
+            # Build the rollout buffer on demand even when use_buffers=False
+            # so we have a structural template to clone from.
+            self._maybe_make_final_rollout(make_rollout=True)
+        result = self._final_rollout.clone().zero_()
+        result = self._maybe_attach_final_obs(result)
+        result = self._maybe_set_truncated(result)
+        return self._postproc(result)
+
+    @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
         """Resets the environments to a new initial state."""
         if self.track_traj_ids:
