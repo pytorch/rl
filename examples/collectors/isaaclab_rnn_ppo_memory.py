@@ -77,6 +77,15 @@ def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]
     }
 
 
+def _metric_float(value) -> float:
+    if isinstance(value, torch.Tensor):
+        value = value.detach()
+        if value.numel() != 1:
+            value = value.float().mean()
+        return float(value.cpu())
+    return float(value)
+
+
 def _assert_rollout_shapes(
     tensordict: TensorDictBase,
     *,
@@ -382,7 +391,7 @@ def main() -> None:
                 if loss_acc is not None and loss_count > 0:
                     metrics.update(
                         {
-                            f"loss/{k}": float(v / loss_count)
+                            f"loss/{k}": _metric_float(v / loss_count)
                             for k, v in loss_acc.items()
                         }
                     )
