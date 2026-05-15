@@ -3350,6 +3350,42 @@ class TestEnvTransformAutoWrap:
                     auto_register_policy_transforms=False,
                 )
 
+    def test_policy_factory_recurrent_auto_register(self):
+        """policy_factory + auto_register_policy_transforms=True must:
+
+        - Instantiate the policy, walk it for InitTracker / TensorDictPrimer
+          requirements, and append both transforms to the env.
+        - Leave the transforms with live parents (not None) so their spec
+          transforms work — the bug this guards against was Compose
+          temporarily parenting the children to a throwaway container.
+        - Keep env.action_spec accessible.
+        """
+        env = GymEnv(CARTPOLE_VERSIONED())
+        keys_before = set(env.full_observation_spec.keys(True, True))
+        assert "is_init" not in keys_before
+        assert "recurrent_state" not in keys_before
+
+        collector = SyncDataCollector(
+            env,
+            policy_factory=self._make_recurrent_policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            keys_after = set(collector.env.full_observation_spec.keys(True, True))
+            assert "is_init" in keys_after
+            assert "recurrent_state" in keys_after
+            # action_spec must remain reachable — Compose-parenting bug
+            # used to break this by leaving InitTracker.parent=None.
+            assert collector.env.action_spec is not None
+            for transform in collector.env.transform:
+                assert transform.parent is not None, (
+                    f"transform {type(transform).__name__} has parent=None"
+                )
+        finally:
+            collector.shutdown()
+
 
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
