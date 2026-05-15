@@ -112,7 +112,6 @@ def _loss_metrics(loss_acc: TensorDictBase, loss_count: int) -> dict[str, float]
 def _inference_metrics(
     data: TensorDictBase,
     *,
-    current_policy_version: int | None,
     frames: int,
 ) -> dict[str, float | int]:
     metrics: dict[str, float | int] = {
@@ -135,22 +134,6 @@ def _inference_metrics(
                     "inference/end_of_traj_episode_reward", end_of_traj_reward
                 )
             )
-    policy_version = data.get("policy_version", default=None)
-    if policy_version is not None:
-        policy_version = policy_version.detach()
-        is_init = data.get("is_init", default=None)
-        if current_policy_version is not None and is_init is not None:
-            is_init = is_init.squeeze(-1).to(torch.bool)
-            policy_version = torch.where(
-                is_init,
-                torch.full_like(policy_version, current_policy_version),
-                policy_version,
-            )
-        metrics.update(_tensor_stats("inference/policy_version", policy_version))
-        if current_policy_version is not None:
-            staleness = current_policy_version - policy_version
-            metrics.update(_tensor_stats("inference/policy_staleness", staleness))
-            metrics["inference/current_policy_version"] = current_policy_version
     return metrics
 
 
@@ -391,7 +374,6 @@ def main() -> None:
         compact_obs=True,
         init_fn=partial(_init_isaac_app, device=str(collector_device)),
         auto_register_policy_transforms=True,
-        track_policy_version=True,
         weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
     )
 
@@ -414,13 +396,11 @@ def main() -> None:
 
     # ---- Training loop ----
     collector_iter = iter(collector)
-    current_policy_version = 0
     try:
         for iteration in range(args.iterations):
             timeit.erase()
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
-            current_policy_version += 1
             with timeit("collector_next"):
                 collected_batch = next(collector_iter)
             with timeit("training"):
@@ -484,7 +464,6 @@ def main() -> None:
                 metrics.update(
                     _inference_metrics(
                         data,
-                        current_policy_version=current_policy_version,
                         frames=(iteration + 1) * frames_per_batch,
                     )
                 )
