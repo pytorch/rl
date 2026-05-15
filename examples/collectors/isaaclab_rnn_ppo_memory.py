@@ -227,7 +227,7 @@ def main() -> None:
         trust_policy=True,
         compact_obs=True,
         final_obs=True,
-        init_fn=_init_isaac_app,
+        init_fn=partial(_init_isaac_app, device=str(collector_device)),
         auto_register_policy_transforms=True,
         track_policy_version=True,
         weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},

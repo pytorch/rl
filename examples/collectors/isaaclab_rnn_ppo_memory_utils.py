@@ -33,13 +33,16 @@ from torchrl.modules import (
 RnnBackend = Literal["pad", "scan", "triton"]
 
 
-def _init_isaac_app() -> None:
+def _init_isaac_app(device: str | None = None) -> None:
     """Start Isaac Lab's AppLauncher in headless mode inside a worker."""
     from isaaclab.app import AppLauncher
 
     parser = argparse.ArgumentParser(description="TorchRL Isaac Lab env launcher.")
     AppLauncher.add_app_launcher_args(parser)
-    args_cli, _ = parser.parse_known_args(["--headless"])
+    launch_args = ["--headless"]
+    if device is not None:
+        launch_args.extend(["--device", device])
+    args_cli, _ = parser.parse_known_args(launch_args)
     AppLauncher(args_cli)
 
 
