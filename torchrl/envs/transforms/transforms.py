@@ -15,6 +15,7 @@ from torchrl.envs.transforms._action import (
     ActionDiscretizer,
     ActionMask,
     DiscreteActionProjection,
+    FlattenAction,
     MultiAction,
 )
 
@@ -125,6 +126,7 @@ __all__ = [
     "ExcludeTransform",
     "ExpandAs",
     "FiniteTensorDictCheck",
+    "FlattenAction",
     "FlattenObservation",
     "FlattenTensorDict",
     "FrameSkipTransform",

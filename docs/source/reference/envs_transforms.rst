@@ -268,6 +268,7 @@ Available Transforms
     ExcludeTransform
     ExpandAs
     FiniteTensorDictCheck
+    FlattenAction
     FlattenObservation
     FrameSkipTransform
     GrayScale
