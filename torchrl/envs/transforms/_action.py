@@ -1143,11 +1143,22 @@ class ActionScaling(Transform):
             dtype=action_spec.dtype,
         )
 
+    def _loc_scale(self, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        # Only move the buffers when the device actually differs: an
+        # unconditional ``.to()`` inserts a copy node in the compile graph,
+        # whereas the device comparison is resolved at trace time (device is
+        # static metadata, not data), so the common same-device path stays
+        # copy-free and compile-friendly.
+        loc, scale = self.loc, self.scale
+        if loc.device != device:
+            loc = loc.to(device)
+            scale = scale.to(device)
+        return loc, scale
+
     def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
         # env action -> normalized
         self._check_initialized()
-        loc = self.loc.to(action.device)
-        scale = self.scale.to(action.device)
+        loc, scale = self._loc_scale(action.device)
         normalized = (action - loc) / scale
         if not self.standard_normal:
             normalized = (normalized + 1) / 2
@@ -1156,8 +1167,7 @@ class ActionScaling(Transform):
     def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
         # normalized -> env action
         self._check_initialized()
-        loc = self.loc.to(action.device)
-        scale = self.scale.to(action.device)
+        loc, scale = self._loc_scale(action.device)
         if not self.standard_normal:
             action = action * 2 - 1
         return action * scale + loc
