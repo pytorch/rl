@@ -466,6 +466,70 @@ class TestValues:
             a1 = r1["advantage"]
             torch.testing.assert_close(a0, a1)
 
+    @pytest.mark.parametrize("has_internal_truncation", [False, True])
+    def test_gae_shifted_rollout_shape_call(self, has_internal_truncation):
+        # Shifted=True now dispatches to a rollout-shape single call when
+        # strictly equivalent to the flatten/interleave path (no internal
+        # truncations). When internal truncations exist it falls back to
+        # the flatten path. Either way the result must match shifted=False.
+        from torchrl.objectives.value.advantages import ValueEstimatorBase
+
+        torch.manual_seed(0)
+        B, T, obs_dim = 4, 8, 6
+        # Mimic an env rollout: obs[t+1] == next_obs[t] for non-done steps.
+        # At done positions, next_obs is whatever the env returned at the
+        # terminal/truncation step and obs[t+1] is the post-reset obs of
+        # a new trajectory (independent).
+        all_obs = torch.randn(B, T + 1, obs_dim)
+        obs = all_obs[:, :T].clone()
+        next_obs = all_obs[:, 1:].clone()
+        reward = torch.randn(B, T, 1)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        terminated = torch.zeros(B, T, 1, dtype=torch.bool)
+        if has_internal_truncation:
+            # Put a truncation (done=True, terminated=False) at t=3 on row 0
+            # and decouple next_obs from obs[t+1] at that position.
+            done[0, 3, 0] = True
+            next_obs[0, 3] = torch.randn(obs_dim)
+        # Always have done at the rollout boundary (T-1). next_obs[T-1] is
+        # the rollout's exit observation; since we never see obs[T] in the
+        # rollout, the value at the boundary slot is dictated by next_obs.
+        done[:, -1, 0] = True
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                        "truncated": done & ~terminated,
+                    },
+                    batch_size=[B, T],
+                ),
+            },
+            batch_size=[B, T],
+        )
+        td.refine_names(..., "time")
+        # Confirm the equivalence detector decides correctly.
+        assert ValueEstimatorBase._can_use_rollout_shape_call(td, ndim=2) is (
+            not has_internal_truncation
+        )
+
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        gae_shifted = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=True)
+        gae_unshifted = GAE(
+            gamma=0.9, lmbda=0.95, value_network=value_net, shifted=False
+        )
+        adv_shifted = gae_shifted(td.copy())["advantage"]
+        adv_unshifted = gae_unshifted(td.copy())["advantage"]
+        torch.testing.assert_close(adv_shifted, adv_unshifted)
+
     @pytest.mark.parametrize("device", get_default_devices())
     @pytest.mark.parametrize("gamma", [0.1, 0.5, 0.99])
     @pytest.mark.parametrize("lmbda", [0.1, 0.5, 0.99])

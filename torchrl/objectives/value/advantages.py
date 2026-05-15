@@ -567,6 +567,124 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if "final" in tensordict.keys():
             del tensordict["final"]
 
+    @staticmethod
+    def _can_use_rollout_shape_call(data: TensorDictBase, ndim: int) -> bool:
+        """Return whether the rollout-shape single-call path is safe to use.
+
+        The rollout-shape path is strictly equivalent to the flatten/interleave
+        path whenever no internal truncations exist within the rollout.
+
+        The rollout-shape path concatenates the boundary ``next_obs`` to the
+        rollout-shaped inputs and slices into ``value`` / ``next_value``.
+        It is strictly equivalent to the flatten/interleave path whenever
+        every internal ``done`` step (``t < T-1``) is also terminated. At
+        truncation-only steps (``done=True, terminated=False`` with
+        ``t < T-1``) the flatten path bootstraps from ``V(real next_obs)``,
+        whereas the rollout-shape path would substitute ``V(obs[t+1])`` from
+        the start of the next trajectory. Internal terminations are always
+        masked downstream by ``(1-terminated)``, so they don't matter.
+        """
+        if ndim < 1:
+            return True
+        time_idx = ndim - 1
+        T = data.shape[time_idx]
+        if T < 2:
+            return True
+        done = data.get(("next", "done"), default=None)
+        if done is None:
+            return True
+        truncated = data.get(("next", "truncated"), default=None)
+        if truncated is None:
+            # No truncated key: GAE treats terminated==done; no internal
+            # truncations possible.
+            return True
+        terminated = data.get(("next", "terminated"), default=done)
+        internal_idx = (slice(None),) * time_idx + (slice(0, T - 1),)
+        trunc = done[internal_idx].bool() & (~terminated[internal_idx].bool())
+        return not bool(trunc.any())
+
+    def _call_value_net_rollout_shape(
+        self,
+        data: TensorDictBase,
+        params: TensorDictBase | None,
+        next_params: TensorDictBase | None,
+        value_key: NestedKey,
+        ndim: int,
+        value_net: TensorDictModuleBase,
+        _call_value_net,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Single call on rollout-shaped data: ``[..., T] → [..., T+1]``.
+
+        Builds the value-net input by appending the rollout-boundary
+        ``next_obs`` along the time dim (using ``("final", k)`` when
+        present, else ``("next", k)[..., T-1]``), runs ``value_net`` once,
+        then slices the output into ``value = out[..., :T]`` and
+        ``next_value = out[..., 1:T+1]``.
+
+        Caller must verify equivalence with the flatten path via
+        :meth:`_can_use_rollout_shape_call`.
+        """
+        if next_params is not None and next_params is not params:
+            raise ValueError(
+                "the value at t and t+1 cannot be retrieved in a single call when both params and next params are passed."
+            )
+        in_keys = value_net.in_keys
+        time_idx = ndim - 1
+        T = data.shape[time_idx]
+        # Include value_key in the select so skip_existing on the value
+        # network can detect pre-filled values (matches flatten path).
+        root_part = data.select(*in_keys, value_key, strict=False)
+        boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
+        next_select = data.get("next").select(*in_keys, value_key, strict=False)
+        boundary_part = next_select[boundary_index]
+        # Fill keys absent from ("next", ...) from root at the boundary
+        # slice. Matches the flatten path's _fill_missing_next_inputs
+        # contract — in particular, this gives "is_init" at the boundary
+        # the value of root["is_init"][..., T-1] (typically False), so the
+        # value net continues the trajectory's hidden state through to the
+        # boundary slot (correct bootstrap semantics).
+        boundary_part = self._fill_missing_next_inputs(
+            boundary_part, root_part[boundary_index], in_keys
+        )
+        # Honor ("final", k) when present (collector contract for true
+        # rollout-boundary next obs), mirroring _apply_final_obs_to_next_done.
+        final_root = data.get("final", default=None)
+        if final_root is not None:
+            copied = False
+            for k in in_keys:
+                key_tuple = (k,) if isinstance(k, str) else tuple(k)
+                fv = final_root.get(
+                    key_tuple[0] if len(key_tuple) == 1 else key_tuple,
+                    default=None,
+                )
+                if fv is None:
+                    continue
+                if not copied:
+                    boundary_part = boundary_part.copy()
+                    copied = True
+                boundary_part.set(k, fv.unsqueeze(time_idx))
+        data_in = torch.cat([root_part, boundary_part], dim=time_idx)
+        if params is not None:
+            with params.to_module(value_net):
+                value_est_full = _call_value_net(data_in)
+        else:
+            value_est_full = _call_value_net(data_in)
+        root_idx = (slice(None),) * time_idx + (slice(0, T),)
+        next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
+        value = value_est_full[root_idx]
+        value_ = value_est_full[next_idx]
+        done = data.get(("next", "done"), default=None)
+        if done is not None:
+            try:
+                value = value.view_as(done)
+                value_ = value_.view_as(done)
+            except RuntimeError:
+                # Value feat dim doesn't match done's trailing dim; leave
+                # shapes as produced by the network. Downstream GAE handles
+                # both layouts.
+                pass
+        return value, value_
+
     def _call_value_nets(
         self,
         data: TensorDictBase,
@@ -605,7 +723,25 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 values.append(value_net(chunk).get(value_key))
             return torch.cat(values, dim=0)
 
-        if single_call:
+        if single_call and self._can_use_rollout_shape_call(data, ndim):
+            # Rollout-shape single call: feed [..., T+1] to the value net in
+            # one shot, then slice into value/next_value. Strictly equivalent
+            # to the flatten/interleave path when no internal truncations
+            # exist (verified by _can_use_rollout_shape_call). Preserves
+            # batch parallelism along the natural batch dim, which matters
+            # for RNN value nets with reset-aware backends (scan/triton/
+            # cuDNN-with-resets) where the flatten path would serialise
+            # along a [1, B*T] time axis.
+            value, value_ = self._call_value_net_rollout_shape(
+                data=data,
+                params=params,
+                next_params=next_params,
+                value_key=value_key,
+                ndim=ndim,
+                value_net=value_net,
+                _call_value_net=_call_value_net,
+            )
+        elif single_call:
             # We are going to flatten the data, then interleave the last observation of each trajectory in between its
             #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
             #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
