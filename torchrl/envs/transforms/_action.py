@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+from collections.abc import Sequence
 from copy import copy
 from enum import IntEnum
 from textwrap import indent
@@ -21,10 +22,12 @@ from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,
     Composite,
+    ContinuousBox,
     MultiCategorical,
     MultiOneHot,
     OneHot,
     TensorSpec,
+    Unbounded,
 )
 
 if TYPE_CHECKING:
@@ -35,11 +38,16 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
+from torchrl.envs.transforms._base import (
+    _apply_to_composite_inv,
+    FORWARD_NOT_IMPLEMENTED,
+    Transform,
+)
 
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "ActionScaling",
     "DiscreteActionProjection",
     "MultiAction",
 ]
@@ -857,3 +865,331 @@ class MultiAction(Transform):
             )
         )
         return observation_spec
+
+
+class ActionScaling(Transform):
+    r"""Affine-scale a continuous action using the bounds of the action spec.
+
+    Given a bounded action spec with bounds ``[low, high]``, this transform exposes
+    a normalized action space to the policy and rescales actions back to the
+    original env range before they are passed to the environment.
+
+    The ``loc`` and ``scale`` are derived from the spec:
+
+    .. math::
+
+        loc = \frac{high + low}{2}, \quad scale = \frac{high - low}{2}.
+
+    When ``standard_normal=True`` (default) the normalized action space is
+    ``[-1, 1]`` and the inverse mapping (policy action -> env action) is
+
+    .. math::
+
+        a_{env} = a_{norm} \cdot scale + loc.
+
+    The forward mapping (env action -> normalized action, used by replay buffer
+    transforms) is the inverse:
+
+    .. math::
+
+        a_{norm} = (a_{env} - loc) / scale.
+
+    When ``standard_normal=False`` the normalized space is ``[0, 1]`` and the
+    mapping is rescaled accordingly so that ``0`` maps to ``low`` and ``1`` to
+    ``high``.
+
+    Args:
+        in_keys_inv (sequence of NestedKey, optional): keys read during the
+            ``inv`` direction (policy -> env). Defaults to ``["action"]``. A
+            single key per :class:`ActionScaling` instance is supported; compose
+            several instances to scale several actions.
+        out_keys_inv (sequence of NestedKey, optional): keys written during the
+            ``inv`` direction. Defaults to ``in_keys_inv``.
+        in_keys (sequence of NestedKey, optional): keys read during the forward
+            direction (env action -> normalized action, used by replay buffers
+            and inside :class:`~torch.nn.Module` chains). Defaults to
+            ``in_keys_inv``.
+        out_keys (sequence of NestedKey, optional): keys written during the
+            forward direction. Defaults to ``in_keys``.
+
+    Keyword Args:
+        loc (torch.Tensor or float, optional): explicit location of the affine
+            transform. If both ``loc`` and ``scale`` are provided the values are
+            used as-is and no derivation from the spec is performed (useful when
+            no parent environment is available, e.g. inside a replay buffer).
+            Defaults to ``None``.
+        scale (torch.Tensor or float, optional): explicit scale of the affine
+            transform. Must be provided together with ``loc``.
+            Defaults to ``None``.
+        standard_normal (bool, optional): if ``True`` (default), the normalized
+            action space is ``[-1, 1]``. If ``False``, the normalized action
+            space is ``[0, 1]``.
+
+    Raises:
+        RuntimeError: if the action spec is unbounded or partially unbounded
+            (any bound is non-finite).
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data.tensor_specs import Bounded
+        >>> from torchrl.envs.transforms import ActionScaling, TransformedEnv
+        >>> from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+        >>> base_env = ContinuousActionVecMockEnv(
+        ...     action_spec=Bounded(low=-2.0, high=4.0, shape=(7,))
+        ... )
+        >>> env = TransformedEnv(base_env, ActionScaling())
+        >>> env.action_spec.space.low
+        tensor([-1., -1., -1., -1., -1., -1., -1.])
+        >>> env.action_spec.space.high
+        tensor([1., 1., 1., 1., 1., 1., 1.])
+    """
+
+    invertible = True
+
+    def __init__(
+        self,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        *,
+        loc: torch.Tensor | float | None = None,
+        scale: torch.Tensor | float | None = None,
+        standard_normal: bool = True,
+    ):
+        if in_keys_inv is None:
+            in_keys_inv = ["action"]
+        if not isinstance(in_keys_inv, (list, tuple)):
+            in_keys_inv = [in_keys_inv]
+        if len(in_keys_inv) != 1:
+            raise ValueError(
+                "ActionScaling only supports a single action key per instance. "
+                "Compose several ActionScaling transforms to scale multiple actions."
+            )
+        if out_keys_inv is None:
+            out_keys_inv = copy(in_keys_inv)
+        if in_keys is None:
+            in_keys = copy(in_keys_inv)
+        if out_keys is None:
+            out_keys = copy(in_keys)
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+        self.standard_normal = bool(standard_normal)
+
+        if (loc is None) != (scale is None):
+            raise ValueError(
+                "loc and scale must either both be provided or both be None."
+            )
+        self._explicit = loc is not None
+        if loc is not None:
+            loc = torch.as_tensor(loc)
+            scale = torch.as_tensor(scale)
+            if not loc.dtype.is_floating_point:
+                loc = loc.to(torch.get_default_dtype())
+            if not scale.dtype.is_floating_point:
+                scale = scale.to(torch.get_default_dtype())
+            if (scale == 0).any():
+                raise ValueError(
+                    "scale must not contain zero entries (would cause division by zero)."
+                )
+            self.register_buffer("loc", loc)
+            self.register_buffer("scale", scale)
+        else:
+            self.register_buffer("loc", nn.UninitializedBuffer())
+            self.register_buffer("scale", nn.UninitializedBuffer())
+
+    @property
+    def initialized(self) -> bool:
+        return not isinstance(self.loc, nn.UninitializedBuffer)
+
+    def _check_initialized(self) -> None:
+        if not self.initialized:
+            self._maybe_init_from_parent()
+        if not self.initialized:
+            raise RuntimeError(
+                "ActionScaling has not been initialized yet. Either pass explicit "
+                "`loc` and `scale` to the constructor, or attach this transform to "
+                "a TransformedEnv whose action spec is bounded so that the values "
+                "can be derived automatically."
+            )
+
+    def _maybe_init_from_parent(self) -> None:
+        """Derive ``loc`` and ``scale`` from the parent env's action spec.
+
+        Walks up the transform chain to compute the action spec as it would be
+        seen on the inv direction (env-scale) for our action key, and uses its
+        bounds to materialize ``loc`` and ``scale``.
+        """
+        if self.initialized or self._explicit:
+            return
+        parent = self.parent
+        if parent is None:
+            return
+        try:
+            full_action_spec = parent.base_env.full_action_spec
+        except Exception:  # noqa: BLE001
+            return
+        # Apply every preceding transform's transform_action_spec on a clone so
+        # that the spec we read here reflects the env-scale bounds at the point
+        # in the chain where this transform sits.
+        full_action_spec = full_action_spec.clone()
+        # ``parent`` is an EnvBase; walk through preceding transforms in the
+        # Compose (if any) up to ``self``.
+        transform = parent.transform
+        from torchrl.envs.transforms._base import Compose
+
+        if isinstance(transform, Compose):
+            for t in transform.transforms:
+                if t is self:
+                    break
+                # Each transform may modify the action spec on the way through.
+                input_spec = Composite(
+                    full_action_spec=full_action_spec,
+                    full_state_spec=Composite(),
+                    shape=full_action_spec.shape,
+                    device=full_action_spec.device,
+                )
+                input_spec = t.transform_input_spec(input_spec)
+                full_action_spec = input_spec["full_action_spec"]
+        key = self.in_keys_inv[0]
+        if key not in full_action_spec.keys(True, True):
+            return
+        leaf = full_action_spec[key]
+        # surface the validation error to the caller - it is the same error
+        # that would have been raised when the spec was first queried.
+        low, high = self._validate_bounded(leaf)
+        dtype = low.dtype if low.dtype.is_floating_point else torch.get_default_dtype()
+        loc = ((high + low) / 2).to(dtype)
+        scale = ((high - low) / 2).to(dtype)
+        self._set_loc_scale(loc, scale)
+
+    def _set_loc_scale(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
+        if isinstance(self.loc, nn.UninitializedBuffer):
+            self.loc.materialize(shape=loc.shape, dtype=loc.dtype)
+            self.scale.materialize(shape=scale.shape, dtype=scale.dtype)
+        self.loc.data.copy_(loc)
+        self.scale.data.copy_(scale)
+
+    @staticmethod
+    def _validate_bounded(action_spec: TensorSpec) -> tuple[torch.Tensor, torch.Tensor]:
+        space = getattr(action_spec, "space", None)
+        if not isinstance(space, ContinuousBox):
+            raise RuntimeError(
+                f"ActionScaling requires a bounded continuous action spec, got "
+                f"{type(action_spec).__name__} with space "
+                f"{type(space).__name__ if space is not None else None}. "
+                "Unbounded or discrete action specs are not supported."
+            )
+        # ``Unbounded`` specs use a ``ContinuousBox`` whose low/high are set to
+        # ``finfo.min`` and ``finfo.max`` respectively, so checking the spec type
+        # is more reliable than ``torch.isfinite``.
+        if isinstance(action_spec, Unbounded):
+            raise RuntimeError(
+                "ActionScaling cannot be used with an Unbounded action spec. "
+                "The action spec must be fully bounded for spec-based normalization."
+            )
+        low = space.low
+        high = space.high
+        # Partially unbounded: one side is finite but the other matches the
+        # ``finfo`` extreme used internally by ``Unbounded``.
+        dtype = low.dtype
+        if dtype.is_floating_point:
+            extreme_low = torch.finfo(dtype).min
+            extreme_high = torch.finfo(dtype).max
+            if (low == extreme_low).any() or (high == extreme_high).any():
+                raise RuntimeError(
+                    "ActionScaling requires fully bounded actions: at least one "
+                    "entry of the action spec is unbounded (low equals finfo.min or "
+                    "high equals finfo.max)."
+                )
+        if not torch.isfinite(low).all() or not torch.isfinite(high).all():
+            raise RuntimeError(
+                "ActionScaling requires fully bounded actions: every entry of the "
+                "action spec must have a finite lower and upper bound. Got "
+                "non-finite values in low or high."
+            )
+        if (high <= low).any():
+            raise RuntimeError(
+                "ActionScaling requires high > low for every entry of the action "
+                "spec. Got entries with high <= low."
+            )
+        return low, high
+
+    @_apply_to_composite_inv
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        low, high = self._validate_bounded(action_spec)
+        dtype = low.dtype if low.dtype.is_floating_point else torch.get_default_dtype()
+        low = low.to(dtype)
+        high = high.to(dtype)
+        if not self._explicit:
+            loc = (high + low) / 2
+            scale = (high - low) / 2
+            self._set_loc_scale(loc, scale)
+        if self.standard_normal:
+            new_low = torch.full_like(low, -1.0)
+            new_high = torch.full_like(high, 1.0)
+        else:
+            new_low = torch.zeros_like(low)
+            new_high = torch.ones_like(high)
+        return Bounded(
+            low=new_low,
+            high=new_high,
+            shape=action_spec.shape,
+            device=action_spec.device,
+            dtype=action_spec.dtype,
+        )
+
+    def _loc_scale(self, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        # Only move the buffers when the device actually differs: an
+        # unconditional ``.to()`` inserts a copy node in the compile graph,
+        # whereas the device comparison is resolved at trace time (device is
+        # static metadata, not data), so the common same-device path stays
+        # copy-free and compile-friendly.
+        loc, scale = self.loc, self.scale
+        if loc.device != device:
+            loc = loc.to(device)
+            scale = scale.to(device)
+        return loc, scale
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        # env action -> normalized
+        self._check_initialized()
+        loc, scale = self._loc_scale(action.device)
+        normalized = (action - loc) / scale
+        if not self.standard_normal:
+            normalized = (normalized + 1) / 2
+        return normalized
+
+    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        # normalized -> env action
+        self._check_initialized()
+        loc, scale = self._loc_scale(action.device)
+        if not self.standard_normal:
+            action = action * 2 - 1
+        return action * scale + loc
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # The action only flows through the inv direction during env stepping.
+        # The next_tensordict returned by the base env does not contain the
+        # action, so we leave it untouched here. The forward direction
+        # (env action -> normalized) is still available via ``forward`` for use
+        # inside replay buffers and ``nn.Module`` chains.
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def __repr__(self) -> str:
+        loc = self.loc if self.initialized else "uninitialized"
+        scale = self.scale if self.initialized else "uninitialized"
+        return (
+            f"{self.__class__.__name__}("
+            f"loc={loc}, scale={scale}, standard_normal={self.standard_normal}, "
+            f"in_keys_inv={self.in_keys_inv})"
+        )

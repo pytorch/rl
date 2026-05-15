@@ -12,6 +12,7 @@ from .rb_transforms import MultiStepTransform, NextStateReconstructor
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
+    ActionScaling,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -81,6 +82,7 @@ from .vip import VIPRewardTransform, VIPTransform
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "ActionScaling",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
