@@ -576,7 +576,9 @@ class TestDiscreteActionProjection(TransformBase):
 class TestActionScaling(TransformBase):
     @staticmethod
     def _bounded_env(low=-2.0, high=4.0, shape=(7,)):
-        return ContinuousActionVecMockEnv(action_spec=Bounded(low=low, high=high, shape=shape))
+        return ContinuousActionVecMockEnv(
+            action_spec=Bounded(low=low, high=high, shape=shape)
+        )
 
     def test_single_trans_env_check(self):
         env = TransformedEnv(self._bounded_env(), ActionScaling())
@@ -707,9 +709,9 @@ class TestActionScaling(TransformBase):
         # Sampling is stochastic — every sampled action must be one of the
         # original normalized values.
         for value in sampled["action"].tolist():
-            assert any(abs(value - x) < 1e-6 for x in normalized.tolist()), (
-                f"sampled value {value} is not among the stored normalized values"
-            )
+            assert any(
+                abs(value - x) < 1e-6 for x in normalized.tolist()
+            ), f"sampled value {value} is not among the stored normalized values"
 
     def test_transform_inverse(self):
         # Round-trip a batch of normalized actions through inv then forward and

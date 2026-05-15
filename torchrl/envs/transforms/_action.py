@@ -43,7 +43,6 @@ from torchrl.envs.transforms._base import (
     FORWARD_NOT_IMPLEMENTED,
     Transform,
 )
-from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 __all__ = [
     "ActionDiscretizer",
@@ -869,7 +868,7 @@ class MultiAction(Transform):
 
 
 class ActionScaling(Transform):
-    """Affine-scale a continuous action using the bounds of the action spec.
+    r"""Affine-scale a continuous action using the bounds of the action spec.
 
     Given a bounded action spec with bounds ``[low, high]``, this transform exposes
     a normalized action space to the policy and rescales actions back to the
@@ -879,14 +878,14 @@ class ActionScaling(Transform):
 
     .. math::
 
-        loc = \\frac{high + low}{2}, \\quad scale = \\frac{high - low}{2}.
+        loc = \frac{high + low}{2}, \quad scale = \frac{high - low}{2}.
 
     When ``standard_normal=True`` (default) the normalized action space is
     ``[-1, 1]`` and the inverse mapping (policy action -> env action) is
 
     .. math::
 
-        a_{env} = a_{norm} \\cdot scale + loc.
+        a_{env} = a_{norm} \cdot scale + loc.
 
     The forward mapping (env action -> normalized action, used by replay buffer
     transforms) is the inverse:
@@ -1038,7 +1037,6 @@ class ActionScaling(Transform):
         # that the spec we read here reflects the env-scale bounds at the point
         # in the chain where this transform sits.
         full_action_spec = full_action_spec.clone()
-        container = self.container
         # ``parent`` is an EnvBase; walk through preceding transforms in the
         # Compose (if any) up to ``self``.
         transform = parent.transform
@@ -1061,12 +1059,9 @@ class ActionScaling(Transform):
         if key not in full_action_spec.keys(True, True):
             return
         leaf = full_action_spec[key]
-        try:
-            low, high = self._validate_bounded(leaf)
-        except RuntimeError:
-            # surface the validation error to the caller — this is the same
-            # error that would have been raised when the spec was first queried.
-            raise
+        # surface the validation error to the caller - it is the same error
+        # that would have been raised when the spec was first queried.
+        low, high = self._validate_bounded(leaf)
         dtype = low.dtype if low.dtype.is_floating_point else torch.get_default_dtype()
         loc = ((high + low) / 2).to(dtype)
         scale = ((high - low) / 2).to(dtype)
