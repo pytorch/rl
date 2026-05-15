@@ -138,6 +138,14 @@ def _inference_metrics(
     policy_version = data.get("policy_version", default=None)
     if policy_version is not None:
         policy_version = policy_version.detach()
+        is_init = data.get("is_init", default=None)
+        if current_policy_version is not None and is_init is not None:
+            is_init = is_init.squeeze(-1).to(torch.bool)
+            policy_version = torch.where(
+                is_init,
+                torch.full_like(policy_version, current_policy_version),
+                policy_version,
+            )
         metrics.update(_tensor_stats("inference/policy_version", policy_version))
         if current_policy_version is not None:
             staleness = current_policy_version - policy_version
