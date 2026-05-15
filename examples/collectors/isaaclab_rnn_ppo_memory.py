@@ -272,12 +272,13 @@ def main() -> None:
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
             with timeit("iteration"):
-                data = collected_batch.to(train_device)
+                data = collected_batch
                 loss_acc = None
                 loss_count = 0
                 for epoch in range(args.ppo_epochs):
+                    epoch_data = data.to(train_device)
                     with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
-                        epoch_data = adv_module(data)
+                        epoch_data = adv_module(epoch_data)
                     if epoch_data.shape != expected_rollout_shape:
                         raise RuntimeError(
                             f"Expected epoch_data shape {expected_rollout_shape}, "
@@ -297,9 +298,8 @@ def main() -> None:
                                 ),
                             }
                         )
-                    epoch_data_cpu = epoch_data.to("cpu")
                     train_buffer.empty()
-                    train_buffer.extend(epoch_data_cpu)
+                    train_buffer.extend(epoch_data)
                     if train_buffer._storage._storage.shape != expected_rollout_shape:
                         raise RuntimeError(
                             "Expected train buffer storage shape "
