@@ -97,6 +97,8 @@ Available wrappers
     MeltingpotEnv
     MeltingpotWrapper
     MOGymEnv
+    MujocoPlaygroundEnv
+    MujocoPlaygroundWrapper
     MOGymWrapper
     MultiThreadedEnv
     MultiThreadedEnvWrapper
