@@ -107,6 +107,24 @@ def _assert_rollout_shapes(
             )
 
 
+def _flatten_rollout_batch(
+    tensordict: TensorDictBase, expected_shape: torch.Size
+) -> TensorDictBase:
+    if tensordict.shape == expected_shape:
+        return tensordict
+    if tensordict.ndim < 2 or tensordict.shape[-1] != expected_shape[-1]:
+        raise RuntimeError(
+            f"Expected collected batch ending in time shape {tuple(expected_shape)}, "
+            f"got {tuple(tensordict.shape)}."
+        )
+    if tensordict.shape[:-1].numel() != expected_shape[0]:
+        raise RuntimeError(
+            f"Expected collected batch with {expected_shape[0]} env elements before "
+            f"time, got shape {tuple(tensordict.shape)}."
+        )
+    return tensordict.reshape(expected_shape)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     # Env / rollout
@@ -311,7 +329,7 @@ def main() -> None:
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
             with timeit("iteration"):
-                data = collected_batch
+                data = _flatten_rollout_batch(collected_batch, expected_rollout_shape)
                 loss_acc = None
                 loss_count = 0
                 for epoch in range(args.ppo_epochs):
