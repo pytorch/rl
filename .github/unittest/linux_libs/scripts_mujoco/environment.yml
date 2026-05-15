@@ -1,0 +1,29 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-json-report
+    - pytest-error-for-skips
+    - pytest-asyncio
+    - expecttest
+    - pybind11[global]
+    - pyyaml
+    - scipy
+    - hydra-core
+    - psutil
+    # MuJoCo physics backends -- pinned for compatibility with mujoco-torch 0.2.0:
+    # mujoco>=3.8 removed the mjENBL_MULTICCD enum that mujoco-torch 0.2.0 references.
+    - mujoco==3.7.0
+    - mujoco-mjx==3.7.0
+    - mujoco-torch==0.2.0
+    - jax[cuda12]>=0.7.0,<0.11

@@ -7,11 +7,17 @@ from .async_envs import AsyncEnvPool, ProcessorAsyncEnvPool, ThreadingAsyncEnvPo
 from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import (
+    AntEnv,
     ChessEnv,
     FinancialRegimeEnv,
+    HopperEnv,
+    HumanoidEnv,
     LLMHashingEnv,
+    MujocoEnv,
     PendulumEnv,
+    SatelliteEnv,
     TicTacToeEnv,
+    Walker2dEnv,
 )
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
@@ -143,6 +149,7 @@ from .utils import (
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "AntEnv",
     "VecNormV2",
     "IsaacLabWrapper",
     "AutoResetEnv",
@@ -191,6 +198,8 @@ __all__ = [
     "GenesisWrapper",
     "HabitatEnv",
     "Hash",
+    "HopperEnv",
+    "HumanoidEnv",
     "InitTracker",
     "ImaginedEnv",
     "IsaacGymEnv",
@@ -206,6 +215,7 @@ __all__ = [
     "MeltingpotEnv",
     "MeltingpotWrapper",
     "ModelBasedEnvBase",
+    "MujocoEnv",
     "MultiAction",
     "MultiStepTransform",
     "MultiThreadedEnv",
@@ -236,6 +246,7 @@ __all__ = [
     "RewardSum",
     "RoboHiveEnv",
     "SMACv2Env",
+    "SatelliteEnv",
     "SMACv2Wrapper",
     "SelectTransform",
     "SerialEnv",
@@ -264,6 +275,7 @@ __all__ = [
     "VecNorm",
     "VmasEnv",
     "VmasWrapper",
+    "Walker2dEnv",
     "check_env_specs",
     "check_marl_grouping",
     "default_info_dict_reader",
