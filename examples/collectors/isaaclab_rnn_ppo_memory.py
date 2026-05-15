@@ -406,12 +406,13 @@ def main() -> None:
 
     # ---- Training loop ----
     collector_iter = iter(collector)
+    current_policy_version = 0
     try:
         for iteration in range(args.iterations):
             timeit.erase()
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
-            current_policy_version = collector.policy_version
+            current_policy_version += 1
             with timeit("collector_next"):
                 collected_batch = next(collector_iter)
             with timeit("training"):
