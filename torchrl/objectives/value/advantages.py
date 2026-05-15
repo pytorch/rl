@@ -11,6 +11,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
+from typing import Literal
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
@@ -229,7 +230,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self,
         *,
         value_network: TensorDictModule,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         differentiable: bool = False,
         skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
@@ -252,7 +253,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
-        self.shifted = shifted
+        self.shifted = self._normalize_shifted(shifted)
 
         if advantage_key is not None:
             raise RuntimeError(
@@ -568,42 +569,40 @@ class ValueEstimatorBase(TensorDictModuleBase):
             del tensordict["final"]
 
     @staticmethod
-    def _can_use_rollout_shape_call(data: TensorDictBase, ndim: int) -> bool:
-        """Return whether the rollout-shape single-call path is safe to use.
+    def _normalize_shifted(
+        shifted: bool | Literal["compact", "legacy"],
+    ) -> Literal[False, "compact", "legacy"]:
+        """Normalize the ``shifted`` argument.
 
-        The rollout-shape path is strictly equivalent to the flatten/interleave
-        path whenever no internal truncations exist within the rollout.
-
-        The rollout-shape path concatenates the boundary ``next_obs`` to the
-        rollout-shaped inputs and slices into ``value`` / ``next_value``.
-        It is strictly equivalent to the flatten/interleave path whenever
-        every internal ``done`` step (``t < T-1``) is also terminated. At
-        truncation-only steps (``done=True, terminated=False`` with
-        ``t < T-1``) the flatten path bootstraps from ``V(real next_obs)``,
-        whereas the rollout-shape path would substitute ``V(obs[t+1])`` from
-        the start of the next trajectory. Internal terminations are always
-        masked downstream by ``(1-terminated)``, so they don't matter.
+        ``shifted=True`` is deprecated; users must opt in explicitly to
+        either ``"compact"`` (compile-friendly constant-shape single call,
+        small bias at trajectory boundaries) or ``"legacy"`` (current
+        flatten/interleave path, exact ``V(next_obs)`` but variable shape).
         """
-        if ndim < 1:
-            return True
-        time_idx = ndim - 1
-        T = data.shape[time_idx]
-        if T < 2:
-            return True
-        done = data.get(("next", "done"), default=None)
-        if done is None:
-            return True
-        truncated = data.get(("next", "truncated"), default=None)
-        if truncated is None:
-            # No truncated key: GAE treats terminated==done; no internal
-            # truncations possible.
-            return True
-        terminated = data.get(("next", "terminated"), default=done)
-        internal_idx = (slice(None),) * time_idx + (slice(0, T - 1),)
-        trunc = done[internal_idx].bool() & (~terminated[internal_idx].bool())
-        return not bool(trunc.any())
+        if shifted is False:
+            return False
+        if shifted is True:
+            warnings.warn(
+                "shifted=True is deprecated and will be removed in v0.15. "
+                "Pass shifted='legacy' to preserve the current "
+                "flatten/interleave behavior (exact V(next_obs), variable "
+                "shape, not compile-friendly), or shifted='compact' to opt "
+                "into the new constant-shape single-call path (small bias "
+                "at trajectory boundaries, compile-friendly). The default "
+                "for shifted=True is currently 'legacy'; this default will "
+                "be removed in v0.15.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            return "legacy"
+        if shifted in ("compact", "legacy"):
+            return shifted
+        raise ValueError(
+            f"shifted must be one of False, 'compact', 'legacy' (or the "
+            f"deprecated True), got {shifted!r}."
+        )
 
-    def _call_value_net_rollout_shape(
+    def _call_value_net_compact(
         self,
         data: TensorDictBase,
         params: TensorDictBase | None,
@@ -613,16 +612,22 @@ class ValueEstimatorBase(TensorDictModuleBase):
         value_net: TensorDictModuleBase,
         _call_value_net,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Single call on rollout-shaped data: ``[..., T] → [..., T+1]``.
+        """Compact single-call path: constant-shape value-net call.
 
-        Builds the value-net input by appending the rollout-boundary
-        ``next_obs`` along the time dim (using ``("final", k)`` when
-        present, else ``("next", k)[..., T-1]``), runs ``value_net`` once,
-        then slices the output into ``value = out[..., :T]`` and
-        ``next_value = out[..., 1:T+1]``.
+        Runs ``value_net`` once on the rollout-shaped inputs along the time
+        dim. When ``("final", k)`` is present for every value-net in-key
+        the call has shape ``[..., T+1]`` (the last slot is the
+        rollout-boundary observation from ``("final", ...)``); otherwise it
+        has shape ``[..., T]`` and ``V(next_obs[T-1])`` is approximated by
+        copying ``V(obs[T-1])``. In both cases ``V(next_obs[t])`` for
+        ``t < T-1`` is taken as ``V(obs[t+1])``, which is exact at
+        non-trajectory-boundary steps and a small bias at internal
+        truncations.
 
-        Caller must verify equivalence with the flatten path via
-        :meth:`_can_use_rollout_shape_call`.
+        This path has no Python branches on tensor values, no ``.item()``
+        syncs, and a shape that depends only on the collector's
+        ``("final", ...)`` policy — i.e. constant within a training run,
+        so ``torch.compile`` specializes once and stays specialized.
         """
         if next_params is not None and next_params is not params:
             raise ValueError(
@@ -632,47 +637,59 @@ class ValueEstimatorBase(TensorDictModuleBase):
         time_idx = ndim - 1
         T = data.shape[time_idx]
         # Include value_key in the select so skip_existing on the value
-        # network can detect pre-filled values (matches flatten path).
+        # network can detect pre-filled values (matches legacy path).
         root_part = data.select(*in_keys, value_key, strict=False)
-        boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
-        next_select = data.get("next").select(*in_keys, value_key, strict=False)
-        boundary_part = next_select[boundary_index]
-        # Fill keys absent from ("next", ...) from root at the boundary
-        # slice. Matches the flatten path's _fill_missing_next_inputs
-        # contract — in particular, this gives "is_init" at the boundary
-        # the value of root["is_init"][..., T-1] (typically False), so the
-        # value net continues the trajectory's hidden state through to the
-        # boundary slot (correct bootstrap semantics).
-        boundary_part = self._fill_missing_next_inputs(
-            boundary_part, root_part[boundary_index], in_keys
-        )
-        # Honor ("final", k) when present (collector contract for true
-        # rollout-boundary next obs), mirroring _apply_final_obs_to_next_done.
+        # Determine whether ("final", k) is available for every in-key
+        # whose corresponding root value exists. Decision is deterministic
+        # given the collector config, so the path taken stays constant
+        # within a training run.
         final_root = data.get("final", default=None)
-        if final_root is not None:
-            copied = False
+        final_values: dict = {}
+        use_final_boundary = final_root is not None
+        if use_final_boundary:
             for k in in_keys:
+                root_v = root_part.get(k, default=None)
+                if root_v is None:
+                    continue
                 key_tuple = (k,) if isinstance(k, str) else tuple(k)
                 fv = final_root.get(
                     key_tuple[0] if len(key_tuple) == 1 else key_tuple,
                     default=None,
                 )
                 if fv is None:
-                    continue
-                if not copied:
-                    boundary_part = boundary_part.copy()
-                    copied = True
+                    use_final_boundary = False
+                    break
+                final_values[k] = fv
+        if use_final_boundary and T >= 1:
+            boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
+            boundary_part = root_part[boundary_index].copy()
+            for k, fv in final_values.items():
                 boundary_part.set(k, fv.unsqueeze(time_idx))
-        data_in = torch.cat([root_part, boundary_part], dim=time_idx)
-        if params is not None:
-            with params.to_module(value_net):
-                value_est_full = _call_value_net(data_in)
+            data_in = torch.cat([root_part, boundary_part], dim=time_idx)
+            if params is not None:
+                with params.to_module(value_net):
+                    values_full = _call_value_net(data_in)
+            else:
+                values_full = _call_value_net(data_in)
+            root_idx = (slice(None),) * time_idx + (slice(0, T),)
+            next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
+            value = values_full[root_idx]
+            value_ = values_full[next_idx]
         else:
-            value_est_full = _call_value_net(data_in)
-        root_idx = (slice(None),) * time_idx + (slice(0, T),)
-        next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
-        value = value_est_full[root_idx]
-        value_ = value_est_full[next_idx]
+            if params is not None:
+                with params.to_module(value_net):
+                    values = _call_value_net(root_part)
+            else:
+                values = _call_value_net(root_part)
+            value = values
+            if T >= 2:
+                shifted_idx = (slice(None),) * time_idx + (slice(1, T),)
+                last_idx = (slice(None),) * time_idx + (slice(T - 1, T),)
+                value_ = torch.cat(
+                    [values[shifted_idx], values[last_idx]], dim=time_idx
+                )
+            else:
+                value_ = values
         done = data.get(("next", "done"), default=None)
         if done is not None:
             try:
@@ -680,8 +697,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 value_ = value_.view_as(done)
             except RuntimeError:
                 # Value feat dim doesn't match done's trailing dim; leave
-                # shapes as produced by the network. Downstream GAE handles
-                # both layouts.
+                # shapes as produced by the network.
                 pass
         return value, value_
 
@@ -690,13 +706,20 @@ class ValueEstimatorBase(TensorDictModuleBase):
         data: TensorDictBase,
         params: TensorDictBase,
         next_params: TensorDictBase,
-        single_call: bool,
+        single_call: bool | Literal["compact", "legacy"],
         value_key: NestedKey,
         detach_next: bool,
         vmap_randomness: str = "error",
         *,
         value_net: TensorDictModuleBase | None = None,
     ):
+        # ``single_call`` is passed by callers as ``self.shifted`` and is
+        # one of ``False``, ``"compact"``, or ``"legacy"`` after
+        # normalization. ``True`` still arrives untransformed from a few
+        # direct callers — fold it into the legacy path for backwards
+        # compat (the constructor already warned).
+        if single_call is True:
+            single_call = "legacy"
         if value_net is None:
             value_net = self.value_network
         in_keys = value_net.in_keys
@@ -723,16 +746,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 values.append(value_net(chunk).get(value_key))
             return torch.cat(values, dim=0)
 
-        if single_call and self._can_use_rollout_shape_call(data, ndim):
-            # Rollout-shape single call: feed [..., T+1] to the value net in
-            # one shot, then slice into value/next_value. Strictly equivalent
-            # to the flatten/interleave path when no internal truncations
-            # exist (verified by _can_use_rollout_shape_call). Preserves
-            # batch parallelism along the natural batch dim, which matters
-            # for RNN value nets with reset-aware backends (scan/triton/
-            # cuDNN-with-resets) where the flatten path would serialise
-            # along a [1, B*T] time axis.
-            value, value_ = self._call_value_net_rollout_shape(
+        if single_call == "compact":
+            value, value_ = self._call_value_net_compact(
                 data=data,
                 params=params,
                 next_params=next_params,
@@ -869,18 +884,36 @@ class TD0Estimator(ValueEstimatorBase):
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve
             the value estimates.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). For recurrent policies or compact
-            rollouts, the input should contain long, contiguous trajectory
-            windows with valid boundary next states; short partial rollouts
-            that drop the final next observation can bias bootstrapping. In
-            that case, keep or reconstruct boundary next states, or use
-            ``shifted=False``. Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -916,7 +949,7 @@ class TD0Estimator(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         value_network: TensorDictModule,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: NestedKey = None,
@@ -1114,18 +1147,36 @@ class TD1Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). For recurrent policies or compact
-            rollouts, the input should contain long, contiguous trajectory
-            windows with valid boundary next states; short partial rollouts
-            that drop the final next observation can bias bootstrapping. In
-            that case, keep or reconstruct boundary next states, or use
-            ``shifted=False``. Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1154,7 +1205,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1353,18 +1404,36 @@ class TDLambdaEstimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). For recurrent policies or compact
-            rollouts, the input should contain long, contiguous trajectory
-            windows with valid boundary next states; short partial rollouts
-            that drop the final next observation can bias bootstrapping. In
-            that case, keep or reconstruct boundary next states, or use
-            ``shifted=False``. Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1395,7 +1464,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1629,18 +1698,36 @@ class GAE(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). For recurrent policies or compact
-            rollouts, the input should contain long, contiguous trajectory
-            windows with valid boundary next states; short partial rollouts
-            that drop the final next observation can bias bootstrapping. In
-            that case, keep or reconstruct boundary next states, or use
-            ``shifted=False``. Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1698,7 +1785,7 @@ class GAE(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         auto_reset_env: bool = False,
@@ -2020,18 +2107,36 @@ class VTrace(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool, optional): if ``True``, the value and next value are
-            estimated with a single call to the value network. This is faster
-            but is only valid whenever (1) the ``"next"`` value is shifted by
-            only one time step (which is not the case with multi-step value
-            estimation, for instance) and (2) when the parameters used at time
-            ``t`` and ``t+1`` are identical (which is not the case when target
-            parameters are to be used). For recurrent policies or compact
-            rollouts, the input should contain long, contiguous trajectory
-            windows with valid boundary next states; short partial rollouts
-            that drop the final next observation can bias bootstrapping. In
-            that case, keep or reconstruct boundary next states, or use
-            ``shifted=False``. Defaults to ``False``.
+        shifted (bool or str, optional): controls how value and next-value
+            are obtained from the value network. ``False`` (default) calls
+            the value network twice (once on the root tensordict, once on
+            ``"next"``), which is correct whenever ``"next"`` may differ
+            non-trivially from ``obs[t+1]``. Truthy values request a single
+            call:
+
+            - ``"compact"``: constant-shape single call along the time dim
+              (``[..., T]`` or ``[..., T+1]`` depending on whether
+              ``("final", k)`` is available for the value-net in-keys).
+              ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` for ``t<T-1``
+              (exact at non-trajectory-boundary steps, small bias at
+              internal truncations); at the rollout boundary, uses
+              ``V(("final", obs))`` when present, else copies
+              ``V(obs[T-1])``. Compile-friendly — no Python branches on
+              tensor values, no ``.item()`` syncs.
+            - ``"legacy"``: original flatten/interleave path. Builds a 1D
+              sequence of size ``B*T + num_done`` with the real
+              ``next_obs`` interleaved at every ``done`` index, giving
+              exact ``V(next_obs)`` at internal truncations. Variable
+              shape, not compile-friendly with reset-aware recurrent
+              backends (``scan``/``triton``) — they serialize the scan
+              along ``[1, B*T]``.
+            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
+              :class:`DeprecationWarning`. The alias is removed in v0.15.
+
+            Both single-call paths require that the parameters at time
+            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
+            used) and that the ``"next"`` value is shifted by exactly one
+            time step (no multi-step returns). Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -2069,7 +2174,7 @@ class VTrace(ValueEstimatorBase):
         advantage_key: NestedKey | None = None,
         value_target_key: NestedKey | None = None,
         value_key: NestedKey | None = None,
-        shifted: bool = False,
+        shifted: bool | Literal["compact", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         value_chunk_size: int | None = None,
