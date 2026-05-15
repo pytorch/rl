@@ -1564,7 +1564,10 @@ if __name__ == "__main__":
             assert fake_keys == real_keys, set(real_keys) ^ set(fake_keys)
             # Must be all-zero.
             for key, val in fake.items(True, True):
-                if val.dtype in (torch.bool, torch.uint8) or not val.is_floating_point():
+                if (
+                    val.dtype in (torch.bool, torch.uint8)
+                    or not val.is_floating_point()
+                ):
                     continue
                 assert not val.any(), f"{key} is not zeroed"
         finally:
