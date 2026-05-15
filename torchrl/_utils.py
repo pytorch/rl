@@ -319,11 +319,6 @@ class timeit:
         """Mark the end of a named timed event and record its elapsed time."""
         cls._record(name, time.time() - cls._MARKS.pop(name))
 
-    @classmethod
-    def mark_env(cls, name: str) -> None:
-        """Alias for :meth:`mark_end`."""
-        cls.mark_end(name)
-
     @staticmethod
     def print(prefix: str | None = None) -> str:  # noqa: T202
         """Prints the state of the timer.
