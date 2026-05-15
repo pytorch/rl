@@ -1054,6 +1054,156 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             fake_td.set(key, policy_output.get(key))
         return fake_td
 
+    @torch.no_grad()
+    def fake_tensordict(self) -> TensorDictBase:
+        """Return a zero-filled tensordict shaped like one batch from this multi-collector.
+
+        Mirrors what one iteration of this collector yields, including
+        policy out-keys, ``("collector", "traj_ids")``, ``compact_obs`` /
+        ``final_obs`` effects, ``split_trajs``, and ``postproc``.
+
+        Shape:
+
+        - :class:`~torchrl.collectors.MultiSyncCollector` with
+          ``cat_results="stack"`` (the default): ``(num_workers,
+          *env.batch_size, frames_per_worker)``, last dim named ``"time"``.
+        - :class:`~torchrl.collectors.MultiSyncCollector` with an integer
+          ``cat_results``: per-worker tensordicts concatenated along that dim.
+        - :class:`~torchrl.collectors.MultiAsyncCollector`:
+          ``(*env.batch_size, frames_per_worker)`` — async yields one
+          worker batch at a time.
+
+        Intended for storage initialization and ``torch.compile`` /
+        cudagraph warmup without spinning up the worker processes.
+        """
+        # Build / borrow one env to read fake_tensordict, compact-obs leaf
+        # keys, and final-obs leaf shapes from.
+        env_fn = self.create_env_fn[0]
+        owns_env = False
+        if isinstance(env_fn, EnvBase):
+            env = env_fn
+        elif isinstance(env_fn, EnvCreator):
+            env = env_fn()
+            owns_env = True
+        else:
+            env = env_fn(**self.create_env_kwargs[0])
+            owns_env = True
+
+        try:
+            per_worker = env.fake_tensordict()
+
+            compact_keys: tuple = ()
+            final_keys: tuple = ()
+            if self.compact_obs:
+                leaf_keys = list(env._observation_keys_step_mdp) + list(
+                    env._state_keys_step_mdp
+                )
+                _compact: list[tuple] = []
+                _final: list[tuple] = []
+                for k in leaf_keys:
+                    if isinstance(k, tuple):
+                        _compact.append(("next", *k))
+                        _final.append(("final", *k))
+                    else:
+                        _compact.append(("next", k))
+                        _final.append(("final", k))
+                compact_keys = tuple(_compact)
+                final_keys = tuple(_final) if self.final_obs else ()
+
+            # Capture leaf shapes for final_obs *before* the exclude
+            # collapses them.
+            final_obs_template = (
+                per_worker.get("next").select(
+                    *[k[1:][0] if len(k[1:]) == 1 else k[1:] for k in final_keys],
+                    strict=False,
+                )
+                if final_keys
+                else None
+            )
+
+            if compact_keys:
+                per_worker = per_worker.exclude(*compact_keys)
+
+            per_worker = self._add_policy_outputs_to_fake_td(per_worker)
+
+            frames_per_worker = self.frames_per_batch_worker(worker_idx=0)
+            per_worker = (
+                per_worker.unsqueeze(-1)
+                .expand(*env.batch_size, frames_per_worker)
+                .clone()
+                .zero_()
+            )
+
+            per_worker.set(
+                ("collector", "traj_ids"),
+                torch.zeros(per_worker.shape, dtype=torch.int64),
+            )
+
+            if final_obs_template is not None:
+                from tensordict import UnbatchedTensor
+
+                for final_k in final_keys:
+                    leaf = final_k[1:]
+                    leaf_path = leaf[0] if len(leaf) == 1 else leaf
+                    src = final_obs_template.get(leaf_path, default=None)
+                    if src is None:
+                        continue
+                    val = torch.zeros_like(src)
+                    per_worker.set(final_k, UnbatchedTensor(val))
+
+            per_worker.refine_names(..., "time")
+
+            cat_results = getattr(self, "cat_results", None)
+            if cat_results is None:
+                # MultiAsyncCollector yields one worker batch at a time;
+                # MultiSyncCollector defaults to stacking along dim 0.
+                from torchrl.collectors._multi_async import MultiAsyncCollector
+
+                if isinstance(self, MultiAsyncCollector):
+                    result = per_worker
+                else:
+                    result = torch.stack(
+                        [per_worker] + [per_worker.clone() for _ in range(self.num_workers - 1)],
+                        0,
+                    )
+                    result.refine_names(*[None] * (result.ndim - 1) + ["time"])
+            elif cat_results == "stack":
+                result = torch.stack(
+                    [per_worker] + [per_worker.clone() for _ in range(self.num_workers - 1)],
+                    0,
+                )
+                result.refine_names(*[None] * (result.ndim - 1) + ["time"])
+            else:
+                result = torch.cat(
+                    [per_worker] + [per_worker.clone() for _ in range(self.num_workers - 1)],
+                    cat_results,
+                )
+                if cat_results == -1:
+                    result.refine_names(*[None] * (result.ndim - 1) + ["time"])
+
+            if self.split_trajs:
+                result = split_trajectories(result, prefix="collector")
+            if self.postproc is not None:
+                postproc = (
+                    self.postproc.to(result.device)
+                    if hasattr(self.postproc, "to")
+                    else self.postproc
+                )
+                result = postproc(result)
+            if self._exclude_private_keys:
+                excluded_keys = [
+                    key
+                    for key in result.keys()
+                    if isinstance(key, str) and key.startswith("_")
+                ]
+                if excluded_keys:
+                    result = result.exclude(*excluded_keys)
+
+            return result
+        finally:
+            if owns_env:
+                env.close()
+
     @classmethod
     def _total_workers_from_env(cls, env_creators):
         if isinstance(env_creators, (tuple, list)):
