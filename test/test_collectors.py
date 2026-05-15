@@ -1490,9 +1490,7 @@ if __name__ == "__main__":
         # ('final', k) is present and is an UnbatchedTensor.
         for k in obs_keys:
             full_final = ("final", *k) if isinstance(k, tuple) else ("final", k)
-            assert full_final in comp_data.keys(True, True), (
-                f"missing {full_final}"
-            )
+            assert full_final in comp_data.keys(True, True), f"missing {full_final}"
             val = comp_data.get(full_final)
             assert isinstance(val, UnbatchedTensor), type(val)
 
@@ -3493,9 +3491,9 @@ class TestEnvTransformAutoWrap:
             # used to break this by leaving InitTracker.parent=None.
             assert collector.env.action_spec is not None
             for transform in collector.env.transform:
-                assert transform.parent is not None, (
-                    f"transform {type(transform).__name__} has parent=None"
-                )
+                assert (
+                    transform.parent is not None
+                ), f"transform {type(transform).__name__} has parent=None"
         finally:
             collector.shutdown()
 
@@ -4196,6 +4194,163 @@ class TestUpdateParams:
         finally:
             collector.shutdown()
             del collector
+
+
+class TestPolicyVersion:
+    """End-to-end checks for ``track_policy_version`` on data collectors.
+
+    The contract: when a collector is constructed with
+    ``track_policy_version=True``, every collected frame must carry a
+    ``policy_version`` key, and that value must bump exactly once per real
+    weight update (``update_policy_weights_()``), regardless of how many
+    iterations are pulled from the collector.
+    """
+
+    class _Env(EnvBase):
+        def __init__(self, device="cpu"):
+            super().__init__(batch_size=(), device=device)
+            self.observation_spec = Composite(
+                observation=Unbounded(shape=(2,), device=device)
+            )
+            self.action_spec = Unbounded(shape=(2,), device=device)
+            self.reward_spec = Unbounded(shape=(1,), device=device)
+
+        def _step(self, td):
+            return TensorDict(
+                {
+                    "observation": torch.zeros(2, device=self.device),
+                    "reward": torch.zeros(1, device=self.device),
+                    **self.full_done_spec.zero(),
+                },
+                (),
+                device=self.device,
+            )
+
+        def _reset(self, td=None):
+            return TensorDict(
+                {"observation": torch.zeros(2, device=self.device)},
+                (),
+                device=self.device,
+            )
+
+        def _set_seed(self, seed):
+            ...
+
+    @staticmethod
+    def _make_policy():
+        return TensorDictModule(
+            nn.Linear(2, 2), in_keys=["observation"], out_keys=["action"]
+        )
+
+    def test_single_collector_bumps_on_update(self):
+        """``SyncDataCollector`` bumps policy_version on each weight update."""
+        policy = self._make_policy()
+        collector = SyncDataCollector(
+            self._Env,
+            policy=policy,
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            it = iter(collector)
+            batch0 = next(it)
+            v0 = batch0["next", "policy_version"]
+            assert v0.dtype == torch.int64
+            # Version is constant within a batch (no update happened mid-batch).
+            assert (v0 == v0[0]).all()
+
+            # No update yet -> next batch keeps the same version.
+            batch1 = next(it)
+            assert (batch1["next", "policy_version"] == v0[0]).all()
+
+            collector.update_policy_weights_()
+            batch2 = next(it)
+            assert (batch2["next", "policy_version"] == v0[0] + 1).all()
+
+            # A second update bumps again, but a continue-without-update doesn't.
+            collector.update_policy_weights_()
+            batch3 = next(it)
+            assert (batch3["next", "policy_version"] == v0[0] + 2).all()
+            batch4 = next(it)
+            assert (batch4["next", "policy_version"] == v0[0] + 2).all()
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+        ],
+        ids=["multi_sync", "multi_async"],
+    )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme_cls",
+        [MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+        ids=["mp", "shared_mem"],
+    )
+    def test_multi_collector_bumps_on_update(
+        self, collector_cls, weight_sync_scheme_cls
+    ):
+        """Worker-side policy_version follows real weight updates.
+
+        Regression for the case where the worker's ``PolicyVersion`` transform
+        was never incremented from the parent's ``update_policy_weights_()``,
+        leaving all worker batches tagged with version 0.
+        """
+        policy = self._make_policy()
+        collector = collector_cls(
+            [self._Env, self._Env],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=200,
+            track_policy_version=True,
+            weight_sync_schemes={"policy": weight_sync_scheme_cls()},
+        )
+        try:
+            it = iter(collector)
+            batch0 = next(it)
+            v0 = batch0["next", "policy_version"]
+            # All workers start at the same initial version (0 by default).
+            v0_val = int(v0.flatten()[0].item())
+            assert (v0 == v0_val).all()
+
+            # Iterations without weight updates must not bump the version.
+            for _ in range(2):
+                batch = next(it)
+                assert (batch["next", "policy_version"] == v0_val).all(), (
+                    f"Worker version drifted without weight update: "
+                    f"{batch['next', 'policy_version']}"
+                )
+
+            collector.update_policy_weights_()
+            # The worker bumps once it has actually applied the new weights.
+            # In async mode, a batch already in flight at the time of the
+            # update may straddle the bump (some frames pre-, some post-).
+            # Drain until we see a batch fully at the bumped version, with
+            # a sane safety cap so we don't loop forever on a regression.
+            target = v0_val + 1
+            for _ in range(10):
+                batch = next(it)
+                if (batch["next", "policy_version"] == target).all():
+                    break
+            else:
+                raise AssertionError(
+                    f"Worker version did not reach {target} within 10 batches "
+                    f"after a single update_policy_weights_(); last batch: "
+                    f"{batch['next', 'policy_version']}"
+                )
+
+            # And no further bumps should occur on subsequent continues that
+            # are not preceded by an update.
+            batch_no_update = next(it)
+            assert (batch_no_update["next", "policy_version"] == target).all(), (
+                f"Worker version drifted past {target} without an update: "
+                f"{batch_no_update['next', 'policy_version']}"
+            )
+        finally:
+            collector.shutdown()
 
 
 class TestAggregateReset:
