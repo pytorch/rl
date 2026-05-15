@@ -57,6 +57,14 @@ from torchrl.record import WandbLogger
 from torchrl.weight_update import MultiProcessWeightSyncScheme
 
 
+_RECURRENT_STATE_KEYS = {
+    "recurrent_state_h",
+    "recurrent_state_c",
+    "('next', 'recurrent_state_h')",
+    "('next', 'recurrent_state_c')",
+}
+
+
 def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]:
     return {
         str(key): {
@@ -67,6 +75,36 @@ def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]
         for key, value in tensordict.items(include_nested=True, leaves_only=True)
         if hasattr(value, "shape")
     }
+
+
+def _assert_rollout_shapes(
+    tensordict: TensorDictBase,
+    *,
+    expected_shape: torch.Size,
+    hidden_size: int,
+    phase: str,
+) -> None:
+    if tensordict.shape != expected_shape:
+        raise RuntimeError(
+            f"{phase}: expected TensorDict shape {expected_shape}, "
+            f"got {tensordict.shape}."
+        )
+    expected_state_shape = (*expected_shape, 1, hidden_size)
+    for key, value in tensordict.items(include_nested=True, leaves_only=True):
+        if not hasattr(value, "shape"):
+            continue
+        if value.shape[: len(expected_shape)] != expected_shape:
+            raise RuntimeError(
+                f"{phase}: key {key} has shape {tuple(value.shape)}, "
+                f"which does not start with {tuple(expected_shape)}."
+            )
+        if str(key) in _RECURRENT_STATE_KEYS and tuple(value.shape) != tuple(
+            expected_state_shape
+        ):
+            raise RuntimeError(
+                f"{phase}: key {key} has recurrent-state shape "
+                f"{tuple(value.shape)}, expected {tuple(expected_state_shape)}."
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -84,10 +122,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--action-dim", type=int, default=8)
     parser.add_argument(
         "--rnn-backend",
-        choices=["pad", "scan", "triton"],
+        choices=["cudnn", "pad", "scan", "triton"],
         default="scan",
         help=(
             "LSTM backend used during training (set_recurrent_mode=True). "
+            "'cudnn' is an alias for the pad/nn.LSTM path. "
             "Collection (set_recurrent_mode=False) always falls back to cuDNN."
         ),
     )
@@ -277,13 +316,20 @@ def main() -> None:
                 loss_count = 0
                 for epoch in range(args.ppo_epochs):
                     epoch_data = data.to(train_device)
+                    _assert_rollout_shapes(
+                        epoch_data,
+                        expected_shape=expected_rollout_shape,
+                        hidden_size=args.hidden_size,
+                        phase="before_gae",
+                    )
                     with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
                         epoch_data = adv_module(epoch_data)
-                    if epoch_data.shape != expected_rollout_shape:
-                        raise RuntimeError(
-                            f"Expected epoch_data shape {expected_rollout_shape}, "
-                            f"got {epoch_data.shape}."
-                        )
+                    _assert_rollout_shapes(
+                        epoch_data,
+                        expected_shape=expected_rollout_shape,
+                        hidden_size=args.hidden_size,
+                        phase="after_gae",
+                    )
                     if iteration == 0 and epoch == 0:
                         torchrl_logger.info(
                             {

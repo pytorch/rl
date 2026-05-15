@@ -30,7 +30,7 @@ from torchrl.modules import (
     ValueOperator,
 )
 
-RnnBackend = Literal["pad", "scan", "triton"]
+RnnBackend = Literal["cudnn", "pad", "scan", "triton"]
 
 
 def _init_isaac_app(device: str | None = None) -> None:
@@ -93,6 +93,7 @@ def make_models(
         in_keys=["policy"],
         out_keys=["embed"],
     )
+    lstm_backend = "pad" if rnn_backend == "cudnn" else rnn_backend
     lstm = LSTMModule(
         input_size=hidden_size,
         hidden_size=hidden_size,
@@ -103,7 +104,7 @@ def make_models(
             ("next", "recurrent_state_h"),
             ("next", "recurrent_state_c"),
         ],
-        recurrent_backend=rnn_backend,
+        recurrent_backend=lstm_backend,
         device=device,
     )
     backbone = TensorDictSequential(embed, lstm)
