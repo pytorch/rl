@@ -143,6 +143,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        SAVE_GATES: tl.constexpr = True,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -234,10 +235,11 @@ if _has_triton:
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
             tl.store(out_ptr + base_out, h, mask=mask_b[:, None])
-            tl.store(save_r_ptr + base_out, r, mask=mask_b[:, None])
-            tl.store(save_z_ptr + base_out, z, mask=mask_b[:, None])
-            tl.store(save_n_ptr + base_out, n, mask=mask_b[:, None])
-            tl.store(save_gh_n_ptr + base_out, gh_n, mask=mask_b[:, None])
+            if SAVE_GATES:
+                tl.store(save_r_ptr + base_out, r, mask=mask_b[:, None])
+                tl.store(save_z_ptr + base_out, z, mask=mask_b[:, None])
+                tl.store(save_n_ptr + base_out, n, mask=mask_b[:, None])
+                tl.store(save_gh_n_ptr + base_out, gh_n, mask=mask_b[:, None])
 
         tl.store(
             h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
@@ -426,6 +428,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        SAVE_GATES: tl.constexpr = True,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -541,11 +544,12 @@ if _has_triton:
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
             tl.store(out_ptr + base_out, h, mask=mask_b[:, None])
             tl.store(c_out_ptr + base_out, c, mask=mask_b[:, None])
-            tl.store(save_i_ptr + base_out, i, mask=mask_b[:, None])
-            tl.store(save_f_ptr + base_out, f, mask=mask_b[:, None])
-            tl.store(save_g_ptr + base_out, g, mask=mask_b[:, None])
-            tl.store(save_o_ptr + base_out, o, mask=mask_b[:, None])
-            tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
+            if SAVE_GATES:
+                tl.store(save_i_ptr + base_out, i, mask=mask_b[:, None])
+                tl.store(save_f_ptr + base_out, f, mask=mask_b[:, None])
+                tl.store(save_g_ptr + base_out, g, mask=mask_b[:, None])
+                tl.store(save_o_ptr + base_out, o, mask=mask_b[:, None])
+                tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
 
         tl.store(
             h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
@@ -825,9 +829,41 @@ def _unpad_w_hh(t: torch.Tensor, n_gates: int, H: int, H_pad: int) -> torch.Tens
     return t.reshape(n_gates * H, H)
 
 
+def _gru_split_w_hh(
+    w_hh: torch.Tensor, H: int, H_pad: int, compute_dtype: torch.dtype
+) -> tuple[torch.Tensor, ...]:
+    """Return ``(w_r_t, w_z_t, w_n_t, w_r, w_z, w_n)`` from a padded ``w_hh``.
+
+    Factored out so the recompute backward can rebuild the per-gate weight
+    views from the saved un-padded ``w_hh`` without duplicating the math.
+    """
+    w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
+    w_hh_c = w_hh_p.to(compute_dtype)
+    w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
+    return (
+        w_hh_c3[0].t().contiguous(),
+        w_hh_c3[1].t().contiguous(),
+        w_hh_c3[2].t().contiguous(),
+        w_hh_c3[0].contiguous(),
+        w_hh_c3[1].contiguous(),
+        w_hh_c3[2].contiguous(),
+    )
+
+
 class _GRUFn(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
+    def forward(
+        ctx,
+        x,
+        hidden,
+        w_ih,
+        w_hh,
+        b_ih,
+        b_hh,
+        is_init,
+        compute_dtype,
+        save_gates=True,
+    ):
         if not _has_triton:
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
@@ -840,7 +876,6 @@ class _GRUFn(torch.autograd.Function):
         b_ih_p = _pad_gate_dim(b_ih, 3, H, H_pad, dim=0)
         b_hh_p = _pad_gate_dim(b_hh, 3, H, H_pad, dim=0)
         w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
-        w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
 
         gates_x = (
             F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
@@ -848,21 +883,25 @@ class _GRUFn(torch.autograd.Function):
             .contiguous()
         )
 
-        w_hh_c = w_hh_p.to(compute_dtype)
-        w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
-        w_r_t = w_hh_c3[0].t().contiguous()
-        w_z_t = w_hh_c3[1].t().contiguous()
-        w_n_t = w_hh_c3[2].t().contiguous()
-        w_r = w_hh_c3[0].contiguous()
-        w_z = w_hh_c3[1].contiguous()
-        w_n = w_hh_c3[2].contiguous()
+        w_r_t, w_z_t, w_n_t, w_r, w_z, w_n = _gru_split_w_hh(
+            w_hh, H, H_pad, compute_dtype
+        )
 
         out = torch.empty(B, T, H_pad, dtype=x.dtype, device=x.device)
         h_final = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
-        save_r = torch.empty_like(out)
-        save_z = torch.empty_like(out)
-        save_n = torch.empty_like(out)
-        save_gh_n = torch.empty_like(out)
+        # See ``_LSTMFn.forward`` for the rationale: under ``save_gates=False``
+        # the kernel's gate-save stores are dead-code-eliminated via the
+        # ``SAVE_GATES`` constexpr, so a single 4-byte placeholder satisfies
+        # the pointer args without polluting the CUDA caching allocator /
+        # cudagraph private pool.
+        if save_gates:
+            save_r = torch.empty_like(out)
+            save_z = torch.empty_like(out)
+            save_n = torch.empty_like(out)
+            save_gh_n = torch.empty_like(out)
+        else:
+            _placeholder = torch.empty(1, dtype=x.dtype, device=x.device)
+            save_r = save_z = save_n = save_gh_n = _placeholder
 
         def grid(meta):
             return (triton.cdiv(B, meta["BLOCK_B"]),)
@@ -884,46 +923,118 @@ class _GRUFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            SAVE_GATES=save_gates,
         )
 
-        ctx.save_for_backward(
-            x,
-            hidden_p,
-            w_ih,
-            w_hh,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            w_r,
-            w_z,
-            w_n,
-            w_ih_p,
-        )
+        if not save_gates:
+            # Drop the per-step gate buffers (save_r/z/n/gh_n) and the per-gate
+            # weight slices from the saved set. Backward replays the forward
+            # kernel into fresh scratch buffers to recover them.
+            ctx.save_for_backward(
+                x,
+                hidden_p,
+                w_ih,
+                w_hh,
+                b_ih_p,
+                b_hh_p,
+                is_init,
+                out,
+                w_ih_p,
+            )
+        else:
+            ctx.save_for_backward(
+                x,
+                hidden_p,
+                w_ih,
+                w_hh,
+                is_init,
+                out,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                w_r,
+                w_z,
+                w_n,
+                w_ih_p,
+            )
         ctx.shapes = (B, T, I_in, H, H_pad)
+        ctx.recompute = not save_gates
+        ctx.compute_dtype = compute_dtype
         return _unpad_last(out, H, H_pad), _unpad_last(h_final, H, H_pad)
 
     @staticmethod
     def backward(ctx, dout, dh_final):
-        (
-            x,
-            hidden_p,
-            w_ih,
-            w_hh,
-            is_init,
-            out,
-            save_r,
-            save_z,
-            save_n,
-            save_gh_n,
-            w_r,
-            w_z,
-            w_n,
-            w_ih_p,
-        ) = ctx.saved_tensors
         B, T, I_in, H, H_pad = ctx.shapes
+        if ctx.recompute:
+            (
+                x,
+                hidden_p,
+                w_ih,
+                w_hh,
+                b_ih_p,
+                b_hh_p,
+                is_init,
+                out,
+                w_ih_p,
+            ) = ctx.saved_tensors
+            w_r_t, w_z_t, w_n_t, w_r, w_z, w_n = _gru_split_w_hh(
+                w_hh, H, H_pad, ctx.compute_dtype
+            )
+            gates_x = (
+                F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+                .view(B, T, 3 * H_pad)
+                .contiguous()
+            )
+            save_r = torch.empty_like(out)
+            save_z = torch.empty_like(out)
+            save_n = torch.empty_like(out)
+            save_gh_n = torch.empty_like(out)
+            # Scratch buffers for outputs we already have (saved ``out`` /
+            # discarded ``h_final``); writing into scratch keeps the saved
+            # ``out`` tensor's version unchanged.
+            out_scratch = torch.empty_like(out)
+            h_final_scratch = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
+
+            def grid_fwd(meta):
+                return (triton.cdiv(B, meta["BLOCK_B"]),)
+
+            _gru_fwd_kernel[grid_fwd](
+                gates_x,
+                hidden_p,
+                w_r_t,
+                w_z_t,
+                w_n_t,
+                b_hh_p,
+                is_init,
+                out_scratch,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                h_final_scratch,
+                B,
+                T,
+                H=H_pad,
+                SAVE_GATES=True,
+            )
+        else:
+            (
+                x,
+                hidden_p,
+                w_ih,
+                w_hh,
+                is_init,
+                out,
+                save_r,
+                save_z,
+                save_n,
+                save_gh_n,
+                w_r,
+                w_z,
+                w_n,
+                w_ih_p,
+            ) = ctx.saved_tensors
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
@@ -980,12 +1091,46 @@ class _GRUFn(torch.autograd.Function):
         dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=0)
         db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=0)
 
-        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None
+        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None, None
+
+
+def _lstm_split_w_hh(
+    w_hh: torch.Tensor, H: int, H_pad: int, compute_dtype: torch.dtype
+) -> tuple[torch.Tensor, ...]:
+    """Return ``(w_i_t, w_f_t, w_g_t, w_o_t, w_i, w_f, w_g, w_o)`` from ``w_hh``.
+
+    Same role as :func:`_gru_split_w_hh` for LSTM's four gates.
+    """
+    w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
+    w_hh_c = w_hh_p.to(compute_dtype)
+    w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
+    return (
+        w_hh_c4[0].t().contiguous(),
+        w_hh_c4[1].t().contiguous(),
+        w_hh_c4[2].t().contiguous(),
+        w_hh_c4[3].t().contiguous(),
+        w_hh_c4[0].contiguous(),
+        w_hh_c4[1].contiguous(),
+        w_hh_c4[2].contiguous(),
+        w_hh_c4[3].contiguous(),
+    )
 
 
 class _LSTMFn(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
+    def forward(
+        ctx,
+        x,
+        hidden,
+        cell,
+        w_ih,
+        w_hh,
+        b_ih,
+        b_hh,
+        is_init,
+        compute_dtype,
+        save_gates=True,
+    ):
         if not _has_triton:
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
@@ -999,7 +1144,6 @@ class _LSTMFn(torch.autograd.Function):
         b_ih_p = _pad_gate_dim(b_ih, 4, H, H_pad, dim=0)
         b_hh_p = _pad_gate_dim(b_hh, 4, H, H_pad, dim=0)
         w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
-        w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
 
         gates_x = (
             F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
@@ -1007,24 +1151,28 @@ class _LSTMFn(torch.autograd.Function):
             .contiguous()
         )
 
-        w_hh_c = w_hh_p.to(compute_dtype)
-        w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
-        w_i_t = w_hh_c4[0].t().contiguous()
-        w_f_t = w_hh_c4[1].t().contiguous()
-        w_g_t = w_hh_c4[2].t().contiguous()
-        w_o_t = w_hh_c4[3].t().contiguous()
-        w_i = w_hh_c4[0].contiguous()
-        w_f = w_hh_c4[1].contiguous()
-        w_g = w_hh_c4[2].contiguous()
-        w_o = w_hh_c4[3].contiguous()
+        w_i_t, w_f_t, w_g_t, w_o_t, w_i, w_f, w_g, w_o = _lstm_split_w_hh(
+            w_hh, H, H_pad, compute_dtype
+        )
 
         out = torch.empty(B, T, H_pad, dtype=x.dtype, device=x.device)
         c_out = torch.empty_like(out)
-        save_i = torch.empty_like(out)
-        save_f = torch.empty_like(out)
-        save_g = torch.empty_like(out)
-        save_o = torch.empty_like(out)
-        save_tanhc = torch.empty_like(out)
+        # Gate-save buffers are only ever read by the backward kernel. When
+        # ``save_gates`` is False (recompute mode, no-grad call, or no input
+        # tracking grad) the forward kernel's ``tl.store(save_*)`` lines are
+        # dead-code-eliminated via ``SAVE_GATES: tl.constexpr`` -- so a single
+        # 4-byte placeholder is enough to satisfy the kernel's pointer
+        # arguments. Avoiding the 5 ``[B, T, H_pad]`` allocations keeps them
+        # out of the CUDA caching allocator / cudagraph private pool.
+        if save_gates:
+            save_i = torch.empty_like(out)
+            save_f = torch.empty_like(out)
+            save_g = torch.empty_like(out)
+            save_o = torch.empty_like(out)
+            save_tanhc = torch.empty_like(out)
+        else:
+            _placeholder = torch.empty(1, dtype=x.dtype, device=x.device)
+            save_i = save_f = save_g = save_o = save_tanhc = _placeholder
         h_final = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
         c_final = torch.empty_like(h_final)
 
@@ -1053,29 +1201,47 @@ class _LSTMFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            SAVE_GATES=save_gates,
         )
 
-        ctx.save_for_backward(
-            x,
-            hidden_p,
-            cell_p,
-            w_ih,
-            w_hh,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            w_ih_p,
-        )
+        if not save_gates:
+            ctx.save_for_backward(
+                x,
+                hidden_p,
+                cell_p,
+                w_ih,
+                w_hh,
+                b_ih_p,
+                b_hh_p,
+                is_init,
+                out,
+                c_out,
+                w_ih_p,
+            )
+        else:
+            ctx.save_for_backward(
+                x,
+                hidden_p,
+                cell_p,
+                w_ih,
+                w_hh,
+                is_init,
+                out,
+                c_out,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                w_i,
+                w_f,
+                w_g,
+                w_o,
+                w_ih_p,
+            )
         ctx.shapes = (B, T, I_in, H, H_pad)
+        ctx.recompute = not save_gates
+        ctx.compute_dtype = compute_dtype
         return (
             _unpad_last(out, H, H_pad),
             _unpad_last(c_out, H, H_pad),
@@ -1085,27 +1251,94 @@ class _LSTMFn(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dout, dc_out, dh_final, dc_final):
-        (
-            x,
-            hidden_p,
-            cell_p,
-            w_ih,
-            w_hh,
-            is_init,
-            out,
-            c_out,
-            save_i,
-            save_f,
-            save_g,
-            save_o,
-            save_tanhc,
-            w_i,
-            w_f,
-            w_g,
-            w_o,
-            w_ih_p,
-        ) = ctx.saved_tensors
         B, T, I_in, H, H_pad = ctx.shapes
+        if ctx.recompute:
+            (
+                x,
+                hidden_p,
+                cell_p,
+                w_ih,
+                w_hh,
+                b_ih_p,
+                b_hh_p,
+                is_init,
+                out,
+                c_out,
+                w_ih_p,
+            ) = ctx.saved_tensors
+            (
+                w_i_t,
+                w_f_t,
+                w_g_t,
+                w_o_t,
+                w_i,
+                w_f,
+                w_g,
+                w_o,
+            ) = _lstm_split_w_hh(w_hh, H, H_pad, ctx.compute_dtype)
+            gates_x = (
+                F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+                .view(B, T, 4 * H_pad)
+                .contiguous()
+            )
+            save_i = torch.empty_like(out)
+            save_f = torch.empty_like(out)
+            save_g = torch.empty_like(out)
+            save_o = torch.empty_like(out)
+            save_tanhc = torch.empty_like(out)
+            out_scratch = torch.empty_like(out)
+            c_out_scratch = torch.empty_like(out)
+            h_final_scratch = torch.empty(B, H_pad, dtype=x.dtype, device=x.device)
+            c_final_scratch = torch.empty_like(h_final_scratch)
+
+            def grid_fwd(meta):
+                return (triton.cdiv(B, meta["BLOCK_B"]),)
+
+            _lstm_fwd_kernel[grid_fwd](
+                gates_x,
+                hidden_p,
+                cell_p,
+                w_i_t,
+                w_f_t,
+                w_g_t,
+                w_o_t,
+                b_hh_p,
+                is_init,
+                out_scratch,
+                c_out_scratch,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                h_final_scratch,
+                c_final_scratch,
+                B,
+                T,
+                H=H_pad,
+                SAVE_GATES=True,
+            )
+        else:
+            (
+                x,
+                hidden_p,
+                cell_p,
+                w_ih,
+                w_hh,
+                is_init,
+                out,
+                c_out,
+                save_i,
+                save_f,
+                save_g,
+                save_o,
+                save_tanhc,
+                w_i,
+                w_f,
+                w_g,
+                w_o,
+                w_ih_p,
+            ) = ctx.saved_tensors
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
@@ -1171,7 +1404,25 @@ class _LSTMFn(torch.autograd.Function):
         dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=0)
         db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=0)
 
-        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None
+        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None, None
+
+
+def _resolve_save_gates(recompute: bool, *tensors: torch.Tensor) -> bool:
+    """Decide whether the Triton forward kernel must store per-step gate buffers.
+
+    Returning ``False`` lets the kernel's ``SAVE_GATES`` constexpr drop the
+    ``tl.store(save_*)`` lines and lets the python wrapper skip the
+    corresponding ``torch.empty_like(out)`` allocations entirely.
+
+    Must be called *outside* ``torch.autograd.Function.apply`` because
+    ``torch.is_grad_enabled()`` is always ``False`` inside ``forward`` even
+    during differentiable calls.
+    """
+    if recompute:
+        return False
+    if not torch.is_grad_enabled():
+        return False
+    return any(t is not None and t.requires_grad for t in tensors)
 
 
 def gru_triton(
@@ -1183,6 +1434,8 @@ def gru_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
+    *,
+    recompute: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Single-layer GRU forward with reset, autograd-aware.
 
@@ -1197,11 +1450,22 @@ def gru_triton(
         is_init: ``[B, T]`` bool reset mask.
         compute_dtype: matmul precision. fp32 -> TF32 on H100. bf16 -> wider SMEM
             margin, lower precision.
+        recompute: when ``True``, drop the per-step gate buffers
+            ``save_r/z/n/gh_n`` from the saved-for-backward set and recompute
+            them by replaying the forward kernel during backward. Trades a
+            small extra fwd-pass cost for a substantial reduction in backward
+            activation memory. The same drop applies automatically when no
+            input requires grad or the call is under :func:`torch.no_grad` --
+            backward cannot run in those cases, so the forward never allocates
+            the gate-save buffers in the first place.
 
     Returns:
         ``(out, h_final)`` where ``out`` is ``[B, T, H]`` and ``h_final`` is ``[B, H]``.
     """
-    return _GRUFn.apply(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
+    save_gates = _resolve_save_gates(recompute, x, hidden, w_ih, w_hh, b_ih, b_hh)
+    return _GRUFn.apply(
+        x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, save_gates
+    )
 
 
 def lstm_triton(
@@ -1214,15 +1478,22 @@ def lstm_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
+    *,
+    recompute: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Single-layer LSTM forward with reset, autograd-aware.
 
     See :func:`gru_triton` for argument conventions. ``cell`` carries the
-    per-step reset cell values (``c0`` semantics).
+    per-step reset cell values (``c0`` semantics). ``recompute`` has the same
+    semantics as in :func:`gru_triton`: drops the five LSTM gate buffers
+    (``save_i/f/g/o/save_tanhc``) from saved state in exchange for an extra
+    forward replay in backward. The drop also happens automatically under
+    :func:`torch.no_grad` / when no input tracks grad.
 
     Returns:
         ``(h_steps, c_steps, h_final, c_final)``.
     """
+    save_gates = _resolve_save_gates(recompute, x, hidden, cell, w_ih, w_hh, b_ih, b_hh)
     return _LSTMFn.apply(
-        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, save_gates
     )
