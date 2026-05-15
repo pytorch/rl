@@ -243,6 +243,7 @@ class timeit:
     """
 
     _REG = {}
+    _MARKS = {}
 
     def __init__(self, name):
         self.name = name
@@ -295,15 +296,28 @@ class timeit:
         """
         return time.time() - self.t0
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        t = self.elapsed()
-        val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
+    @classmethod
+    def _record(cls, name: str, elapsed: float) -> None:
+        val = cls._REG.setdefault(name, [0.0, 0.0, 0])
 
         count = val[2]
         N = count + 1
-        val[0] = val[0] * (count / N) + t / N
-        val[1] += t
+        val[0] = val[0] * (count / N) + elapsed / N
+        val[1] += elapsed
         val[2] = N
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self._record(self.name, self.elapsed())
+
+    @classmethod
+    def mark_start(cls, name: str) -> None:
+        """Mark the start of a named timed event."""
+        cls._MARKS[name] = time.time()
+
+    @classmethod
+    def mark_end(cls, name: str) -> None:
+        """Mark the end of a named timed event and record its elapsed time."""
+        cls._record(name, time.time() - cls._MARKS.pop(name))
 
     @staticmethod
     def print(prefix: str | None = None) -> str:  # noqa: T202
