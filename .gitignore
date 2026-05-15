@@ -200,10 +200,3 @@ main/
 
 # Additional cache directories
 .ruff_cache/
-
-# Local agent / experiment artifacts
-.codex/
-.cursorignore
-.github/rulesets/
-TODO/
-uv.lock
