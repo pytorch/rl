@@ -17,8 +17,10 @@ Key TorchRL features exercised:
 - ``compact_obs=True`` to drop the redundant ``("next", obs)``. Shifted
   value estimation reconstructs next observations by shifting the root
   observations when the next observations are absent.
-- :class:`~torchrl.objectives.value.GAE` with ``shifted=True``: uses the
-  root observation shift when compact rollouts omit ``("next", obs)``.
+- :class:`~torchrl.objectives.value.GAE` with ``shifted="compact"``: a
+  constant-shape single value-network call along the time dim. No reads
+  of ``("next", obs)``, no Python branches on tensor values, no
+  ``.item()`` syncs — friendly to ``torch.compile`` + scan/triton LSTM.
 - :class:`~torchrl.modules.LSTMModule` with a configurable
   ``recurrent_backend``: during collection (``set_recurrent_mode=False``)
   the LSTM auto-uses cuDNN regardless of the backend; the configured
@@ -308,7 +310,7 @@ def main() -> None:
         lmbda=args.gae_lambda,
         value_network=full_value,
         average_gae=False,
-        shifted=True,
+        shifted="compact",
         device=train_device,
     )
     optim = group_optimizers(
