@@ -1335,6 +1335,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
+                    "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
