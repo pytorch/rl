@@ -43,6 +43,7 @@ import torch
 import torch.optim
 
 from isaaclab_rnn_ppo_memory_utils import _init_isaac_app, make_env, make_models
+from tensordict import TensorDictBase
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.collectors import MultiCollector
@@ -54,6 +55,18 @@ from torchrl.objectives import ClipPPOLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record import WandbLogger
 from torchrl.weight_update import MultiProcessWeightSyncScheme
+
+
+def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]:
+    return {
+        str(key): {
+            "shape": str(tuple(value.shape)),
+            "dtype": str(value.dtype),
+            "device": str(value.device),
+        }
+        for key, value in tensordict.items(include_nested=True, leaves_only=True)
+        if hasattr(value, "shape")
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -139,6 +152,7 @@ def main() -> None:
     per_collector_envs = args.num_envs // args.num_collectors
     frames_per_batch = args.num_envs * args.rollout_steps
     sample_num_slices = max(1, args.mini_batch_steps // args.rollout_steps)
+    expected_rollout_shape = torch.Size((args.num_envs, args.rollout_steps))
 
     # ---- Training model (lives on train_device, recurrent_mode=True path) ----
     actor, critic, full_value = make_models(
@@ -233,7 +247,7 @@ def main() -> None:
     )
 
     train_buffer = ReplayBuffer(
-        storage=LazyTensorStorage(args.num_envs, device=train_device, ndim=1),
+        storage=LazyTensorStorage(args.num_envs, device="cpu", ndim=1),
         sampler=SamplerWithoutReplacement(drop_last=True),
         batch_size=sample_num_slices,
     )
@@ -261,11 +275,37 @@ def main() -> None:
                 data = collected_batch.to(train_device)
                 loss_acc = None
                 loss_count = 0
-                for _ in range(args.ppo_epochs):
+                for epoch in range(args.ppo_epochs):
                     with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
                         epoch_data = adv_module(data)
+                    if epoch_data.shape != expected_rollout_shape:
+                        raise RuntimeError(
+                            f"Expected epoch_data shape {expected_rollout_shape}, "
+                            f"got {epoch_data.shape}."
+                        )
+                    if iteration == 0 and epoch == 0:
+                        torchrl_logger.info(
+                            {
+                                "phase": "pre_train_buffer_extend",
+                                "epoch_data_shape": tuple(epoch_data.shape),
+                                "epoch_data_leaf_shapes": _leaf_shape_summary(
+                                    epoch_data
+                                ),
+                                "epoch_data_0_shape": tuple(epoch_data[0].shape),
+                                "epoch_data_0_leaf_shapes": _leaf_shape_summary(
+                                    epoch_data[0]
+                                ),
+                            }
+                        )
+                    epoch_data_cpu = epoch_data.to("cpu")
                     train_buffer.empty()
-                    train_buffer.extend(epoch_data)
+                    train_buffer.extend(epoch_data_cpu)
+                    if train_buffer._storage._storage.shape != expected_rollout_shape:
+                        raise RuntimeError(
+                            "Expected train buffer storage shape "
+                            f"{expected_rollout_shape}, got "
+                            f"{train_buffer._storage._storage.shape}."
+                        )
                     for mini_batch in train_buffer:
                         with timeit("update"):
                             loss = update(mini_batch.to(train_device))
