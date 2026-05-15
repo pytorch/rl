@@ -159,8 +159,15 @@ class PolicyVersion(Transform):
         if self.version_type in (str, "uuid"):
             version = NonTensorData(self.version).expand(next_tensordict.shape)
         elif self.version_type in (int, "int"):
-            # Cast to float for torch.full
-            version = torch.full(next_tensordict.shape, float(cast(int, self.version)))
+            device = next_tensordict.device
+            kwargs = {"dtype": torch.int64}
+            if device is not None:
+                kwargs["device"] = device
+            version = torch.full(
+                next_tensordict.shape,
+                cast(int, self.version),
+                **kwargs,
+            )
         else:
             raise ValueError(f"Invalid version type: {self.version_type}")
 

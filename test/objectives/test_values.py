@@ -171,6 +171,177 @@ class TestValues:
         torch.testing.assert_close(vt[..., -1, :], reward[..., -1, :])
         torch.testing.assert_close(adv[..., -1, :], reward[..., -1, :] - v_s)
 
+    @pytest.mark.parametrize(
+        "estimator_cls,kwargs",
+        [
+            (TD0Estimator, {"gamma": 0.9}),
+            (TD1Estimator, {"gamma": 0.9}),
+            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.95}),
+            (GAE, {"gamma": 0.9, "lmbda": 0.95}),
+        ],
+    )
+    def test_missing_next_obs_compact_shifted_is_safe(self, estimator_cls, kwargs):
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1, bias=False),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        B, T, F = 2, 5, 3
+        obs = torch.randn(B, T, F)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, 2] = True
+        done[:, -1] = True
+        reward = torch.ones(B, T, 1)
+        td_compact = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        )
+
+        next_obs = torch.empty_like(obs)
+        next_obs[:, :-1] = obs[:, 1:]
+        next_obs[:, -1] = float("nan")
+        next_obs[done.expand_as(next_obs)] = float("nan")
+        td_reference = td_compact.clone()
+        td_reference["next", "obs"] = next_obs
+
+        est = estimator_cls(**kwargs, value_network=value_net, shifted=True)
+        td_actual = td_compact.clone()
+        actual = est(td_actual)
+        expected = est(td_reference.clone())
+
+        assert td_actual.get(("next", "obs"), default=None) is None
+        torch.testing.assert_close(actual["advantage"], expected["advantage"])
+        torch.testing.assert_close(actual["value_target"], expected["value_target"])
+        assert torch.isfinite(actual["advantage"]).all()
+        assert torch.isfinite(actual["value_target"]).all()
+
+    def test_shifted_gae_accepts_noncanonical_strides(self):
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1, bias=False),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        B, T, F = 2, 5, 3
+        obs = torch.randn(B, T, F)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, -1] = True
+        reward = torch.ones(B, T, 1)
+        td = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "obs": torch.randn(B, T, F),
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        ).transpose(0, 1)
+
+        assert not td["obs"].is_contiguous()
+        est = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=True)
+        out = est(td)
+        assert torch.isfinite(out["advantage"]).all()
+        assert torch.isfinite(out["value_target"]).all()
+
+    @pytest.mark.parametrize(
+        "estimator_cls,kwargs",
+        [
+            (TD0Estimator, {"gamma": 0.9}),
+            (TD1Estimator, {"gamma": 0.9}),
+            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.95}),
+            (GAE, {"gamma": 0.9, "lmbda": 0.95}),
+        ],
+    )
+    def test_final_obs_bootstrap_shifted(self, estimator_cls, kwargs):
+        """``("final", obs)`` carries the true bootstrap obs at the window edge.
+
+        Without it, shifted-GAE under ``compact_obs=True`` falls back to
+        ``V(s_{T-1})`` via :meth:`_fill_missing_next_inputs`, corrupting the
+        last step's advantage when the window boundary is not a real done.
+        The fix overrides those positions with the values carried under
+        ``("final", obs)`` and matches the non-compact reference exactly.
+
+        Also verifies the consumer drops ``("final", ...)`` from the returned
+        tensordict so it survives a contiguous-storage replay buffer.
+        """
+        from tensordict import UnbatchedTensor
+
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1, bias=False),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        B, T, F = 2, 5, 3
+        obs = torch.randn(B, T, F)
+        # No real done inside the window: the last step is a "soft" boundary.
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        reward = torch.ones(B, T, 1)
+        # The "true" next obs after step T-1 (one per env, no time dim).
+        final_obs = torch.randn(B, F)
+
+        # Reference: full ('next', obs) at every step.
+        next_obs_full = torch.empty(B, T, F)
+        next_obs_full[:, :-1] = obs[:, 1:]
+        next_obs_full[:, -1] = final_obs
+        td_ref = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "obs": next_obs_full,
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+            },
+            [B, T],
+        )
+
+        # Compact + final_obs: no ('next', obs) but a ('final', obs) UnbatchedTensor.
+        td_compact = TensorDict(
+            {
+                "obs": obs,
+                "next": {
+                    "reward": reward,
+                    "done": done.clone(),
+                    "terminated": done.clone(),
+                },
+                "final": TensorDict(
+                    {"obs": UnbatchedTensor(final_obs)},
+                    batch_size=(B, T),
+                ),
+            },
+            [B, T],
+        )
+
+        est = estimator_cls(**kwargs, value_network=value_net, shifted=True)
+        out_ref = est(td_ref.clone())
+        out_compact = est(td_compact.clone())
+
+        # Must match the non-compact reference exactly at the boundary
+        # (and everywhere else).
+        torch.testing.assert_close(out_compact["advantage"], out_ref["advantage"])
+        torch.testing.assert_close(out_compact["value_target"], out_ref["value_target"])
+
+        # Drop must have happened — the rollout is now safe to extend into a
+        # contiguous-storage RB.
+        out_inplace = td_compact.clone()
+        est(out_inplace)
+        assert (
+            "final" not in out_inplace.keys()
+        ), "('final', ...) should have been consumed and dropped"
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):
 
@@ -214,8 +385,12 @@ class TestValues:
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     @pytest.mark.parametrize("module", ["lstm", "gru"])
-    def test_gae_recurrent(self, module):
-        # Checks that shifted=True and False provide the same result in GAE when an LSTM is used
+    @pytest.mark.parametrize("vectorized", [False, True])
+    def test_gae_recurrent(self, module, vectorized):
+        # Checks that shifted=True and False produce the same advantages
+        # when an RNN value net is used, across both vectorized and
+        # non-vectorized GAE — vectorized and shifted are orthogonal and
+        # should all agree.
         env = SerialEnv(
             2,
             [
@@ -268,6 +443,7 @@ class TestValues:
             lmbda=0.99,
             value_network=value_net,
             shifted=True,
+            vectorized=vectorized,
         )
         with set_recurrent_mode(True):
             r0 = gae_shifted(vals.copy())
@@ -278,6 +454,7 @@ class TestValues:
             lmbda=0.99,
             value_network=value_net,
             shifted=False,
+            vectorized=vectorized,
             deactivate_vmap=True,
         )
         with pytest.raises(
