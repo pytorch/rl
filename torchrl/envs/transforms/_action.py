@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import functools
+from collections.abc import Sequence
 from copy import copy
 from enum import IntEnum
 from textwrap import indent
@@ -14,13 +15,14 @@ from typing import Any, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 
 from torchrl.data.tensor_specs import (
     Bounded,
     Categorical,
     Composite,
+    ContinuousBox,
     MultiCategorical,
     MultiOneHot,
     OneHot,
@@ -35,12 +37,18 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
+from torchrl.envs.transforms._base import (
+    _apply_to_composite_inv,
+    FORWARD_NOT_IMPLEMENTED,
+    Transform,
+)
+from torchrl.envs.transforms.utils import _set_missing_tolerance
 
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
     "DiscreteActionProjection",
+    "FlattenAction",
     "MultiAction",
 ]
 
@@ -857,3 +865,280 @@ class MultiAction(Transform):
             )
         )
         return observation_spec
+
+
+class FlattenAction(Transform):
+    """Flatten adjacent dimensions of an action.
+
+    Mirrors :class:`~torchrl.envs.transforms.FlattenObservation`, but applies
+    to actions: the policy sees a flattened action space and the original
+    multi-dimensional shape is restored on the inv direction before the action
+    is passed to the base environment.
+
+    On the inv direction (policy -> env), a 1-D ``flattened`` action is
+    unflattened to the original ``(dim_first, ..., dim_last)`` span of the env
+    action. On the forward direction (env action -> flattened, used inside
+    replay buffers and :class:`~torch.nn.Module` chains), the adjacent dims
+    ``[first_dim, last_dim]`` are flattened.
+
+    Args:
+        first_dim (int): first dimension to flatten. Must be negative unless
+            ``allow_positive_dim`` is ``True``.
+        last_dim (int): last dimension to flatten (inclusive). Must be negative
+            unless ``allow_positive_dim`` is ``True``.
+        in_keys_inv (sequence of NestedKey, optional): keys read during the
+            ``inv`` direction (policy -> env). Defaults to ``["action"]``.
+            Multiple keys are supported - the same flatten span is applied to
+            each one, which is useful for dict-structured action spaces.
+        out_keys_inv (sequence of NestedKey, optional): keys written during the
+            ``inv`` direction. Defaults to ``in_keys_inv``.
+        in_keys (sequence of NestedKey, optional): keys read during the forward
+            direction (env action -> flattened). Defaults to ``in_keys_inv``.
+        out_keys (sequence of NestedKey, optional): keys written during the
+            forward direction. Defaults to ``in_keys``.
+        allow_positive_dim (bool, optional): if ``True``, positive dimensions
+            are accepted. Defaults to ``False`` so that the same transform
+            works regardless of the parent environment's batch size.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.data.tensor_specs import Bounded
+        >>> from torchrl.envs.transforms import FlattenAction, TransformedEnv
+        >>> from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+        >>> base_env = ContinuousActionVecMockEnv(
+        ...     action_spec=Bounded(low=-1.0, high=1.0, shape=(3, 5))
+        ... )
+        >>> env = TransformedEnv(base_env, FlattenAction(first_dim=-2, last_dim=-1))
+        >>> env.action_spec.shape
+        torch.Size([15])
+    """
+
+    invertible = True
+
+    def __init__(
+        self,
+        first_dim: int = -2,
+        last_dim: int = -1,
+        in_keys_inv: Sequence[NestedKey] | None = None,
+        out_keys_inv: Sequence[NestedKey] | None = None,
+        in_keys: Sequence[NestedKey] | None = None,
+        out_keys: Sequence[NestedKey] | None = None,
+        allow_positive_dim: bool = False,
+    ):
+        if in_keys_inv is None:
+            in_keys_inv = ["action"]
+        if not isinstance(in_keys_inv, (list, tuple)):
+            in_keys_inv = [in_keys_inv]
+        if out_keys_inv is None:
+            out_keys_inv = copy(list(in_keys_inv))
+        if in_keys is None:
+            in_keys = copy(list(in_keys_inv))
+        if out_keys is None:
+            out_keys = copy(list(in_keys))
+        super().__init__(
+            in_keys=in_keys,
+            out_keys=out_keys,
+            in_keys_inv=in_keys_inv,
+            out_keys_inv=out_keys_inv,
+        )
+        if not allow_positive_dim and first_dim >= 0:
+            raise ValueError(
+                "first_dim should be smaller than 0 to accommodate for "
+                "envs of different batch_sizes. Set allow_positive_dim=True "
+                "to allow positive dimensions."
+            )
+        if not allow_positive_dim and last_dim >= 0:
+            raise ValueError(
+                "last_dim should be smaller than 0 to accommodate for "
+                "envs of different batch_sizes. Set allow_positive_dim=True "
+                "to allow positive dimensions."
+            )
+        if first_dim > last_dim:
+            raise ValueError(
+                f"first_dim ({first_dim}) must be <= last_dim ({last_dim})."
+            )
+        self._first_dim = first_dim
+        self._last_dim = last_dim
+        self.allow_positive_dim = bool(allow_positive_dim)
+        # Per-action-key original (pre-flatten) span, populated from the spec.
+        self._unflatten_shapes: dict[NestedKey, tuple[int, ...]] = {}
+
+    @property
+    def first_dim(self) -> int:
+        if self._first_dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._first_dim
+        return self._first_dim
+
+    @property
+    def last_dim(self) -> int:
+        if self._last_dim >= 0 and self.parent is not None:
+            return len(self.parent.batch_size) + self._last_dim
+        return self._last_dim
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        # env-scale action -> flattened
+        return torch.flatten(action, self.first_dim, self.last_dim)
+
+    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        # flattened action -> env-scale (unflatten)
+        if not self._unflatten_shapes:
+            self._maybe_init_from_parent()
+        if not self._unflatten_shapes:
+            raise RuntimeError(
+                "FlattenAction has not been initialized: the original action "
+                "shape could not be derived from the parent environment's "
+                "action spec. Attach this transform to a TransformedEnv so the "
+                "spec can be queried."
+            )
+        # All in_keys_inv share the same first_dim/last_dim, but the inner
+        # span may differ across keys. We rely on the per-key ``_unflatten``
+        # state set in ``transform_action_spec`` to invert the operation.
+        # When _inv_apply_transform is called by the base ``_inv_call``, we do
+        # not know which key triggered the call; pick the first compatible one.
+        last_dim = self.last_dim
+        for key in self.in_keys_inv:
+            key = unravel_key(key)
+            shape = self._unflatten_shapes.get(key)
+            if shape is None:
+                continue
+            expected = 1
+            for s in shape:
+                expected *= s
+            if action.shape[last_dim] == expected:
+                return torch.unflatten(action, last_dim, shape)
+        # fall back to the first known shape
+        first_key = unravel_key(self.in_keys_inv[0])
+        return torch.unflatten(action, last_dim, self._unflatten_shapes[first_key])
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Route each action key to its own unflatten span using the per-key
+        # state computed at ``transform_action_spec`` time.
+        if not self.in_keys_inv:
+            return tensordict
+        if not self._unflatten_shapes:
+            self._maybe_init_from_parent()
+        last_dim = self.last_dim
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            in_key_u = unravel_key(in_key)
+            out_key_u = unravel_key(out_key)
+            data = tensordict.get(out_key_u, default=None)
+            if data is None:
+                if not self.missing_tolerance:
+                    raise KeyError(
+                        f"'{out_key_u}' not found in tensordict {tensordict}"
+                    )
+                continue
+            shape = self._unflatten_shapes.get(in_key_u)
+            if shape is None:
+                raise RuntimeError(
+                    f"FlattenAction has no stored unflatten shape for key "
+                    f"{in_key_u!r}. Attach the transform to a TransformedEnv "
+                    f"with a bounded action spec for this key."
+                )
+            tensordict.set(in_key_u, torch.unflatten(data, last_dim, shape))
+        return tensordict
+
+    def _maybe_init_from_parent(self) -> None:
+        parent = self.parent
+        if parent is None:
+            return
+        try:
+            full_action_spec = parent.base_env.full_action_spec
+        except Exception:  # noqa: BLE001
+            return
+        full_action_spec = full_action_spec.clone()
+        transform = parent.transform
+        from torchrl.envs.transforms._base import Compose
+
+        if isinstance(transform, Compose):
+            for t in transform.transforms:
+                if t is self:
+                    break
+                input_spec = Composite(
+                    full_action_spec=full_action_spec,
+                    full_state_spec=Composite(),
+                    shape=full_action_spec.shape,
+                    device=full_action_spec.device,
+                )
+                input_spec = t.transform_input_spec(input_spec)
+                full_action_spec = input_spec["full_action_spec"]
+        for in_key in self.in_keys_inv:
+            in_key = unravel_key(in_key)
+            if in_key in full_action_spec.keys(True, True):
+                leaf = full_action_spec[in_key]
+                self._unflatten_shapes[in_key] = self._span_from_spec(leaf)
+
+    def _span_from_spec(self, leaf_spec: TensorSpec) -> tuple[int, ...]:
+        ndim = len(leaf_spec.shape)
+        first = self._first_dim
+        last = self._last_dim
+        if first < 0:
+            first = ndim + first
+        if last < 0:
+            last = ndim + last
+        if first < 0 or last >= ndim or first > last:
+            raise RuntimeError(
+                f"FlattenAction(first_dim={self._first_dim}, last_dim={self._last_dim}) "
+                f"is not compatible with an action of shape {tuple(leaf_spec.shape)}."
+            )
+        return tuple(int(s) for s in leaf_spec.shape[first : last + 1])
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        # Manual iteration so that nested action keys are supported - the
+        # generic ``_apply_to_composite_inv`` decorator only iterates top-level
+        # keys when it is called with the full action spec directly.
+        if not isinstance(action_spec, Composite):
+            self._unflatten_shapes[unravel_key(self.in_keys_inv[0])] = (
+                self._span_from_spec(action_spec)
+            )
+            return self._flatten_leaf(action_spec)
+        action_spec = action_spec.clone()
+        for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
+            in_key_u = unravel_key(in_key)
+            out_key_u = unravel_key(out_key)
+            if in_key_u in action_spec.keys(True, True):
+                leaf = action_spec[in_key_u].clone()
+                self._unflatten_shapes[in_key_u] = self._span_from_spec(leaf)
+                action_spec[out_key_u] = self._flatten_leaf(leaf)
+                if in_key_u != out_key_u:
+                    del action_spec[in_key_u]
+        return action_spec
+
+    def _flatten_leaf(self, leaf_spec: TensorSpec) -> TensorSpec:
+        space = getattr(leaf_spec, "space", None)
+        if isinstance(space, ContinuousBox):
+            new_low = torch.flatten(space.low, self.first_dim, self.last_dim)
+            new_high = torch.flatten(space.high, self.first_dim, self.last_dim)
+            return Bounded(
+                low=new_low,
+                high=new_high,
+                shape=new_low.shape,
+                device=leaf_spec.device,
+                dtype=leaf_spec.dtype,
+            )
+        new_shape = torch.flatten(
+            torch.zeros(leaf_spec.shape, device="cpu"),
+            self.first_dim,
+            self.last_dim,
+        ).shape
+        leaf_spec = leaf_spec.clone()
+        leaf_spec.shape = new_shape
+        return leaf_spec
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # The action does not appear in ``next_tensordict`` during env
+        # stepping, so we leave it untouched here. The ``forward`` path used
+        # by replay buffers is still wired through ``_apply_transform``.
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}("
+            f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)}, "
+            f"in_keys_inv={self.in_keys_inv})"
+        )
