@@ -1536,6 +1536,87 @@ if __name__ == "__main__":
         flat = without.reshape(-1)
         assert flat.batch_size.numel() == 20
 
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_fake_tensordict_single_matches_iter(self, use_buffers):
+        """``Collector.fake_tensordict()`` mirrors the shape and keys of a real batch."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            use_buffers=use_buffers,
+        )
+        try:
+            fake = c.fake_tensordict()
+            torch.manual_seed(0)
+            real = next(iter(c))
+            assert fake.batch_size == real.batch_size, (
+                fake.batch_size,
+                real.batch_size,
+            )
+            assert fake.names == real.names
+            fake_keys = sorted(map(str, fake.keys(True, True)))
+            real_keys = sorted(map(str, real.keys(True, True)))
+            assert fake_keys == real_keys, set(real_keys) ^ set(fake_keys)
+            # Must be all-zero.
+            for key, val in fake.items(True, True):
+                if (
+                    val.dtype in (torch.bool, torch.uint8)
+                    or not val.is_floating_point()
+                ):
+                    continue
+                assert not val.any(), f"{key} is not zeroed"
+        finally:
+            c.shutdown()
+
+    def test_fake_tensordict_single_with_compact_and_final_obs(self):
+        """``compact_obs`` + ``final_obs`` effects are visible on the fake batch."""
+        from tensordict import UnbatchedTensor
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=10,
+            total_frames=10,
+            compact_obs=True,
+            final_obs=True,
+        )
+        try:
+            fake = c.fake_tensordict()
+            # compact_obs dropped ('next', obs)
+            assert ("next", "observation") not in fake.keys(True, True)
+            # final_obs attached ('final', obs) as UnbatchedTensor
+            val = fake.get(("final", "observation"))
+            assert isinstance(val, UnbatchedTensor)
+        finally:
+            c.shutdown()
+
+    def test_fake_tensordict_multi_raises(self):
+        """``MultiCollector.fake_tensordict()`` is intentionally not implemented."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = MultiCollector(
+            create_env_fn=[make_env, make_env],
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            sync=True,
+        )
+        try:
+            with pytest.raises(NotImplementedError, match="fake_tensordict"):
+                c.fake_tensordict()
+        finally:
+            c.shutdown()
+
     @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
     def test_initial_obs_consistency(self, env_class, seed=1):
         # non regression test on #938
