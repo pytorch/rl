@@ -1425,6 +1425,195 @@ if __name__ == "__main__":
             root_shifted = ref_data.get(k)[..., 1:, :]
             torch.testing.assert_close(ref_next[mask], root_shifted[mask])
 
+    def test_final_obs_requires_compact_obs(self):
+        """``final_obs=True`` without ``compact_obs=True`` must raise."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        with pytest.raises(ValueError, match="requires compact_obs=True"):
+            Collector(
+                create_env_fn=make_env,
+                policy=RandomPolicy(make_env().action_spec),
+                frames_per_batch=10,
+                total_frames=10,
+                compact_obs=False,
+                final_obs=True,
+            )
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_final_obs_matches_compact_off(self, use_buffers):
+        """``final_obs=True`` carries the same boundary obs as a non-compact run.
+
+        Runs two rollouts with identical seeds: one with
+        ``compact_obs=False`` (full ``('next', obs)`` retained at every step)
+        and one with ``compact_obs=True, final_obs=True`` (boundary obs
+        stored under ``('final', obs)`` as
+        :class:`~tensordict.UnbatchedTensor`). The two must agree on the
+        boundary obs (non-done envs only — at done envs the bootstrap is
+        masked downstream so the value there is unconstrained).
+        """
+        from tensordict import UnbatchedTensor
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        dummy_env = make_env()
+        obs_keys = list(dummy_env._observation_keys_step_mdp)
+        dummy_env.close()
+
+        def run(compact, final):
+            torch.manual_seed(0)
+            return Collector(
+                create_env_fn=make_env,
+                policy=RandomPolicy(make_env().action_spec),
+                frames_per_batch=20,
+                total_frames=20,
+                use_buffers=use_buffers,
+                compact_obs=compact,
+                final_obs=final,
+            )
+
+        ref = run(False, False)
+        ref_data = next(iter(ref))
+        ref.shutdown()
+        del ref
+
+        comp = run(True, True)
+        comp_data = next(iter(comp))
+        comp.shutdown()
+        del comp
+
+        # Batch shape preserved (no time dim leakage from the UnbatchedTensor).
+        assert comp_data.batch_size == ref_data.batch_size
+
+        # ('final', k) is present and is an UnbatchedTensor.
+        for k in obs_keys:
+            full_final = ("final", *k) if isinstance(k, tuple) else ("final", k)
+            assert full_final in comp_data.keys(True, True), f"missing {full_final}"
+            val = comp_data.get(full_final)
+            assert isinstance(val, UnbatchedTensor), type(val)
+
+            # Compare against the reference's ('next', k) at the last step,
+            # masked to non-done envs.
+            full_next = ("next", *k) if isinstance(k, tuple) else ("next", k)
+            ref_last_next = ref_data.get(full_next)[..., -1, :]
+            done_last = ref_data.get(("next", "done"))[..., -1, :].squeeze(-1)
+            mask = ~done_last
+            torch.testing.assert_close(val[mask], ref_last_next[mask])
+
+    def test_final_obs_unbatched_survives_indexing(self):
+        """The ``("final", obs)`` UnbatchedTensor must not collapse on reshape.
+
+        Closes (a): if the leaf were a regular tensor, indexing or reshaping
+        the rollout along the time axis would either drop the time dim or
+        propagate a shape mismatch into a contiguous-storage replay buffer.
+        """
+        from tensordict import UnbatchedTensor
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            compact_obs=True,
+            final_obs=True,
+        )
+        data = next(iter(c))
+        c.shutdown()
+
+        original = data.get(("final", "observation"))
+        # Slicing along time must preserve the same underlying tensor.
+        sliced = data[..., :5].get(("final", "observation"))
+        assert isinstance(sliced, UnbatchedTensor)
+        assert torch.equal(original, sliced)
+        # exclude("final") must yield a td whose batch shape reshapes cleanly.
+        without = data.exclude("final")
+        assert "final" not in without.keys()
+        flat = without.reshape(-1)
+        assert flat.batch_size.numel() == 20
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_fake_tensordict_single_matches_iter(self, use_buffers):
+        """``Collector.fake_tensordict()`` mirrors the shape and keys of a real batch."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            use_buffers=use_buffers,
+        )
+        try:
+            fake = c.fake_tensordict()
+            torch.manual_seed(0)
+            real = next(iter(c))
+            assert fake.batch_size == real.batch_size, (
+                fake.batch_size,
+                real.batch_size,
+            )
+            assert fake.names == real.names
+            fake_keys = sorted(map(str, fake.keys(True, True)))
+            real_keys = sorted(map(str, real.keys(True, True)))
+            assert fake_keys == real_keys, set(real_keys) ^ set(fake_keys)
+            # Must be all-zero.
+            for key, val in fake.items(True, True):
+                if val.dtype in (torch.bool, torch.uint8) or not val.is_floating_point():
+                    continue
+                assert not val.any(), f"{key} is not zeroed"
+        finally:
+            c.shutdown()
+
+    def test_fake_tensordict_single_with_compact_and_final_obs(self):
+        """``compact_obs`` + ``final_obs`` effects are visible on the fake batch."""
+        from tensordict import UnbatchedTensor
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=10,
+            total_frames=10,
+            compact_obs=True,
+            final_obs=True,
+        )
+        try:
+            fake = c.fake_tensordict()
+            # compact_obs dropped ('next', obs)
+            assert ("next", "observation") not in fake.keys(True, True)
+            # final_obs attached ('final', obs) as UnbatchedTensor
+            val = fake.get(("final", "observation"))
+            assert isinstance(val, UnbatchedTensor)
+        finally:
+            c.shutdown()
+
+    def test_fake_tensordict_multi_raises(self):
+        """``MultiCollector.fake_tensordict()`` is intentionally not implemented."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = MultiCollector(
+            create_env_fn=[make_env, make_env],
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            sync=True,
+        )
+        try:
+            with pytest.raises(NotImplementedError, match="fake_tensordict"):
+                c.fake_tensordict()
+        finally:
+            c.shutdown()
+
     @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
     def test_initial_obs_consistency(self, env_class, seed=1):
         # non regression test on #938
@@ -3350,6 +3539,42 @@ class TestEnvTransformAutoWrap:
                     auto_register_policy_transforms=False,
                 )
 
+    def test_policy_factory_recurrent_auto_register(self):
+        """policy_factory + auto_register_policy_transforms=True must:
+
+        - Instantiate the policy, walk it for InitTracker / TensorDictPrimer
+          requirements, and append both transforms to the env.
+        - Leave the transforms with live parents (not None) so their spec
+          transforms work — the bug this guards against was Compose
+          temporarily parenting the children to a throwaway container.
+        - Keep env.action_spec accessible.
+        """
+        env = GymEnv(CARTPOLE_VERSIONED())
+        keys_before = set(env.full_observation_spec.keys(True, True))
+        assert "is_init" not in keys_before
+        assert "recurrent_state" not in keys_before
+
+        collector = SyncDataCollector(
+            env,
+            policy_factory=self._make_recurrent_policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            keys_after = set(collector.env.full_observation_spec.keys(True, True))
+            assert "is_init" in keys_after
+            assert "recurrent_state" in keys_after
+            # action_spec must remain reachable — Compose-parenting bug
+            # used to break this by leaving InitTracker.parent=None.
+            assert collector.env.action_spec is not None
+            for transform in collector.env.transform:
+                assert (
+                    transform.parent is not None
+                ), f"transform {type(transform).__name__} has parent=None"
+        finally:
+            collector.shutdown()
+
 
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
@@ -4047,6 +4272,163 @@ class TestUpdateParams:
         finally:
             collector.shutdown()
             del collector
+
+
+class TestPolicyVersion:
+    """End-to-end checks for ``track_policy_version`` on data collectors.
+
+    The contract: when a collector is constructed with
+    ``track_policy_version=True``, every collected frame must carry a
+    ``policy_version`` key, and that value must bump exactly once per real
+    weight update (``update_policy_weights_()``), regardless of how many
+    iterations are pulled from the collector.
+    """
+
+    class _Env(EnvBase):
+        def __init__(self, device="cpu"):
+            super().__init__(batch_size=(), device=device)
+            self.observation_spec = Composite(
+                observation=Unbounded(shape=(2,), device=device)
+            )
+            self.action_spec = Unbounded(shape=(2,), device=device)
+            self.reward_spec = Unbounded(shape=(1,), device=device)
+
+        def _step(self, td):
+            return TensorDict(
+                {
+                    "observation": torch.zeros(2, device=self.device),
+                    "reward": torch.zeros(1, device=self.device),
+                    **self.full_done_spec.zero(),
+                },
+                (),
+                device=self.device,
+            )
+
+        def _reset(self, td=None):
+            return TensorDict(
+                {"observation": torch.zeros(2, device=self.device)},
+                (),
+                device=self.device,
+            )
+
+        def _set_seed(self, seed):
+            ...
+
+    @staticmethod
+    def _make_policy():
+        return TensorDictModule(
+            nn.Linear(2, 2), in_keys=["observation"], out_keys=["action"]
+        )
+
+    def test_single_collector_bumps_on_update(self):
+        """``SyncDataCollector`` bumps policy_version on each weight update."""
+        policy = self._make_policy()
+        collector = SyncDataCollector(
+            self._Env,
+            policy=policy,
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            it = iter(collector)
+            batch0 = next(it)
+            v0 = batch0["next", "policy_version"]
+            assert v0.dtype == torch.int64
+            # Version is constant within a batch (no update happened mid-batch).
+            assert (v0 == v0[0]).all()
+
+            # No update yet -> next batch keeps the same version.
+            batch1 = next(it)
+            assert (batch1["next", "policy_version"] == v0[0]).all()
+
+            collector.update_policy_weights_()
+            batch2 = next(it)
+            assert (batch2["next", "policy_version"] == v0[0] + 1).all()
+
+            # A second update bumps again, but a continue-without-update doesn't.
+            collector.update_policy_weights_()
+            batch3 = next(it)
+            assert (batch3["next", "policy_version"] == v0[0] + 2).all()
+            batch4 = next(it)
+            assert (batch4["next", "policy_version"] == v0[0] + 2).all()
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+        ],
+        ids=["multi_sync", "multi_async"],
+    )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme_cls",
+        [MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+        ids=["mp", "shared_mem"],
+    )
+    def test_multi_collector_bumps_on_update(
+        self, collector_cls, weight_sync_scheme_cls
+    ):
+        """Worker-side policy_version follows real weight updates.
+
+        Regression for the case where the worker's ``PolicyVersion`` transform
+        was never incremented from the parent's ``update_policy_weights_()``,
+        leaving all worker batches tagged with version 0.
+        """
+        policy = self._make_policy()
+        collector = collector_cls(
+            [self._Env, self._Env],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=200,
+            track_policy_version=True,
+            weight_sync_schemes={"policy": weight_sync_scheme_cls()},
+        )
+        try:
+            it = iter(collector)
+            batch0 = next(it)
+            v0 = batch0["next", "policy_version"]
+            # All workers start at the same initial version (0 by default).
+            v0_val = int(v0.flatten()[0].item())
+            assert (v0 == v0_val).all()
+
+            # Iterations without weight updates must not bump the version.
+            for _ in range(2):
+                batch = next(it)
+                assert (batch["next", "policy_version"] == v0_val).all(), (
+                    f"Worker version drifted without weight update: "
+                    f"{batch['next', 'policy_version']}"
+                )
+
+            collector.update_policy_weights_()
+            # The worker bumps once it has actually applied the new weights.
+            # In async mode, a batch already in flight at the time of the
+            # update may straddle the bump (some frames pre-, some post-).
+            # Drain until we see a batch fully at the bumped version, with
+            # a sane safety cap so we don't loop forever on a regression.
+            target = v0_val + 1
+            for _ in range(10):
+                batch = next(it)
+                if (batch["next", "policy_version"] == target).all():
+                    break
+            else:
+                raise AssertionError(
+                    f"Worker version did not reach {target} within 10 batches "
+                    f"after a single update_policy_weights_(); last batch: "
+                    f"{batch['next', 'policy_version']}"
+                )
+
+            # And no further bumps should occur on subsequent continues that
+            # are not preceded by an update.
+            batch_no_update = next(it)
+            assert (batch_no_update["next", "policy_version"] == target).all(), (
+                f"Worker version drifted past {target} without an update: "
+                f"{batch_no_update['next', 'policy_version']}"
+            )
+        finally:
+            collector.shutdown()
 
 
 class TestAggregateReset:

@@ -1035,7 +1035,11 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                             self.model, self._receiver_shared_weights, inplace=True
                         )
 
-                    # Cascade weight update to sub-collectors if context supports it
+                    # Cascade weight update to sub-collectors if context supports it.
+                    # When the context is a leaf Collector, its
+                    # update_policy_weights_ also bumps the local
+                    # PolicyVersion transform — so we don't need a separate
+                    # increment_version() call here.
                     model_id = self._model_id or "policy"
                     if self.context is not None and hasattr(
                         self.context, "update_policy_weights_"
