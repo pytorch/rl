@@ -948,7 +948,11 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         weights = result
         model_id = self._model_id or "policy"
 
-        # Cascade weight update to sub-collectors if context supports it
+        # Cascade weight update to sub-collectors if context supports it.
+        # Note on policy_version tracking: the cascade eventually reaches a
+        # leaf Collector.update_policy_weights_, which bumps the local
+        # PolicyVersion transform on the worker's env. So there is no
+        # separate increment_version() call here.
         if self.context is not None and hasattr(self.context, "update_policy_weights_"):
             self.context.update_policy_weights_(
                 model_id=model_id, policy_or_weights=weights
