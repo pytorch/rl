@@ -11,6 +11,7 @@ import cost.
 """
 from __future__ import annotations
 
+import argparse
 from typing import Literal
 
 import torch
@@ -30,6 +31,16 @@ from torchrl.modules import (
 )
 
 RnnBackend = Literal["pad", "scan", "triton"]
+
+
+def _init_isaac_app() -> None:
+    """Start Isaac Lab's AppLauncher in headless mode inside a worker."""
+    from isaaclab.app import AppLauncher
+
+    parser = argparse.ArgumentParser(description="TorchRL Isaac Lab env launcher.")
+    AppLauncher.add_app_launcher_args(parser)
+    args_cli, _ = parser.parse_known_args(["--headless"])
+    AppLauncher(args_cli)
 
 
 def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
@@ -122,7 +133,7 @@ def make_models(
         default_interaction_type=ExplorationType.RANDOM,
     )
 
-    # The value module re-uses the backbone (shared params, single LSTM call
+    # The value module reuses the backbone (shared params, single LSTM call
     # per GAE/update pass). An identity TDM caches the lstm_out under a
     # distinct key so the critic head and the actor head don't fight over
     # write semantics on a shared key.

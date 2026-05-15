@@ -37,11 +37,12 @@ from __future__ import annotations
 import argparse
 import logging
 import math
-import sys
 from functools import partial
 
 import torch
 import torch.optim
+
+from isaaclab_rnn_ppo_memory_utils import _init_isaac_app, make_env, make_models
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.collectors import MultiCollector
@@ -53,8 +54,6 @@ from torchrl.objectives import ClipPPOLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record import WandbLogger
 from torchrl.weight_update import MultiProcessWeightSyncScheme
-
-from isaaclab_rnn_ppo_memory_utils import make_env, make_models
 
 
 def parse_args() -> argparse.Namespace:
@@ -228,6 +227,7 @@ def main() -> None:
         trust_policy=True,
         compact_obs=True,
         final_obs=True,
+        init_fn=_init_isaac_app,
         auto_register_policy_transforms=True,
         track_policy_version=True,
         weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
@@ -276,7 +276,10 @@ def main() -> None:
                 metrics = timeit.todict(percall=False, prefix="time")
                 if loss_acc is not None and loss_count > 0:
                     metrics.update(
-                        {f"loss/{k}": float(v / loss_count) for k, v in loss_acc.items()}
+                        {
+                            f"loss/{k}": float(v / loss_count)
+                            for k, v in loss_acc.items()
+                        }
                     )
                 metrics.update(
                     {
