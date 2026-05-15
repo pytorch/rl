@@ -37,12 +37,7 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    _apply_to_composite_inv,
-    FORWARD_NOT_IMPLEMENTED,
-    Transform,
-)
-from torchrl.envs.transforms.utils import _set_missing_tolerance
+from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
     "ActionDiscretizer",
@@ -1088,9 +1083,9 @@ class FlattenAction(Transform):
         # generic ``_apply_to_composite_inv`` decorator only iterates top-level
         # keys when it is called with the full action spec directly.
         if not isinstance(action_spec, Composite):
-            self._unflatten_shapes[unravel_key(self.in_keys_inv[0])] = (
-                self._span_from_spec(action_spec)
-            )
+            self._unflatten_shapes[
+                unravel_key(self.in_keys_inv[0])
+            ] = self._span_from_spec(action_spec)
             return self._flatten_leaf(action_spec)
         action_spec = action_spec.clone()
         for in_key, out_key in zip(self.in_keys_inv, self.out_keys_inv):
