@@ -614,20 +614,35 @@ class ValueEstimatorBase(TensorDictModuleBase):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compact single-call path: constant-shape value-net call.
 
-        Runs ``value_net`` once on the rollout-shaped inputs along the time
-        dim. When ``("final", k)`` is present for every value-net in-key
-        the call has shape ``[..., T+1]`` (the last slot is the
-        rollout-boundary observation from ``("final", ...)``); otherwise it
-        has shape ``[..., T]`` and ``V(next_obs[T-1])`` is approximated by
-        copying ``V(obs[T-1])``. In both cases ``V(next_obs[t])`` for
-        ``t < T-1`` is taken as ``V(obs[t+1])``, which is exact at
-        non-trajectory-boundary steps and a small bias at internal
+        Always runs ``value_net`` once on a ``[..., T+1]`` input along the
+        time dim. The boundary slot at ``T`` is filled per value-net
+        in-key with the first available of:
+
+        1. ``("final", k)``: explicit collector contract for the
+           rollout-boundary observation (most authoritative; set by
+           ``Collector(final_obs=True)``).
+        2. ``("next", k)[..., T-1:T]``: env-returned "next" value at the
+           last step. Present whenever the rollout is collected without
+           ``compact_obs=True``.
+        3. A duplicate of ``root[T-1]``: smoothness proxy used when
+           neither of the above is available (e.g. Isaac with
+           ``compact_obs=True`` and no ``final_obs=True``).
+
+        The duplication in case 3 is intentional for recurrent value
+        nets: feeding the RNN one extra step with the duplicated obs
+        advances the hidden state, so ``V(next_obs[T-1])`` is
+        approximated by ``f(obs_{T-1}, h_T)`` — not by a scalar copy of
+        ``V_T = f(obs_{T-1}, h_{T-1})``. The two coincide for
+        non-recurrent value nets.
+
+        For ``t < T-1``, ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` —
+        exact at non-trajectory-boundary steps, small bias at internal
         truncations.
 
-        This path has no Python branches on tensor values, no ``.item()``
-        syncs, and a shape that depends only on the collector's
-        ``("final", ...)`` policy — i.e. constant within a training run,
-        so ``torch.compile`` specializes once and stays specialized.
+        Shape and code path are constant within a training run (the
+        collector config determines availability of ``("final", ...)``
+        and ``("next", ...)`` deterministically across calls), so
+        ``torch.compile`` specializes once and stays specialized.
         """
         if next_params is not None and next_params is not params:
             raise ValueError(
@@ -639,57 +654,45 @@ class ValueEstimatorBase(TensorDictModuleBase):
         # Include value_key in the select so skip_existing on the value
         # network can detect pre-filled values (matches legacy path).
         root_part = data.select(*in_keys, value_key, strict=False)
-        # Determine whether ("final", k) is available for every in-key
-        # whose corresponding root value exists. Decision is deterministic
-        # given the collector config, so the path taken stays constant
-        # within a training run.
+        boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
+        # Per-key boundary overrides. See docstring for priority.
         final_root = data.get("final", default=None)
-        final_values: dict = {}
-        use_final_boundary = final_root is not None
-        if use_final_boundary:
-            for k in in_keys:
-                root_v = root_part.get(k, default=None)
-                if root_v is None:
-                    continue
+        next_root = data.get("next", default=None)
+        boundary_overrides: dict = {}
+        for k in in_keys:
+            if root_part.get(k, default=None) is None:
+                continue
+            # 1. ("final", k): unbatched leaf, [..., *F] with no time dim.
+            if final_root is not None:
                 key_tuple = (k,) if isinstance(k, str) else tuple(k)
                 fv = final_root.get(
                     key_tuple[0] if len(key_tuple) == 1 else key_tuple,
                     default=None,
                 )
-                if fv is None:
-                    use_final_boundary = False
-                    break
-                final_values[k] = fv
-        if use_final_boundary and T >= 1:
-            boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
-            boundary_part = root_part[boundary_index].copy()
-            for k, fv in final_values.items():
-                boundary_part.set(k, fv.unsqueeze(time_idx))
-            data_in = torch.cat([root_part, boundary_part], dim=time_idx)
-            if params is not None:
-                with params.to_module(value_net):
-                    values_full = _call_value_net(data_in)
-            else:
+                if fv is not None:
+                    boundary_overrides[k] = fv.unsqueeze(time_idx)
+                    continue
+            # 2. ("next", k)[..., T-1:T]: env-returned next at last step.
+            if next_root is not None:
+                nv = next_root.get(k, default=None)
+                if nv is not None:
+                    boundary_overrides[k] = nv[boundary_index]
+                    continue
+            # 3. (no override) — boundary_part keeps the duplicated
+            #    root[T-1] value below.
+        boundary_part = root_part[boundary_index].copy()
+        for k, v in boundary_overrides.items():
+            boundary_part.set(k, v)
+        data_in = torch.cat([root_part, boundary_part], dim=time_idx)
+        if params is not None:
+            with params.to_module(value_net):
                 values_full = _call_value_net(data_in)
-            root_idx = (slice(None),) * time_idx + (slice(0, T),)
-            next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
-            value = values_full[root_idx]
-            value_ = values_full[next_idx]
         else:
-            if params is not None:
-                with params.to_module(value_net):
-                    values = _call_value_net(root_part)
-            else:
-                values = _call_value_net(root_part)
-            value = values
-            if T >= 2:
-                shifted_idx = (slice(None),) * time_idx + (slice(1, T),)
-                last_idx = (slice(None),) * time_idx + (slice(T - 1, T),)
-                value_ = torch.cat(
-                    [values[shifted_idx], values[last_idx]], dim=time_idx
-                )
-            else:
-                value_ = values
+            values_full = _call_value_net(data_in)
+        root_idx = (slice(None),) * time_idx + (slice(0, T),)
+        next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
+        value = values_full[root_idx]
+        value_ = values_full[next_idx]
         done = data.get(("next", "done"), default=None)
         if done is not None:
             try:
