@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-05-15
+# Flaky Test Report - 2026-05-16
 
 ## Summary
 
 - **Flaky tests**: 10
-- **Newly flaky** (last 7 days): 10
+- **Newly flaky** (last 7 days): 0
 - **Resolved**: 0
-- **Total tests analyzed**: 35555
+- **Total tests analyzed**: 35578
 - **CI runs analyzed**: 15
 
 ---
@@ -14,30 +14,17 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...ted_collector_updatepolicy[True-False-MultiSyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...ed_collector_updatepolicy[True-False-MultiAsyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...uted_collector_updatepolicy[True-True-MultiSyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...ted_collector_updatepolicy[True-True-MultiAsyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...ted_collector_updatepolicy[True-False-MultiSyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...ed_collector_updatepolicy[True-False-MultiAsyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...uted_collector_updatepolicy[True-True-MultiSyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...ted_collector_updatepolicy[True-True-MultiAsyncCollector]` 🆕 | 15.4% (8/52) | 8 | 0.31 | 2026-05-08 |
-| `...tory::test_per_worker_weight_sync_with_distinct_factories` 🆕 | 7.7% (10/130) | 10 | 0.15 | 2026-05-08 |
-| `...tory::test_per_worker_weight_sync_multiple_workers_update` 🆕 | 7.7% (10/130) | 10 | 0.15 | 2026-05-08 |
+| `...ted_collector_updatepolicy[True-False-MultiSyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...ed_collector_updatepolicy[True-False-MultiAsyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...uted_collector_updatepolicy[True-True-MultiSyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...ted_collector_updatepolicy[True-True-MultiAsyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...ted_collector_updatepolicy[True-False-MultiSyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...ed_collector_updatepolicy[True-False-MultiAsyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...uted_collector_updatepolicy[True-True-MultiSyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...ted_collector_updatepolicy[True-True-MultiAsyncCollector]` | 16.7% (8/48) | 8 | 0.33 | 2026-05-08 |
+| `...tory::test_per_worker_weight_sync_with_distinct_factories` | 7.7% (10/130) | 10 | 0.15 | 2026-05-08 |
+| `...tory::test_per_worker_weight_sync_multiple_workers_update` | 7.7% (10/130) | 10 | 0.15 | 2026-05-08 |
 
-
-### Newly Flaky Tests
-
-- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-False-MultiSyncCollector]`
-- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-False-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-True-MultiSyncCollector]`
-- `test/test_distributed.py::TestRPCCollector::test_distributed_collector_updatepolicy[True-True-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-False-MultiAsyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiSyncCollector]`
-- `test/test_distributed.py::TestRayCollector::test_distributed_collector_updatepolicy[True-True-MultiAsyncCollector]`
-- `test/test_collectors.py::TestMakePolicyFactory::test_per_worker_weight_sync_with_distinct_factories`
-- `test/test_collectors.py::TestMakePolicyFactory::test_per_worker_weight_sync_multiple_workers_update`
 
 ---
 
@@ -50,4 +37,4 @@
 
 ---
 
-*Generated at 2026-05-15T07:16:42.142441+00:00*
+*Generated at 2026-05-16T06:53:42.834897+00:00*
