@@ -662,6 +662,10 @@ class TestLSTMModule:
             in_key="embed",
             out_key="features",
             python_based=True,
+            # vmap cannot trace through ``torch._higher_order_ops.scan``; the
+            # 'pad' backend keeps the time loop as a plain Python call into
+            # the Python-based LSTM, which is fully vmap-compatible.
+            recurrent_backend="pad",
         )
         mlp = TensorDictModule(
             MLP(
@@ -1338,6 +1342,9 @@ class TestLSTMModule:
         torch.testing.assert_close(out, weird)
 
     @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
+    )
+    @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
     )
@@ -1384,6 +1391,9 @@ class TestLSTMModule:
             torch._dynamo.config.capture_scalar_outputs = prev
         assert "feat" in out.keys(True, True)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
+    )
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
@@ -1998,6 +2008,10 @@ class TestGRUModule:
             in_key="embed",
             out_key="features",
             python_based=True,
+            # vmap cannot trace through ``torch._higher_order_ops.scan``; the
+            # 'pad' backend keeps the time loop as a plain Python call into
+            # the Python-based GRU, which is fully vmap-compatible.
+            recurrent_backend="pad",
         )
         mlp = TensorDictModule(
             MLP(

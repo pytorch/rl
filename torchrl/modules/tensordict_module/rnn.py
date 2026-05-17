@@ -19,7 +19,12 @@ from tensordict.utils import expand_as_right, set_lazy_legacy
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
-from torchrl._utils import _ContextManager, _DecoratorContextManager, implement_for
+from torchrl._utils import (
+    _ContextManager,
+    _DecoratorContextManager,
+    implement_for,
+    is_compiling,
+)
 from torchrl.data.tensor_specs import Unbounded
 
 # ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. Gate the
@@ -649,7 +654,7 @@ class LSTMModule(ModuleBase):
         proj_size=0,
         bidirectional=False,
         python_based=False,
-        recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "scan",
+        recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
         *,
         in_key=None,
@@ -743,12 +748,6 @@ class LSTMModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = default_recurrent_mode
-        # Resolve "auto" once at construction. Previously this was resolved
-        # per-forward via is_compiling(), which produced different backend
-        # choices in eager vs compiled traces and could trigger recompiles
-        # when entering/leaving a compiled region.
-        if recurrent_backend == "auto":
-            recurrent_backend = "scan"
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
 
@@ -908,13 +907,19 @@ class LSTMModule(ModuleBase):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
         if self.recurrent_mode:
             # Straight-line shape normalization. Time is the last batch dim;
             # all earlier batch dims are folded into a single leading B.
-            # No Python loop on tensor ndim, no data-dependent branches.
+            # Cheaper and simpler than the historical ``while ndim < 3`` loop
+            # plus ``prod(...)`` + ``apply(..., batch_size=[...])``.
             td_ndim = tensordict.ndim
             if td_ndim == 0:
                 raise ValueError(
@@ -932,16 +937,33 @@ class LSTMModule(ModuleBase):
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
         is_init = tensordict_shaped["is_init"].squeeze(-1)
-        # Backend is resolved at construction time; no runtime is_compiling()
-        # check, no data-dependent fallback. The "pad" backend in
-        # recurrent_mode no longer handles trajectory resets — callers with
-        # multi-trajectory rollouts must use 'scan' or 'triton'. Use
-        # 'pad' only for single-trajectory windows or non-recurrent-mode
-        # collection.
+        splits = None
         backend = self.recurrent_backend
+        if backend == "auto":
+            # In eager, CuDNN-backed pad is the fastest path; under torch.compile
+            # the data-dependent ``_split_and_pad_sequence`` branch is unfriendly,
+            # so prefer scan there.
+            backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        splits = None
+        if (
+            self.recurrent_mode
+            and not use_scan
+            and not use_triton
+            and is_init[..., 1:].any()
+        ):
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
+            # Multi-trajectory rollouts under the pad backend: split each row
+            # into per-trajectory windows of shape [N, T'], run the LSTM on
+            # the padded result, then stitch them back. Required for correctness
+            # whenever ``is_init`` fires mid-row.
+            splits = _get_num_per_traj_init(is_init)
+            tensordict_shaped_shape = tensordict_shaped.shape
+            tensordict_shaped = _split_and_pad_sequence(
+                tensordict_shaped.select(*self.in_keys, strict=False), splits
+            )
+            is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden0, hidden1 = (
             tensordict_shaped.get(key, default)
@@ -980,6 +1002,10 @@ class LSTMModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden0)
         tensordict_shaped.set(self.out_keys[2], hidden1)
+        if splits is not None:
+            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
+                tensordict_shaped_shape
+            )
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
             tensordict.update(tensordict_shaped.reshape(shape))
@@ -1842,7 +1868,7 @@ class GRUModule(ModuleBase):
         dropout=0,
         bidirectional=False,
         python_based=False,
-        recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "scan",
+        recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
         *,
         in_key=None,
@@ -1933,10 +1959,6 @@ class GRUModule(ModuleBase):
         self.in_keys = in_keys
         self.out_keys = out_keys
         self._recurrent_mode = default_recurrent_mode
-        # Resolve "auto" once at construction. See LSTMModule.__init__ for
-        # rationale.
-        if recurrent_backend == "auto":
-            recurrent_backend = "scan"
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
 
@@ -2093,6 +2115,11 @@ class GRUModule(ModuleBase):
     @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
+        from torchrl.objectives.value.functional import (
+            _inv_pad_sequence,
+            _split_and_pad_sequence,
+        )
+
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
@@ -2115,12 +2142,26 @@ class GRUModule(ModuleBase):
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
         is_init = tensordict_shaped["is_init"].squeeze(-1)
-        # Backend resolved at construction. See LSTMModule.forward for the
-        # rationale on dropping the pad-with-resets fallback.
+        splits = None
         backend = self.recurrent_backend
+        if backend == "auto":
+            backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        splits = None
+        if (
+            self.recurrent_mode
+            and not use_scan
+            and not use_triton
+            and is_init[..., 1:].any()
+        ):
+            from torchrl.objectives.value.utils import _get_num_per_traj_init
+
+            splits = _get_num_per_traj_init(is_init)
+            tensordict_shaped_shape = tensordict_shaped.shape
+            tensordict_shaped = _split_and_pad_sequence(
+                tensordict_shaped.select(*self.in_keys, strict=False), splits
+            )
+            is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden = (
             tensordict_shaped.get(key, default)
@@ -2145,6 +2186,10 @@ class GRUModule(ModuleBase):
         )
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
+        if splits is not None:
+            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
+                tensordict_shaped_shape
+            )
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
             tensordict.update(tensordict_shaped.reshape(shape))
