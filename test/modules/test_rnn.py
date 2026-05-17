@@ -662,6 +662,10 @@ class TestLSTMModule:
             in_key="embed",
             out_key="features",
             python_based=True,
+            # vmap cannot trace through ``torch._higher_order_ops.scan``; the
+            # 'pad' backend keeps the time loop as a plain Python call into
+            # the Python-based LSTM, which is fully vmap-compatible.
+            recurrent_backend="pad",
         )
         mlp = TensorDictModule(
             MLP(
@@ -2004,6 +2008,10 @@ class TestGRUModule:
             in_key="embed",
             out_key="features",
             python_based=True,
+            # vmap cannot trace through ``torch._higher_order_ops.scan``; the
+            # 'pad' backend keeps the time loop as a plain Python call into
+            # the Python-based GRU, which is fully vmap-compatible.
+            recurrent_backend="pad",
         )
         mlp = TensorDictModule(
             MLP(
