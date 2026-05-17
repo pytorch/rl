@@ -3380,9 +3380,9 @@ class TestEnvTransformAutoWrap:
             # used to break this by leaving InitTracker.parent=None.
             assert collector.env.action_spec is not None
             for transform in collector.env.transform:
-                assert transform.parent is not None, (
-                    f"transform {type(transform).__name__} has parent=None"
-                )
+                assert (
+                    transform.parent is not None
+                ), f"transform {type(transform).__name__} has parent=None"
         finally:
             collector.shutdown()
 
