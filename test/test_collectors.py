@@ -1490,9 +1490,7 @@ if __name__ == "__main__":
         # ('final', k) is present and is an UnbatchedTensor.
         for k in obs_keys:
             full_final = ("final", *k) if isinstance(k, tuple) else ("final", k)
-            assert full_final in comp_data.keys(True, True), (
-                f"missing {full_final}"
-            )
+            assert full_final in comp_data.keys(True, True), f"missing {full_final}"
             val = comp_data.get(full_final)
             assert isinstance(val, UnbatchedTensor), type(val)
 
@@ -3493,9 +3491,9 @@ class TestEnvTransformAutoWrap:
             # used to break this by leaving InitTracker.parent=None.
             assert collector.env.action_spec is not None
             for transform in collector.env.transform:
-                assert transform.parent is not None, (
-                    f"transform {type(transform).__name__} has parent=None"
-                )
+                assert (
+                    transform.parent is not None
+                ), f"transform {type(transform).__name__} has parent=None"
         finally:
             collector.shutdown()
 
