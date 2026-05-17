@@ -739,9 +739,7 @@ class TestPolicyVersion:
         version = out.get("policy_version")
         assert version.dtype == torch.int64
         assert version.shape == (4,)
-        assert torch.equal(
-            version, torch.full((4,), 7, dtype=torch.int64)
-        )
+        assert torch.equal(version, torch.full((4,), 7, dtype=torch.int64))
 
         if torch.cuda.is_available():
             td_cuda = TensorDict(batch_size=(4,), device="cuda")
