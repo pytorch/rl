@@ -1252,6 +1252,13 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     context=self,
                     worker_idx=self.worker_idx,
                 )
+            elif scheme.context is None:
+                # The scheme was already initialized on the receiver (e.g. early,
+                # by _make_policy_factory which has no access to the inner
+                # collector yet). Now that we *do* have the collector, set it as
+                # the context so receiver-side bookkeeping (policy version,
+                # cascading sub-collector updates) can reach it.
+                scheme.context = self
 
             # Store the scheme for later use in receive_weights()
             self._receiver_schemes[model_id] = scheme
