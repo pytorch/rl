@@ -310,7 +310,11 @@ class TestIQL(LossModuleTestBase):
             expectile=expectile,
             loss_function="l2",
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return
@@ -439,7 +443,11 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
             deactivate_vmap=False,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_vmap.make_value_estimator(td_est)
             return
@@ -463,7 +471,11 @@ class TestIQL(LossModuleTestBase):
             loss_function="l2",
             deactivate_vmap=True,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn_no_vmap.make_value_estimator(td_est)
             return
@@ -1206,7 +1218,11 @@ class TestDiscreteIQL(LossModuleTestBase):
             loss_function="l2",
             action_space="one-hot",
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_fn.make_value_estimator(td_est)
             return

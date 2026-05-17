@@ -91,6 +91,7 @@ from torchrl.data.replay_buffers.writers import (
     WriterEnsemble,
 )
 from torchrl.envs import GymEnv, SerialEnv
+from torchrl.envs.transforms import NextStateReconstructor
 from torchrl.envs.transforms.transforms import (
     BinarizeReward,
     CatFrames,
@@ -115,7 +116,6 @@ from torchrl.envs.transforms.transforms import (
     UnsqueezeTransform,
     VecNorm,
 )
-from torchrl.envs.transforms import NextStateReconstructor
 from torchrl.modules import GRUModule, RandomPolicy, set_recurrent_mode
 
 from torchrl.testing import (
