@@ -742,9 +742,6 @@ class TestLSTMModule:
         )
 
     @pytest.mark.skipif(
-        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
-    )
-    @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
     )
@@ -1341,9 +1338,6 @@ class TestLSTMModule:
         assert tuple(out.stride()) == _canonical_stride(out.shape)
         torch.testing.assert_close(out, weird)
 
-    @pytest.mark.skipif(
-        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
-    )
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
