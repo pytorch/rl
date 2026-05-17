@@ -614,9 +614,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Compact single-call path: constant-shape value-net call.
 
-        Always runs ``value_net`` once on a ``[..., T+1]`` input along the
-        time dim. The boundary slot at ``T`` is filled per value-net
-        in-key with the first available of:
+        Always runs ``value_net`` once on a batched ``[..., T]`` input. The
+        root and ``("next", ...)`` streams are concatenated along a non-time
+        batch dimension, so populated next observations are evaluated directly
+        without a second value-network call. The boundary slot at ``T-1`` on
+        the next side is filled per value-net in-key with the first available
+        of:
 
         1. ``("final", k)``: explicit collector contract for the
            rollout-boundary observation (most authoritative; set by
@@ -627,17 +630,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         3. A duplicate of ``root[T-1]``: smoothness proxy used when
            neither of the above is available (e.g. Isaac with
            ``compact_obs=True`` and no ``final_obs=True``).
-
-        The duplication in case 3 is intentional for recurrent value
-        nets: feeding the RNN one extra step with the duplicated obs
-        advances the hidden state, so ``V(next_obs[T-1])`` is
-        approximated by ``f(obs_{T-1}, h_T)`` — not by a scalar copy of
-        ``V_T = f(obs_{T-1}, h_{T-1})``. The two coincide for
-        non-recurrent value nets.
-
-        For ``t < T-1``, ``V(next_obs[t])`` is taken as ``V(obs[t+1])`` —
-        exact at non-trajectory-boundary steps, small bias at internal
-        truncations.
 
         Shape and code path are constant within a training run (the
         collector config determines availability of ``("final", ...)``
@@ -678,21 +670,40 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 if nv is not None:
                     boundary_overrides[k] = nv[boundary_index]
                     continue
-            # 3. (no override) — boundary_part keeps the duplicated
-            #    root[T-1] value below.
-        boundary_part = root_part[boundary_index].copy()
+            # 3. (no override) — ``next_part[..., T-1]`` keeps the value
+            #    already in ``("next", k)`` (or, for ``compact_obs=True``
+            #    runs that don't populate it, the duplicated ``root[T-1]``
+            #    from ``_fill_missing_next_inputs`` below).
+        next_part = data.get("next").select(*in_keys, value_key, strict=False)
+        next_part = self._fill_missing_next_inputs(next_part, root_part, in_keys)
+        next_part = next_part.copy()
+        if "is_init" in root_part.keys() and "is_init" in next_part.keys():
+            next_part["is_init"] = next_part["is_init"] | root_part["is_init"]
         for k, v in boundary_overrides.items():
-            boundary_part.set(k, v)
-        data_in = torch.cat([root_part, boundary_part], dim=time_idx)
+            next_value = next_part.get(k, default=None)
+            if next_value is None:
+                continue
+            next_value = next_value.clone()
+            next_value[boundary_index] = v
+            next_part.set(k, next_value)
+        added_batch_dim = time_idx == 0
+        cat_dim = 0
+        if added_batch_dim:
+            root_part = root_part.unsqueeze(0)
+            next_part = next_part.unsqueeze(0)
+            time_idx = 1
+        data_in = torch.cat([root_part, next_part], dim=cat_dim)
         if params is not None:
             with params.to_module(value_net):
                 values_full = _call_value_net(data_in)
         else:
             values_full = _call_value_net(data_in)
-        root_idx = (slice(None),) * time_idx + (slice(0, T),)
-        next_idx = (slice(None),) * time_idx + (slice(1, T + 1),)
-        value = values_full[root_idx]
-        value_ = values_full[next_idx]
+        batch_root = root_part.shape[cat_dim]
+        value = values_full[:batch_root]
+        value_ = values_full[batch_root : 2 * batch_root]
+        if added_batch_dim:
+            value = value.squeeze(0)
+            value_ = value_.squeeze(0)
         done = data.get(("next", "done"), default=None)
         if done is not None:
             try:
