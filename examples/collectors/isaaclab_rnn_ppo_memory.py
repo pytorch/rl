@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Recurrent PPO on Isaac Lab with compact rollouts and shifted GAE.
+"""Recurrent PPO on Isaac Lab with configurable recurrent rollout storage.
 
 Demonstrates running large-vectorized Isaac Lab environments with an LSTM
 policy through a :class:`~torchrl.collectors.MultiCollector`. Isaac Lab is
@@ -14,13 +14,13 @@ Key TorchRL features exercised:
 - :class:`~torchrl.collectors.MultiCollector` with ``policy_factory`` (each
   worker builds its own policy copy and receives weights via
   :class:`~torchrl.weight_update.MultiProcessWeightSyncScheme`).
-- ``compact_obs=True`` to drop the redundant ``("next", obs)``. Shifted
-  value estimation reconstructs next observations by shifting the root
-  observations when the next observations are absent.
-- :class:`~torchrl.objectives.value.GAE` with ``shifted="compact"``: a
-  constant-shape single value-network call along the time dim. No reads
-  of ``("next", obs)``, no Python branches on tensor values, no
-  ``.item()`` syncs — friendly to ``torch.compile`` + scan/triton LSTM.
+- Optional ``compact_obs=True`` to drop the redundant ``("next", obs)``.
+  Shifted value estimation reconstructs next observations by shifting the
+  root observations when the next observations are absent.
+- Configurable :class:`~torchrl.objectives.value.GAE` shifted mode. The
+  ``shifted="compact"`` path keeps a constant-shape single value-network
+  call along the time dim and is friendly to ``torch.compile`` + scan/triton
+  LSTM. ``shifted="false"`` keeps the full observation representation.
 - :class:`~torchrl.modules.LSTMModule` with a configurable
   ``recurrent_backend``: during collection (``set_recurrent_mode=False``)
   the LSTM auto-uses cuDNN regardless of the backend; the configured
@@ -235,6 +235,34 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--entropy-coeff", type=float, default=0.0)
     parser.add_argument("--critic-coeff", type=float, default=1.0)
     parser.add_argument("--clip-grad-norm", type=float, default=1.0)
+    parser.add_argument(
+        "--compact-obs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Drop redundant ('next', obs) keys from collector batches. Use "
+            "--no-compact-obs for the full baseline representation."
+        ),
+    )
+    parser.add_argument(
+        "--gae-shifted",
+        choices=["false", "legacy", "compact"],
+        default="compact",
+        help=(
+            "GAE shifted mode. Use 'false' for the full baseline path and "
+            "'compact' for the compile-friendly compact shifted path."
+        ),
+    )
+    parser.add_argument(
+        "--deactivate-vmap",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Replace vmap in GAE with a Python loop. Required for "
+            "--gae-shifted=false when the value network is recurrent "
+            "(cuDNN ops do not compose with vmap)."
+        ),
+    )
     # Compile / cudagraph
     parser.add_argument(
         "--compile-update", action=argparse.BooleanOptionalAction, default=False
@@ -274,6 +302,9 @@ def main() -> None:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
     if args.compile_update or args.cudagraph_update:
         torch._dynamo.config.capture_scalar_outputs = True
+    gae_shifted: bool | str = (
+        False if args.gae_shifted == "false" else args.gae_shifted
+    )
 
     torch.manual_seed(args.seed)
     torch.set_float32_matmul_precision("high")
@@ -310,7 +341,8 @@ def main() -> None:
         lmbda=args.gae_lambda,
         value_network=full_value,
         average_gae=False,
-        shifted="compact",
+        shifted=gae_shifted,
+        deactivate_vmap=args.deactivate_vmap,
         device=train_device,
     )
     optim = group_optimizers(
@@ -373,7 +405,7 @@ def main() -> None:
         storing_device="cpu",
         no_cuda_sync=True,
         trust_policy=True,
-        compact_obs=True,
+        compact_obs=args.compact_obs,
         init_fn=partial(_init_isaac_app, device=str(collector_device)),
         auto_register_policy_transforms=True,
         weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
