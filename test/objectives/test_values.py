@@ -417,9 +417,7 @@ class TestValues:
         # is allowed a small boundary bias from copying V(obs[T-1]) at
         # the rollout boundary; not asserted.
         torch.manual_seed(0)
-        td, obs_dim = self._build_shifted_test_td(
-            with_internal_done=with_internal_done
-        )
+        td, obs_dim = self._build_shifted_test_td(with_internal_done=with_internal_done)
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1),
             in_keys=["observation"],
