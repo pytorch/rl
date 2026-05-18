@@ -18,6 +18,7 @@ from torchrl.envs.llm.transforms import (
     ExecuteToolsInOrder,
     IncrementalTokenizer,
     JSONCallParser,
+    PolicyVersion,
     ToolCall,
     ToolRegistry,
     XMLBlockParser,
@@ -718,3 +719,31 @@ class TestIncrementalTokenizer:
         assert ("tokens", "prompt") in result.keys(True, True)
         tokens = result.get(("tokens", "prompt"), as_list=True)
         assert tokens[0].numel() > 0
+
+
+class TestPolicyVersion:
+    def test_int_version_dtype_and_device(self):
+        """Integer policy version must stay int64 and follow the tensordict device.
+
+        Regression for a bug where ``version_type="int"`` was cast to float
+        and dropped the device, producing CPU float tensors that mismatched
+        the surrounding tensordict.
+        """
+        import torch
+
+        transform = PolicyVersion(version_type="int")
+        transform.version = 7
+
+        td = TensorDict(batch_size=(4,))
+        out = transform._step(td, td.copy())
+        version = out.get("policy_version")
+        assert version.dtype == torch.int64
+        assert version.shape == (4,)
+        assert torch.equal(version, torch.full((4,), 7, dtype=torch.int64))
+
+        if torch.cuda.is_available():
+            td_cuda = TensorDict(batch_size=(4,), device="cuda")
+            out_cuda = transform._step(td_cuda, td_cuda.copy())
+            version_cuda = out_cuda.get("policy_version")
+            assert version_cuda.dtype == torch.int64
+            assert version_cuda.device.type == "cuda"
