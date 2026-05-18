@@ -254,6 +254,12 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--gae-compact-cat-dim",
+        choices=["batch", "time"],
+        default="batch",
+        help="Concatenation dimension used by GAE shifted='compact'.",
+    )
+    parser.add_argument(
         "--deactivate-vmap",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -342,6 +348,7 @@ def main() -> None:
         value_network=full_value,
         average_gae=False,
         shifted=gae_shifted,
+        compact_cat_dim=args.gae_compact_cat_dim,
         deactivate_vmap=args.deactivate_vmap,
         device=train_device,
     )
