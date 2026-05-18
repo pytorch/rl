@@ -4,16 +4,24 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import inspect as _inspect
+
 import warnings
 
 import torch
 from tensordict import TensorDictBase, unravel_key_list
+
 from tensordict.nn import (
     InteractionType,
     ProbabilisticTensorDictModule,
     ProbabilisticTensorDictSequential,
     TensorDictModule,
 )
+
+_PTDM_HAS_GENERATOR = (
+    "generator" in _inspect.signature(ProbabilisticTensorDictModule.__init__).parameters
+)
+del _inspect
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.modules.distributions import Delta
@@ -220,7 +228,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             log_prob_keys=log_prob_keys,
             log_prob_key=log_prob_key,
             num_samples=num_samples,
-            generator=generator,
+            **{"generator": generator} if _PTDM_HAS_GENERATOR else {},
         )
         if spec is not None:
             spec = spec.clone()

@@ -91,7 +91,7 @@ class _MultiAgentPPOMixin:
             "target_critic_network_params",
         )
         if self._has_critic:
-            return self.critic_coef * loss_value, None, None
+            return self.critic_coeff * loss_value, None, None
         return loss_value, None, None
 
 
