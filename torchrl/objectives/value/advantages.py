@@ -623,7 +623,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 pass
         return value, value_
 
-
     def _call_value_nets(
         self,
         data: TensorDictBase,
