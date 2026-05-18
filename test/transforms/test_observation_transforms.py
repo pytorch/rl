@@ -30,6 +30,7 @@ from torchrl.envs import (
     Crop,
     FlattenObservation,
     GrayScale,
+    NextObservationDelta,
     ObservationNorm,
     ParallelEnv,
     PermuteTransform,
@@ -2790,3 +2791,270 @@ class TestPermuteTransform(TransformBase):
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         td = trans(td)
         assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+
+class TestNextObservationDelta(TransformBase):
+    """Tests for the env-side delta-compression transform."""
+
+    @staticmethod
+    def _delta_tol(delta_dtype: torch.dtype, scale: float = 1.0) -> float:
+        # Round-trip error of (next_obs - obs) cast to delta_dtype then back.
+        # finfo.eps is the gap around 1.0; scale by max magnitude of the delta
+        # being represented to get a meaningful tolerance.
+        return torch.finfo(delta_dtype).eps * 8.0 * scale
+
+    # `check_env_specs` is intentionally NOT used here. NextObservationDelta
+    # changes the runtime dtype of `("next", obs)` to `delta_dtype` while
+    # leaving `observation_spec` untouched (root and `("next", ...)` share the
+    # same spec in TorchRL, and we don't fork it in v1). The spec-vs-runtime
+    # check would therefore reject the env. We use a reset + step smoke test
+    # instead, which is what callers actually do.
+
+    @staticmethod
+    def _smoke_one_step(env, *, expect_compressed: bool):
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        post_step, flowing = env.step_and_maybe_reset(td)
+        if expect_compressed:
+            assert post_step["next", "observation"].dtype == torch.float16
+            assert flowing["observation"].dtype == torch.float32
+        else:
+            # batched-env wraps a TransformedEnv worker -- the outer batched
+            # env's step_and_maybe_reset does not invoke the hook, and may
+            # upcast through pre-allocated buffers. We only assert the env
+            # boots and steps without raising.
+            assert post_step["next", "observation"].shape == flowing["observation"].shape
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        self._smoke_one_step(env, expect_compressed=True)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(
+            2,
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            ),
+        )
+        self._smoke_one_step(env, expect_compressed=False)
+
+    def test_parallel_trans_env_check(self):
+        env = ParallelEnv(
+            2,
+            lambda: TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            ),
+            mp_start_method="fork",
+        )
+        try:
+            self._smoke_one_step(env, expect_compressed=False)
+        finally:
+            env.close()
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: ContinuousActionVecMockEnv()),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        self._smoke_one_step(env, expect_compressed=True)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(2, lambda: ContinuousActionVecMockEnv(), mp_start_method="fork"),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        try:
+            self._smoke_one_step(env, expect_compressed=True)
+        finally:
+            env.close()
+
+    def test_transform_no_env(self):
+        # The transform is env-side only: calling it like a module / RB transform
+        # must raise.
+        t = NextObservationDelta(in_keys=["observation"])
+        with pytest.raises(NotImplementedError, match="env-side transform"):
+            t(TensorDict({"observation": torch.zeros(3)}, []))
+
+    def test_transform_compose(self):
+        # Composed offline call still routes through forward, which is unsupported.
+        t = Compose(NextObservationDelta(in_keys=["observation"]))
+        with pytest.raises(NotImplementedError, match="env-side transform"):
+            t(TensorDict({"observation": torch.zeros(3)}, []))
+
+    def test_transform_env(self):
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        post_step, flowing = env.step_and_maybe_reset(td)
+
+        assert post_step["next", "observation"].dtype == torch.float16
+        assert post_step["observation"].dtype == torch.float32
+        assert flowing["observation"].dtype == torch.float32
+
+        # Rehydrated flowing root == root_obs + delta (round-tripped through
+        # the delta dtype).
+        expected = (
+            post_step["observation"].to(torch.float32)
+            + post_step["next", "observation"].to(torch.float32)
+        )
+        tol = self._delta_tol(torch.float16, scale=max(1.0, expected.abs().max().item()))
+        torch.testing.assert_close(
+            flowing["observation"].to(torch.float32), expected, atol=tol, rtol=tol
+        )
+
+    def test_transform_model(self):
+        pytest.skip("NextObservationDelta is an env-side transform; not a module hook.")
+
+    def test_transform_rb(self):
+        from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(4),
+            transform=NextObservationDelta(in_keys=["observation"]),
+            batch_size=4,
+        )
+        # Extend goes through `inv`, which is a no-op for this transform
+        # (it has no in_keys_inv) -- so the write succeeds.
+        rb.extend(
+            TensorDict({"observation": torch.zeros(4, 3)}, batch_size=[4])
+        )
+        # Sampling, however, routes through `forward`, which is unsupported
+        # for this env-side-only transform.
+        with pytest.raises(NotImplementedError, match="env-side transform"):
+            rb.sample()
+
+    def test_transform_inverse(self):
+        pytest.skip("NextObservationDelta has no inverse (no in_keys_inv).")
+
+    def test_auto_infer_keys_skips_uint8(self):
+        # Build an env whose observation_spec contains a uint8 image key plus
+        # a float vector. Only the float vector should be picked up by
+        # auto-inference.
+        from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+
+        class _DualObsEnv(ContinuousActionVecMockEnv):
+            pass
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(
+                observation_spec=Composite(
+                    observation=Unbounded(shape=(7,)),
+                    pixels=Bounded(low=0, high=255, shape=(3, 4, 4), dtype=torch.uint8),
+                )
+            ),
+            NextObservationDelta(),
+        )
+        # Access lazy in_keys via the transform.
+        in_keys = list(env.transform.in_keys)
+        assert ("observation",) in [tuple([k]) if isinstance(k, str) else tuple(k) for k in in_keys]
+        # No uint8 leaf made it in.
+        for k in in_keys:
+            spec = env.observation_spec[k] if not isinstance(k, tuple) else env.observation_spec[k]
+            assert spec.dtype.is_floating_point
+
+    def test_multi_in_keys_explicit(self):
+        torch.manual_seed(1)
+        from torchrl.data.tensor_specs import Composite, Unbounded
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(
+                observation_spec=Composite(
+                    observation=Unbounded(shape=(7,)),
+                    observation_orig=Unbounded(shape=(7,)),
+                )
+            ),
+            NextObservationDelta(in_keys=["observation", "observation_orig"]),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td)
+        assert out["next", "observation"].dtype == torch.float16
+        assert out["next", "observation_orig"].dtype == torch.float16
+        assert out_["observation"].dtype == torch.float32
+        assert out_["observation_orig"].dtype == torch.float32
+
+    def test_reset_between_steps(self):
+        # Stateless contract: a reset between two steps must not corrupt the
+        # delta computed on the second step.
+        torch.manual_seed(2)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        td0 = env.reset()
+        td0.set("action", env.action_spec.rand())
+        env.step_and_maybe_reset(td0)
+        td1 = env.reset()
+        td1.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td1)
+        expected = out["observation"].to(torch.float32) + out["next", "observation"].to(
+            torch.float32
+        )
+        tol = self._delta_tol(torch.float16, scale=max(1.0, expected.abs().max().item()))
+        torch.testing.assert_close(
+            out_["observation"].to(torch.float32), expected, atol=tol, rtol=tol
+        )
+
+    def test_compose_with_downstream_transform(self):
+        # NextObservationDelta inside a Compose with another env transform.
+        # Round-trip through the rehydration must still match a reference run
+        # that doesn't compress.
+        from torchrl.envs.transforms import RewardSum
+
+        torch.manual_seed(3)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                NextObservationDelta(in_keys=["observation"]),
+                RewardSum(),
+            ),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td)
+        assert out["next", "observation"].dtype == torch.float16
+        assert out_["observation"].dtype == torch.float32
+
+    def test_collector_use_buffers_false(self):
+        # End-to-end: with use_buffers=False (no pre-allocated final_rollout),
+        # the stacked rollout actually carries float16 ("next", obs).
+        from torchrl.collectors import SyncDataCollector
+
+        torch.manual_seed(4)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            )
+
+        collector = SyncDataCollector(
+            create_env_fn=make_env,
+            policy=None,
+            frames_per_batch=16,
+            total_frames=16,
+            use_buffers=False,
+        )
+        try:
+            batch = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert batch["next", "observation"].dtype == torch.float16
+        assert batch["observation"].dtype == torch.float32
+
+        # Reconstruct next.obs at full precision and verify shape/finiteness.
+        recon = batch["observation"].to(torch.float32) + batch["next", "observation"].to(
+            torch.float32
+        )
+        assert recon.shape == batch["observation"].shape
+        assert torch.isfinite(recon).all()

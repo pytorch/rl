@@ -386,6 +386,39 @@ class Transform(nn.Module):
         next_tensordict = self._call(next_tensordict)
         return next_tensordict
 
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> TensorDictBase:
+        """Hook called after :func:`~torchrl.envs.utils.step_mdp` inside ``step_and_maybe_reset``.
+
+        Override when a transform needs to modify the tensordict the policy
+        will read on the next iteration *after* root keys have been promoted
+        from ``("next", ...)``. This is the natural place to undo / rehydrate
+        a representation that was compressed in :meth:`_step` (for example
+        a low-precision delta) before the policy sees the next observation.
+
+        Args:
+            tensordict (TensorDictBase): post-step tensordict, still carrying
+                the ``("next", ...)`` sub-tensordict.
+            tensordict_ (TensorDictBase): post-step-mdp tensordict, with root
+                keys promoted from ``("next", ...)``. This is what the next
+                policy call will receive (after a possible reset).
+
+        Returns:
+            The (possibly modified) ``tensordict_``.
+
+        .. note:: Transforms that implement this hook must rely on the env they
+            are attached to wiring it up. :class:`~torchrl.envs.TransformedEnv`
+            delegates ``EnvBase._post_step_mdp_hooks`` to
+            ``self.transform._post_step_mdp_hooks``, so a transform appended to
+            a ``TransformedEnv`` is picked up automatically. Non-collector
+            entry points (e.g. ``env.rollout()``) currently do not invoke this
+            hook.
+        """
+        return tensordict_
+
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform.
 
@@ -1004,12 +1037,17 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self.empty_cache()
         return self
 
-    # def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
-    # """Allows modification of the tensordict after the step_mdp."""
-    # if type(self.base_env)._post_step_mdp_hooks is not None:
-    # If the base env has a _post_step_mdp_hooks, we call it
-    # tensordict = self.base_env._post_step_mdp_hooks(tensordict)
-    # return tensordict
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> TensorDictBase:
+        """Run the transform-chain post-step-mdp hook, then the base env's own."""
+        tensordict_ = self.transform._post_step_mdp_hooks(tensordict, tensordict_)
+        base_env = self.base_env
+        if base_env is not None and base_env._post_step_mdp_hooks is not None:
+            tensordict_ = base_env._post_step_mdp_hooks(tensordict, tensordict_)
+        return tensordict_
 
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:
@@ -1593,6 +1631,15 @@ class Compose(Transform):
         for t in self.transforms:
             next_tensordict = t._step(tensordict, next_tensordict)
         return next_tensordict
+
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict_ = t._post_step_mdp_hooks(tensordict, tensordict_)
+        return tensordict_
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in reversed(self.transforms):

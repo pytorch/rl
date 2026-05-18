@@ -3892,8 +3892,8 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 tensordict
             )
         tensordict_ = self._step_mdp(tensordict)
-        # if self._post_step_mdp_hooks is not None:
-        # tensordict_ = self._post_step_mdp_hooks(tensordict_)
+        if self._post_step_mdp_hooks is not None:
+            tensordict_ = self._post_step_mdp_hooks(tensordict, tensordict_)
         if native_autoreset:
             for obs_key, obs in reset_observations.items():
                 if obs_key in tensordict_.keys(True, True):
@@ -3908,7 +3908,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
-    # _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None
+    _post_step_mdp_hooks: Callable[
+        [TensorDictBase, TensorDictBase], TensorDictBase
+    ] | None = None
+    """Optional hook called after :meth:`_step_mdp` inside :meth:`step_and_maybe_reset`.
+
+    Signature: ``(tensordict, tensordict_) -> tensordict_`` where ``tensordict``
+    is the post-step tensordict (still carrying ``("next", ...)`` entries) and
+    ``tensordict_`` is the result of ``step_mdp``. Used by transforms that need
+    to modify the flowing tensordict the policy will read on the next iteration
+    (for example to rehydrate observations that were compressed in
+    :meth:`Transform._step`).
+
+    Defaults to ``None``: when unset, the hook is skipped. Transforms that need
+    it are expected to expose a ``_post_step_mdp_hooks`` method themselves and
+    rely on :class:`~torchrl.envs.TransformedEnv` to delegate the call.
+    """
 
     @property
     @_cache_value
