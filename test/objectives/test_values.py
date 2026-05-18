@@ -412,17 +412,13 @@ class TestValues:
 
     @pytest.mark.parametrize("with_internal_done", [False, True])
     @pytest.mark.parametrize("compact_cat_dim", ["batch", "time"])
-    def test_gae_shifted_compact_and_legacy(
-        self, with_internal_done, compact_cat_dim
-    ):
+    def test_gae_shifted_compact_and_legacy(self, with_internal_done, compact_cat_dim):
         # Both shifted='compact' and shifted='legacy' must produce a valid
         # advantage. 'legacy' must match shifted=False exactly. 'compact'
         # is allowed a small boundary bias from copying V(obs[T-1]) at
         # the rollout boundary; not asserted.
         torch.manual_seed(0)
-        td, obs_dim = self._build_shifted_test_td(
-            with_internal_done=with_internal_done
-        )
+        td, obs_dim = self._build_shifted_test_td(with_internal_done=with_internal_done)
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1),
             in_keys=["observation"],
