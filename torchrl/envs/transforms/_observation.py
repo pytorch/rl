@@ -1582,7 +1582,11 @@ class NextObservationDelta(Transform):
                 continue
             if self.auto_skip and next_obs.dtype == self.delta_dtype:
                 continue
-            delta = next_obs.to(self.delta_dtype) - obs.to(self.delta_dtype)
+            # Subtract in the source (typically full-precision) dtype, then
+            # cast once. This loses fewer significant bits than casting each
+            # operand to ``delta_dtype`` first and subtracting in low precision
+            # (which would risk catastrophic cancellation for nearby values).
+            delta = (next_obs - obs).to(self.delta_dtype)
             next_tensordict.set(key, delta)
         return next_tensordict
 
