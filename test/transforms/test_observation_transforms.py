@@ -2860,7 +2860,9 @@ class TestNextObservationDelta(TransformBase):
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(
-            ParallelEnv(2, lambda: ContinuousActionVecMockEnv(), mp_start_method="fork"),
+            ParallelEnv(
+                2, lambda: ContinuousActionVecMockEnv(), mp_start_method="fork"
+            ),
             NextObservationDelta(in_keys=["observation"]),
         )
         try:
@@ -2897,11 +2899,12 @@ class TestNextObservationDelta(TransformBase):
 
         # Rehydrated flowing root == root_obs + delta (round-tripped through
         # the delta dtype).
-        expected = (
-            post_step["observation"].to(torch.float32)
-            + post_step["next", "observation"].to(torch.float32)
+        expected = post_step["observation"].to(torch.float32) + post_step[
+            "next", "observation"
+        ].to(torch.float32)
+        tol = self._delta_tol(
+            torch.float16, scale=max(1.0, expected.abs().max().item())
         )
-        tol = self._delta_tol(torch.float16, scale=max(1.0, expected.abs().max().item()))
         torch.testing.assert_close(
             flowing["observation"].to(torch.float32), expected, atol=tol, rtol=tol
         )
@@ -2919,9 +2922,7 @@ class TestNextObservationDelta(TransformBase):
         )
         # Extend goes through `inv`, which is a no-op for this transform
         # (it has no in_keys_inv) -- so the write succeeds.
-        rb.extend(
-            TensorDict({"observation": torch.zeros(4, 3)}, batch_size=[4])
-        )
+        rb.extend(TensorDict({"observation": torch.zeros(4, 3)}, batch_size=[4]))
         # Sampling, however, routes through `forward`, which is unsupported
         # for this env-side-only transform.
         with pytest.raises(NotImplementedError, match="env-side transform"):
@@ -2950,10 +2951,16 @@ class TestNextObservationDelta(TransformBase):
         )
         # Access lazy in_keys via the transform.
         in_keys = list(env.transform.in_keys)
-        assert ("observation",) in [tuple([k]) if isinstance(k, str) else tuple(k) for k in in_keys]
+        assert ("observation",) in [
+            (k,) if isinstance(k, str) else tuple(k) for k in in_keys
+        ]
         # No uint8 leaf made it in.
         for k in in_keys:
-            spec = env.observation_spec[k] if not isinstance(k, tuple) else env.observation_spec[k]
+            spec = (
+                env.observation_spec[k]
+                if not isinstance(k, tuple)
+                else env.observation_spec[k]
+            )
             assert spec.dtype.is_floating_point
 
     def test_multi_in_keys_explicit(self):
@@ -2994,7 +3001,9 @@ class TestNextObservationDelta(TransformBase):
         expected = out["observation"].to(torch.float32) + out["next", "observation"].to(
             torch.float32
         )
-        tol = self._delta_tol(torch.float16, scale=max(1.0, expected.abs().max().item()))
+        tol = self._delta_tol(
+            torch.float16, scale=max(1.0, expected.abs().max().item())
+        )
         torch.testing.assert_close(
             out_["observation"].to(torch.float32), expected, atol=tol, rtol=tol
         )
@@ -3049,9 +3058,9 @@ class TestNextObservationDelta(TransformBase):
         assert batch["next", "observation"].dtype == torch.float16
         assert batch["observation"].dtype == torch.float32
 
-        recon = batch["observation"].to(torch.float32) + batch["next", "observation"].to(
-            torch.float32
-        )
+        recon = batch["observation"].to(torch.float32) + batch[
+            "next", "observation"
+        ].to(torch.float32)
         assert recon.shape == batch["observation"].shape
         assert torch.isfinite(recon).all()
 

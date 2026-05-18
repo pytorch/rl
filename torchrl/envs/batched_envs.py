@@ -716,11 +716,12 @@ class BatchedEnvBase(EnvBase):
 
     @staticmethod
     def _validate_worker_env(env) -> None:
-        """Walk transforms on a worker env and call each transform's
-        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`.
+        """Check that each transform on a worker env is batched-env compatible.
 
-        Transforms that should not live inside a batched-env worker raise here
-        with a clear message so the user gets immediate feedback rather than
+        Walks ``env.transform`` and invokes
+        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`
+        on each entry. Transforms that should not live inside a batched-env
+        worker raise here so the user gets immediate feedback rather than
         silently-wrong runtime behavior.
         """
         transform = getattr(env, "transform", None)

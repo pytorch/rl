@@ -244,8 +244,6 @@ def get_env_metadata(
     Args:
         env_or_creator: env instance or a creator callable / :class:`EnvCreator`.
         kwargs: optional kwargs forwarded to a creator.
-
-    Keyword Args:
         env_validator: optional callable invoked on the (possibly transient)
             env instance before its metadata is extracted. Used by batched
             envs to fail loudly on worker-incompatible transforms at
