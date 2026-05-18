@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
+from torchrl.record.loggers.trackio import TrackioLogger
+from torchrl.record.loggers.wandb import WandbLogger
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 
@@ -37,11 +40,35 @@ class WandbLoggerConfig(LoggerConfig):
     project: str | None = None
     video_fps: int = 32
     log_dir: str | None = None
+    wandb_kwargs: dict[str, Any] = field(default_factory=dict)
 
-    _target_: str = "torchrl.record.loggers.wandb.WandbLogger"
+    _target_: str = "torchrl.trainers.algorithms.configs.logging._make_wandb_logger"
 
     def __post_init__(self) -> None:
         pass
+
+
+def _make_wandb_logger(
+    exp_name: str,
+    offline: bool = False,
+    save_dir: str | None = None,
+    id: str | None = None,
+    project: str | None = None,
+    video_fps: int = 32,
+    log_dir: str | None = None,
+    wandb_kwargs: dict[str, Any] | None = None,
+) -> WandbLogger:
+    wandb_kwargs = dict(wandb_kwargs or {})
+    return WandbLogger(
+        exp_name=exp_name,
+        offline=offline,
+        save_dir=save_dir,
+        id=id,
+        project=project,
+        video_fps=video_fps,
+        log_dir=log_dir,
+        **wandb_kwargs,
+    )
 
 
 @dataclass
@@ -59,6 +86,40 @@ class TensorboardLoggerConfig(LoggerConfig):
 
     def __post_init__(self) -> None:
         pass
+
+
+@dataclass
+class TrackioLoggerConfig(LoggerConfig):
+    """A class to configure a Trackio logger.
+
+    .. seealso::
+        :class:`~torchrl.record.loggers.trackio.TrackioLogger`
+    """
+
+    exp_name: str
+    project: str
+    video_fps: int = 32
+    trackio_kwargs: dict[str, Any] = field(default_factory=dict)
+
+    _target_: str = "torchrl.trainers.algorithms.configs.logging._make_trackio_logger"
+
+    def __post_init__(self) -> None:
+        pass
+
+
+def _make_trackio_logger(
+    exp_name: str,
+    project: str,
+    video_fps: int = 32,
+    trackio_kwargs: dict[str, Any] | None = None,
+) -> TrackioLogger:
+    trackio_kwargs = dict(trackio_kwargs or {})
+    return TrackioLogger(
+        exp_name=exp_name,
+        project=project,
+        video_fps=video_fps,
+        **trackio_kwargs,
+    )
 
 
 @dataclass

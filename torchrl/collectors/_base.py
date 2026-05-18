@@ -137,6 +137,82 @@ class ProfileConfig:
         return worker_idx in self.workers
 
 
+class _ProfilerHook:
+    """A ``post_collect_hook`` callable that drives a ``torch.profiler.profile``.
+
+    The hook owns a profiler in the process where it lives — the main process
+    for a single :class:`Collector`, each worker process for a multi-collector,
+    each remote actor for a Ray collector. It starts the profiler lazily on the
+    first call, steps once per rollout, and auto-stops + exports after
+    ``config.num_rollouts`` rollouts.
+
+    Pickling — the hook is a plain Python object and travels through
+    :class:`~torchrl.data.utils.CloudpickleWrapper` when pushed to mp workers.
+    The :class:`torch.profiler.profile` instance is built lazily inside the
+    target process so it never needs to cross a pickle boundary itself.
+    """
+
+    def __init__(self, config: ProfileConfig, worker_idx: int = 0):
+        self.config = config
+        self.worker_idx = worker_idx
+        self._profiler = None
+        self._rollout_count = 0
+        self._stopped = False
+
+    def _build_profiler(self) -> Any | None:
+        active = self.config.num_rollouts - self.config.warmup_rollouts
+        schedule = torch.profiler.schedule(
+            skip_first=self.config.warmup_rollouts,
+            wait=0,
+            warmup=0,
+            active=active,
+            repeat=1,
+        )
+        activities = self.config.get_activities()
+        if not activities:
+            return None
+        if self.config.on_trace_ready is not None:
+            on_trace_ready = self.config.on_trace_ready
+        else:
+            save_path = self.config.get_save_path(self.worker_idx)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            from torchrl import logger as torchrl_logger
+
+            def on_trace_ready(prof, _path=save_path, _idx=self.worker_idx):
+                prof.export_chrome_trace(str(_path))
+                torchrl_logger.info(f"Profiler [worker {_idx}]: trace saved to {_path}")
+
+        return torch.profiler.profile(
+            activities=activities,
+            schedule=schedule,
+            on_trace_ready=on_trace_ready,
+            record_shapes=self.config.record_shapes,
+            profile_memory=self.config.profile_memory,
+            with_stack=self.config.with_stack,
+            with_flops=self.config.with_flops,
+        )
+
+    def __call__(self, batch: TensorDictBase | None = None) -> None:
+        if self._stopped:
+            return
+        if self._profiler is None:
+            self._profiler = self._build_profiler()
+            if self._profiler is None:
+                self._stopped = True
+                return
+            self._profiler.start()
+        self._profiler.step()
+        self._rollout_count += 1
+        if self._rollout_count >= self.config.num_rollouts:
+            self.stop()
+
+    def stop(self) -> None:
+        """Stop the underlying profiler (idempotent)."""
+        if self._profiler is not None and not self._stopped:
+            self._profiler.stop()
+            self._stopped = True
+
+
 class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     """Base class for data collectors.
 
@@ -212,6 +288,14 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                 collector.start()  # workers fill rb with complete trajectories
 
             Defaults to ``None`` (fixed-frame batches).
+        trajs_per_write (int, optional): When ``trajs_per_batch`` is used with
+            a replay buffer, write this many completed trajectories to the
+            buffer per ``extend`` call. Larger values reduce Python overhead
+            for highly batched environments. For example, if 10 complete
+            trajectories are queued for replay-buffer insertion,
+            ``trajs_per_write=2`` makes 5 writes, while
+            ``trajs_per_write=10`` or larger makes 1 write. Defaults to
+            ``None`` (write all currently queued completed trajectories).
     """
 
     _task = None
@@ -228,6 +312,67 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     verbose: bool = False
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
+    trajs_per_write: int | None = None
+    _pre_collect_hook: Callable[[], None] | None = None
+    _post_collect_hook: Callable[[TensorDictBase], None] | None = None
+
+    def __init__(
+        self,
+        *,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+    ):
+        self._pre_collect_hook = pre_collect_hook
+        self._post_collect_hook = post_collect_hook
+
+    @property
+    def pre_collect_hook(self) -> Callable[[], None] | None:
+        """Get the pre-collection hook.
+
+        Returns:
+            A callable to be executed before each rollout, or None.
+        """
+        return self._pre_collect_hook
+
+    @pre_collect_hook.setter
+    def pre_collect_hook(self, hook: Callable[[], None] | None) -> None:
+        """Set the pre-collection hook.
+
+        Args:
+            hook: A callable to be executed before each rollout.
+        """
+        self._pre_collect_hook = hook
+
+    @property
+    def post_collect_hook(self) -> Callable[[TensorDictBase], None] | None:
+        """Get the post-collection hook.
+
+        Returns:
+            A callable to be executed after each rollout, receiving the collected
+            TensorDict as argument, or None.
+        """
+        return self._post_collect_hook
+
+    @post_collect_hook.setter
+    def post_collect_hook(self, hook: Callable[[TensorDictBase], None] | None) -> None:
+        """Set the post-collection hook.
+
+        Args:
+            hook: A callable to be executed after each rollout, receiving the
+                collected TensorDict as argument.
+        """
+        self._post_collect_hook = hook
+
+    def set_post_collect_hook(
+        self, hook: Callable[[TensorDictBase], None] | None
+    ) -> None:
+        """Method form of the ``post_collect_hook`` setter.
+
+        Exposed because Ray actor handles can call methods (`actor.method.remote(...)`)
+        but cannot directly invoke property setters. Keeping the actual setter
+        for in-process use and this method for remote-actor use.
+        """
+        self.post_collect_hook = hook
 
     def enable_profile(
         self,
@@ -312,7 +457,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         if activities is None:
             activities = ["cpu", "cuda"]
 
-        self._profile_config = ProfileConfig(
+        config = ProfileConfig(
             workers=workers,
             num_rollouts=num_rollouts,
             warmup_rollouts=warmup_rollouts,
@@ -324,6 +469,41 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             with_flops=with_flops,
             on_trace_ready=on_trace_ready,
         )
+        self._profile_config = config
+        self._install_profile_hooks(config)
+
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install the per-process profiler hook.
+
+        Default implementation handles the single-process :class:`Collector`
+        by saving the current ``post_collect_hook`` and replacing it with a
+        :class:`_ProfilerHook`. Multi-process / Ray collectors override this
+        to fan out per-worker hooks (each worker gets its own ``worker_idx``).
+        """
+        self._saved_post_collect_hook = self._post_collect_hook
+        self.post_collect_hook = _ProfilerHook(config, worker_idx=0)
+
+    def disable_profile(self) -> None:
+        """Stop any in-flight profiler and restore the prior ``post_collect_hook``.
+
+        Safe to call when profiling was never enabled (becomes a no-op). When
+        the profiler was already self-stopped after ``num_rollouts``, this just
+        clears the hook and restores any user-set ``post_collect_hook``.
+        """
+        if self._profile_config is None:
+            return
+        try:
+            self._uninstall_profile_hooks(self._profile_config)
+        finally:
+            self._profile_config = None
+
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Single-process default uninstall: stop hook locally and restore."""
+        hook = self._post_collect_hook
+        if isinstance(hook, _ProfilerHook):
+            hook.stop()
+        self._post_collect_hook = getattr(self, "_saved_post_collect_hook", None)
+        self._saved_post_collect_hook = None
 
     @property
     def profile_config(self) -> ProfileConfig | None:
@@ -408,6 +588,72 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     f"Arguments and keyword arguments are not supported for non-callable attributes. Got {args} and {kwargs} for {attr_path}"
                 )
             return attr
+
+    def get_distant_attr(self, attr: str) -> Any:
+        """Get a nested attribute of this collector.
+
+        This method allows remote callers to retrieve attributes from nested
+        structures of the collector without needing to know the full structure.
+
+        Args:
+            attr: Full path to the attribute, e.g.,
+                "_receiver_schemes['model_id'].some_attribute"
+
+        Returns:
+            The value of the attribute.
+
+        Examples:
+            >>> collector.get_distant_attr("_receiver_schemes['policy']._sync_interval")
+        """
+        return _resolve_attr(self, attr)
+
+    def map_fn(
+        self,
+        method_name: str,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> list[Any]:
+        """Apply a method to each set of arguments.
+
+        This method executes a method on the collector with different arguments,
+        returning a list of results.
+
+        Args:
+            method_name: Name of the method to call on the collector.
+            list_of_args: List of positional argument tuples. Each tuple
+                contains the arguments for one call.
+            list_of_kwargs: List of keyword argument dicts. Each dict
+                contains the kwargs for one call.
+
+        Returns:
+            List of return values from each method call.
+
+        Examples:
+            >>> # Call a method with different arguments
+            >>> collector.map_fn("update_policy_weights_", list_of_args=[(weights1,), (weights2,)])
+            >>>
+            >>> # Call with kwargs
+            >>> collector.map_fn("update_policy_weights_", list_of_kwargs=[{"weights": w1}, {"weights": w2}])
+        """
+        if list_of_args is None:
+            list_of_args = [()] * len(list_of_kwargs) if list_of_kwargs else [()]
+        if list_of_kwargs is None:
+            list_of_kwargs = [{}] * len(list_of_args)
+
+        if len(list_of_args) != len(list_of_kwargs):
+            raise ValueError(
+                f"list_of_args and list_of_kwargs must have the same length. "
+                f"Got {len(list_of_args)} and {len(list_of_kwargs)}"
+            )
+
+        method = _resolve_attr(self, method_name)
+        if not callable(method):
+            raise AttributeError(f"Attribute {method_name} is not callable.")
+
+        results = []
+        for args, kwargs in zip(list_of_args, list_of_kwargs):
+            results.append(method(*args, **kwargs))
+        return results
 
     def _get_policy_and_device(
         self,
@@ -1085,9 +1331,18 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     # pad-then-unpad round-trip and works with any storage
                     # ndim (variable-length trajectories cannot fill a
                     # fixed second dimension reliably).
+                    trajs_per_write = getattr(self, "trajs_per_write", None)
+                    if trajs_per_write is None:
+                        trajs_per_write = len(complete_trajs)
+                    else:
+                        trajs_per_write = max(int(trajs_per_write), 1)
                     while complete_trajs:
-                        traj = complete_trajs.pop(0)
-                        rb.extend(traj)
+                        trajs = complete_trajs[:trajs_per_write]
+                        del complete_trajs[:trajs_per_write]
+                        if len(trajs) == 1:
+                            rb.extend(trajs[0])
+                        else:
+                            rb.extend(torch.cat(trajs, dim=0))
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:

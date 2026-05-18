@@ -12,6 +12,7 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import (
     _check_for_faulty_process,
+    _maybe_record_function_decorator,
     accept_remote_rref_udf_invocation,
     logger as torchrl_logger,
 )
@@ -129,14 +130,14 @@ class MultiAsyncCollector(MultiCollector):
         self.out_tensordicts = defaultdict(lambda: None)
         self.running = False
 
-        if self.postprocs is not None and self.replay_buffer is None:
-            postproc = self.postprocs
-            self.postprocs = {}
+        self._postproc_per_device = {}
+        if self.postproc is not None and self.replay_buffer is None:
+            postproc = self.postproc
             for _device in self.storing_device:
-                if _device not in self.postprocs:
+                if _device not in self._postproc_per_device:
                     if hasattr(postproc, "to"):
                         postproc = deepcopy(postproc).to(_device)
-                    self.postprocs[_device] = postproc
+                    self._postproc_per_device[_device] = postproc
 
     # for RPC
     def next(self):
@@ -170,6 +171,7 @@ class MultiAsyncCollector(MultiCollector):
         return super().load_state_dict(state_dict)
 
     # for RPC
+    @_maybe_record_function_decorator("MultiAsyncCollector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -268,8 +270,8 @@ class MultiAsyncCollector(MultiCollector):
                 worker_frames = self.frames_per_batch_worker()
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
-            if out is not None and self.postprocs:
-                out = self.postprocs[out.device](out)
+            if out is not None and self._postproc_per_device:
+                out = self._postproc_per_device[out.device](out)
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement

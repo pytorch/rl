@@ -660,8 +660,14 @@ class VmasEnv(VmasWrapper):
             in one group named ``"agents"``.
             Otherwise, a group map can be specified or selected from some premade options.
             See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
-        **kwargs (Dict, optional): These are additional arguments that can be passed to the VMAS scenario constructor.
-            (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
+        scenario_kwargs (Dict, optional): dictionary of additional arguments passed to the VMAS
+            scenario constructor (e.g., number of agents, reward sparsity).
+            This is convenient when scenario parameters are stored under a dedicated config field.
+        **kwargs (Dict, optional): Additional arguments passed to the VMAS scenario constructor.
+            This allows passing scenario arguments directly as keyword arguments.
+            If the same key is provided in both ``scenario_kwargs`` and ``kwargs``, the value in
+            ``kwargs`` takes precedence.
+            The available arguments will vary based on the chosen scenario.
             To see the available arguments for a specific scenario, see the constructor in its file from
             `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3/vmas/scenarios>`__.
 
@@ -751,6 +757,7 @@ class VmasEnv(VmasWrapper):
         categorical_actions: bool = True,
         seed: int | None = None,
         group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
+        scenario_kwargs: dict | None = None,
         **kwargs,
     ):
         if not _has_vmas:
@@ -758,6 +765,7 @@ class VmasEnv(VmasWrapper):
                 f"vmas python package was not found. Please install this dependency. "
                 f"More info: {self.git_url}."
             )
+        scenario_kwargs = {**(scenario_kwargs or {}), **kwargs}
         super().__init__(
             scenario=scenario,
             num_envs=num_envs,
@@ -766,7 +774,7 @@ class VmasEnv(VmasWrapper):
             seed=seed,
             categorical_actions=categorical_actions,
             group_map=group_map,
-            **kwargs,
+            **scenario_kwargs,
         )
 
     def _check_kwargs(self, kwargs: dict):

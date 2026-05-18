@@ -1,2 +1,3 @@
 include torchrl/version.py
 include version.txt
+recursive-include torchrl/csrc *.cpp *.cu *.h

@@ -22,6 +22,39 @@ def _close_mp_queue(queue: mp.Queue) -> None:
     queue.join_thread()
 
 
+def _tensor_summary(weights: TensorDictBase) -> tuple[set[str], int, int]:
+    devices = set()
+    numel = 0
+    nbytes = 0
+    for value in weights.values(True, True):
+        if not torch.is_tensor(value):
+            continue
+        devices.add(str(value.device))
+        numel += value.numel()
+        nbytes += value.numel() * value.element_size()
+    return devices, numel, nbytes
+
+
+def _log_weight_sync(
+    *,
+    model_id: str | None,
+    worker_idx: int | None,
+    source: TensorDictBase,
+    destination: TensorDictBase,
+) -> None:
+    source_devices, numel, nbytes = _tensor_summary(source)
+    destination_devices, _, _ = _tensor_summary(destination)
+    torchrl_logger.debug(
+        "Synced weights model_id=%s worker=%s params=%s bytes=%s devices=%s -> %s",
+        model_id,
+        worker_idx,
+        numel,
+        nbytes,
+        sorted(source_devices),
+        sorted(destination_devices),
+    )
+
+
 class SharedMemTransport:
     """Shared memory transport for in-place weight updates.
 
@@ -210,6 +243,12 @@ class SharedMemTransport:
                         raise RuntimeError(
                             "Gradients should not be required for weights."
                         )
+                    _log_weight_sync(
+                        model_id=None,
+                        worker_idx=None,
+                        source=weights_to_update,
+                        destination=buffer,
+                    )
                     buffer.update_(weights_to_update, non_blocking=True)
 
         if torch.cuda.is_available():
@@ -242,6 +281,12 @@ class SharedMemTransport:
         if weights_to_update.requires_grad:
             raise RuntimeError("Gradients should not be required for weights.")
 
+        _log_weight_sync(
+            model_id=None,
+            worker_idx=worker_idx,
+            source=weights_to_update,
+            destination=buffer,
+        )
         buffer.update_(weights_to_update, non_blocking=True)
 
     def receive_weights(
@@ -532,6 +577,8 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         for worker_idx, factory in enumerate(factories):
                             if factory is not None:
                                 worker_model = factory()
+                                if not isinstance(worker_model, nn.Module):
+                                    continue
                                 worker_weights = TensorDict.from_module(worker_model)
                                 worker_weights = worker_weights.data.apply(
                                     _cast, worker_weights
@@ -546,8 +593,20 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
                         # Set per_worker_weights flag on the scheme
                         self.per_worker_weights = True
                         return params_map
+            if not isinstance(model, nn.Module):
+                raise TypeError(
+                    f"SharedMemWeightSyncScheme requires an nn.Module policy, "
+                    f"got {type(model)}. Non-Module policies (e.g. RandomPolicy) "
+                    f"do not need weight synchronization."
+                )
             weights = TensorDict.from_module(model)
         elif model is not None:
+            if not isinstance(model, nn.Module):
+                raise TypeError(
+                    f"SharedMemWeightSyncScheme requires an nn.Module model, "
+                    f"got {type(model)}. Non-Module policies (e.g. RandomPolicy) "
+                    f"do not need weight synchronization."
+                )
             if weights is not None:
                 raise ValueError("weights cannot be provided if model is provided")
             weights = TensorDict.from_module(model)
@@ -805,6 +864,12 @@ class SharedMemWeightSyncScheme(WeightSyncScheme):
         # buffers (one per device). We must update ALL of them, not just the first.
         if self._shared_transport is not None and self.shared_transport.unique_weights:
             for shared_weights in self.shared_transport.unique_weights:
+                _log_weight_sync(
+                    model_id=model_id,
+                    worker_idx=None,
+                    source=fresh_weights,
+                    destination=shared_weights,
+                )
                 shared_weights.data.update_(fresh_weights.data)
             return self.shared_transport.unique_weights[0]
 

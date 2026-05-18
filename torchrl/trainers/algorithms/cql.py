@@ -35,6 +35,9 @@ from torchrl.trainers.trainers import (
 class CQLTrainer(Trainer):
     """A trainer class for Conservative Q-Learning (CQL) algorithm.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.CQLTrainerConfig` for the
+    Hydra configuration counterpart.
+
     This trainer implements the CQL algorithm, an off-policy actor-critic method
     that adds a conservative penalty to Q-value estimates to prevent overestimation
     of out-of-distribution actions. CQL is particularly effective for offline RL.
@@ -101,6 +104,7 @@ class CQLTrainer(Trainer):
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
         warnings.warn(
             "CQLTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -140,6 +144,7 @@ class CQLTrainer(Trainer):
             save_trainer_file=save_trainer_file,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection

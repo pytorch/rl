@@ -1,0 +1,56 @@
+# task and env
+env:
+  env_name: halfcheetah
+  num_envs: 4096          # batch size for mujoco-torch GPU-batched envs
+  compile: true            # torch.compile for env stepping
+
+# collector
+collector:
+  frames_per_batch: 65536  # 4096 envs x 16 steps (for GAE trajectory segments)
+  total_frames: 50_000_000
+  async_mode: start  # iterate | start
+  # iterate: semi-async, training gated on collector batches (for data in collector)
+  # start: fully async, collector.start() fills buffer independently
+
+# buffer
+buffer:
+  size: 2_000_000
+  max_staleness: -1  # no hard gate — let IS corrections handle arbitrary staleness
+  min_fill: 65536
+  sampler: staleness  # staleness | staleness_no_gate | random | no_replacement
+
+# logger
+logger:
+  backend: wandb
+  project_name: torchrl_example_ppo_async
+  group_name: null
+  exp_name: Mujoco_Async_GPU
+  test_interval: 500_000
+  num_eval_envs: 64
+  video: false
+
+# Optim
+optim:
+  lr: 5e-5
+  weight_decay: 0.0
+  anneal_lr: True
+  max_grad_norm: 1.0
+  device:            # training device (loss, optimizer, buffer). null=auto
+  collect_device:    # collector inference device. null=same as device
+  eval_device:       # evaluator device. null=same as device
+
+# loss
+loss:
+  gamma: 0.99
+  mini_batch_size: 4096
+  ppo_epochs: 10
+  gae_lambda: 0.95
+  clip_epsilon: 0.2
+  anneal_clip_epsilon: False
+  critic_coeff: 0.25
+  entropy_coeff: 0.01
+  loss_critic_type: l2
+  advantage_on: worker  # worker | learner
+  # worker: GAE computed on collector worker (stale critic, synced via SharedMemWeightSyncScheme)
+  # learner: TD(0) advantage computed at training time with current critic
+  # Only meaningful when collector.async_mode=start. Ignored when iterate.

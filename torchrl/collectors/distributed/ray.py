@@ -16,7 +16,7 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors._base import BaseCollector
+from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
@@ -367,7 +367,13 @@ class RayCollector(BaseCollector):
         use_env_creator: bool = False,
         no_cuda_sync: bool | None = None,
         trajs_per_batch: int | None = None,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
     ):
+        super().__init__(
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
+        )
         self.frames_per_batch = frames_per_batch
         if remote_configs is None:
             remote_configs = DEFAULT_REMOTE_CLASS_CONFIG
@@ -377,6 +383,18 @@ class RayCollector(BaseCollector):
 
         if collector_kwargs is None:
             collector_kwargs = {}
+        if pre_collect_hook is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("pre_collect_hook", pre_collect_hook)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("pre_collect_hook", pre_collect_hook)
+        if post_collect_hook is not None:
+            if isinstance(collector_kwargs, dict):
+                collector_kwargs.setdefault("post_collect_hook", post_collect_hook)
+            else:
+                for ck in collector_kwargs:
+                    ck.setdefault("post_collect_hook", post_collect_hook)
         if replay_buffer is not None:
             if not isinstance(replay_buffer, RayReplayBuffer):
                 raise TypeError(
@@ -532,12 +550,35 @@ class RayCollector(BaseCollector):
         else:
             self._frames_per_batch_corrected = frames_per_batch
 
+        # When the inner collector is a Multi*Collector built from a
+        # policy_factory (no policy instance), the inner collector's
+        # auto-scheme branch in MultiCollector only handles
+        # isinstance(policy, nn.Module); a remote update_policy_weights_(weights)
+        # would otherwise propagate to the remote node's main process but
+        # never reach its worker subprocesses. Inject a default
+        # SharedMemWeightSyncScheme on the inner collector so the broadcast
+        # actually lands. Only when the user hasn't already supplied one.
+        needs_inner_shared_mem_scheme = (
+            policy is None
+            and any(policy_factory)
+            and collector_class in (MultiSyncCollector, MultiAsyncCollector)
+        )
+
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
             # Don't pass policy_factory if we have a policy - remote collectors need the policy object
             # to be able to apply weight updates
             if policy is None:
                 collector_kwarg["policy_factory"] = policy_factory[i]
+            if (
+                needs_inner_shared_mem_scheme
+                and "weight_sync_schemes" not in collector_kwarg
+            ):
+                from torchrl.weight_update import SharedMemWeightSyncScheme
+
+                collector_kwarg["weight_sync_schemes"] = {
+                    "policy": SharedMemWeightSyncScheme()
+                }
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -853,6 +894,97 @@ class RayCollector(BaseCollector):
     def remote_collectors(self):
         """Returns list of remote collectors."""
         return self._remote_collectors
+
+    def _normalize_worker_calls(
+        self,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> tuple[list[tuple], list[dict]]:
+        if list_of_args is None and list_of_kwargs is None:
+            list_of_args = [()] * self.num_collectors
+            list_of_kwargs = [{}] * self.num_collectors
+        elif list_of_args is None:
+            list_of_args = [()] * len(list_of_kwargs)
+        elif list_of_kwargs is None:
+            list_of_kwargs = [{}] * len(list_of_args)
+
+        if len(list_of_args) != self.num_collectors:
+            raise ValueError(
+                f"Expected {self.num_collectors} argument entries, got {len(list_of_args)}."
+            )
+        if len(list_of_kwargs) != self.num_collectors:
+            raise ValueError(
+                f"Expected {self.num_collectors} keyword-argument entries, got "
+                f"{len(list_of_kwargs)}."
+            )
+        return list_of_args, list_of_kwargs
+
+    def map_fn(
+        self,
+        method_name: str,
+        list_of_args: list[tuple] | None = None,
+        list_of_kwargs: list[dict] | None = None,
+    ) -> list[Any]:
+        """Apply a method to each remote collector."""
+        list_of_args, list_of_kwargs = self._normalize_worker_calls(
+            list_of_args, list_of_kwargs
+        )
+        futures = [
+            collector.cascade_execute.remote(method_name, *args, **kwargs)
+            for collector, args, kwargs in zip(
+                self.remote_collectors, list_of_args, list_of_kwargs
+            )
+        ]
+        return ray.get(futures)
+
+    def get_distant_attr(self, attr: str) -> list[Any]:
+        """Get a nested attribute from each remote collector."""
+        return ray.get(
+            [
+                collector.get_distant_attr.remote(attr)
+                for collector in self.remote_collectors
+            ]
+        )
+
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install per-actor :class:`_ProfilerHook` on each selected remote actor.
+
+        Each actor receives its own ``_ProfilerHook(config, worker_idx=idx)``
+        through ``set_post_collect_hook`` (a regular method on
+        :class:`BaseCollector`) — Ray actor handles can call methods but not
+        property setters directly. Actors not in ``config.workers`` are left
+        untouched.
+        """
+        targeted = [idx for idx in config.workers if idx < len(self.remote_collectors)]
+        futures = [
+            self.remote_collectors[idx].set_post_collect_hook.remote(
+                _ProfilerHook(config, worker_idx=idx)
+            )
+            for idx in targeted
+        ]
+        ray.get(futures)
+
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Stop the per-actor profiler hooks and clear ``post_collect_hook``."""
+        targeted = [idx for idx in config.workers if idx < len(self.remote_collectors)]
+        # Best-effort stop — early-stop is harmless if it already auto-stopped.
+        try:
+            ray.get(
+                [
+                    self.remote_collectors[idx].cascade_execute.remote(
+                        "post_collect_hook.stop"
+                    )
+                    for idx in targeted
+                ]
+            )
+        except Exception:
+            pass
+        ray.get(
+            [
+                self.remote_collectors[idx].set_post_collect_hook.remote(None)
+                for idx in targeted
+            ]
+        )
 
     def stop_remote_collectors(self):
         """Stops all remote collectors."""

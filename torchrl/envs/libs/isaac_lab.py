@@ -20,6 +20,13 @@ class IsaacLabWrapper(GymWrapper):
         allow_done_after_reset (bool, optional): if ``True``, it is tolerated
             for envs to be ``done`` just after :meth:`reset` is called.
             Defaults to ``False``.
+        native_autoreset (bool, optional): if ``True``, keeps Isaac Lab's native
+            auto-reset observations in the collector hot path and avoids the
+            synthetic reset call in :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`.
+            The terminal ``"next"`` observation remains unavailable and is
+            marked with ``NaN``; the native reset observation is cloned into
+            the next root observation.
+            Defaults to ``False``.
 
     For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation.
 
@@ -54,6 +61,7 @@ class IsaacLabWrapper(GymWrapper):
         allow_done_after_reset: bool = True,
         convert_actions_to_numpy: bool = False,
         device: torch.device | None = None,
+        native_autoreset: bool = False,
         **kwargs,
     ):
         if device is None:

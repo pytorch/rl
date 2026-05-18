@@ -18,7 +18,7 @@ from tensordict import (
     TensorDict,
 )
 from tensordict.nn import TensorDictModuleBase
-from torch import nn
+from torch import multiprocessing as mp, nn
 
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.collectors import Collector, MultiSyncCollector
@@ -1118,8 +1118,6 @@ class TestConcurrentEnvs:
             self.main_penv(6)
             self.main_penv(9)
         else:
-            from torch import multiprocessing as mp
-
             q = mp.Queue(3)
             ps = []
             try:
@@ -1141,8 +1139,6 @@ class TestConcurrentEnvs:
             self.main_collector(6)
             self.main_collector(9)
         else:
-            from torch import multiprocessing as mp
-
             q = mp.Queue(3)
             ps = []
             try:
@@ -1225,8 +1221,6 @@ class TestLibThreading:
 
 @pytest.mark.skipif(IS_WIN, reason="fork not available on windows 10")
 def test_parallel_another_ctx():
-    from torch import multiprocessing as mp
-
     gc.collect()
 
     try:

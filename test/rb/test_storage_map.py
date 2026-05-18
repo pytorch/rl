@@ -605,8 +605,6 @@ class TestMCTSForest:
 
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_simple_tree(self):
-        from torchrl.envs import GymEnv
-
         env = GymEnv(PENDULUM_VERSIONED())
         r = env.rollout(10)
         state0 = r[0]
@@ -632,8 +630,6 @@ class TestMCTSForest:
         if tree_type == "simple":
             if not _has_gym:
                 pytest.skip("requires gym")
-            from torchrl.envs import GymEnv
-
             env = GymEnv(PENDULUM_VERSIONED())
             r = env.rollout(10)
             state0 = r[0]

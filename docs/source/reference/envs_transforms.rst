@@ -266,6 +266,7 @@ Available Transforms
     DoubleToFloat
     EndOfLifeTransform
     ExcludeTransform
+    ExpandAs
     FiniteTensorDictCheck
     FlattenObservation
     FrameSkipTransform
@@ -276,6 +277,7 @@ Available Transforms
     MeanActionSelector
     ModuleTransform
     MultiAction
+    NextStateReconstructor
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -283,6 +285,7 @@ Available Transforms
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RandomTruncationTransform
     RemoveEmptySpecs
     RenameTransform
     Resize
