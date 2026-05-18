@@ -2803,65 +2803,60 @@ class TestNextObservationDelta(TransformBase):
         # being represented to get a meaningful tolerance.
         return torch.finfo(delta_dtype).eps * 8.0 * scale
 
-    # `check_env_specs` is intentionally NOT used here. NextObservationDelta
-    # changes the runtime dtype of `("next", obs)` to `delta_dtype` while
-    # leaving `observation_spec` untouched (root and `("next", ...)` share the
-    # same spec in TorchRL, and we don't fork it in v1). The spec-vs-runtime
-    # check would therefore reject the env. We use a reset + step smoke test
-    # instead, which is what callers actually do.
+    # `check_env_specs` is not used here. It enforces
+    # ``observation_spec.contains(("next", obs))``, and TorchRL's spec system
+    # shares observation_spec between root and ("next", ...) leaves. Since
+    # this transform deliberately compresses ("next", obs) below the spec
+    # dtype, `spec.contains` fails. We assert end-to-end behavior instead:
+    # the env steps, the rollout / collector batch carries the compressed
+    # dtype, and the rehydrated flowing td is full precision.
 
     @staticmethod
-    def _smoke_one_step(env, *, expect_compressed: bool):
+    def _smoke_one_step(env):
         td = env.reset()
         td.set("action", env.action_spec.rand())
         post_step, flowing = env.step_and_maybe_reset(td)
-        if expect_compressed:
-            assert post_step["next", "observation"].dtype == torch.float16
-            assert flowing["observation"].dtype == torch.float32
-        else:
-            # batched-env wraps a TransformedEnv worker -- the outer batched
-            # env's step_and_maybe_reset does not invoke the hook, and may
-            # upcast through pre-allocated buffers. We only assert the env
-            # boots and steps without raising.
-            assert post_step["next", "observation"].shape == flowing["observation"].shape
+        assert post_step["next", "observation"].dtype == torch.float16
+        assert flowing["observation"].dtype == torch.float32
 
     def test_single_trans_env_check(self):
         env = TransformedEnv(
             ContinuousActionVecMockEnv(),
             NextObservationDelta(in_keys=["observation"]),
         )
-        self._smoke_one_step(env, expect_compressed=True)
+        self._smoke_one_step(env)
 
     def test_serial_trans_env_check(self):
-        env = SerialEnv(
-            2,
-            lambda: TransformedEnv(
-                ContinuousActionVecMockEnv(),
-                NextObservationDelta(in_keys=["observation"]),
-            ),
-        )
-        self._smoke_one_step(env, expect_compressed=False)
+        # NextObservationDelta inside a batched-env worker must raise at
+        # construction time -- the outer batched env's step_and_maybe_reset
+        # does not propagate the worker's transform hook and pre-allocated
+        # batched buffers would upcast the write anyway.
+        with pytest.raises(RuntimeError, match="cannot live inside a SerialEnv"):
+            SerialEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    NextObservationDelta(in_keys=["observation"]),
+                ),
+            )
 
     def test_parallel_trans_env_check(self):
-        env = ParallelEnv(
-            2,
-            lambda: TransformedEnv(
-                ContinuousActionVecMockEnv(),
-                NextObservationDelta(in_keys=["observation"]),
-            ),
-            mp_start_method="fork",
-        )
-        try:
-            self._smoke_one_step(env, expect_compressed=False)
-        finally:
-            env.close()
+        with pytest.raises(RuntimeError, match="cannot live inside a SerialEnv"):
+            ParallelEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    NextObservationDelta(in_keys=["observation"]),
+                ),
+                mp_start_method="fork",
+            )
 
     def test_trans_serial_env_check(self):
         env = TransformedEnv(
             SerialEnv(2, lambda: ContinuousActionVecMockEnv()),
             NextObservationDelta(in_keys=["observation"]),
         )
-        self._smoke_one_step(env, expect_compressed=True)
+        self._smoke_one_step(env)
 
     def test_trans_parallel_env_check(self):
         env = TransformedEnv(
@@ -2869,7 +2864,7 @@ class TestNextObservationDelta(TransformBase):
             NextObservationDelta(in_keys=["observation"]),
         )
         try:
-            self._smoke_one_step(env, expect_compressed=True)
+            self._smoke_one_step(env)
         finally:
             env.close()
 
@@ -3024,9 +3019,11 @@ class TestNextObservationDelta(TransformBase):
         assert out["next", "observation"].dtype == torch.float16
         assert out_["observation"].dtype == torch.float32
 
-    def test_collector_use_buffers_false(self):
-        # End-to-end: with use_buffers=False (no pre-allocated final_rollout),
-        # the stacked rollout actually carries float16 ("next", obs).
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_collector_compressed(self, use_buffers):
+        # End-to-end: the stacked rollout actually carries float16
+        # ("next", obs) in both the pre-allocated (use_buffers=True) and the
+        # lazy (use_buffers=False) collector paths.
         from torchrl.collectors import SyncDataCollector
 
         torch.manual_seed(4)
@@ -3042,7 +3039,7 @@ class TestNextObservationDelta(TransformBase):
             policy=None,
             frames_per_batch=16,
             total_frames=16,
-            use_buffers=False,
+            use_buffers=use_buffers,
         )
         try:
             batch = next(iter(collector))
@@ -3052,9 +3049,33 @@ class TestNextObservationDelta(TransformBase):
         assert batch["next", "observation"].dtype == torch.float16
         assert batch["observation"].dtype == torch.float32
 
-        # Reconstruct next.obs at full precision and verify shape/finiteness.
         recon = batch["observation"].to(torch.float32) + batch["next", "observation"].to(
             torch.float32
         )
         assert recon.shape == batch["observation"].shape
         assert torch.isfinite(recon).all()
+
+    def test_env_rollout_hook_fires(self):
+        # env.rollout() must invoke _post_step_mdp_hooks so the flowing td
+        # carries full-precision root obs even on the stop-early path.
+        torch.manual_seed(5)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        out = env.rollout(8, break_when_any_done=True)
+        # Stacked ("next", obs) is compressed; root obs is full precision
+        # because each iteration's flowing td was rehydrated by the hook
+        # before becoming the next iteration's root.
+        assert out["next", "observation"].dtype == torch.float16
+        assert out["observation"].dtype == torch.float32
+
+    def test_env_rollout_nonstop_hook_fires(self):
+        torch.manual_seed(6)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        out = env.rollout(8, break_when_any_done=False)
+        assert out["next", "observation"].dtype == torch.float16
+        assert out["observation"].dtype == torch.float32

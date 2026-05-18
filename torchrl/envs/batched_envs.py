@@ -714,13 +714,28 @@ class BatchedEnvBase(EnvBase):
     def _has_dynamic_specs(self):
         return not self._use_buffers
 
+    @staticmethod
+    def _validate_worker_env(env) -> None:
+        """Walk transforms on a worker env and call each transform's
+        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`.
+
+        Transforms that should not live inside a batched-env worker raise here
+        with a clear message so the user gets immediate feedback rather than
+        silently-wrong runtime behavior.
+        """
+        transform = getattr(env, "transform", None)
+        if transform is not None:
+            transform._check_batched_worker_compat()
+
     def _get_metadata(
         self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
             meta_data: EnvMetaData = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
+                create_env_fn[0],
+                create_env_kwargs[0],
+                env_validator=self._validate_worker_env,
             )
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
@@ -740,7 +755,11 @@ class BatchedEnvBase(EnvBase):
             self.meta_data: list[EnvMetaData] = []
             for i in range(n_tasks):
                 self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
+                    get_env_metadata(
+                        create_env_fn[i],
+                        create_env_kwargs[i],
+                        env_validator=self._validate_worker_env,
+                    ).clone()
                 )
             if self.share_individual_td is not True:
                 share_individual_td = not _stackable(

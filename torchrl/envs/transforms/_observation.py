@@ -1468,19 +1468,11 @@ class NextObservationDelta(Transform):
         representable step.
 
     .. warning::
-        Rollout memory savings only materialize when the stacked output is
-        **not** pre-allocated at full precision. With
-        :class:`~torchrl.collectors.SyncDataCollector` set ``use_buffers=False``
-        (or use a lazy replay-buffer storage). Pre-allocated
-        ``_final_rollout`` buffers will upcast writes back to the original
-        dtype and erase the saving.
-
-    .. warning::
-        The post-step-mdp rehydration is wired through
-        :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`, which is the
-        entry point used by the data collectors. ``env.rollout()`` does not
-        currently invoke the hook, so when used directly users should
-        rehydrate manually if they need the next obs at full precision.
+        The transform must live **outside** any batched env
+        (``TransformedEnv(ParallelEnv(N, factory), NextObservationDelta())``).
+        Building a :class:`~torchrl.envs.SerialEnv` /
+        :class:`~torchrl.envs.ParallelEnv` whose worker contains a
+        ``NextObservationDelta`` raises at construction time.
 
     Example:
         >>> import torch
@@ -1610,6 +1602,39 @@ class NextObservationDelta(Transform):
             dtype = root.dtype if self.restore_dtype == "root" else self.restore_dtype
             tensordict_.set(key, root.to(dtype) + delta.to(dtype))
         return tensordict_
+
+    def _check_batched_worker_compat(self) -> None:
+        raise RuntimeError(
+            f"{type(self).__name__} cannot live inside a SerialEnv/ParallelEnv "
+            "worker: the post-step-mdp rehydration relies on the outer env's "
+            "`step_and_maybe_reset` invoking the hook, but a batched env's "
+            "`step_and_maybe_reset` does not propagate the worker's transform "
+            "hook, and the batched output is upcast through the shared spec "
+            "buffer. Place the transform OUTSIDE the batched env instead, "
+            "e.g. `TransformedEnv(ParallelEnv(N, base_env_factory), "
+            f"{type(self).__name__}(...))`."
+        )
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        # Cast the ("next", key) leaves to delta_dtype so collectors (and any
+        # other consumer of env.fake_tensordict()) pre-allocate storage for
+        # the compressed dtype rather than the spec dtype. Root keys are left
+        # at the spec dtype because the transform writes full-precision obs
+        # at root (via rehydration on the flowing tensordict).
+        in_keys = self.in_keys
+        if not in_keys:
+            return fake_tensordict
+        next_td = fake_tensordict.get("next", default=None)
+        if next_td is None:
+            return fake_tensordict
+        for key in in_keys:
+            leaf = next_td.get(key, default=None)
+            if leaf is None:
+                continue
+            next_td.set(key, leaf.to(self.delta_dtype))
+        return fake_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         raise NotImplementedError(

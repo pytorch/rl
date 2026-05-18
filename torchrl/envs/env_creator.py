@@ -233,9 +233,27 @@ def env_creator(fun: Callable) -> EnvCreator:
     return EnvCreator(fun)
 
 
-def get_env_metadata(env_or_creator: EnvBase | Callable, kwargs: dict | None = None):
-    """Retrieves a EnvMetaData object from an env."""
+def get_env_metadata(
+    env_or_creator: EnvBase | Callable,
+    kwargs: dict | None = None,
+    *,
+    env_validator: Callable[[EnvBase], None] | None = None,
+):
+    """Retrieves a EnvMetaData object from an env.
+
+    Args:
+        env_or_creator: env instance or a creator callable / :class:`EnvCreator`.
+        kwargs: optional kwargs forwarded to a creator.
+
+    Keyword Args:
+        env_validator: optional callable invoked on the (possibly transient)
+            env instance before its metadata is extracted. Used by batched
+            envs to fail loudly on worker-incompatible transforms at
+            construction time.
+    """
     if isinstance(env_or_creator, (EnvBase,)):
+        if env_validator is not None:
+            env_validator(env_or_creator)
         return EnvMetaData.metadata_from_env(env_or_creator)
     elif not isinstance(env_or_creator, EnvBase) and not isinstance(
         env_or_creator, EnvCreator
@@ -244,6 +262,8 @@ def get_env_metadata(env_or_creator: EnvBase | Callable, kwargs: dict | None = N
         if kwargs is None:
             kwargs = {}
         env = env_or_creator(**kwargs)
+        if env_validator is not None:
+            env_validator(env)
         return EnvMetaData.metadata_from_env(env)
     elif isinstance(env_or_creator, EnvCreator):
         if not (
@@ -256,6 +276,17 @@ def get_env_metadata(env_or_creator: EnvBase | Callable, kwargs: dict | None = N
                 f"got EnvCreator.create_env_kwargs={env_or_creator.create_env_kwargs} and "
                 f"kwargs = {kwargs}"
             )
+        if env_validator is not None:
+            # EnvCreator caches the env on .meta_data; build a transient
+            # instance to validate the live transform chain.
+            transient = env_or_creator()
+            try:
+                env_validator(transient)
+            finally:
+                try:
+                    transient.close()
+                except Exception:
+                    pass
         return env_or_creator.meta_data.clone()
     else:
         raise NotImplementedError(

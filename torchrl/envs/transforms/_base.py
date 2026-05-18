@@ -413,11 +413,44 @@ class Transform(nn.Module):
             are attached to wiring it up. :class:`~torchrl.envs.TransformedEnv`
             delegates ``EnvBase._post_step_mdp_hooks`` to
             ``self.transform._post_step_mdp_hooks``, so a transform appended to
-            a ``TransformedEnv`` is picked up automatically. Non-collector
-            entry points (e.g. ``env.rollout()``) currently do not invoke this
-            hook.
+            a ``TransformedEnv`` is picked up automatically. The hook fires
+            from :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` (used by
+            data collectors and the non-stop path of :meth:`~torchrl.envs.EnvBase.rollout`)
+            and from the stop-early path of :meth:`~torchrl.envs.EnvBase.rollout`.
         """
         return tensordict_
+
+    def _check_batched_worker_compat(self) -> None:
+        """Raise if this transform should not live inside a batched-env worker.
+
+        :class:`~torchrl.envs.SerialEnv` and :class:`~torchrl.envs.ParallelEnv`
+        call this on every transform of every worker env at construction
+        time. Transforms whose semantics rely on
+        :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` or
+        :meth:`~torchrl.envs.EnvBase.rollout` hooks running on the *outer*
+        env (rather than the worker) override this to raise a clear error.
+
+        The default is a no-op.
+        """
+        return None
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Adjust the env's ``fake_tensordict`` after it is built from specs.
+
+        :meth:`~torchrl.envs.EnvBase.fake_tensordict` constructs a zero-filled
+        tensordict from the env's specs, which is used by data collectors to
+        pre-allocate the rollout storage. The TorchRL spec system shares the
+        observation spec between the root and ``("next", ...)`` leaves, so
+        transforms that want the runtime ``("next", k)`` dtype to differ from
+        the root ``k`` dtype need a way to fix up the fake tensordict here.
+
+        The default is a no-op. Override only when the runtime tensordict your
+        transform produces does not match what the spec-derived fake
+        tensordict would imply.
+        """
+        return fake_tensordict
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform.
@@ -1049,6 +1082,13 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             tensordict_ = base_env._post_step_mdp_hooks(tensordict, tensordict_)
         return tensordict_
 
+    def fake_tensordict(self) -> TensorDictBase:
+        """Build a fake tensordict and let the transform chain post-process it."""
+        fake_td = super().fake_tensordict()
+        if self.transform is not None:
+            fake_td = self.transform.transform_fake_tensordict(fake_td)
+        return fake_td
+
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:
             env = env.to(device)
@@ -1640,6 +1680,17 @@ class Compose(Transform):
         for t in self.transforms:
             tensordict_ = t._post_step_mdp_hooks(tensordict, tensordict_)
         return tensordict_
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        for t in self.transforms:
+            fake_tensordict = t.transform_fake_tensordict(fake_tensordict)
+        return fake_tensordict
+
+    def _check_batched_worker_compat(self) -> None:
+        for t in self.transforms:
+            t._check_batched_worker_compat()
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in reversed(self.transforms):
