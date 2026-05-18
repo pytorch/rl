@@ -329,6 +329,12 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             the version under which each individual frame was produced, not as a batch-level
             label.
 
+            For multi-process collectors, the ``"policy_version"`` entries in the
+            collected tensordict are produced by worker-local transforms and are the
+            source of truth for data provenance. The parent collector's
+            :attr:`policy_version` property exposes only the parent-side tracker state
+            and should not be used as a label for a returned batch.
+
             The recommended path is ``track_policy_version=True``: let the collector own
             the transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
             instance directly is reserved for advanced use cases that wire up a
@@ -1986,19 +1992,28 @@ also that the state dict is synchronised across processes if needed."""
 
     @property
     def policy_version(self) -> str | int | None:
-        """The current policy version."""
+        """The parent-side policy version.
+
+        For multi-process collectors, worker-local
+        :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+        transforms write the per-frame ``"policy_version"`` values in returned
+        batches. Those tensor entries are the source of truth for collected
+        data; this property is only the parent-side tracker state.
+        """
         if not hasattr(self.policy_version_tracker, "version"):
             return None
         return self.policy_version_tracker.version
 
     def get_policy_version(self) -> str | int | None:
-        """Get the current policy version.
+        """Get the parent-side policy version.
 
         This method exists to support remote calls in Ray actors, since properties
         cannot be accessed directly through Ray's RPC mechanism.
 
         Returns:
-            The current version number (int) or UUID (str), or None if version tracking is disabled.
+            The parent-side version number (int) or UUID (str), or ``None`` if
+            version tracking is disabled. For collected data, prefer the
+            per-frame ``"policy_version"`` tensor in returned batches.
         """
         return self.policy_version
 

@@ -375,7 +375,11 @@ def make_reward_model(reward_model_cfg, sys_cfg):
 
 def make_loss(actor, critic, critic_head):
     advantage = GAE(
-        value_network=critic, gamma=0.99, lmbda=0.95, average_gae=True, shifted=True
+        value_network=critic,
+        gamma=0.99,
+        lmbda=0.95,
+        average_gae=True,
+        shifted="legacy",
     )
     loss_fn = ClipPPOLoss(actor, critic_head)
     return loss_fn, advantage

@@ -623,7 +623,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 pass
         return value, value_
 
-
     def _call_value_nets(
         self,
         data: TensorDictBase,
@@ -1691,14 +1690,16 @@ class GAE(ValueEstimatorBase):
 
     .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the
         init markers (`"is_init"`) and terminated / truncated markers are properly set.
-        If `shifted=True`, the trajectory batch will be flattened and the last step of each trajectory will
-        be placed within the flat tensordict after the last step from the root, such that each trajectory has
-        `T+1` elements. If `shifted=False`, the root and `"next"` trajecotries will be stacked and the value
-        network will be called with `vmap` over the stack of trajectories. Because RNNs require fair amount of
-        control flow, they are currently not compatible with `torch.vmap` and, as such, the `deactivate_vmap` option
-        must be turned on in these cases.
-        Similarly, if `shifted=False`, the `"is_init"` entry of the root tensordict will be copied onto the
-        `"is_init"` of the `"next"` entry, such that trajectories are well separated both for root and `"next"` data.
+        With ``shifted="legacy"``, the trajectory batch is flattened and the next state of each done step is
+        interleaved after its root state, giving exact ``V(next_obs)`` values at the cost of a data-dependent
+        shape. With ``shifted="compact"``, root and next streams are concatenated into a constant-shape
+        batch, which is friendlier to ``torch.compile`` and scan-style recurrent backends. If ``shifted=False``,
+        the root and ``"next"`` trajectories are stacked and the value network is called with ``vmap`` over the
+        stack of trajectories. Because RNNs require a fair amount of control flow, they are currently not
+        compatible with ``torch.vmap`` and, as such, the ``deactivate_vmap`` option must be turned on in these
+        cases. Similarly, if ``shifted=False``, the ``"is_init"`` entry of the root tensordict will be copied
+        onto the ``"is_init"`` of the ``"next"`` entry, such that trajectories are well separated both for root
+        and ``"next"`` data.
     """
 
     value_network: TensorDictModule | None

@@ -308,9 +308,7 @@ def main() -> None:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
     if args.compile_update or args.cudagraph_update:
         torch._dynamo.config.capture_scalar_outputs = True
-    gae_shifted: bool | str = (
-        False if args.gae_shifted == "false" else args.gae_shifted
-    )
+    gae_shifted: bool | str = False if args.gae_shifted == "false" else args.gae_shifted
 
     torch.manual_seed(args.seed)
     torch.set_float32_matmul_precision("high")

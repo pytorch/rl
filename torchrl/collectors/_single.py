@@ -287,7 +287,15 @@ class Collector(BaseCollector):
             keys can be re-hydrated at sampling time with
             :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
             when consuming a :class:`~torchrl.data.SliceSampler`-backed replay
-            buffer. Defaults to ``False``.
+            buffer.
+
+            ``compact_obs=True`` composes cleanly with
+            :class:`~torchrl.objectives.value.advantages.GAE` configured with
+            ``shifted="compact"``: the compact shifted path can run the
+            on-policy advantage pass without rehydrating every per-step
+            ``("next", "observation")`` mirror. For vectorized environments
+            with large observations this is typically a sizeable GPU-memory
+            win at near-zero CPU cost. Defaults to ``False``.
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
