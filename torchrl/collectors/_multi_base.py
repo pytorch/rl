@@ -1056,6 +1056,25 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             fake_td.set(key, policy_output.get(key))
         return fake_td
 
+    def fake_tensordict(self) -> TensorDictBase:
+        """Not implemented for multi-process collectors.
+
+        Honoring the multi-collector contract here would require either
+        creating an env in the main process (which defeats the purpose of
+        a multi-process collector — Isaac Lab / mujoco-mjx etc. can only
+        run in workers) or routing a request to a worker over the pipe
+        (which requires workers to be alive and adds protocol surface).
+        Neither is implemented; call :meth:`~torchrl.collectors.Collector.fake_tensordict`
+        on a single :class:`~torchrl.collectors.Collector` instead, or
+        build the template directly from the env spec.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.fake_tensordict() is not implemented. "
+            "Use Collector.fake_tensordict() on a single-process collector "
+            "for storage / cudagraph warmup, or build the template from the "
+            "env spec directly."
+        )
+
     @classmethod
     def _total_workers_from_env(cls, env_creators):
         if isinstance(env_creators, (tuple, list)):
