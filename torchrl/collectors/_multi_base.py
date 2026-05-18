@@ -317,10 +317,27 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on each worker's environment, tagging every collected frame with the
+            current version under the ``"policy_version"`` key. Each worker's transform is
+            bumped after the new weights have actually been applied in that worker, so
+            per-frame tagging tracks real weight updates rather than rollout iterations.
+
+            Note that in asynchronous mode a batch that was already in flight when
+            :meth:`update_policy_weights_` is called may straddle the bump (some frames
+            tagged with the old version, the remainder with the new). Treat the value as
+            the version under which each individual frame was produced, not as a batch-level
+            label.
+
+            The recommended path is ``track_policy_version=True``: let the collector own
+            the transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a
+            ``PolicyVersion`` **without** going through a collector. With multi-process
+            collectors that pre-built tracker lives in the *parent* and is not propagated
+            into workers, so per-frame tagging will still be driven by per-worker
+            transforms — favor ``True``.
+
+            Defaults to ``False``.
         compact_obs (bool, optional): if ``True``, each worker drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking. See
@@ -1039,6 +1056,25 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             fake_td.set(key, policy_output.get(key))
         return fake_td
 
+    def fake_tensordict(self) -> TensorDictBase:
+        """Not implemented for multi-process collectors.
+
+        Honoring the multi-collector contract here would require either
+        creating an env in the main process (which defeats the purpose of
+        a multi-process collector — Isaac Lab / mujoco-mjx etc. can only
+        run in workers) or routing a request to a worker over the pipe
+        (which requires workers to be alive and adds protocol surface).
+        Neither is implemented; call :meth:`~torchrl.collectors.Collector.fake_tensordict`
+        on a single :class:`~torchrl.collectors.Collector` instead, or
+        build the template directly from the env spec.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.fake_tensordict() is not implemented. "
+            "Use Collector.fake_tensordict() on a single-process collector "
+            "for storage / cudagraph warmup, or build the template from the "
+            "env spec directly."
+        )
+
     @classmethod
     def _total_workers_from_env(cls, env_creators):
         if isinstance(env_creators, (tuple, list)):
@@ -1320,6 +1356,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
+                    "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
