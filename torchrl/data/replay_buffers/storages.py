@@ -1562,15 +1562,6 @@ class LazyTensorStorage(TensorStorage):
 class LazyMemmapStorage(LazyTensorStorage):
     """A memory-mapped storage for tensors and tensordicts.
 
-    .. note:: ``LazyMemmapStorage`` trades sampling throughput for GPU memory:
-        keeping the buffer off-device avoids the GPU-memory pressure of a
-        large ``LazyTensorStorage(..., device='cuda')``, but every sample
-        incurs a host-to-device copy (and a disk read on cold pages). For
-        vectorized RL with large rollouts this is often the right call when
-        the buffer would otherwise dominate GPU memory; for tight inner loops
-        where the buffer fits comfortably on device, ``LazyTensorStorage``
-        on the training device is usually faster.
-
     Args:
         max_size (int): size of the storage, i.e. maximum number of elements stored
             in the buffer.
