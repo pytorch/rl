@@ -50,4 +50,5 @@ Documentation Sections
    objectives_policy
    objectives_actorcritic
    objectives_offline
+   objectives_multiagent
    objectives_other

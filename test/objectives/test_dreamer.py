@@ -406,7 +406,11 @@ class TestDreamer(LossModuleTestBase):
             imagination_horizon=imagination_horizon,
             discount_loss=discount_loss,
         )
-        if td_est in (ValueEstimators.GAE, ValueEstimators.VTrace):
+        if td_est in (
+            ValueEstimators.GAE,
+            ValueEstimators.MAGAE,
+            ValueEstimators.VTrace,
+        ):
             with pytest.raises(NotImplementedError):
                 loss_module.make_value_estimator(td_est)
             return
