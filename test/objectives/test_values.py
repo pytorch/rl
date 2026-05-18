@@ -10,6 +10,7 @@ import functools
 
 import pytest
 import torch
+from packaging import version
 
 from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
@@ -52,6 +53,8 @@ from torchrl.testing import (  # noqa
     get_default_devices,
     PENDULUM_VERSIONED,
 )
+
+_TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class TestValues:
@@ -460,6 +463,11 @@ class TestValues:
         adv_legacy = gae_legacy(td.copy())["advantage"]
         torch.testing.assert_close(adv_true, adv_legacy)
 
+    @pytest.mark.skipif(
+        _TORCH_VERSION < version.parse("2.7"),
+        reason="GAE compact recurrent path uses torch.vmap chunked semantics that fall "
+        "back to _pseudo_vmap on torch<2.7 (NotImplementedError).",
+    )
     @pytest.mark.parametrize("module", ["lstm", "gru"])
     @pytest.mark.parametrize("compact_cat_dim", ["batch", "time"])
     def test_gae_recurrent_shifted_compact_matches_unshifted_isaac_shape(
