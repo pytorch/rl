@@ -261,10 +261,22 @@ class Collector(BaseCollector):
             RPCDataCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on the environment, tagging every collected frame with the current version
+            under the ``"policy_version"`` key. The transform's version is bumped exactly once
+            per :meth:`update_policy_weights_` call — for multi-process collectors this happens
+            in each worker after the new weights have actually been applied, so per-frame
+            tagging tracks real weight updates rather than rollout iterations.
+
+            The recommended path is ``track_policy_version=True``: let the collector own the
+            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
+            **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
+            a transform and passing it to a collector is supported but discouraged because it
+            invites a divergence between the transform on the env and the one the collector
+            increments.
+
+            Defaults to ``False``.
         compact_obs (bool, optional): if ``True``, the collector drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking per-step data. Those keys are bit-for-bit identical
@@ -1334,6 +1346,16 @@ class Collector(BaseCollector):
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
+
+        # Bump the local PolicyVersion transform (if track_policy_version is on).
+        # This is the canonical bump point for the leaf collector — it covers:
+        #   - User calls collector.update_policy_weights_() on a single-process
+        #     SyncDataCollector / Collector.
+        #   - The receiver-side WeightSyncScheme cascade in a multi-process
+        #     worker (which calls inner_collector.update_policy_weights_()
+        #     after applying weights). MultiCollector does not inherit from
+        #     Collector, so its update_policy_weights_ does NOT bump here.
+        self.increment_version()
 
     def _maybe_fallback_update(
         self,
