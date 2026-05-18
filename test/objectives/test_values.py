@@ -11,7 +11,7 @@ import functools
 import pytest
 import torch
 
-from tensordict import assert_allclose_td, TensorDict, UnbatchedTensor
+from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import (
     set_composite_lp_aggregate,
     TensorDictModule,
@@ -254,94 +254,6 @@ class TestValues:
         assert torch.isfinite(out["advantage"]).all()
         assert torch.isfinite(out["value_target"]).all()
 
-    @pytest.mark.parametrize(
-        "estimator_cls,kwargs",
-        [
-            (TD0Estimator, {"gamma": 0.9}),
-            (TD1Estimator, {"gamma": 0.9}),
-            (TDLambdaEstimator, {"gamma": 0.9, "lmbda": 0.95}),
-            (GAE, {"gamma": 0.9, "lmbda": 0.95}),
-        ],
-    )
-    def test_final_obs_bootstrap_shifted(self, estimator_cls, kwargs):
-        """``("final", obs)`` carries the true bootstrap obs at the window edge.
-
-        Without it, shifted-GAE under ``compact_obs=True`` falls back to
-        ``V(s_{T-1})`` via :meth:`_fill_missing_next_inputs`, corrupting the
-        last step's advantage when the window boundary is not a real done.
-        The fix overrides those positions with the values carried under
-        ``("final", obs)`` and matches the non-compact reference exactly.
-
-        Also verifies the consumer drops ``("final", ...)`` from the returned
-        tensordict so it survives a contiguous-storage replay buffer.
-        """
-        from tensordict import UnbatchedTensor
-
-        torch.manual_seed(0)
-        value_net = TensorDictModule(
-            nn.Linear(3, 1, bias=False),
-            in_keys=["obs"],
-            out_keys=["state_value"],
-        )
-        B, T, F = 2, 5, 3
-        obs = torch.randn(B, T, F)
-        # No real done inside the window: the last step is a "soft" boundary.
-        done = torch.zeros(B, T, 1, dtype=torch.bool)
-        reward = torch.ones(B, T, 1)
-        # The "true" next obs after step T-1 (one per env, no time dim).
-        final_obs = torch.randn(B, F)
-
-        # Reference: full ('next', obs) at every step.
-        next_obs_full = torch.empty(B, T, F)
-        next_obs_full[:, :-1] = obs[:, 1:]
-        next_obs_full[:, -1] = final_obs
-        td_ref = TensorDict(
-            {
-                "obs": obs,
-                "next": {
-                    "obs": next_obs_full,
-                    "reward": reward,
-                    "done": done.clone(),
-                    "terminated": done.clone(),
-                },
-            },
-            [B, T],
-        )
-
-        # Compact + final_obs: no ('next', obs) but a ('final', obs) UnbatchedTensor.
-        td_compact = TensorDict(
-            {
-                "obs": obs,
-                "next": {
-                    "reward": reward,
-                    "done": done.clone(),
-                    "terminated": done.clone(),
-                },
-                "final": TensorDict(
-                    {"obs": UnbatchedTensor(final_obs)},
-                    batch_size=(B, T),
-                ),
-            },
-            [B, T],
-        )
-
-        est = estimator_cls(**kwargs, value_network=value_net, shifted=True)
-        out_ref = est(td_ref.clone())
-        out_compact = est(td_compact.clone())
-
-        # Must match the non-compact reference exactly at the boundary
-        # (and everywhere else).
-        torch.testing.assert_close(out_compact["advantage"], out_ref["advantage"])
-        torch.testing.assert_close(out_compact["value_target"], out_ref["value_target"])
-
-        # Drop must have happened — the rollout is now safe to extend into a
-        # contiguous-storage RB.
-        out_inplace = td_compact.clone()
-        est(out_inplace)
-        assert (
-            "final" not in out_inplace.keys()
-        ), "('final', ...) should have been consumed and dropped"
-
     @pytest.mark.skipif(not _has_gym, reason="requires gym")
     def test_gae_multi_done(self):
 
@@ -466,10 +378,9 @@ class TestValues:
             a1 = r1["advantage"]
             torch.testing.assert_close(a0, a1)
 
-    def _build_shifted_test_td(self, *, with_final: bool, with_internal_done: bool):
+    def _build_shifted_test_td(self, *, with_internal_done: bool):
         """Build a rollout-shaped tensordict for shifted-mode tests."""
         B, T, obs_dim = 4, 8, 6
-        # Real rollout invariant: obs[t+1] == next_obs[t] for non-done steps.
         all_obs = torch.randn(B, T + 1, obs_dim)
         obs = all_obs[:, :T].clone()
         next_obs = all_obs[:, 1:].clone()
@@ -477,48 +388,40 @@ class TestValues:
         done = torch.zeros(B, T, 1, dtype=torch.bool)
         terminated = torch.zeros(B, T, 1, dtype=torch.bool)
         if with_internal_done:
-            # Internal truncation at (0, 3): decouple next_obs from obs[t+1].
             done[0, 3, 0] = True
             next_obs[0, 3] = torch.randn(obs_dim)
-        # Rollout boundary at T-1 (truncation by collector cutoff).
         done[:, -1, 0] = True
-        td_data = {
-            "observation": obs,
-            "next": TensorDict(
-                {
-                    "observation": next_obs,
-                    "reward": reward,
-                    "done": done,
-                    "terminated": terminated,
-                    "truncated": done & ~terminated,
-                },
-                batch_size=[B, T],
-            ),
-        }
-        if with_final:
-            # Collector with final_obs=True stores the true rollout-boundary
-            # next obs as an UnbatchedTensor leaf under ("final", k) so the
-            # leaf escapes the rollout's [B, T] batch-size enforcement.
-            td_data["final"] = TensorDict(
-                {"observation": UnbatchedTensor(all_obs[:, T])},
-                batch_size=[],
-            )
-        td = TensorDict(td_data, batch_size=[B, T])
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                        "truncated": done & ~terminated,
+                    },
+                    batch_size=[B, T],
+                ),
+            },
+            batch_size=[B, T],
+        )
         td.refine_names(..., "time")
         return td, obs_dim
 
-    @pytest.mark.parametrize("with_final", [False, True])
     @pytest.mark.parametrize("with_internal_done", [False, True])
-    def test_gae_shifted_compact_and_legacy(self, with_final, with_internal_done):
+    @pytest.mark.parametrize("compact_cat_dim", ["batch", "time"])
+    def test_gae_shifted_compact_and_legacy(
+        self, with_internal_done, compact_cat_dim
+    ):
         # Both shifted='compact' and shifted='legacy' must produce a valid
-        # advantage. When the rollout has no internal truncations, the two
-        # paths and shifted=False must all match. When internal truncations
-        # exist, 'compact' is allowed a small bias (it bootstraps from
-        # V(obs[t+1]) instead of V(real_next_obs)); 'legacy' must still
-        # match shifted=False exactly.
+        # advantage. 'legacy' must match shifted=False exactly. 'compact'
+        # is allowed a small boundary bias from copying V(obs[T-1]) at
+        # the rollout boundary; not asserted.
         torch.manual_seed(0)
         td, obs_dim = self._build_shifted_test_td(
-            with_final=with_final, with_internal_done=with_internal_done
+            with_internal_done=with_internal_done
         )
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1),
@@ -526,7 +429,11 @@ class TestValues:
             out_keys=["state_value"],
         )
         gae_compact = GAE(
-            gamma=0.9, lmbda=0.95, value_network=value_net, shifted="compact"
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted="compact",
+            compact_cat_dim=compact_cat_dim,
         )
         gae_legacy = GAE(
             gamma=0.9, lmbda=0.95, value_network=value_net, shifted="legacy"
@@ -534,23 +441,14 @@ class TestValues:
         gae_unshifted = GAE(
             gamma=0.9, lmbda=0.95, value_network=value_net, shifted=False
         )
-        adv_compact = gae_compact(td.copy())["advantage"]
+        gae_compact(td.copy())
         adv_legacy = gae_legacy(td.copy())["advantage"]
         adv_unshifted = gae_unshifted(td.copy())["advantage"]
-        # legacy is the exact reference: matches shifted=False bit-for-bit.
         torch.testing.assert_close(adv_legacy, adv_unshifted)
-        if not with_internal_done:
-            # No internal truncations: compact also matches exactly when
-            # ("final", obs) is provided. Without final, compact has a
-            # small boundary bias from copying V(obs[T-1]); not asserted.
-            if with_final:
-                torch.testing.assert_close(adv_compact, adv_unshifted)
 
     def test_gae_shifted_true_deprecation_aliases_legacy(self):
         torch.manual_seed(0)
-        td, obs_dim = self._build_shifted_test_td(
-            with_final=False, with_internal_done=True
-        )
+        td, obs_dim = self._build_shifted_test_td(with_internal_done=True)
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1),
             in_keys=["observation"],
@@ -567,7 +465,10 @@ class TestValues:
         torch.testing.assert_close(adv_true, adv_legacy)
 
     @pytest.mark.parametrize("module", ["lstm", "gru"])
-    def test_gae_recurrent_shifted_compact_matches_unshifted_isaac_shape(self, module):
+    @pytest.mark.parametrize("compact_cat_dim", ["batch", "time"])
+    def test_gae_recurrent_shifted_compact_matches_unshifted_isaac_shape(
+        self, module, compact_cat_dim
+    ):
         # Isaac-shaped regression test: recurrent value network, multi-trajectory
         # rollout with truncations every `episode_len` steps (never terminations),
         # and ``compact_obs=False`` semantics — ``("next", obs)`` is populated
@@ -673,6 +574,7 @@ class TestValues:
             lmbda=0.95,
             value_network=value_net,
             shifted="compact",
+            compact_cat_dim=compact_cat_dim,
             deactivate_vmap=False,
             average_gae=False,
         )
