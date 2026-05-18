@@ -2457,10 +2457,17 @@ class _RecurrentModeContextManager(_ContextManager):
         )
 
     def get_mode(self) -> bool | None:
+        # Dynamo can't trace ContextVar.get; fall back to the parent's plain
+        # attribute under torch.compile. set_mode keeps both in sync so this
+        # stays correct (compile traces a single thread).
+        if is_compiling():
+            return self._mode
         return self._context_mode.get()
 
     def set_mode(self, mode: bool | None) -> None:
-        self._context_mode.set(mode)
+        self._mode = mode
+        if not is_compiling():
+            self._context_mode.set(mode)
 
 
 recurrent_mode_state_manager = _RecurrentModeContextManager()
