@@ -13,6 +13,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .her import HERReplayBuffer, HindsightStrategy
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -55,6 +56,8 @@ from .writers import (
 )
 
 __all__ = [
+    "HERReplayBuffer",
+    "HindsightStrategy",
     "CompressedListStorage",
     "CompressedListStorageCheckpointer",
     "FlatStorageCheckpointer",
