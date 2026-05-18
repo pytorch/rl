@@ -42,6 +42,7 @@ from torchrl.modules.models import (
     NoisyLazyLinear,
     NoisyLinear,
 )
+from torchrl.modules.models.cross_group_critic import CrossGroupCritic, GroupSpec
 from torchrl.modules.models.decision_transformer import (
     _has_transformers,
     DecisionTransformer,
@@ -1749,6 +1750,166 @@ class TestDiffusionActor:
         td["action"].sum().backward()
         for p in actor.parameters():
             assert p.grad is not None
+
+
+class TestCrossGroupCritic:
+    def _make_td(self, batch, group_map):
+        data = {}
+        for name, spec in group_map.items():
+            data[name] = {
+                "observation": torch.randn(*batch, spec.n_agents, spec.obs_dim)
+            }
+        return TensorDict(data, batch_size=list(batch))
+
+    def _make_group_map(self):
+        return {
+            "soldiers": GroupSpec(
+                obs_dim=12,
+                n_agents=3,
+                obs_key=("soldiers", "observation"),
+                value_key=("soldiers", "state_value"),
+            ),
+            "medics": GroupSpec(
+                obs_dim=8,
+                n_agents=2,
+                obs_key=("medics", "observation"),
+                value_key=("medics", "state_value"),
+            ),
+        }
+
+    @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
+    @pytest.mark.parametrize("share_params", [True, False])
+    def test_output_shapes(self, batch, share_params):
+        group_map = self._make_group_map()
+        critic = CrossGroupCritic(
+            group_map,
+            d_model=16,
+            trunk_depth=1,
+            trunk_cells=32,
+            share_params=share_params,
+        )
+        td = self._make_td(batch, group_map)
+        td = critic(td)
+        for name, spec in group_map.items():
+            val = td[name, "state_value"]
+            assert val.shape == (
+                *batch,
+                spec.n_agents,
+                1,
+            ), f"group '{name}': expected {(*batch, spec.n_agents, 1)}, got {val.shape}"
+
+    def test_heterogeneous_obs_dims(self):
+        # Three groups with deliberately different obs dims
+        group_map = {
+            "a": GroupSpec(
+                obs_dim=6, n_agents=2, obs_key=("a", "obs"), value_key=("a", "val")
+            ),
+            "b": GroupSpec(
+                obs_dim=20, n_agents=3, obs_key=("b", "obs"), value_key=("b", "val")
+            ),
+            "c": GroupSpec(
+                obs_dim=4, n_agents=1, obs_key=("c", "obs"), value_key=("c", "val")
+            ),
+        }
+        critic = CrossGroupCritic(group_map, d_model=8, trunk_depth=1, trunk_cells=16)
+        td = TensorDict(
+            {
+                "a": {"obs": torch.randn(4, 2, 6)},
+                "b": {"obs": torch.randn(4, 3, 20)},
+                "c": {"obs": torch.randn(4, 1, 4)},
+            },
+            batch_size=[4],
+        )
+        td = critic(td)
+        assert td["a", "val"].shape == (4, 2, 1)
+        assert td["b", "val"].shape == (4, 3, 1)
+        assert td["c", "val"].shape == (4, 1, 1)
+
+    def test_share_params_same_head(self):
+        group_map = self._make_group_map()
+        critic = CrossGroupCritic(
+            group_map, d_model=16, trunk_depth=1, trunk_cells=32, share_params=True
+        )
+        # With share_params=True the inner net has shared_head, not group_heads
+        assert critic.module.shared_head is not None
+        assert critic.module.group_heads is None
+
+    def test_no_share_params_separate_heads(self):
+        group_map = self._make_group_map()
+        critic = CrossGroupCritic(
+            group_map, d_model=16, trunk_depth=1, trunk_cells=32, share_params=False
+        )
+        assert critic.module.shared_head is None
+        assert set(critic.module.group_heads.keys()) == set(group_map.keys())
+
+    def test_detach_groups_blocks_gradient(self):
+        group_map = {
+            "active": GroupSpec(
+                obs_dim=6,
+                n_agents=2,
+                obs_key=("active", "obs"),
+                value_key=("active", "val"),
+            ),
+            "frozen": GroupSpec(
+                obs_dim=6,
+                n_agents=2,
+                obs_key=("frozen", "obs"),
+                value_key=("frozen", "val"),
+            ),
+        }
+        critic = CrossGroupCritic(
+            group_map,
+            d_model=8,
+            trunk_depth=1,
+            trunk_cells=16,
+            detach_groups=["frozen"],
+        )
+        frozen_obs = torch.randn(4, 2, 6, requires_grad=True)
+        active_obs = torch.randn(4, 2, 6, requires_grad=True)
+        td = TensorDict(
+            {"active": {"obs": active_obs}, "frozen": {"obs": frozen_obs}},
+            batch_size=[4],
+        )
+        td = critic(td)
+        td["active", "val"].sum().backward()
+        # Observations from the detached group receive no gradient.
+        assert frozen_obs.grad is None
+        # Observations from the active group receive gradients.
+        assert active_obs.grad is not None
+
+    def test_gradients_flow_through_critic(self):
+        group_map = self._make_group_map()
+        critic = CrossGroupCritic(group_map, d_model=16, trunk_depth=1, trunk_cells=32)
+        td = self._make_td((4,), group_map)
+        td = critic(td)
+        loss = sum(td[name, "state_value"].sum() for name in group_map)
+        loss.backward()
+        for p in critic.parameters():
+            assert p.grad is not None
+
+    def test_nested_key_inputs(self):
+        # obs_key as a tuple of strings (NestedKey)
+        group_map = {
+            "g1": GroupSpec(
+                obs_dim=4,
+                n_agents=2,
+                obs_key=("agents", "g1", "observation"),
+                value_key=("agents", "g1", "state_value"),
+            ),
+        }
+        critic = CrossGroupCritic(group_map, d_model=8, trunk_depth=1, trunk_cells=16)
+        td = TensorDict(
+            {"agents": {"g1": {"observation": torch.randn(3, 2, 4)}}}, batch_size=[3]
+        )
+        td = critic(td)
+        assert td["agents", "g1", "state_value"].shape == (3, 2, 1)
+
+    def test_device(self):
+        group_map = self._make_group_map()
+        critic = CrossGroupCritic(group_map, d_model=8, trunk_depth=1, trunk_cells=16)
+        # Parameters should be on CPU by default
+        for p in critic.parameters():
+            assert p.device.type == "cpu"
 
 
 if __name__ == "__main__":
