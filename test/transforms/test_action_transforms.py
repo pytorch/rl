@@ -824,6 +824,58 @@ class TestActionScaling(TransformBase):
         assert (r["action"] >= -1.0).all()
         assert (r["action"] <= 1.0).all()
 
+    def test_nested_action_key(self):
+        # Verify that ActionScaling rewrites the spec and applies the inv
+        # transform for dict-structured action spaces (issue #1209).
+        class _NestedActionEnv(EnvBase):
+            def __init__(self):
+                super().__init__()
+                self.action_spec = Composite(
+                    {("agent", "action"): Bounded(low=-2.0, high=4.0, shape=(7,))}
+                )
+                self.observation_spec = Composite(observation=Unbounded(shape=(4,)))
+                self.reward_spec = Unbounded(shape=(1,))
+                self.full_done_spec = Composite(
+                    done=Categorical(2, shape=(1,), dtype=torch.bool),
+                    terminated=Categorical(2, shape=(1,), dtype=torch.bool),
+                )
+                self.last_action = None
+
+            def _reset(self, tensordict=None):
+                out = TensorDict({}, batch_size=[])
+                out.update(self.observation_spec.zero())
+                out.update(self.full_done_spec.zero())
+                return out
+
+            def _step(self, tensordict):
+                self.last_action = tensordict["agent", "action"].clone()
+                out = TensorDict({}, batch_size=[])
+                out.update(self.observation_spec.zero())
+                out.update(self.full_done_spec.zero())
+                out["reward"] = self.reward_spec.zero()
+                return out
+
+            def _set_seed(self, seed):
+                pass
+
+        base_env = _NestedActionEnv()
+        env = TransformedEnv(base_env, ActionScaling(in_keys_inv=[("agent", "action")]))
+        leaf = env.full_action_spec[("agent", "action")]
+        assert torch.allclose(leaf.space.low, -torch.ones(7))
+        assert torch.allclose(leaf.space.high, torch.ones(7))
+
+        td = env.reset()
+        td["agent", "action"] = torch.ones(7)
+        env.step(td)
+        # normalized +1 -> env-scale +4 (high)
+        assert torch.allclose(base_env.last_action, torch.full((7,), 4.0))
+
+        td = env.reset()
+        td["agent", "action"] = -torch.ones(7)
+        env.step(td)
+        # normalized -1 -> env-scale -2 (low)
+        assert torch.allclose(base_env.last_action, torch.full((7,), -2.0))
+
 
 class TestMultiAction(TransformBase):
     @pytest.mark.parametrize("bwad", [False, True])

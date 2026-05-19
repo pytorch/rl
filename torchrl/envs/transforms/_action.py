@@ -15,7 +15,7 @@ from typing import Any, TYPE_CHECKING
 import torch
 
 from tensordict import TensorDictBase
-from tensordict.utils import NestedKey
+from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 
 from torchrl.data.tensor_specs import (
@@ -38,11 +38,7 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.envs.transforms._base import (
-    _apply_to_composite_inv,
-    FORWARD_NOT_IMPLEMENTED,
-    Transform,
-)
+from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
     "ActionDiscretizer",
@@ -1006,68 +1002,39 @@ class ActionScaling(Transform):
     def initialized(self) -> bool:
         return not isinstance(self.loc, nn.UninitializedBuffer)
 
-    def _check_initialized(self) -> None:
-        if not self.initialized:
-            self._maybe_init_from_parent()
-        if not self.initialized:
-            raise RuntimeError(
-                "ActionScaling has not been initialized yet. Either pass explicit "
-                "`loc` and `scale` to the constructor, or attach this transform to "
-                "a TransformedEnv whose action spec is bounded so that the values "
-                "can be derived automatically."
-            )
-
-    def _maybe_init_from_parent(self) -> None:
-        """Derive ``loc`` and ``scale`` from the parent env's action spec.
-
-        Walks up the transform chain to compute the action spec as it would be
-        seen on the inv direction (env-scale) for our action key, and uses its
-        bounds to materialize ``loc`` and ``scale``.
-        """
-        if self.initialized or self._explicit:
+    def _ensure_initialized(self) -> None:
+        # Lazily populate ``loc`` and ``scale`` from the parent env's action
+        # spec at the insertion point of this transform. ``self.parent`` is
+        # rebuilt with all transforms up to (but not including) ``self``, so
+        # its action spec is exactly the env-scale spec we need to read.
+        if self.initialized:
             return
         parent = self.parent
         if parent is None:
-            return
-        try:
-            full_action_spec = parent.base_env.full_action_spec
-        except Exception:  # noqa: BLE001
-            return
-        # Apply every preceding transform's transform_action_spec on a clone so
-        # that the spec we read here reflects the env-scale bounds at the point
-        # in the chain where this transform sits.
-        full_action_spec = full_action_spec.clone()
-        # ``parent`` is an EnvBase; walk through preceding transforms in the
-        # Compose (if any) up to ``self``.
-        transform = parent.transform
-        from torchrl.envs.transforms._base import Compose
+            raise RuntimeError(
+                "ActionScaling has not been initialized: pass explicit ``loc`` "
+                "and ``scale`` to the constructor, or attach this transform to "
+                "a TransformedEnv whose action spec is bounded so that the "
+                "values can be derived automatically."
+            )
+        in_key = unravel_key(self.in_keys_inv[0])
+        full_action_spec = parent.full_action_spec
+        if in_key not in full_action_spec.keys(True, True):
+            raise RuntimeError(
+                f"ActionScaling could not find key {in_key!r} in the parent "
+                f"environment's action spec. Available keys: "
+                f"{list(full_action_spec.keys(True, True))}."
+            )
+        self._init_from_spec(full_action_spec[in_key])
 
-        if isinstance(transform, Compose):
-            for t in transform.transforms:
-                if t is self:
-                    break
-                # Each transform may modify the action spec on the way through.
-                input_spec = Composite(
-                    full_action_spec=full_action_spec,
-                    full_state_spec=Composite(),
-                    shape=full_action_spec.shape,
-                    device=full_action_spec.device,
-                )
-                input_spec = t.transform_input_spec(input_spec)
-                full_action_spec = input_spec["full_action_spec"]
-        key = self.in_keys_inv[0]
-        if key not in full_action_spec.keys(True, True):
-            return
-        leaf = full_action_spec[key]
-        # surface the validation error to the caller - it is the same error
-        # that would have been raised when the spec was first queried.
-        low, high = self._validate_bounded(leaf)
+    def _init_from_spec(self, leaf_spec: TensorSpec) -> None:
+        low, high = self._validate_bounded(leaf_spec)
         dtype = low.dtype if low.dtype.is_floating_point else torch.get_default_dtype()
         loc = ((high + low) / 2).to(dtype)
         scale = ((high - low) / 2).to(dtype)
-        self._set_loc_scale(loc, scale)
+        self._materialize_loc_scale(loc, scale)
 
-    def _set_loc_scale(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
+    def _materialize_loc_scale(self, loc: torch.Tensor, scale: torch.Tensor) -> None:
         if isinstance(self.loc, nn.UninitializedBuffer):
             self.loc.materialize(shape=loc.shape, dtype=loc.dtype)
             self.scale.materialize(shape=scale.shape, dtype=scale.dtype)
@@ -1119,16 +1086,22 @@ class ActionScaling(Transform):
             )
         return low, high
 
-    @_apply_to_composite_inv
-    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
-        low, high = self._validate_bounded(action_spec)
-        dtype = low.dtype if low.dtype.is_floating_point else torch.get_default_dtype()
-        low = low.to(dtype)
-        high = high.to(dtype)
-        if not self._explicit:
-            loc = (high + low) / 2
-            scale = (high - low) / 2
-            self._set_loc_scale(loc, scale)
+    def _transform_leaf(self, leaf_spec: TensorSpec) -> TensorSpec:
+        # Validate the leaf action spec, lazily populate ``loc``/``scale`` from
+        # the bounds and return a new bounded spec in normalized space.
+        if not self._explicit and not self.initialized:
+            self._init_from_spec(leaf_spec)
+        else:
+            # Still validate so that downstream users get a consistent error
+            # message for unbounded / partially-unbounded specs.
+            self._validate_bounded(leaf_spec)
+        dtype = (
+            leaf_spec.dtype
+            if leaf_spec.dtype.is_floating_point
+            else torch.get_default_dtype()
+        )
+        low = leaf_spec.space.low.to(dtype)
+        high = leaf_spec.space.high.to(dtype)
         if self.standard_normal:
             new_low = torch.full_like(low, -1.0)
             new_high = torch.full_like(high, 1.0)
@@ -1138,10 +1111,29 @@ class ActionScaling(Transform):
         return Bounded(
             low=new_low,
             high=new_high,
-            shape=action_spec.shape,
-            device=action_spec.device,
-            dtype=action_spec.dtype,
+            shape=leaf_spec.shape,
+            device=leaf_spec.device,
+            dtype=leaf_spec.dtype,
         )
+
+    def transform_action_spec(self, action_spec: TensorSpec) -> TensorSpec:
+        # We iterate the action spec manually rather than relying on
+        # ``@_apply_to_composite_inv``: when ``transform_input_spec`` calls this
+        # method with the action sub-composite, the decorator only inspects
+        # top-level keys (``input_spec.keys(False, True)``) and silently skips
+        # nested action keys. Iterating ourselves makes dict-structured action
+        # spaces (e.g. ``("agent", "action")``) work like flat ones.
+        if not isinstance(action_spec, Composite):
+            return self._transform_leaf(action_spec)
+        action_spec = action_spec.clone()
+        in_key = unravel_key(self.in_keys_inv[0])
+        out_key = unravel_key(self.out_keys_inv[0])
+        if in_key in action_spec.keys(True, True):
+            leaf = action_spec[in_key].clone()
+            action_spec[out_key] = self._transform_leaf(leaf)
+            if in_key != out_key:
+                del action_spec[in_key]
+        return action_spec
 
     def _loc_scale(self, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
         # Only move the buffers when the device actually differs: an
@@ -1156,8 +1148,7 @@ class ActionScaling(Transform):
         return loc, scale
 
     def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
-        # env action -> normalized
-        self._check_initialized()
+        self._ensure_initialized()
         loc, scale = self._loc_scale(action.device)
         normalized = (action - loc) / scale
         if not self.standard_normal:
@@ -1165,29 +1156,24 @@ class ActionScaling(Transform):
         return normalized
 
     def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
-        # normalized -> env action
-        self._check_initialized()
+        self._ensure_initialized()
         loc, scale = self._loc_scale(action.device)
         if not self.standard_normal:
             action = action * 2 - 1
         return action * scale + loc
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        # The action only flows through the inv direction during env stepping.
-        # The next_tensordict returned by the base env does not contain the
-        # action, so we leave it untouched here. The forward direction
-        # (env action -> normalized) is still available via ``forward`` for use
-        # inside replay buffers and ``nn.Module`` chains.
+        # The action only flows through the inv direction during env stepping;
+        # the ``next_tensordict`` returned by the base env does not contain it.
+        # Overriding ``_call`` as a no-op avoids the default loop raising a
+        # ``KeyError`` for the missing action key. The forward direction
+        # (env action -> normalized) is still wired through ``forward`` /
+        # ``_apply_transform`` for replay buffers and ``nn.Module`` chains.
         return next_tensordict
 
-    def _reset(
-        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
-    ) -> TensorDictBase:
-        return tensordict_reset
-
     def __repr__(self) -> str:
-        loc = self.loc if self.initialized else "uninitialized"
-        scale = self.scale if self.initialized else "uninitialized"
+        loc = self.loc if self.initialized else "<uninitialized>"
+        scale = self.scale if self.initialized else "<uninitialized>"
         return (
             f"{self.__class__.__name__}("
             f"loc={loc}, scale={scale}, standard_normal={self.standard_normal}, "
