@@ -85,11 +85,26 @@ print(td["policy"].shape)
 
 ## Tiled-camera rendering
 
-### Add a `TiledCameraCfg`
-
 Manager-based environments do not put camera data in the observation manager by
-default. Add a tiled camera to the scene config before `gym.make(...)` and read
-its batched RGB output.
+default. Add a tiled camera to the scene config before `gym.make(...)` and launch
+with `--enable_cameras`; without it, camera/rendering APIs are not initialized.
+
+For TorchRL, prefer `IsaacLabWrapper.add_tiled_camera_config(...)` and
+`IsaacLabWrapper(..., from_tiled_camera=True)` so pixels are inserted into the
+TensorDict under `"pixels"`.
+
+```python
+from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+IsaacLabWrapper.add_tiled_camera_config(env_cfg, width=64, height=64)
+env = IsaacLabWrapper(
+    gym.make("Isaac-Ant-v0", cfg=env_cfg),
+    device="cuda:0",
+    from_tiled_camera=True,
+)
+```
+
+If configuring the sensor manually, add a `TiledCameraCfg` to the scene config:
 
 ```python
 from isaaclab.sensors import TiledCameraCfg
@@ -114,16 +129,73 @@ env_cfg.scene.tiled_camera = TiledCameraCfg(
 )
 ```
 
-Use `--enable_cameras` with `AppLauncher`; without it, camera/rendering APIs are
-not initialized.
+`TiledCamera` renders all environments in a single batched pass on the GPU,
+producing `[num_envs, H, W, C]` tensors efficiently. Rendering many
+environments is expensive: start with a smaller number of envs for pixels, and
+increase `env_cfg.scene.env_spacing` if neighboring envs appear in camera views.
 
-For TorchRL, prefer `IsaacLabWrapper.add_tiled_camera_config(...)` and
-`IsaacLabWrapper(..., from_tiled_camera=True)` so pixels are inserted into the
-TensorDict under `"pixels"`.
+For the ANYmal-C quadruped (base at approximately 0.5 m height), useful camera
+positions include:
 
-Rendering many environments is expensive. Start with a smaller number of envs
-for pixels, and increase `env_cfg.scene.env_spacing` if neighboring envs appear
-in camera views.
+- rear-elevated: `pos=(-3.0, 0.0, 2.0)`;
+- side view: `pos=(0.0, -3.0, 1.5)`;
+- top-down: `pos=(0.0, 0.0, 5.0)`.
+
+The rotation quaternion `(w, x, y, z) = (0.9945, 0.0, 0.1045, 0.0)` applies a
+slight downward pitch (approximately 12 degrees).
+
+## Auto-reset and per-index reset
+
+IsaacLab environments auto-reset individual sub-environments when they reach a
+terminal state. Done can be reported immediately after reset.
+
+`IsaacLabWrapper(env, native_autoreset=True)` keeps Isaac's native post-reset
+observation in `tensordict_["policy"]` and marks the terminal
+`("next", "policy")` with NaN; `EnvBase.step_and_maybe_reset` then skips the
+synthetic reset call. The same bridge is installed for Direct-workflow envs
+(`DirectRLEnv`, `DirectMARLEnv`), not just Manager-based envs.
+
+`IsaacLabWrapper` surfaces Isaac Lab's per-index reset and `reset_to` APIs
+through the standard torchrl `"_reset"` boolean mask:
+
+```python
+env = IsaacLabWrapper(gym.make("Isaac-Ant-v0", cfg=AntEnvCfg()), native_autoreset=True)
+td = env.reset()
+
+# ... step the env a few times ...
+
+# Reset half of the sub-envs without disturbing the others. The transform
+# stack (RewardSum, InitTracker, recurrent primers, VecNormV2, ...) fires
+# on the masked rows only, exactly like a normal reset.
+reset_mask = torch.zeros(env.batch_size[0], 1, dtype=torch.bool, device=env.device)
+reset_mask[: env.batch_size[0] // 2] = True
+td.set("_reset", reset_mask)
+env.reset(td)
+
+# Snapshot and branch from a deterministic state (manager-based envs only).
+snapshot = env.base_env.get_state()
+# ... evolve env from `snapshot` to explore one branch ...
+env.reset(td, isaac_reset_state=snapshot)  # rewind to snapshot
+
+# Convenience method (equivalent to the call above):
+env.reset_to_state(snapshot, td)
+```
+
+Gotchas:
+
+- The per-index reset path is gated on `native_autoreset=True`. With the
+  default `native_autoreset=False`, the `VecGymEnvTransform`-based obs-swap path
+  already handles `step_and_maybe_reset`-driven partial resets implicitly; an
+  explicit per-index reset would double-reset those envs.
+- `reset_to_state` is only available on manager-based envs (`ManagerBasedEnv` /
+  `ManagerBasedRLEnv`). Direct envs do not expose `reset_to`.
+- `is_relative=True` interprets the snapshot pose relative to the env origin,
+  which is useful for terrain-relative pose reuse.
+
+## In-place tensor modification
+
+IsaacLab modifies `terminated` and `truncated` tensors in-place. Downstream code
+should clone these tensors to prevent data corruption.
 
 ### Headless EGL/Vulkan dependencies
 

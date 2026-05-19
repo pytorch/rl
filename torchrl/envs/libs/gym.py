@@ -883,17 +883,25 @@ class _GymAsyncMeta(_EnvPostInit):
             )
 
             if _has_isaaclab:
-                from isaaclab.envs import ManagerBasedRLEnv
+                # IsaacLabWrapper owns the single source of truth for which
+                # Isaac Lab envs we know how to bridge (manager-based and
+                # direct alike). Importing it lazily here avoids a circular
+                # import at module load time.
+                from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
                 kwargs = {}
                 if missing_obs_value is not None:
                     kwargs["missing_obs_value"] = missing_obs_value
-                if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
+                if IsaacLabWrapper._supports_native_autoreset(instance._env.unwrapped):
                     env = TransformedEnv(
                         instance,
                         VecGymEnvTransform(**kwargs, native_autoreset=native_autoreset),
                     )
                     env._torchrl_native_autoreset = native_autoreset
+                    # Mirror the flag on the inner wrapper so it can gate
+                    # the per-index ``_reset`` bridge on it (see
+                    # IsaacLabWrapper._reset).
+                    instance._torchrl_native_autoreset = native_autoreset
                     return env
 
             if _has_sb3:
@@ -1182,9 +1190,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
             tuple_of_classes = tuple_of_classes + (VecEnv,)
         if _has_isaaclab:
-            from isaaclab.envs import ManagerBasedRLEnv
+            from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-            tuple_of_classes = tuple_of_classes + (ManagerBasedRLEnv,)
+            tuple_of_classes = (
+                tuple_of_classes + IsaacLabWrapper._supported_isaac_env_classes()
+            )
         return isinstance(
             self._env.unwrapped, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
