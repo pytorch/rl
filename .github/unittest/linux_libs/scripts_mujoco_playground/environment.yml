@@ -21,5 +21,6 @@ dependencies:
     - scipy
     - hydra-core
     - jax[cuda12]>=0.7.0
-    - mujoco_playground
+    # NOTE: import name is `mujoco_playground` but the PyPI distribution is `playground`.
+    - playground
     - psutil

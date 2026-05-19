@@ -30,31 +30,11 @@ export MAGNUM_LOG=verbose MAGNUM_GPU_VALIDATION=ON
 python -c "import mujoco_playground"
 python -c "from mujoco_playground import dm_control_suite, locomotion, manipulation, registry"
 
-# Initialize JAX with proper GPU configuration
-python -c "
-import jax
-import jax.numpy as jnp
-import os
-
-# Configure JAX for GPU
-os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = 'false'
-os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
-
-# Test JAX GPU availability
-try:
-    devices = jax.devices()
-    print(f'JAX devices: {devices}')
-    if len(devices) > 1:
-        print('JAX GPU is available')
-    else:
-        print('JAX CPU only')
-except Exception as e:
-    print(f'JAX initialization error: {e}')
-    # Fallback to CPU
-    os.environ['JAX_PLATFORM_NAME'] = 'cpu'
-    jax.config.update('jax_platform_name', 'cpu')
-    print('Falling back to JAX CPU')
-"
+# Report JAX devices. We deliberately avoid try/except + JAX_PLATFORM_NAME
+# fallback here: it runs in a subprocess that exits immediately, so it has no
+# effect on the pytest invocation below, and it would hide a real "GPU not
+# visible" failure from CI.
+python -c "import jax; print(f'JAX devices: {jax.devices()}')"
 
 python -c 'import torch;t = torch.ones([2,2], device="cuda:0");print(t);print("tensor device:" + str(t.device))'
 

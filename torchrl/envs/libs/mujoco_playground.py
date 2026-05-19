@@ -4,9 +4,10 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import copy
 import importlib.util
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import torch
@@ -27,6 +28,18 @@ _has_mujoco_playground = importlib.util.find_spec("mujoco_playground") is not No
 
 
 def _listerize(ranges: list) -> list[int]:
+    """Expand a mixed list of ints and ``(lo, hi)`` tuples into a flat list of ints.
+
+    .. warning::
+        Tuple ranges are **inclusive** on both ends: ``(0, 5)`` expands to
+        ``[0, 1, 2, 3, 4, 5]``, **not** Python's usual half-open
+        ``range(0, 5) == [0, 1, 2, 3, 4]``. This convention is kept for
+        backwards compatibility with MABrax-style index lists.
+
+    Examples:
+        >>> _listerize([(0, 2), 5, (7, 8)])
+        [0, 1, 2, 5, 7, 8]
+    """
     result = []
     for r in ranges:
         if isinstance(r, tuple):
@@ -36,7 +49,7 @@ def _listerize(ranges: list) -> list[int]:
     return result
 
 
-@dataclass
+@dataclass(frozen=True)
 class MujocoPlaygroundAgentSpec:
     """Observation/action slice definition for one agent in a cooperative task.
 
@@ -57,7 +70,7 @@ class MujocoPlaygroundAgentSpec:
     observation_indices: list[int] | dict[str, list[int]]
 
 
-@dataclass
+@dataclass(frozen=True)
 class MujocoPlaygroundAgentMapping:
     """Agent mapping for :class:`MujocoPlaygroundWrapper`.
 
@@ -79,10 +92,24 @@ class MujocoPlaygroundAgentMapping:
               ``max_obs_size + n_agents`` (a one-hot agent-ID prefix is
               prepended), and actions are padded to ``max_action_size``.
               All agents share the same input/output shape.
+
+              **Policy contract (max):** each agent's observation layout is
+              ``[one_hot_id (n_agents) | raw_obs (len(observation_indices)) | zero_pad]``,
+              for a total length of ``max_obs_size + n_agents``. The action
+              vector emitted by the policy has length ``max_action_size``; only
+              the first ``len(action_indices)`` entries are used and the rest
+              are silently dropped.
             - ``"concat"``: each agent receives the full global
               observation/action vector with zeros at positions it does not
               own. All agents share the same input/output shape equal to the
               full environment dimensions.
+
+              **Policy contract (concat):** the observation has length
+              ``env.observation_size`` with zeros at positions not owned by
+              the agent. The policy must emit a full-length action vector;
+              only entries at the agent's own ``action_indices`` are applied
+              to the environment and entries at indices owned by other agents
+              are ignored.
 
     Examples:
         >>> mapping = MujocoPlaygroundAgentMapping(
@@ -102,7 +129,7 @@ class MujocoPlaygroundAgentMapping:
         ... )
     """
 
-    agents: list[MujocoPlaygroundAgentSpec]
+    agents: list[MujocoPlaygroundAgentSpec] = field(default_factory=list)
     homogenization_mode: Literal["none", "max", "concat"] = "none"
 
 
@@ -191,7 +218,19 @@ def _validate_agent_mapping(
 
 
 # Predefined multi-agent partitionings for common MuJoCo locomotion tasks.
-# These mappings mirror the decompositions used in JaxMARL's MABrax suite.
+#
+# .. warning::
+#     These mappings mirror the decompositions used in JaxMARL's `MABrax`_
+#     suite, which targets `Brax`_'s observation/action layouts. MuJoCo
+#     Playground is a separate code base (built on MJX) whose envs may expose
+#     **different** observation layouts even when the action sizes match. As a
+#     result, these mappings will produce per-agent observation slices that
+#     are syntactically valid (indices in range) but may not be semantically
+#     equivalent to MABrax's decomposition. Verify the partitioning matches
+#     your env before training.
+#
+#     .. _MABrax: https://github.com/FLAIROx/JaxMARL/tree/main/jaxmarl/environments/mabrax
+#     .. _Brax: https://github.com/google/brax
 KNOWN_MARL_MAPPINGS: dict[str, MujocoPlaygroundAgentMapping] = {
     "ant_4x2": MujocoPlaygroundAgentMapping(
         agents=[
@@ -326,7 +365,14 @@ class _MujocoPlaygroundMeta(_EnvPostInit):
     """Metaclass for MujocoPlaygroundEnv that returns a lazy ParallelEnv when num_workers > 1."""
 
     def __call__(cls, *args, num_workers: int | None = None, **kwargs):
-        num_workers = 1 if num_workers is None else int(num_workers)
+        # Accept num_workers either as the explicit kwarg or via the kwargs
+        # dict (e.g. when constructed from a config that builds kwargs
+        # dynamically), mirroring `_BraxMeta`.
+        if num_workers is None:
+            num_workers = kwargs.pop("num_workers", 1)
+        else:
+            kwargs.pop("num_workers", None)
+        num_workers = int(num_workers)
         if cls.__name__ == "MujocoPlaygroundEnv" and num_workers > 1:
             env_name = args[0] if len(args) >= 1 else kwargs.get("env_name")
             env_kwargs = {k: v for k, v in kwargs.items() if k != "env_name"}
@@ -376,6 +422,16 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
     Attributes:
         available_envs: environments available to build
 
+    .. note::
+        Unlike :class:`~torchrl.envs.BraxWrapper`, this wrapper does **not**
+        copy the underlying JAX env state into the output ``TensorDict``. The
+        state is kept on the env instance (``self._current_state``) and rolled
+        forward by ``_step``; this avoids round-tripping MJX/pytree state
+        through ``TensorDict``, which would break MJX's metadata pytree
+        registration. As a consequence, the output ``TensorDict`` only
+        contains ``observation`` (or per-key obs for dict-obs envs),
+        ``reward``, ``done`` and ``terminated`` — there is no ``state`` key.
+
     Examples:
         >>> from mujoco_playground import dm_control_suite
         >>> from torchrl.envs import MujocoPlaygroundWrapper
@@ -394,13 +450,15 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
                 done: Tensor(torch.Size([1]), dtype=torch.bool),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(torch.Size([5]), dtype=torch.float32)},
+                        done: Tensor(torch.Size([1]), dtype=torch.bool),
+                        observation: Tensor(torch.Size([5]), dtype=torch.float32),
+                        reward: Tensor(torch.Size([1]), dtype=torch.float32),
+                        terminated: Tensor(torch.Size([1]), dtype=torch.bool)},
                     batch_size=torch.Size([]),
                     device=cpu,
                     is_shared=False),
                 observation: Tensor(torch.Size([5]), dtype=torch.float32),
-                reward: Tensor(torch.Size([1]), dtype=torch.float32),
-                state: TensorDict(...)},
+                terminated: Tensor(torch.Size([1]), dtype=torch.bool)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
@@ -445,6 +503,7 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
     def __init__(
         self,
         env=None,
+        *,
         agent_mapping: MujocoPlaygroundAgentMapping | str | None = None,
         **kwargs,
     ):
@@ -454,9 +513,24 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
                     f"Unknown agent_mapping '{agent_mapping}'. "
                     f"Known mappings: {sorted(KNOWN_MARL_MAPPINGS)}."
                 )
-            agent_mapping = KNOWN_MARL_MAPPINGS[agent_mapping]
+            warnings.warn(
+                f"Resolving agent_mapping='{agent_mapping}' against "
+                "KNOWN_MARL_MAPPINGS. These mappings were authored against "
+                "JaxMARL's MABrax (Brax) observation layouts and may not be "
+                "semantically equivalent on the corresponding mujoco_playground "
+                "env. Verify the partitioning matches your env before training.",
+                stacklevel=2,
+            )
+            # Deepcopy so users mutating the returned mapping cannot leak
+            # changes back into the module-level KNOWN_MARL_MAPPINGS dict
+            # (the dataclass is frozen but its `agents` list is not).
+            agent_mapping = copy.deepcopy(KNOWN_MARL_MAPPINGS[agent_mapping])
         if env is not None:
             kwargs["env"] = env
+        # `_seed_calls_reset` is part of the `_EnvWrapper` interface; the
+        # default `None` keeps the base class's behaviour (no extra reset on
+        # `set_seed`). Left as an explicit attribute to make the contract
+        # visible to subclasses.
         self._seed_calls_reset = None
         self._agent_mapping = agent_mapping
         super().__init__(**kwargs)
@@ -482,18 +556,15 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         env,
         _seed: int | None = None,
         from_pixels: bool = False,
-        render_kwargs: dict | None = None,
-        pixels_only: bool = False,
-        camera_id: int | str = 0,
         **kwargs,
     ):
         self.from_pixels = from_pixels
-        self.pixels_only = pixels_only
-
         if from_pixels:
             raise NotImplementedError(
                 "from_pixels=True is not yet supported within MujocoPlaygroundWrapper"
             )
+        if kwargs:
+            raise ValueError(f"Unsupported kwargs: {sorted(kwargs)}")
         return env
 
     def _obs_is_dict(self) -> bool:
@@ -625,10 +696,12 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         self._vmap_jit_env_step = jax.vmap(jax.jit(self._env.step))
 
     def _set_seed(self, seed: int | None) -> None:
+        # `_reset` falls back to seed=0 when no key has been initialised, so
+        # accept the same convention here for consistency.
         jax = self.jax
         if seed is None:
-            raise Exception("MujocoPlayground requires an integer seed.")
-        self._key = jax.random.PRNGKey(seed)
+            seed = 0
+        self._key = jax.random.PRNGKey(int(seed))
 
     def _extract_obs(self, state) -> dict:
         """Extract observation tensors directly from raw JAX state.
@@ -913,13 +986,15 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
                 done: Tensor(torch.Size([1]), dtype=torch.bool),
                 next: TensorDict(
                     fields={
-                        observation: Tensor(torch.Size([5]), dtype=torch.float32)},
+                        done: Tensor(torch.Size([1]), dtype=torch.bool),
+                        observation: Tensor(torch.Size([5]), dtype=torch.float32),
+                        reward: Tensor(torch.Size([1]), dtype=torch.float32),
+                        terminated: Tensor(torch.Size([1]), dtype=torch.bool)},
                     batch_size=torch.Size([]),
                     device=cpu,
                     is_shared=False),
                 observation: Tensor(torch.Size([5]), dtype=torch.float32),
-                reward: Tensor(torch.Size([1]), dtype=torch.float32),
-                state: TensorDict(...)},
+                terminated: Tensor(torch.Size([1]), dtype=torch.bool)},
             batch_size=torch.Size([]),
             device=cpu,
             is_shared=False)
@@ -941,7 +1016,14 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
 
     """
 
-    def __init__(self, env_name: str, config=None, config_overrides=None, **kwargs):
+    def __init__(
+        self,
+        env_name: str,
+        *,
+        config=None,
+        config_overrides=None,
+        **kwargs,
+    ):
         kwargs["env_name"] = env_name
         if config is not None:
             kwargs["config"] = config
@@ -964,33 +1046,31 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
             )
         from mujoco_playground import registry
 
+        # `from_pixels=True` is rejected by the parent wrapper; reject any
+        # pixel/render related kwarg early to keep the error message close to
+        # the construction site.
         from_pixels = kwargs.pop("from_pixels", False)
-        pixels_only = kwargs.pop("pixels_only", True)
-        camera_id = kwargs.pop("camera_id", 0)
-        render_kwargs = kwargs.pop("render_kwargs", None)
         if kwargs:
             raise ValueError(f"Unsupported kwargs: {sorted(kwargs)}")
 
         self.wrapper_frame_skip = 1
         env = registry.load(env_name, config=config, config_overrides=config_overrides)
-        return super()._build_env(
-            env,
-            pixels_only=pixels_only,
-            from_pixels=from_pixels,
-            camera_id=camera_id,
-            render_kwargs=render_kwargs,
-        )
+        return super()._build_env(env, from_pixels=from_pixels)
 
     @property
     def env_name(self) -> str:
         return self._constructor_kwargs["env_name"]
 
     def _check_kwargs(self, kwargs: dict):
+        # We intentionally only validate `env_name` here (not the env's
+        # attributes) because `_build_env` calls `registry.load(env_name, ...)`
+        # to produce a valid MjxEnv before the wrapper's own `_check_kwargs`
+        # would otherwise run.
         if "env_name" not in kwargs:
             raise TypeError("Expected 'env_name' to be part of kwargs")
 
     def __repr__(self) -> str:
         return (
-            f"{self.__class__.__name__}(env={self.env_name}, "
+            f"{self.__class__.__name__}(env_name={self.env_name!r}, "
             f"batch_size={self.batch_size}, device={self.device})"
         )

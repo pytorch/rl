@@ -41,7 +41,7 @@ from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger
 from torchrl.collectors import Collector
 from torchrl.envs import MujocoPlaygroundEnv
-from torchrl.envs.libs.jax_utils import _tensordict_to_object
+from torchrl.envs.utils import step_mdp
 
 os.environ.setdefault("TORCHRL_PROFILING", "1")
 
@@ -262,43 +262,44 @@ def make_policy(
     raise ValueError(f"Unknown policy mode {policy_mode!r}.")
 
 
-def save_visualization(env: MujocoPlaygroundEnv, args: argparse.Namespace) -> None:
+def save_visualization(
+    env: MujocoPlaygroundEnv,
+    policy: typing.Callable[[TensorDictBase], TensorDictBase],
+    args: argparse.Namespace,
+) -> None:
     """Collect a short rollout and save a rendered visualization.
 
-    Converts TensorDict states back to JAX State objects, calls the
-    underlying environment's ``render`` method, then writes the frames
-    to an MP4 file (via ``imageio``) or to individual PNG files.
+    Snapshots the env's JAX state (``env._current_state``) after each step,
+    optionally indexing into the leading batch dim, and feeds the resulting
+    list of states to the underlying env's ``render`` method.
 
     Args:
         env (MujocoPlaygroundEnv): the environment to render.
+        policy (callable): a policy that fills the action in a TensorDict.
         args (argparse.Namespace): parsed command-line arguments.
     """
     import jax
 
+    batched = len(env.batch_size) > 0
+
+    def _snapshot(state):
+        # For batched envs, pick the first sub-environment so the renderer
+        # receives un-batched JAX State objects.
+        if batched:
+            return jax.tree_util.tree_map(lambda x: x[0], state)
+        return state
+
     torchrl_logger.info(
         f"Collecting {args.render_steps} steps for visualization rollout."
     )
+    td = env.reset()
+    states = [_snapshot(env._current_state)]
     with torch.no_grad():
-        td = env.rollout(args.render_steps)
-
-    batched = len(env.batch_size) > 0
-
-    # Build a single-element state example so _tensordict_to_object can
-    # infer field structure without a batch dimension.
-    if batched:
-        single_example = jax.tree_util.tree_map(lambda x: x[0], env._state_example)
-    else:
-        single_example = env._state_example
-
-    torchrl_logger.info("Converting TensorDict states to JAX State objects.")
-    states = []
-    for t in range(args.render_steps):
-        if batched:
-            step_td = td[0, t].get("state")
-        else:
-            step_td = td[t].get("state")
-        jax_state = _tensordict_to_object(step_td, single_example)
-        states.append(jax_state)
+        for _ in range(args.render_steps):
+            td = policy(td)
+            td = env.step(td)
+            states.append(_snapshot(env._current_state))
+            td = step_mdp(td)
 
     torchrl_logger.info(
         f"Rendering {len(states)} frames "
@@ -402,7 +403,7 @@ def main() -> None:
     torchrl_logger.info(f"Trace written to {worker_0_trace_path}.")
 
     if args_cli.render:
-        save_visualization(env, args_cli)
+        save_visualization(env, policy, args_cli)
 
     env.close()
 

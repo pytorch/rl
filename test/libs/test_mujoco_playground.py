@@ -45,6 +45,41 @@ _KNOWN_LOCOMOTION_ENVS = ["Go1JoystickFlatTerrain"]
 # Manipulation environments known to exist (subset)
 _KNOWN_MANIPULATION_ENVS = ["PandaPickCube"]
 
+# Dict-obs environment used to exercise the dict-observation code path.
+_DICT_OBS_ENV = "Go1JoystickFlatTerrain"
+
+
+# Module-level autouse fixture: every test in this module needs JAX to be set
+# up before any wrapper is instantiated. Previously this was duplicated as a
+# class-level fixture on each test class.
+@pytest.fixture(autouse=True)
+def _setup_jax():
+    if not _has_jax:
+        yield
+        return
+    os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+    os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
+    os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
+    yield
+
+
+# Cached environment dims for the multi-agent test env, avoiding O(n_tests)
+# construction of a throwaway env just to read `action_size` /
+# `observation_size`. The env build is expensive (jit tracing), so we pay it
+# once per test session.
+@pytest.fixture(scope="session")
+def marl_env_sizes():
+    if not _has_mujoco_playground:
+        pytest.skip("mujoco_playground not installed")
+    env = MujocoPlaygroundEnv(_MARL_ENV, config_overrides=_JAX_CONFIG)
+    try:
+        return {
+            "action_size": env._env.action_size,
+            "observation_size": env._env.observation_size,
+        }
+    finally:
+        env.close()
+
 
 @pytest.mark.skipif(
     not _has_mujoco_playground, reason="mujoco_playground not installed"
@@ -52,23 +87,6 @@ _KNOWN_MANIPULATION_ENVS = ["PandaPickCube"]
 @pytest.mark.parametrize("device", get_available_devices())
 @pytest.mark.parametrize("envname", [_FLAT_OBS_ENV])
 class TestMujocoPlayground:
-    @pytest.fixture(autouse=True)
-    def _setup_jax(self):
-        """Configure JAX for proper GPU initialization."""
-        import jax
-
-        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-        os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
-        os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
-
-        try:
-            jax.devices()
-        except Exception:
-            os.environ["JAX_PLATFORM_NAME"] = "cpu"
-            jax.config.update("jax_platform_name", "cpu")
-
-        yield
-
     def test_constructor_wrapper(self, envname, device):
         """MujocoPlaygroundWrapper works from a pre-built env."""
         from mujoco_playground import dm_control_suite
@@ -220,20 +238,6 @@ class TestMujocoPlayground:
 )
 @pytest.mark.parametrize("device", get_available_devices())
 class TestMujocoPlaygroundAvailableEnvs:
-    @pytest.fixture(autouse=True)
-    def _setup_jax(self):
-        import jax
-
-        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-        os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
-        os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
-        try:
-            jax.devices()
-        except Exception:
-            os.environ["JAX_PLATFORM_NAME"] = "cpu"
-            jax.config.update("jax_platform_name", "cpu")
-        yield
-
     def test_available_envs_contains_all_suites(self, device):
         """available_envs spans dm_control_suite, locomotion, and manipulation."""
         envs = MujocoPlaygroundEnv.available_envs
@@ -273,11 +277,11 @@ class TestMujocoPlaygroundAvailableEnvs:
         env.close()
 
 
-def _make_two_agent_mapping(env):
-    """Build a 2-agent mapping for a flat-obs env by splitting obs/action in half."""
-    action_size = env._env.action_size
-    obs_size = env._env.observation_size
-    half_act = action_size // 2
+def _two_agent_mapping_from_sizes(
+    obs_size, act_size, homogenization_mode="none"
+) -> MujocoPlaygroundAgentMapping:
+    """Build a 2-agent mapping that splits obs/action in half."""
+    half_act = act_size // 2
     half_obs = obs_size // 2
     return MujocoPlaygroundAgentMapping(
         agents=[
@@ -288,11 +292,11 @@ def _make_two_agent_mapping(env):
             ),
             MujocoPlaygroundAgentSpec(
                 name="agent_1",
-                action_indices=list(range(half_act, action_size)),
+                action_indices=list(range(half_act, act_size)),
                 observation_indices=list(range(half_obs, obs_size)),
             ),
         ],
-        homogenization_mode="none",
+        homogenization_mode=homogenization_mode,
     )
 
 
@@ -301,30 +305,12 @@ def _make_two_agent_mapping(env):
 )
 @pytest.mark.parametrize("device", get_available_devices())
 class TestMujocoPlaygroundMultiAgent:
-    @pytest.fixture(autouse=True)
-    def _setup_jax(self):
-        import jax
-
-        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-        os.environ.setdefault("XLA_PYTHON_CLIENT_ALLOCATOR", "platform")
-        os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
-        try:
-            jax.devices()
-        except Exception:
-            os.environ["JAX_PLATFORM_NAME"] = "cpu"
-            jax.config.update("jax_platform_name", "cpu")
-        yield
-
-    def _make_env(self, device, mapping=None, batch_size=()):
-        env = MujocoPlaygroundEnv(
-            _MARL_ENV,
-            batch_size=batch_size,
-            device=device,
-            config_overrides=_JAX_CONFIG,
-        )
+    def _make_env(self, device, marl_env_sizes, mapping=None, batch_size=()):
         if mapping is None:
-            mapping = _make_two_agent_mapping(env)
-        env.close()
+            mapping = _two_agent_mapping_from_sizes(
+                marl_env_sizes["observation_size"],
+                marl_env_sizes["action_size"],
+            )
         return MujocoPlaygroundEnv(
             _MARL_ENV,
             batch_size=batch_size,
@@ -333,13 +319,13 @@ class TestMujocoPlaygroundMultiAgent:
             config_overrides=_JAX_CONFIG,
         )
 
-    def test_construction_two_agents(self, device):
-        env = self._make_env(device)
+    def test_construction_two_agents(self, device, marl_env_sizes):
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         env.close()
 
-    def test_action_spec_is_nested_composite(self, device):
-        env = self._make_env(device)
+    def test_action_spec_is_nested_composite(self, device, marl_env_sizes):
+        env = self._make_env(device, marl_env_sizes)
         from torchrl.data.tensor_specs import Composite
 
         assert isinstance(env.action_spec, Composite)
@@ -347,8 +333,8 @@ class TestMujocoPlaygroundMultiAgent:
         assert "agent_1" in env.action_spec.keys()
         env.close()
 
-    def test_reset_output_keys(self, device):
-        env = self._make_env(device)
+    def test_reset_output_keys(self, device, marl_env_sizes):
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         td = env.reset()
         assert "agent_0" in td.keys()
@@ -359,30 +345,11 @@ class TestMujocoPlaygroundMultiAgent:
         assert "observation" in td["agent_1"].keys()
         env.close()
 
-    def test_reset_obs_shapes_none_mode(self, device):
-        # Build mapping explicitly so we know obs sizes
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        act_size = base_env._env.action_size
-        base_env.close()
-
+    def test_reset_obs_shapes_none_mode(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
+        act_size = marl_env_sizes["action_size"]
         half_obs = obs_size // 2
-        mapping = MujocoPlaygroundAgentMapping(
-            agents=[
-                MujocoPlaygroundAgentSpec(
-                    name="agent_0",
-                    action_indices=list(range(act_size // 2)),
-                    observation_indices=list(range(half_obs)),
-                ),
-                MujocoPlaygroundAgentSpec(
-                    name="agent_1",
-                    action_indices=list(range(act_size // 2, act_size)),
-                    observation_indices=list(range(half_obs, obs_size)),
-                ),
-            ],
-        )
+        mapping = _two_agent_mapping_from_sizes(obs_size, act_size)
         env = MujocoPlaygroundEnv(
             _MARL_ENV,
             device=device,
@@ -395,9 +362,9 @@ class TestMujocoPlaygroundMultiAgent:
         assert td["agent_1", "observation"].shape[-1] == obs_size - half_obs
         env.close()
 
-    def test_state_not_in_tensordict(self, device):
+    def test_state_not_in_tensordict(self, device, marl_env_sizes):
         # JAX state is kept as instance var; it must not appear in TensorDict output
-        env = self._make_env(device)
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         td = env.reset()
         assert "state" not in td.keys()
@@ -405,15 +372,15 @@ class TestMujocoPlaygroundMultiAgent:
         assert "state" not in td["agent_1"].keys()
         env.close()
 
-    def test_rollout_works(self, device):
-        env = self._make_env(device)
+    def test_rollout_works(self, device, marl_env_sizes):
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         td = env.rollout(3)
         assert td.shape[-1] == 3
         env.close()
 
-    def test_reward_duplicated_to_all_agents(self, device):
-        env = self._make_env(device)
+    def test_reward_duplicated_to_all_agents(self, device, marl_env_sizes):
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         td = env.rollout(1)
         r0 = td[..., 0]["next", "agent_0", "reward"]
@@ -421,14 +388,9 @@ class TestMujocoPlaygroundMultiAgent:
         torch.testing.assert_close(r0, r1)
         env.close()
 
-    def test_action_shapes_in_rollout(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        act_size = base_env._env.action_size
-        base_env.close()
-
-        env = self._make_env(device)
+    def test_action_shapes_in_rollout(self, device, marl_env_sizes):
+        act_size = marl_env_sizes["action_size"]
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         td = env.rollout(2)
         half = act_size // 2
@@ -436,13 +398,8 @@ class TestMujocoPlaygroundMultiAgent:
         assert td["agent_1", "action"].shape[-1] == act_size - half
         env.close()
 
-    def test_validation_overlapping_actions_raises(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        base_env.close()
-
+    def test_validation_overlapping_actions_raises(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
         mapping = MujocoPlaygroundAgentMapping(
             agents=[
                 MujocoPlaygroundAgentSpec(
@@ -465,13 +422,8 @@ class TestMujocoPlaygroundMultiAgent:
                 config_overrides=_JAX_CONFIG,
             )
 
-    def test_validation_missing_action_indices_raises(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        base_env.close()
-
+    def test_validation_missing_action_indices_raises(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
         mapping = MujocoPlaygroundAgentMapping(
             agents=[
                 MujocoPlaygroundAgentSpec(
@@ -494,14 +446,9 @@ class TestMujocoPlaygroundMultiAgent:
                 config_overrides=_JAX_CONFIG,
             )
 
-    def test_validation_out_of_range_action_index_raises(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        act_size = base_env._env.action_size
-        base_env.close()
-
+    def test_validation_out_of_range_action_index_raises(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
+        act_size = marl_env_sizes["action_size"]
         mapping = MujocoPlaygroundAgentMapping(
             agents=[
                 MujocoPlaygroundAgentSpec(
@@ -519,13 +466,8 @@ class TestMujocoPlaygroundMultiAgent:
                 config_overrides=_JAX_CONFIG,
             )
 
-    def test_homogenization_max_shapes(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        base_env.close()
-
+    def test_homogenization_max_shapes(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
         # Unequal action splits: 2 vs 4
         mapping = MujocoPlaygroundAgentMapping(
             agents=[
@@ -559,28 +501,11 @@ class TestMujocoPlaygroundMultiAgent:
         assert env.action_spec["agent_1", "action"].shape[-1] == max_act
         env.close()
 
-    def test_homogenization_concat_shapes(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        act_size = base_env._env.action_size
-        base_env.close()
-
-        mapping = MujocoPlaygroundAgentMapping(
-            agents=[
-                MujocoPlaygroundAgentSpec(
-                    name="agent_0",
-                    action_indices=list(range(act_size // 2)),
-                    observation_indices=list(range(obs_size // 2)),
-                ),
-                MujocoPlaygroundAgentSpec(
-                    name="agent_1",
-                    action_indices=list(range(act_size // 2, act_size)),
-                    observation_indices=list(range(obs_size // 2, obs_size)),
-                ),
-            ],
-            homogenization_mode="concat",
+    def test_homogenization_concat_shapes(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
+        act_size = marl_env_sizes["action_size"]
+        mapping = _two_agent_mapping_from_sizes(
+            obs_size, act_size, homogenization_mode="concat"
         )
         env = MujocoPlaygroundEnv(
             _MARL_ENV,
@@ -597,20 +522,15 @@ class TestMujocoPlaygroundMultiAgent:
         assert env.action_spec["agent_1", "action"].shape[-1] == act_size
         env.close()
 
-    def test_check_env_specs_none_mode(self, device):
-        env = self._make_env(device)
+    def test_check_env_specs_none_mode(self, device, marl_env_sizes):
+        env = self._make_env(device, marl_env_sizes)
         env.set_seed(0)
         check_env_specs(env)
         env.close()
 
-    def test_check_env_specs_max_mode(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        act_size = base_env._env.action_size
-        base_env.close()
-
+    def test_check_env_specs_max_mode(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
+        act_size = marl_env_sizes["action_size"]
         mapping = MujocoPlaygroundAgentMapping(
             agents=[
                 MujocoPlaygroundAgentSpec(
@@ -636,28 +556,11 @@ class TestMujocoPlaygroundMultiAgent:
         check_env_specs(env)
         env.close()
 
-    def test_check_env_specs_concat_mode(self, device):
-        base_env = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
-        obs_size = base_env._env.observation_size
-        act_size = base_env._env.action_size
-        base_env.close()
-
-        mapping = MujocoPlaygroundAgentMapping(
-            agents=[
-                MujocoPlaygroundAgentSpec(
-                    name="agent_0",
-                    action_indices=list(range(act_size // 2)),
-                    observation_indices=list(range(obs_size // 2)),
-                ),
-                MujocoPlaygroundAgentSpec(
-                    name="agent_1",
-                    action_indices=list(range(act_size // 2, act_size)),
-                    observation_indices=list(range(obs_size // 2, obs_size)),
-                ),
-            ],
-            homogenization_mode="concat",
+    def test_check_env_specs_concat_mode(self, device, marl_env_sizes):
+        obs_size = marl_env_sizes["observation_size"]
+        act_size = marl_env_sizes["action_size"]
+        mapping = _two_agent_mapping_from_sizes(
+            obs_size, act_size, homogenization_mode="concat"
         )
         env = MujocoPlaygroundEnv(
             _MARL_ENV,
@@ -670,8 +573,8 @@ class TestMujocoPlaygroundMultiAgent:
         env.close()
 
     @pytest.mark.parametrize("batch_size", [(4,), (4, 3)])
-    def test_batch_size_with_agent_mapping(self, device, batch_size):
-        env = self._make_env(device, batch_size=batch_size)
+    def test_batch_size_with_agent_mapping(self, device, marl_env_sizes, batch_size):
+        env = self._make_env(device, marl_env_sizes, batch_size=batch_size)
         env.set_seed(0)
         td = env.reset()
         assert td.batch_size == torch.Size(batch_size)
@@ -683,21 +586,35 @@ class TestMujocoPlaygroundMultiAgent:
         )
         env.close()
 
-    def test_no_mapping_regression(self, device):
-        env_marl = MujocoPlaygroundEnv(
-            _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
-        )
+    def test_no_mapping_regression(self, device, marl_env_sizes):
+        """Without `agent_mapping`, the env exposes the single-agent layout
+        (flat ``observation``), and with the same env+seed the multi-agent
+        variant exposes the per-agent layout."""
         env_plain = MujocoPlaygroundEnv(
             _MARL_ENV, device=device, config_overrides=_JAX_CONFIG
         )
-        env_marl.set_seed(42)
-        env_plain.set_seed(42)
-        td_plain = env_plain.rollout(5)
-        # single-agent mode: observation key present at top level
-        assert "observation" in td_plain.keys()
-        assert "agent_0" not in td_plain.keys()
-        env_marl.close()
-        env_plain.close()
+        env_marl = MujocoPlaygroundEnv(
+            _MARL_ENV,
+            device=device,
+            config_overrides=_JAX_CONFIG,
+            agent_mapping=_two_agent_mapping_from_sizes(
+                marl_env_sizes["observation_size"],
+                marl_env_sizes["action_size"],
+            ),
+        )
+        try:
+            env_plain.set_seed(42)
+            env_marl.set_seed(42)
+            td_plain = env_plain.rollout(5)
+            td_marl = env_marl.rollout(5)
+            assert "observation" in td_plain.keys()
+            assert "agent_0" not in td_plain.keys()
+            assert "agent_0" in td_marl.keys()
+            assert "agent_1" in td_marl.keys()
+            assert "observation" not in td_marl.keys()
+        finally:
+            env_marl.close()
+            env_plain.close()
 
 
 @pytest.mark.skipif(
@@ -727,12 +644,13 @@ class TestKnownMarlMappings:
 
     def test_string_mapping_resolves(self):
         # CheetahRun has action_size=6 — matches halfcheetah_6x1
-        env = MujocoPlaygroundEnv(
-            "CheetahRun",
-            device="cpu",
-            agent_mapping="halfcheetah_6x1",
-            config_overrides=_JAX_CONFIG,
-        )
+        with pytest.warns(UserWarning, match="MABrax"):
+            env = MujocoPlaygroundEnv(
+                "CheetahRun",
+                device="cpu",
+                agent_mapping="halfcheetah_6x1",
+                config_overrides=_JAX_CONFIG,
+            )
         env.set_seed(0)
         td = env.reset()
         for i in range(6):
@@ -740,12 +658,13 @@ class TestKnownMarlMappings:
         env.close()
 
     def test_string_mapping_check_env_specs(self):
-        env = MujocoPlaygroundEnv(
-            "CheetahRun",
-            device="cpu",
-            agent_mapping="halfcheetah_6x1",
-            config_overrides=_JAX_CONFIG,
-        )
+        with pytest.warns(UserWarning, match="MABrax"):
+            env = MujocoPlaygroundEnv(
+                "CheetahRun",
+                device="cpu",
+                agent_mapping="halfcheetah_6x1",
+                config_overrides=_JAX_CONFIG,
+            )
         env.set_seed(0)
         check_env_specs(env)
         env.close()
@@ -761,7 +680,7 @@ class TestKnownMarlMappings:
 
     def test_mismatch_env_raises(self):
         # ant_4x2 expects action_size=8; CheetahRun has action_size=6 — mismatch
-        with pytest.raises(ValueError):
+        with pytest.warns(UserWarning, match="MABrax"), pytest.raises(ValueError):
             MujocoPlaygroundEnv(
                 "CheetahRun",
                 device="cpu",
@@ -769,15 +688,127 @@ class TestKnownMarlMappings:
                 config_overrides=_JAX_CONFIG,
             )
 
-    def test_object_mapping_still_works(self):
+    def test_object_mapping_does_not_warn(self):
+        """Passing a mapping object directly should not trigger the MABrax warning."""
+        import warnings
+
         mapping = KNOWN_MARL_MAPPINGS["halfcheetah_6x1"]
-        env = MujocoPlaygroundEnv(
-            "CheetahRun",
-            device="cpu",
-            agent_mapping=mapping,
-            config_overrides=_JAX_CONFIG,
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UserWarning)
+            env = MujocoPlaygroundEnv(
+                "CheetahRun",
+                device="cpu",
+                agent_mapping=mapping,
+                config_overrides=_JAX_CONFIG,
+            )
         env.set_seed(0)
         td = env.reset()
         assert "agent_0" in td.keys()
         env.close()
+
+    def test_string_mapping_returns_deep_copy(self):
+        """Mutating the resolved mapping must not leak into KNOWN_MARL_MAPPINGS."""
+        original_n_agents = len(KNOWN_MARL_MAPPINGS["halfcheetah_6x1"].agents)
+        with pytest.warns(UserWarning, match="MABrax"):
+            env = MujocoPlaygroundEnv(
+                "CheetahRun",
+                device="cpu",
+                agent_mapping="halfcheetah_6x1",
+                config_overrides=_JAX_CONFIG,
+            )
+        try:
+            # `_agent_mapping` is frozen but `.agents` is a list and is
+            # mutable; verify the wrapper's copy is not the module-level one.
+            assert (
+                env._agent_mapping.agents
+                is not KNOWN_MARL_MAPPINGS["halfcheetah_6x1"].agents
+            )
+            env._agent_mapping.agents.clear()
+            assert (
+                len(KNOWN_MARL_MAPPINGS["halfcheetah_6x1"].agents) == original_n_agents
+            )
+        finally:
+            env.close()
+
+
+@pytest.mark.skipif(
+    not _has_mujoco_playground,
+    reason="mujoco_playground not installed",
+)
+class TestMujocoPlaygroundDictObs:
+    """Tests for dict-observation environments (e.g. locomotion suite)."""
+
+    def _is_dict_obs(self):
+        from mujoco_playground import registry
+
+        env = registry.load(_DICT_OBS_ENV, config_overrides=_JAX_CONFIG)
+        return isinstance(env.observation_size, dict)
+
+    def test_dict_obs_env_reset(self):
+        env = MujocoPlaygroundEnv(
+            _DICT_OBS_ENV, device="cpu", config_overrides=_JAX_CONFIG
+        )
+        if not isinstance(env._env.observation_size, dict):
+            env.close()
+            pytest.skip(f"{_DICT_OBS_ENV} unexpectedly exposes a non-dict observation.")
+        env.set_seed(0)
+        td = env.reset()
+        # Each observation key from the env should appear at the top level of
+        # the reset TensorDict.
+        for key in env._env.observation_size:
+            assert key in td.keys(), f"obs key '{key}' missing from reset td"
+        env.close()
+
+    def test_dict_obs_check_env_specs(self):
+        env = MujocoPlaygroundEnv(
+            _DICT_OBS_ENV, device="cpu", config_overrides=_JAX_CONFIG
+        )
+        if not isinstance(env._env.observation_size, dict):
+            env.close()
+            pytest.skip(f"{_DICT_OBS_ENV} unexpectedly exposes a non-dict observation.")
+        env.set_seed(0)
+        check_env_specs(env)
+        env.close()
+
+    def test_dict_obs_max_mode_raises_not_implemented(self):
+        """`homogenization_mode != 'none'` is not yet supported for dict obs."""
+        env = MujocoPlaygroundEnv(
+            _DICT_OBS_ENV, device="cpu", config_overrides=_JAX_CONFIG
+        )
+        if not isinstance(env._env.observation_size, dict):
+            env.close()
+            pytest.skip(f"{_DICT_OBS_ENV} unexpectedly exposes a non-dict observation.")
+        # Use the first obs key to build a minimal dict-obs mapping covering
+        # the action space.
+        obs_sizes = env._env.observation_size
+        act_size = env._env.action_size
+        env.close()
+
+        first_key = next(iter(obs_sizes))
+        key_len = (
+            int(obs_sizes[first_key][0])
+            if hasattr(obs_sizes[first_key], "__len__")
+            else int(obs_sizes[first_key])
+        )
+        mapping = MujocoPlaygroundAgentMapping(
+            agents=[
+                MujocoPlaygroundAgentSpec(
+                    name="agent_0",
+                    action_indices=list(range(act_size // 2)),
+                    observation_indices={first_key: list(range(key_len // 2))},
+                ),
+                MujocoPlaygroundAgentSpec(
+                    name="agent_1",
+                    action_indices=list(range(act_size // 2, act_size)),
+                    observation_indices={first_key: list(range(key_len // 2, key_len))},
+                ),
+            ],
+            homogenization_mode="max",
+        )
+        with pytest.raises(NotImplementedError, match="dict-observation"):
+            MujocoPlaygroundEnv(
+                _DICT_OBS_ENV,
+                device="cpu",
+                agent_mapping=mapping,
+                config_overrides=_JAX_CONFIG,
+            )
