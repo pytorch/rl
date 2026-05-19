@@ -928,7 +928,7 @@ class PPOLoss(LossModule):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1335,7 +1335,7 @@ class ClipPPOLoss(PPOLoss):
             td_out.set("max_ratio", ratio.max())
             td_out.set("mean_ratio", ratio.mean())
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1691,7 +1691,7 @@ class KLPENPPOLoss(PPOLoss):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict_copy).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

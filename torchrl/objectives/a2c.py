@@ -33,7 +33,6 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
-    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -589,7 +588,7 @@ class A2CLoss(LossModule):
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, tensordict).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
