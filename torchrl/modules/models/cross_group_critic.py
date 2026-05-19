@@ -22,7 +22,7 @@ from torchrl.modules.models.models import MLP
 
 
 @dataclasses.dataclass
-class GroupSpec:
+class CrossCriticGroupSpec:
     """Specification for one agent group used by :class:`CrossGroupCritic`.
 
     Args:
@@ -50,7 +50,7 @@ class _CrossGroupNet(nn.Module):
 
     def __init__(
         self,
-        group_specs: dict[str, GroupSpec],
+        group_specs: dict[str, CrossCriticGroupSpec],
         d_model: int,
         trunk_depth: int,
         trunk_cells: int,
@@ -140,8 +140,8 @@ class CrossGroupCritic(TensorDictModule):
     those classes.
 
     Args:
-        group_map (dict[str, GroupSpec]): ordered mapping from a group name
-            to a :class:`GroupSpec` that describes the group's observation
+        group_map (dict[str, CrossCriticGroupSpec]): ordered mapping from a group name
+            to a :class:`CrossCriticGroupSpec` that describes the group's observation
             dimensionality, agent count, and tensordict keys.
 
     Keyword Args:
@@ -171,12 +171,12 @@ class CrossGroupCritic(TensorDictModule):
     Example:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.modules.models.cross_group_critic import CrossGroupCritic, GroupSpec
+        >>> from torchrl.modules.models.cross_group_critic import CrossGroupCritic, CrossCriticGroupSpec
         >>> group_map = {
-        ...     "soldiers": GroupSpec(obs_dim=12, n_agents=3,
+        ...     "soldiers": CrossCriticGroupSpec(obs_dim=12, n_agents=3,
         ...         obs_key=("soldiers", "observation"),
         ...         value_key=("soldiers", "state_value")),
-        ...     "medics": GroupSpec(obs_dim=8, n_agents=2,
+        ...     "medics": CrossCriticGroupSpec(obs_dim=8, n_agents=2,
         ...         obs_key=("medics", "observation"),
         ...         value_key=("medics", "state_value")),
         ... }
@@ -197,7 +197,7 @@ class CrossGroupCritic(TensorDictModule):
 
     def __init__(
         self,
-        group_map: dict[str, GroupSpec],
+        group_map: dict[str, CrossCriticGroupSpec],
         *,
         d_model: int = 64,
         trunk_depth: int = 2,

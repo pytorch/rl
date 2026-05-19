@@ -12,6 +12,10 @@ import torch
 from tensordict import TensorDict
 from torch import nn
 from torchrl.modules import MultiAgentConvNet, MultiAgentMLP, QMixer, VDNMixer
+from torchrl.modules.models.cross_group_critic import (
+    CrossCriticGroupSpec,
+    CrossGroupCritic,
+)
 from torchrl.modules.models.multiagent import MultiAgentNetBase
 
 from torchrl.testing import retry
@@ -624,16 +628,14 @@ class TestCrossGroupCritic:
         return TensorDict(data, batch_size=list(batch))
 
     def _make_group_map(self):
-        from torchrl.modules.models.cross_group_critic import GroupSpec
-
         return {
-            "soldiers": GroupSpec(
+            "soldiers": CrossCriticGroupSpec(
                 obs_dim=12,
                 n_agents=3,
                 obs_key=("soldiers", "observation"),
                 value_key=("soldiers", "state_value"),
             ),
-            "medics": GroupSpec(
+            "medics": CrossCriticGroupSpec(
                 obs_dim=8,
                 n_agents=2,
                 obs_key=("medics", "observation"),
@@ -644,8 +646,6 @@ class TestCrossGroupCritic:
     @pytest.mark.parametrize("batch", [(4,), (4, 3), ()])
     @pytest.mark.parametrize("share_params", [True, False])
     def test_output_shapes(self, batch, share_params):
-        from torchrl.modules.models.cross_group_critic import CrossGroupCritic
-
         group_map = self._make_group_map()
         critic = CrossGroupCritic(
             group_map,
@@ -665,19 +665,14 @@ class TestCrossGroupCritic:
             ), f"group '{name}': expected {(*batch, spec.n_agents, 1)}, got {val.shape}"
 
     def test_heterogeneous_obs_dims(self):
-        from torchrl.modules.models.cross_group_critic import (
-            CrossGroupCritic,
-            GroupSpec,
-        )
-
         group_map = {
-            "a": GroupSpec(
+            "a": CrossCriticGroupSpec(
                 obs_dim=6, n_agents=2, obs_key=("a", "obs"), value_key=("a", "val")
             ),
-            "b": GroupSpec(
+            "b": CrossCriticGroupSpec(
                 obs_dim=20, n_agents=3, obs_key=("b", "obs"), value_key=("b", "val")
             ),
-            "c": GroupSpec(
+            "c": CrossCriticGroupSpec(
                 obs_dim=4, n_agents=1, obs_key=("c", "obs"), value_key=("c", "val")
             ),
         }
@@ -696,8 +691,6 @@ class TestCrossGroupCritic:
         assert td["c", "val"].shape == (4, 1, 1)
 
     def test_share_params_same_head(self):
-        from torchrl.modules.models.cross_group_critic import CrossGroupCritic
-
         group_map = self._make_group_map()
         critic = CrossGroupCritic(
             group_map, d_model=16, trunk_depth=1, trunk_cells=32, share_params=True
@@ -706,8 +699,6 @@ class TestCrossGroupCritic:
         assert critic.module.group_heads is None
 
     def test_no_share_params_separate_heads(self):
-        from torchrl.modules.models.cross_group_critic import CrossGroupCritic
-
         group_map = self._make_group_map()
         critic = CrossGroupCritic(
             group_map, d_model=16, trunk_depth=1, trunk_cells=32, share_params=False
@@ -716,19 +707,14 @@ class TestCrossGroupCritic:
         assert set(critic.module.group_heads.keys()) == set(group_map.keys())
 
     def test_detach_groups_blocks_gradient(self):
-        from torchrl.modules.models.cross_group_critic import (
-            CrossGroupCritic,
-            GroupSpec,
-        )
-
         group_map = {
-            "active": GroupSpec(
+            "active": CrossCriticGroupSpec(
                 obs_dim=6,
                 n_agents=2,
                 obs_key=("active", "obs"),
                 value_key=("active", "val"),
             ),
-            "frozen": GroupSpec(
+            "frozen": CrossCriticGroupSpec(
                 obs_dim=6,
                 n_agents=2,
                 obs_key=("frozen", "obs"),
@@ -754,8 +740,6 @@ class TestCrossGroupCritic:
         assert active_obs.grad is not None
 
     def test_gradients_flow_through_critic(self):
-        from torchrl.modules.models.cross_group_critic import CrossGroupCritic
-
         group_map = self._make_group_map()
         critic = CrossGroupCritic(group_map, d_model=16, trunk_depth=1, trunk_cells=32)
         td = self._make_td((4,), group_map)
@@ -766,13 +750,8 @@ class TestCrossGroupCritic:
             assert p.grad is not None
 
     def test_nested_key_inputs(self):
-        from torchrl.modules.models.cross_group_critic import (
-            CrossGroupCritic,
-            GroupSpec,
-        )
-
         group_map = {
-            "g1": GroupSpec(
+            "g1": CrossCriticGroupSpec(
                 obs_dim=4,
                 n_agents=2,
                 obs_key=("agents", "g1", "observation"),
@@ -787,8 +766,6 @@ class TestCrossGroupCritic:
         assert td["agents", "g1", "state_value"].shape == (3, 2, 1)
 
     def test_device(self):
-        from torchrl.modules.models.cross_group_critic import CrossGroupCritic
-
         group_map = self._make_group_map()
         critic = CrossGroupCritic(group_map, d_model=8, trunk_depth=1, trunk_cells=16)
         for p in critic.parameters():
