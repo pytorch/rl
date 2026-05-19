@@ -64,8 +64,178 @@ class ValueEstimators(Enum):
     VTrace = "V-trace"
 
 
+# ---------------------------------------------------------------------------
+# Value-estimator registry
+# ---------------------------------------------------------------------------
+#
+# Historically, every loss that wanted to pick between TD0 / GAE / V-Trace /
+# etc. shipped its own ``make_value_estimator`` body with a hard-coded
+# ``if/elif`` chain that knew the class names, the default kwargs, and any
+# per-estimator construction quirks (e.g. V-Trace needs the actor). Adding a
+# new estimator therefore meant touching ~15 loss files.
+#
+# The registry below decouples those three things:
+#   - which class implements a given ``ValueEstimators`` enum entry
+#   - what default hyper-parameters that class expects
+#   - how to wire the estimator against a particular ``LossModule``
+#
+# Estimators self-register via the :func:`register_value_estimator` decorator
+# at class-definition time. Loss modules can then build the right estimator
+# with a single call to :func:`build_value_estimator`, regardless of how many
+# concrete estimator classes exist.
+#
+# The registry accepts either an enum value or its lowercase string alias
+# (e.g. ``"gae"``), which is convenient for config-driven setups.
+
+
+class _ValueEstimatorRegistryEntry:
+    """One row of the value-estimator registry."""
+
+    __slots__ = ("cls", "default_kwargs")
+
+    def __init__(self, cls: type, default_kwargs: dict) -> None:
+        self.cls = cls
+        self.default_kwargs = dict(default_kwargs)
+
+
+_VALUE_ESTIMATOR_REGISTRY: dict[ValueEstimators, _ValueEstimatorRegistryEntry] = {}
+
+
+def register_value_estimator(
+    value_type: ValueEstimators, *, default_kwargs: dict | None = None
+):
+    """Decorator: register an estimator class against a :class:`ValueEstimators` entry.
+
+    Args:
+        value_type: the enum entry this class implements.
+        default_kwargs: hyperparameter defaults applied when a loss calls
+            ``make_value_estimator(value_type)`` without overriding them.
+
+    Example:
+        >>> @register_value_estimator(
+        ...     ValueEstimators.GAE,
+        ...     default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+        ... )
+        ... class GAE(ValueEstimatorBase):
+        ...     ...
+    """
+
+    def _decorator(cls):
+        _VALUE_ESTIMATOR_REGISTRY[value_type] = _ValueEstimatorRegistryEntry(
+            cls, default_kwargs or {}
+        )
+        return cls
+
+    return _decorator
+
+
+def _coerce_value_type(value_type) -> ValueEstimators:
+    """Allow string aliases like ``"gae"`` alongside the enum values."""
+    if isinstance(value_type, ValueEstimators):
+        return value_type
+    if isinstance(value_type, str):
+        # Accept both the enum *member* name ("GAE") and a lowercase alias
+        # ("gae") for ergonomics with hydra / yaml configs.
+        key = value_type.lower()
+        for member in ValueEstimators:
+            if member.name.lower() == key:
+                return member
+        raise KeyError(
+            f"Unknown value estimator alias {value_type!r}. "
+            f"Known aliases: {[m.name.lower() for m in ValueEstimators]}."
+        )
+    raise TypeError(
+        f"value_type must be a ValueEstimators enum value or a string alias, "
+        f"got {type(value_type).__name__}."
+    )
+
+
+def get_value_estimator_entry(value_type) -> _ValueEstimatorRegistryEntry:
+    """Look up the registry entry for ``value_type`` (enum or string alias)."""
+    coerced = _coerce_value_type(value_type)
+    try:
+        return _VALUE_ESTIMATOR_REGISTRY[coerced]
+    except KeyError as exc:
+        raise NotImplementedError(
+            f"No value estimator registered for {coerced!r}. "
+            "Register one with @register_value_estimator(...) at class definition time."
+        ) from exc
+
+
+def build_value_estimator(loss_module, value_type, **hyperparams):
+    """Construct a value estimator for ``loss_module`` using the registry.
+
+    Resolves the class via :func:`get_value_estimator_entry`, merges the
+    registry defaults with the caller's ``hyperparams``, then delegates the
+    final wiring to ``cls.for_loss(loss_module, **merged)``. Estimator
+    subclasses with construction quirks (V-Trace needs the actor network)
+    override ``for_loss`` rather than every loss owning the quirk.
+    """
+    entry = get_value_estimator_entry(value_type)
+    merged = {**entry.default_kwargs, **hyperparams}
+    return entry.cls.for_loss(loss_module, **merged)
+
+
+def dispatch_value_estimator(
+    loss_module,
+    value_type,
+    *,
+    supported: Iterable[ValueEstimators],
+    tensor_keys: dict[str, NestedKey] | None = None,
+    **hyperparams,
+):
+    """Convenience wrapper for ``make_value_estimator`` bodies.
+
+    Most losses share the exact same dispatch boilerplate:
+
+    1. validate ``value_type`` against a small set of supported estimators;
+    2. merge ``self.gamma`` (if any) and registry defaults into ``hyperparams``;
+    3. build the estimator with :func:`build_value_estimator`;
+    4. apply the loss's ``tensor_keys`` to the estimator via ``set_keys``.
+
+    This helper does all four and assigns the estimator to
+    ``loss_module._value_estimator`` and ``loss_module.value_type``.
+
+    Args:
+        loss_module: the loss whose value estimator to build.
+        value_type: the requested :class:`ValueEstimators` member (or a
+            string alias).
+        supported: the set of :class:`ValueEstimators` members the loss
+            knows how to use. ``value_type`` is checked against this set;
+            anything outside raises :class:`NotImplementedError` with a
+            message naming both the value type and the loss class.
+        tensor_keys: optional dict of ``key_name -> NestedKey`` that gets
+            forwarded to ``value_estimator.set_keys(**tensor_keys)``. If
+            ``None`` (default), no ``set_keys`` call is made and the caller
+            is expected to wire the keys explicitly afterwards.
+        **hyperparams: forwarded to :func:`build_value_estimator`.
+    """
+    supported_set = set(supported)
+    coerced = _coerce_value_type(value_type)
+    if coerced not in supported_set:
+        raise NotImplementedError(
+            f"Value type {coerced!r} is not implemented for loss "
+            f"{type(loss_module).__name__}. Supported value types: "
+            f"{sorted(m.name for m in supported_set)}."
+        )
+    loss_module.value_type = coerced
+    hp = dict(hyperparams)
+    if hasattr(loss_module, "gamma"):
+        hp.setdefault("gamma", loss_module.gamma)
+    estimator = build_value_estimator(loss_module, coerced, **hp)
+    loss_module._value_estimator = estimator
+    if tensor_keys is not None:
+        estimator.set_keys(**tensor_keys)
+    return estimator
+
+
 def default_value_kwargs(value_type: ValueEstimators):
     """Default value function keyword argument generator.
+
+    Now reads from :data:`_VALUE_ESTIMATOR_REGISTRY` so any
+    :func:`register_value_estimator`-decorated class is picked up
+    automatically. Retained as a top-level function for back-compat with
+    callers that don't want to touch the registry directly.
 
     Args:
         value_type (Enum.value): the value function type, from the
@@ -73,23 +243,9 @@ def default_value_kwargs(value_type: ValueEstimators):
 
     Examples:
         >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
-        {"gamma": 0.99, "lmbda": 0.95}
-
+        {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     """
-    if value_type == ValueEstimators.TD1:
-        return {"gamma": 0.99, "differentiable": True}
-    elif value_type == ValueEstimators.TD0:
-        return {"gamma": 0.99, "differentiable": True}
-    elif value_type == ValueEstimators.GAE:
-        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
-    elif value_type == ValueEstimators.MAGAE:
-        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
-    elif value_type == ValueEstimators.TDLambda:
-        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
-    elif value_type == ValueEstimators.VTrace:
-        return {"gamma": 0.99, "differentiable": True}
-    else:
-        raise NotImplementedError(f"Unknown value type {value_type}.")
+    return dict(get_value_estimator_entry(value_type).default_kwargs)
 
 
 class _context_manager:

@@ -25,12 +25,11 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TDLambdaEstimator, ValueEstimatorBase
-from torchrl.objectives.value.advantages import TD0Estimator, TD1Estimator
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class DQNLoss(LossModule):
@@ -263,45 +262,33 @@ class DQNLoss(LossModule):
             self._set_in_keys()
         return self._in_keys
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(**hp, value_network=self.value_network)
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(**hp, value_network=self.value_network)
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp, value_network=self.value_network
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value_target": self.tensor_keys.value_target,
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "advantage": self.tensor_keys.advantage,
+                "value_target": self.tensor_keys.value_target,
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            **hyperparams,
+        )
 
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
@@ -651,34 +638,23 @@ class DistributionalDQNLoss(LossModule):
         )
         return td_out
 
+    SUPPORTED_VALUE_ESTIMATORS = (ValueEstimators.TD0,)
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
+        if value_type not in self.SUPPORTED_VALUE_ESTIMATORS:
+            raise NotImplementedError(
+                f"value type {value_type} is not implemented for "
+                f"{type(self).__name__}. Supported: "
+                f"{sorted(m.name for m in self.SUPPORTED_VALUE_ESTIMATORS)}."
+            )
+        # TD0 here is handled directly in forward — no estimator object is built.
         self.value_type = value_type
-        if value_type is ValueEstimators.TD1:
-            raise NotImplementedError(
-                f"value type {value_type} is not implemented for {self.__class__.__name__}."
-            )
-        elif value_type is ValueEstimators.TD0:
-            # see forward call
-            pass
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"value type {value_type} is not implemented for {self.__class__.__name__}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            raise NotImplementedError(
-                f"value type {value_type} is not implemented for {self.__class__.__name__}."
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
 
     def _default_value_estimator(self):
         self.make_value_estimator(ValueEstimators.TD0)

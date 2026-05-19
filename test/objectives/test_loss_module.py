@@ -1431,3 +1431,116 @@ class TestSchedulableBuffers:
         loss2.load_state_dict(sd)
         assert loss2.entropy_coeff.item() == pytest.approx(0.042)
         assert loss2.clip_epsilon.item() == pytest.approx(0.15)
+
+
+class TestValueEstimatorRegistry:
+    """Tests for the dynamic value-estimator registry.
+
+    These tests are intentionally agnostic of any specific loss so they
+    exercise just the registry machinery in ``torchrl.objectives.utils``.
+    """
+
+    def test_all_builtins_registered(self):
+        """Every ValueEstimators enum member must have a registry entry."""
+        from torchrl.objectives.utils import (
+            _VALUE_ESTIMATOR_REGISTRY,
+            get_value_estimator_entry,
+            ValueEstimators,
+        )
+
+        for member in ValueEstimators:
+            assert member in _VALUE_ESTIMATOR_REGISTRY, f"missing: {member}"
+            entry = get_value_estimator_entry(member)
+            assert entry.cls is not None
+            assert "gamma" in entry.default_kwargs
+
+    def test_string_alias_resolves(self):
+        from torchrl.objectives.utils import get_value_estimator_entry, ValueEstimators
+
+        assert (
+            get_value_estimator_entry("gae").cls
+            is get_value_estimator_entry(ValueEstimators.GAE).cls
+        )
+        assert (
+            get_value_estimator_entry("vtrace").cls
+            is get_value_estimator_entry(ValueEstimators.VTrace).cls
+        )
+
+    def test_unknown_alias_raises(self):
+        from torchrl.objectives.utils import get_value_estimator_entry
+
+        with pytest.raises(KeyError, match="Unknown value estimator alias"):
+            get_value_estimator_entry("not_a_real_estimator")
+
+    def test_unknown_type_raises(self):
+        from torchrl.objectives.utils import get_value_estimator_entry
+
+        with pytest.raises(TypeError, match="must be a ValueEstimators"):
+            get_value_estimator_entry(42)
+
+    def test_register_and_dispatch_custom_estimator(self):
+        """Adding a new estimator must not require touching any loss file."""
+        from enum import Enum
+
+        from torchrl.objectives.utils import (
+            _VALUE_ESTIMATOR_REGISTRY,
+            register_value_estimator,
+        )
+        from torchrl.objectives.value.advantages import GAE
+
+        class _Custom(Enum):
+            FAKE = "fake"
+
+        @register_value_estimator(
+            _Custom.FAKE, default_kwargs={"gamma": 0.99, "lmbda": 0.5}
+        )
+        class _MyGAE(GAE):
+            pass
+
+        try:
+            entry = _VALUE_ESTIMATOR_REGISTRY[_Custom.FAKE]
+            assert entry.cls is _MyGAE
+            assert entry.default_kwargs == {"gamma": 0.99, "lmbda": 0.5}
+        finally:
+            _VALUE_ESTIMATOR_REGISTRY.pop(_Custom.FAKE, None)
+
+    def test_default_value_kwargs_reads_registry(self):
+        """Back-compat shim must agree with the registry."""
+        from torchrl.objectives.utils import (
+            _VALUE_ESTIMATOR_REGISTRY,
+            default_value_kwargs,
+        )
+
+        for member, entry in _VALUE_ESTIMATOR_REGISTRY.items():
+            assert default_value_kwargs(member) == entry.default_kwargs
+
+    def test_dispatch_unsupported_raises(self):
+        """`dispatch_value_estimator` rejects estimators outside the supported set."""
+        from torchrl.objectives.utils import dispatch_value_estimator, ValueEstimators
+
+        class _Dummy:
+            pass
+
+        dummy = _Dummy()
+        with pytest.raises(NotImplementedError, match="Supported value types"):
+            dispatch_value_estimator(
+                dummy,
+                ValueEstimators.GAE,
+                supported=(ValueEstimators.TD0,),
+            )
+
+    def test_for_loss_respects_explicit_value_network(self):
+        """When the loss passes ``value_network=...``, the registry uses it."""
+        from torchrl.objectives.utils import build_value_estimator, ValueEstimators
+        from torchrl.objectives.value.advantages import GAE
+
+        class _Dummy:
+            # neither ``critic_network`` nor ``value_network`` attributes
+            pass
+
+        net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        gae = build_value_estimator(_Dummy(), ValueEstimators.GAE, value_network=net)
+        assert isinstance(gae, GAE)
+        assert gae.value_network is net
