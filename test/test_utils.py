@@ -606,6 +606,42 @@ class TestProfilingDecorator:
         assert "runtime_env" not in captured
 
 
+class TestTimeitMark:
+    """Tests for the ``timeit.mark_start`` / ``mark_end`` non-context-manager API."""
+
+    def setup_method(self):
+        from torchrl._utils import timeit
+
+        timeit._REG.clear()
+        timeit._MARKS.clear()
+
+    def test_mark_start_end_records_into_reg(self):
+        from torchrl._utils import timeit
+
+        timeit.mark_start("alpha")
+        timeit.mark_end("alpha")
+        assert "alpha" in timeit._REG
+        avg, total, count = timeit._REG["alpha"]
+        assert count == 1
+        assert total >= 0.0
+        assert avg == total
+
+    def test_mark_end_pops_outstanding_mark(self):
+        from torchrl._utils import timeit
+
+        timeit.mark_start("beta")
+        assert "beta" in timeit._MARKS
+        timeit.mark_end("beta")
+        assert "beta" not in timeit._MARKS
+
+    def test_context_manager_still_records(self):
+        from torchrl._utils import timeit
+
+        with timeit("delta"):
+            pass
+        assert "delta" in timeit._REG
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

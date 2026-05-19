@@ -58,6 +58,7 @@ from .model_based import DreamerDecoder, DreamerEnv, ImaginedEnv, ModelBasedEnvB
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
+    ActionScaling,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -144,6 +145,7 @@ from .utils import (
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "ActionScaling",
     "VecNormV2",
     "IsaacLabWrapper",
     "AutoResetEnv",

@@ -317,10 +317,33 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on each worker's environment, tagging every collected frame with the
+            current version under the ``"policy_version"`` key. Each worker's transform is
+            bumped after the new weights have actually been applied in that worker, so
+            per-frame tagging tracks real weight updates rather than rollout iterations.
+
+            Note that in asynchronous mode a batch that was already in flight when
+            :meth:`update_policy_weights_` is called may straddle the bump (some frames
+            tagged with the old version, the remainder with the new). Treat the value as
+            the version under which each individual frame was produced, not as a batch-level
+            label.
+
+            For multi-process collectors, the ``"policy_version"`` entries in the
+            collected tensordict are produced by worker-local transforms and are the
+            source of truth for data provenance. The parent collector's
+            :attr:`policy_version` property exposes only the parent-side tracker state
+            and should not be used as a label for a returned batch.
+
+            The recommended path is ``track_policy_version=True``: let the collector own
+            the transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a
+            ``PolicyVersion`` **without** going through a collector. With multi-process
+            collectors that pre-built tracker lives in the *parent* and is not propagated
+            into workers, so per-frame tagging will still be driven by per-worker
+            transforms — favor ``True``.
+
+            Defaults to ``False``.
         compact_obs (bool, optional): if ``True``, each worker drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking. See
@@ -1039,6 +1062,25 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             fake_td.set(key, policy_output.get(key))
         return fake_td
 
+    def fake_tensordict(self) -> TensorDictBase:
+        """Not implemented for multi-process collectors.
+
+        Honoring the multi-collector contract here would require either
+        creating an env in the main process (which defeats the purpose of
+        a multi-process collector — Isaac Lab / mujoco-mjx etc. can only
+        run in workers) or routing a request to a worker over the pipe
+        (which requires workers to be alive and adds protocol surface).
+        Neither is implemented; call :meth:`~torchrl.collectors.Collector.fake_tensordict`
+        on a single :class:`~torchrl.collectors.Collector` instead, or
+        build the template directly from the env spec.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.fake_tensordict() is not implemented. "
+            "Use Collector.fake_tensordict() on a single-process collector "
+            "for storage / cudagraph warmup, or build the template from the "
+            "env spec directly."
+        )
+
     @classmethod
     def _total_workers_from_env(cls, env_creators):
         if isinstance(env_creators, (tuple, list)):
@@ -1320,6 +1362,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
                     "auto_register_policy_transforms": self._auto_register_policy_transforms,
+                    "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
                     "compact_obs": self.compact_obs,
@@ -1949,19 +1992,28 @@ also that the state dict is synchronised across processes if needed."""
 
     @property
     def policy_version(self) -> str | int | None:
-        """The current policy version."""
+        """The parent-side policy version.
+
+        For multi-process collectors, worker-local
+        :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+        transforms write the per-frame ``"policy_version"`` values in returned
+        batches. Those tensor entries are the source of truth for collected
+        data; this property is only the parent-side tracker state.
+        """
         if not hasattr(self.policy_version_tracker, "version"):
             return None
         return self.policy_version_tracker.version
 
     def get_policy_version(self) -> str | int | None:
-        """Get the current policy version.
+        """Get the parent-side policy version.
 
         This method exists to support remote calls in Ray actors, since properties
         cannot be accessed directly through Ray's RPC mechanism.
 
         Returns:
-            The current version number (int) or UUID (str), or None if version tracking is disabled.
+            The parent-side version number (int) or UUID (str), or ``None`` if
+            version tracking is disabled. For collected data, prefer the
+            per-frame ``"policy_version"`` tensor in returned batches.
         """
         return self.policy_version
 

@@ -30,6 +30,7 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import (
     GAE,
+    MultiAgentGAE,
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
@@ -502,6 +503,10 @@ class ReinforceLoss(LossModule):
             )
         elif value_type == ValueEstimators.GAE:
             self._value_estimator = GAE(value_network=self.critic_network, **hp)
+        elif value_type == ValueEstimators.MAGAE:
+            self._value_estimator = MultiAgentGAE(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
                 value_network=self.critic_network, **hp

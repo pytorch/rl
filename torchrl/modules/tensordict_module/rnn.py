@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextvars
 import importlib.metadata
 import typing
 from typing import Any
@@ -14,7 +15,7 @@ from packaging import version
 from tensordict import TensorDict, TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
-from tensordict.utils import expand_as_right, prod, set_lazy_legacy
+from tensordict.utils import expand_as_right, set_lazy_legacy
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
@@ -55,6 +56,28 @@ def _check_triton_available() -> bool:
 
 
 _has_triton = _check_triton_available()
+
+
+def _canonical_stride(shape: typing.Sequence[int]) -> tuple[int, ...]:
+    strides: list[int] = []
+    running = 1
+    for size in reversed(shape):
+        strides.append(running)
+        running *= size
+    strides.reverse()
+    return tuple(strides)
+
+
+def _canonical_contiguous(value: Tensor) -> Tensor:
+    # torch._higher_order_ops.scan and the triton RNN kernels read strides
+    # directly and reject inputs whose strides don't match the canonical
+    # row-major layout. A size-1 dim left behind by indexing+transposing a
+    # hidden-state buffer can pass is_contiguous() while having non-canonical
+    # strides — re-materialize then.
+    if tuple(value.stride()) == _canonical_stride(value.shape):
+        return value
+    result = torch.empty_like(value, memory_format=torch.contiguous_format)
+    return result.copy_(value)
 
 
 @implement_for("torch", None, "2.6.0", compilable=True)
@@ -892,21 +915,24 @@ class LSTMModule(ModuleBase):
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
-        tensordict_shaped = tensordict
         if self.recurrent_mode:
-            # if less than 2 dims, unsqueeze
-            ndim = tensordict_shaped.get(self.in_keys[0]).ndim
-            while ndim < 3:
-                tensordict_shaped = tensordict_shaped.unsqueeze(0)
-                ndim += 1
-            if ndim > 3:
-                dims_to_flatten = ndim - 3
-                # we assume that the tensordict can be flattened like this
-                nelts = prod(tensordict_shaped.shape[: dims_to_flatten + 1])
-                tensordict_shaped = tensordict_shaped.apply(
-                    lambda value: value.flatten(0, dims_to_flatten),
-                    batch_size=[nelts, tensordict_shaped.shape[-1]],
+            # Straight-line shape normalization. Time is the last batch dim;
+            # all earlier batch dims are folded into a single leading B.
+            # Cheaper and simpler than the historical ``while ndim < 3`` loop
+            # plus ``prod(...)`` + ``apply(..., batch_size=[...])``.
+            td_ndim = tensordict.ndim
+            if td_ndim == 0:
+                raise ValueError(
+                    "LSTMModule(recurrent_mode=True) requires the input "
+                    "tensordict to have at least one batch dim (time). Got a "
+                    "0-d tensordict."
                 )
+            elif td_ndim == 1:
+                tensordict_shaped = tensordict.unsqueeze(0)
+            elif td_ndim == 2:
+                tensordict_shaped = tensordict
+            else:
+                tensordict_shaped = tensordict.flatten(0, -2)
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
@@ -914,6 +940,9 @@ class LSTMModule(ModuleBase):
         splits = None
         backend = self.recurrent_backend
         if backend == "auto":
+            # In eager, CuDNN-backed pad is the fastest path; under torch.compile
+            # the data-dependent ``_split_and_pad_sequence`` branch is unfriendly,
+            # so prefer scan there.
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
@@ -925,12 +954,10 @@ class LSTMModule(ModuleBase):
         ):
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
-            # if we have consecutive trajectories, things get a little more complicated
-            # we have a tensordict of shape [B, T]
-            # we will split / pad things such that we get a tensordict of shape
-            # [N, T'] where T' <= T and N >= B is the new batch size, such that
-            # each index of N is an independent trajectory. We'll need to keep
-            # track of the indices though, as we want to put things back together in the end.
+            # Multi-trajectory rollouts under the pad backend: split each row
+            # into per-trajectory windows of shape [N, T'], run the LSTM on
+            # the padded result, then stitch them back. Required for correctness
+            # whenever ``is_init`` fires mid-row.
             splits = _get_num_per_traj_init(is_init)
             tensordict_shaped_shape = tensordict_shaped.shape
             tensordict_shaped = _split_and_pad_sequence(
@@ -976,7 +1003,6 @@ class LSTMModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[1], hidden0)
         tensordict_shaped.set(self.out_keys[2], hidden1)
         if splits is not None:
-            # let's recover our original shape
             tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
                 tensordict_shaped_shape
             )
@@ -1029,8 +1055,8 @@ class LSTMModule(ModuleBase):
         _hidden0_in = hidden0_in[..., 0, :, :]
         _hidden1_in = hidden1_in[..., 0, :, :]
         hidden = (
-            _hidden0_in.transpose(-3, -2).contiguous(),
-            _hidden1_in.transpose(-3, -2).contiguous(),
+            _canonical_contiguous(_hidden0_in.transpose(-3, -2)),
+            _canonical_contiguous(_hidden1_in.transpose(-3, -2)),
         )
 
         if is_init is not None and backend == "triton":
@@ -1094,7 +1120,15 @@ class LSTMModule(ModuleBase):
                 "Triton LSTM layer composition expects unidirectional weights."
             )
 
-        layer_input = input
+        layer_input = _canonical_contiguous(input)
+        is_init = _canonical_contiguous(is_init)
+        # Canonicalize the full hidden buffers once. For num_layers=1
+        # (the common RL case) per-layer slicing then yields a canonical
+        # view for free; for num_layers>=2 adjacent layers are interleaved
+        # in the parent so per-layer slices still need a re-materialize
+        # below.
+        hidden0_in = _canonical_contiguous(hidden0_in)
+        hidden1_in = _canonical_contiguous(hidden1_in)
         hidden0_layers = []
         hidden1_layers = []
         for layer in range(self.lstm.num_layers):
@@ -1110,8 +1144,8 @@ class LSTMModule(ModuleBase):
                 b_ih = zeros if b_ih is None else b_ih
                 b_hh = zeros if b_hh is None else b_hh
 
-            hidden_per_step = hidden0_in[..., layer, :]
-            cell_per_step = hidden1_in[..., layer, :]
+            hidden_per_step = _canonical_contiguous(hidden0_in[..., layer, :])
+            cell_per_step = _canonical_contiguous(hidden1_in[..., layer, :])
 
             h_steps, c_steps, _, _ = lstm_triton(
                 layer_input,
@@ -1225,6 +1259,13 @@ class LSTMModule(ModuleBase):
                 "LSTMModule(recurrent_backend='scan') does not support bidirectional LSTMs yet."
             )
 
+        # nn.LSTM with cuDNN flattens its parameters: weight_ih_l*,
+        # weight_hh_l*, bias_ih_l*, bias_hh_l* are views into a single
+        # flat storage. Closing the scan body over them as-is fails with
+        # "input-to-input aliasing" under torch.compile (the HOP tracer
+        # walks the FakeTensor graph and rejects shared storage on inputs).
+        # Cloning produces independent allocations; gradients still flow
+        # back to the parameters.
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.lstm.num_layers):
             weights = self.lstm._all_weights[layer]
@@ -1237,10 +1278,14 @@ class LSTMModule(ModuleBase):
                 getattr(self.lstm, weights[3]).clone() if self.lstm.bias else None
             )
 
-        input = input.transpose(0, 1)
-        is_init = is_init.transpose(0, 1)
-        reset_hidden0 = hidden0_in.transpose(0, 1).transpose(-3, -2).contiguous()
-        reset_hidden1 = hidden1_in.transpose(0, 1).transpose(-3, -2).contiguous()
+        input = _canonical_contiguous(input.transpose(0, 1))
+        is_init = _canonical_contiguous(is_init.transpose(0, 1))
+        reset_hidden0 = _canonical_contiguous(
+            hidden0_in.transpose(0, 1).transpose(-3, -2)
+        )
+        reset_hidden1 = _canonical_contiguous(
+            hidden1_in.transpose(0, 1).transpose(-3, -2)
+        )
         num_layers = self.lstm.num_layers
 
         def step(carry, inputs):
@@ -1266,8 +1311,14 @@ class LSTMModule(ModuleBase):
                 new_h.append(h_new)
                 new_c.append(c_new)
                 x_t = h_new
-            new_h = torch.stack(new_h, 0).clone()
-            new_c = torch.stack(new_c, 0).clone()
+            # torch.stack already allocates a fresh tensor, so the carry
+            # outputs need no extra clone. The per-step outputs are derived
+            # from the carry via view-style ops (transpose+flatten), which
+            # scan's HOP tracer treats as aliasing the carry even though
+            # they copy at runtime — clone these and x_t (which aliases the
+            # last layer's pre-stack hidden) to break the aliasing edge.
+            new_h = torch.stack(new_h, 0)
+            new_c = torch.stack(new_c, 0)
             hidden0_out = new_h.transpose(0, 1).flatten(1).clone()
             hidden1_out = new_c.transpose(0, 1).flatten(1).clone()
             return (new_h, new_c), (x_t.clone(), hidden0_out, hidden1_out)
@@ -2072,21 +2123,21 @@ class GRUModule(ModuleBase):
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
-        tensordict_shaped = tensordict
         if self.recurrent_mode:
-            # if less than 2 dims, unsqueeze
-            ndim = tensordict_shaped.get(self.in_keys[0]).ndim
-            while ndim < 3:
-                tensordict_shaped = tensordict_shaped.unsqueeze(0)
-                ndim += 1
-            if ndim > 3:
-                dims_to_flatten = ndim - 3
-                # we assume that the tensordict can be flattened like this
-                nelts = prod(tensordict_shaped.shape[: dims_to_flatten + 1])
-                tensordict_shaped = tensordict_shaped.apply(
-                    lambda value: value.flatten(0, dims_to_flatten),
-                    batch_size=[nelts, tensordict_shaped.shape[-1]],
+            # Straight-line shape normalization (see LSTMModule.forward).
+            td_ndim = tensordict.ndim
+            if td_ndim == 0:
+                raise ValueError(
+                    "GRUModule(recurrent_mode=True) requires the input "
+                    "tensordict to have at least one batch dim (time). Got a "
+                    "0-d tensordict."
                 )
+            elif td_ndim == 1:
+                tensordict_shaped = tensordict.unsqueeze(0)
+            elif td_ndim == 2:
+                tensordict_shaped = tensordict
+            else:
+                tensordict_shaped = tensordict.flatten(0, -2)
         else:
             tensordict_shaped = tensordict.reshape(-1).unsqueeze(-1)
 
@@ -2105,12 +2156,6 @@ class GRUModule(ModuleBase):
         ):
             from torchrl.objectives.value.utils import _get_num_per_traj_init
 
-            # if we have consecutive trajectories, things get a little more complicated
-            # we have a tensordict of shape [B, T]
-            # we will split / pad things such that we get a tensordict of shape
-            # [N, T'] where T' <= T and N >= B is the new batch size, such that
-            # each index of N is an independent trajectory. We'll need to keep
-            # track of the indices though, as we want to put things back together in the end.
             splits = _get_num_per_traj_init(is_init)
             tensordict_shaped_shape = tensordict_shaped.shape
             tensordict_shaped = _split_and_pad_sequence(
@@ -2142,7 +2187,6 @@ class GRUModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
-            # let's recover our original shape
             tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
                 tensordict_shaped_shape
             )
@@ -2179,7 +2223,7 @@ class GRUModule(ModuleBase):
 
         # we only need the first hidden state
         _hidden_in = hidden_in[:, 0]
-        hidden = _hidden_in.transpose(-3, -2).contiguous()
+        hidden = _canonical_contiguous(_hidden_in.transpose(-3, -2))
 
         if is_init is not None and backend == "triton":
             return self._gru_triton_with_resets(input, hidden_in, is_init)
@@ -2230,7 +2274,12 @@ class GRUModule(ModuleBase):
                 "Triton GRU layer composition expects unidirectional weights."
             )
 
-        layer_input = input
+        layer_input = _canonical_contiguous(input)
+        is_init = _canonical_contiguous(is_init)
+        # Canonicalize the full hidden buffer once; per-layer slices are
+        # canonical for free for num_layers=1, still need the re-materialize
+        # below for num_layers>=2 (adjacent layers interleaved in memory).
+        hidden_in = _canonical_contiguous(hidden_in)
         hidden_layers = []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
@@ -2245,7 +2294,7 @@ class GRUModule(ModuleBase):
                 b_ih = zeros if b_ih is None else b_ih
                 b_hh = zeros if b_hh is None else b_hh
 
-            hidden_per_step = hidden_in[..., layer, :]
+            hidden_per_step = _canonical_contiguous(hidden_in[..., layer, :])
             h_steps, _ = gru_triton(
                 layer_input,
                 hidden_per_step,
@@ -2334,6 +2383,9 @@ class GRUModule(ModuleBase):
                 "GRUModule(recurrent_backend='scan') does not support bidirectional GRUs yet."
             )
 
+        # See _lstm_scan_with_resets: cuDNN flattens GRU parameters into a
+        # single storage, so the views alias each other and the scan tracer
+        # rejects them as inputs. Cloning produces independent allocations.
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
@@ -2346,9 +2398,9 @@ class GRUModule(ModuleBase):
                 getattr(self.gru, weights[3]).clone() if self.gru.bias else None
             )
 
-        input = input.transpose(0, 1)
-        is_init = is_init.transpose(0, 1)
-        reset_hidden = hidden_in.permute(1, 2, 0, 3).contiguous()
+        input = _canonical_contiguous(input.transpose(0, 1))
+        is_init = _canonical_contiguous(is_init.transpose(0, 1))
+        reset_hidden = _canonical_contiguous(hidden_in.permute(1, 2, 0, 3))
         num_layers = self.gru.num_layers
 
         def step(carry, inputs):
@@ -2369,9 +2421,12 @@ class GRUModule(ModuleBase):
                 )
                 new_h.append(h_new)
                 x_t = h_new
-            # scan returns both carry and per-step outputs; clone to avoid
-            # aliasing between those two pytrees under torch.compile.
-            new_h = torch.stack(new_h, 0).clone()
+            # torch.stack allocates a fresh tensor, so the carry needs no
+            # extra clone. The per-step output is derived from the carry
+            # via transpose+flatten (view-style at the HOP tracer level
+            # even though it copies at runtime) — clone it and x_t to
+            # break the carry/output aliasing scan would otherwise flag.
+            new_h = torch.stack(new_h, 0)
             hidden_out = new_h.transpose(0, 1).flatten(1).clone()
             return new_h, (x_t.clone(), hidden_out)
 
@@ -2394,7 +2449,28 @@ class GRUModule(ModuleBase):
 
 
 # Recurrent mode manager
-recurrent_mode_state_manager = _ContextManager()
+class _RecurrentModeContextManager(_ContextManager):
+    def __init__(self):
+        super().__init__()
+        self._context_mode = contextvars.ContextVar(
+            "torchrl_recurrent_mode", default=None
+        )
+
+    def get_mode(self) -> bool | None:
+        # Dynamo can't trace ContextVar.get; fall back to the parent's plain
+        # attribute under torch.compile. set_mode keeps both in sync so this
+        # stays correct (compile traces a single thread).
+        if is_compiling():
+            return self._mode
+        return self._context_mode.get()
+
+    def set_mode(self, mode: bool | None) -> None:
+        self._mode = mode
+        if not is_compiling():
+            self._context_mode.set(mode)
+
+
+recurrent_mode_state_manager = _RecurrentModeContextManager()
 
 
 def recurrent_mode() -> bool | None:

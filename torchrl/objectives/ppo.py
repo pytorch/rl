@@ -45,6 +45,7 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import (
     GAE,
+    MultiAgentGAE,
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
@@ -762,6 +763,23 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
+    def _critic_loss_inputs(
+        self,
+        target_return: torch.Tensor,
+        state_value: torch.Tensor,
+        old_state_value: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        """Transform the critic-loss inputs before distance / clip.
+
+        Default implementation is identity. Subclasses (notably
+        :class:`~torchrl.objectives.multiagent.MAPPOLoss`) override this to
+        push the three tensors through a running
+        :class:`~torchrl.modules.ValueNorm` so the MSE / smooth-L1 distance
+        lives on a fixed scale -- and so the PPO value-clip radius stays
+        meaningful when reward scales drift.
+        """
+        return target_return, state_value, old_state_value
+
     def loss_critic(
         self, tensordict: TensorDictBase
     ) -> tuple[torch.Tensor | TensorDict, ...]:
@@ -782,6 +800,7 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        old_state_value = None
         if self.clip_value:
             old_state_value = tensordict.get(self.tensor_keys.value)
             if old_state_value is None:
@@ -804,6 +823,14 @@ class PPOLoss(LossModule):
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
                 f"Make sure that the 'value_key' passed to PPO is accurate."
             )
+
+        # Subclass hook: lets e.g. MAPPOLoss inject PopArt-style value
+        # normalisation uniformly across target_return / state_value /
+        # old_state_value so the MSE and the clip radius both live in
+        # normalised space.
+        target_return, state_value, old_state_value = self._critic_loss_inputs(
+            target_return, state_value, old_state_value
+        )
 
         loss_value = distance_loss(
             target_return,
@@ -940,6 +967,10 @@ class PPOLoss(LossModule):
             )
         elif value_type == ValueEstimators.GAE:
             self._value_estimator = GAE(value_network=self.critic_network, **hp)
+        elif value_type == ValueEstimators.MAGAE:
+            self._value_estimator = MultiAgentGAE(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
                 value_network=self.critic_network, **hp

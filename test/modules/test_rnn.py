@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import functools
 import sys
+import threading
 
 import pytest
 import torch
@@ -45,12 +46,14 @@ from torchrl.modules import (
     MLP,
     ProbabilisticActor,
     set_recurrent_mode,
+    ValueOperator,
 )
 from torchrl.modules.utils import (
     get_env_transforms_from_module,
     get_primers_from_module,
 )
 from torchrl.modules.utils.utils import _compute_missing_env_transforms
+from torchrl.objectives.value.advantages import GAE
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
@@ -372,6 +375,26 @@ class TestLSTMModule:
             assert lstm_module.recurrent_mode
         assert lstm_module.recurrent_mode is bool(default_val)
 
+    def test_set_recurrent_mode_is_thread_local(self):
+        lstm_module = LSTMModule(
+            input_size=3,
+            hidden_size=12,
+            batch_first=True,
+            in_keys=["observation", "hidden0", "hidden1"],
+            out_keys=["intermediate", ("next", "hidden0"), ("next", "hidden1")],
+        )
+        values = []
+
+        def worker():
+            values.append(lstm_module.recurrent_mode)
+
+        with set_recurrent_mode(True):
+            thread = threading.Thread(target=worker)
+            thread.start()
+            thread.join()
+            assert lstm_module.recurrent_mode
+        assert values == [False]
+
     def test_python_cudnn(self):
         lstm_module = LSTMModule(
             input_size=3,
@@ -639,6 +662,10 @@ class TestLSTMModule:
             in_key="embed",
             out_key="features",
             python_based=True,
+            # vmap cannot trace through ``torch._higher_order_ops.scan``; the
+            # 'pad' backend keeps the time loop as a plain Python call into
+            # the Python-based LSTM, which is fully vmap-compatible.
+            recurrent_backend="pad",
         )
         mlp = TensorDictModule(
             MLP(
@@ -1213,6 +1240,371 @@ class TestLSTMModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("backend", ["scan", "triton"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_backends_non_contiguous_recurrent_inputs(self, backend):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H, L = 4, 6, 3, 8, 1
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            "device": device,
+        }
+        pad_module = LSTMModule(**kwargs)
+        module = LSTMModule(**kwargs, recurrent_backend=backend)
+        module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(T, B, F, device=device)
+        hidden0_source = torch.randn(T, B, L, H, device=device)
+        hidden1_source = torch.randn(T, B, L, H, device=device)
+        is_init_source = torch.zeros(T, B, 1, dtype=torch.bool, device=device)
+        is_init_source[0] = True
+        is_init_source[2, 1] = True
+        is_init_source[4, 3] = True
+
+        def make_data():
+            obs_base = obs_source.detach().clone().requires_grad_()
+            hidden0_base = hidden0_source.detach().clone().requires_grad_()
+            hidden1_base = hidden1_source.detach().clone().requires_grad_()
+            obs = obs_base.transpose(0, 1)
+            hidden0 = hidden0_base.transpose(0, 1)
+            hidden1 = hidden1_base.transpose(0, 1)
+            is_init = is_init_source.transpose(0, 1)
+            assert not obs.is_contiguous()
+            assert not is_init.is_contiguous()
+            return (
+                TensorDict(
+                    {
+                        "obs": obs,
+                        "hidden0": hidden0,
+                        "hidden1": hidden1,
+                        "is_init": is_init,
+                    },
+                    [B, T],
+                ),
+                obs_base,
+                hidden0_base,
+                hidden1_base,
+            )
+
+        pad_data, pad_obs, pad_hidden0, pad_hidden1 = make_data()
+        data, obs, hidden0, hidden1 = make_data()
+        with set_recurrent_mode(True):
+            pad_out = pad_module(pad_data)
+            out = module(data)
+
+        tol = 5e-3
+        for key in ["feat", ("next", "hidden0"), ("next", "hidden1")]:
+            torch.testing.assert_close(pad_out[key], out[key], atol=tol, rtol=tol)
+
+        pad_out["feat"].square().mean().backward()
+        out["feat"].square().mean().backward()
+        torch.testing.assert_close(pad_obs.grad, obs.grad, atol=tol, rtol=tol)
+        torch.testing.assert_close(pad_hidden0.grad, hidden0.grad, atol=tol, rtol=tol)
+        torch.testing.assert_close(pad_hidden1.grad, hidden1.grad, atol=tol, rtol=tol)
+        for (_, pad_param), (_, param) in zip(
+            pad_module.named_parameters(), module.named_parameters()
+        ):
+            torch.testing.assert_close(pad_param.grad, param.grad, atol=tol, rtol=tol)
+
+    def test_canonical_contiguous_helper(self):
+        # _canonical_contiguous must be a no-op when the input strides match
+        # the C-canonical layout, and must materialize a fresh canonical
+        # tensor when they don't (the size-1-dim quirk).
+        from torchrl.modules.tensordict_module.rnn import (
+            _canonical_contiguous,
+            _canonical_stride,
+        )
+
+        canonical = torch.randn(3, 4, 5)
+        assert _canonical_stride(canonical.shape) == (20, 5, 1)
+        out = _canonical_contiguous(canonical)
+        assert out.data_ptr() == canonical.data_ptr()
+
+        # A [1, 4, 5] tensor with strides (5, 5, 1) passes is_contiguous()
+        # (size-1 leading dim makes stride[0] irrelevant for that check)
+        # but is not canonical — canonical would be (20, 5, 1).
+        weird = torch.empty_strided((1, 4, 5), (5, 5, 1))
+        weird.copy_(torch.randn(1, 4, 5))
+        assert weird.is_contiguous()
+        assert tuple(weird.stride()) != _canonical_stride(weird.shape)
+        out = _canonical_contiguous(weird)
+        assert out.data_ptr() != weird.data_ptr()
+        assert tuple(out.stride()) == _canonical_stride(out.shape)
+        torch.testing.assert_close(out, weird)
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
+    )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_scan_compile_no_aliasing(self):
+        # Under torch.compile, scan's HOP tracer walks the FakeTensor graph
+        # and rejects shared storage on inputs. nn.LSTM with cuDNN flattens
+        # its parameters into a single storage, so the per-layer weight
+        # views alias each other — `_lstm_scan_with_resets` must clone
+        # them before closing the scan body over them. This test pins
+        # that contract so the clones are not silently removed again.
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 6, 3, 8, 1
+        scan_module = LSTMModule(
+            input_size=F_in,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            recurrent_backend="scan",
+        )
+
+        obs = torch.randn(B, T, F_in)
+        hidden0 = torch.zeros(B, T, L, H)
+        hidden1 = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        prev = torch._dynamo.config.capture_scalar_outputs
+        torch._dynamo.config.capture_scalar_outputs = True
+        try:
+
+            @torch.compile(fullgraph=False)
+            def call(td):
+                with set_recurrent_mode(True):
+                    return scan_module(td)
+
+            with torch.no_grad():
+                out = call(data.clone())
+        finally:
+            torch._dynamo.config.capture_scalar_outputs = prev
+        assert "feat" in out.keys(True, True)
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile scan tests need a C compiler"
+    )
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_module_scan_compile_no_aliasing(self):
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 6, 3, 8, 1
+        scan_module = GRUModule(
+            input_size=F_in,
+            hidden_size=H,
+            num_layers=L,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="scan",
+        )
+
+        obs = torch.randn(B, T, F_in)
+        hidden = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init},
+            [B, T],
+        )
+
+        prev = torch._dynamo.config.capture_scalar_outputs
+        torch._dynamo.config.capture_scalar_outputs = True
+        try:
+
+            @torch.compile(fullgraph=False)
+            def call(td):
+                with set_recurrent_mode(True):
+                    return scan_module(td)
+
+            with torch.no_grad():
+                out = call(data.clone())
+        finally:
+            torch._dynamo.config.capture_scalar_outputs = prev
+        assert "feat" in out.keys(True, True)
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_three_backends_ppo_advantage_parity(self):
+        # End-to-end pin: feeding the LSTM output through a value head and
+        # GAE should produce identical advantages across all backends. The
+        # existing three_backends_equivalent test already pins feat and the
+        # per-step hidden tensors; this test pins the downstream PPO
+        # contract so a regression in either step is caught.
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 7, 3, 16, 1
+        kwargs = {
+            "input_size": F_in,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+        }
+        pad_module = LSTMModule(**kwargs)
+        scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(pad_module.state_dict())
+        critic = ValueOperator(nn.Linear(H, 1), in_keys=["feat"])
+
+        obs = torch.randn(B, T, F_in)
+        hidden0 = torch.zeros(B, T, L, H)
+        hidden1 = torch.zeros(B, T, L, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        is_init[1, 3] = True
+        is_init[2, 5] = True
+        reward = torch.randn(B, T, 1)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[1, 2] = True
+        done[2, 4] = True
+        terminated = done.clone()
+        next_obs = torch.randn(B, T, F_in)
+        data = TensorDict(
+            {
+                "obs": obs,
+                "hidden0": hidden0,
+                "hidden1": hidden1,
+                "is_init": is_init,
+                "next": TensorDict(
+                    {
+                        "obs": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+
+        def pipeline(lstm_module, td):
+            with set_recurrent_mode(True), torch.no_grad():
+                td = lstm_module(td)
+                td = critic(td)
+                # Mirror critic onto ("next", "state_value") so GAE has the
+                # bootstrap term it expects.
+                next_td = td["next"].clone()
+                next_td["feat"] = td["feat"]  # placeholder; critic just needs feat
+                # use the actual next_feat via a single re-call on next obs
+                next_lstm_in = TensorDict(
+                    {
+                        "obs": td["next", "obs"],
+                        "hidden0": td["next", "hidden0"],
+                        "hidden1": td["next", "hidden1"],
+                        "is_init": td["is_init"],
+                    },
+                    td.batch_size,
+                )
+                next_lstm_out = lstm_module(next_lstm_in)
+                next_state_value = critic(
+                    TensorDict({"feat": next_lstm_out["feat"]}, td.batch_size)
+                )["state_value"]
+                td["next", "state_value"] = next_state_value
+                gae = GAE(
+                    gamma=0.99,
+                    lmbda=0.95,
+                    value_network=None,
+                    average_gae=False,
+                    shifted=False,
+                )
+                gae(td)
+            return td["advantage"], td["value_target"], td["state_value"]
+
+        adv_pad, vt_pad, val_pad = pipeline(pad_module, data.clone())
+        adv_scan, vt_scan, val_scan = pipeline(scan_module, data.clone())
+        torch.testing.assert_close(val_pad, val_scan, atol=5e-3, rtol=5e-3)
+        torch.testing.assert_close(adv_pad, adv_scan, atol=5e-3, rtol=5e-3)
+        torch.testing.assert_close(vt_pad, vt_scan, atol=5e-3, rtol=5e-3)
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_module_scan_non_canonical_hidden_strides(self):
+        # Hidden buffers whose strides pass is_contiguous() but disagree with
+        # the canonical row-major layout (the size-1-dim quirk that bit the
+        # Isaac PPO run) must not break the scan backend.
+        torch.manual_seed(0)
+        B, T, F, H, L = 4, 6, 3, 8, 1
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+        }
+        pad_module = LSTMModule(**kwargs)
+        scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F)
+        # Build a [B, T, L, H] hidden buffer whose internal [..., 0, :, :]
+        # slice then transpose(-3, -2) yields a [L, B, H] view that
+        # is_contiguous() but has non-canonical strides. The same buffer
+        # shape PPO uses; the stride layout matters more than the values.
+        canonical_h = torch.zeros(B, T, L, H)
+        h_storage = torch.randn(B * L * H)
+        # Lay out so that hidden_buf[:, 0] -> [B, L, H] indexing then
+        # transposing yields the size-1-dim non-canonical stride pattern.
+        hidden_buf = torch.empty_strided((B, T, L, H), (L * H, L * H, H, 1))
+        hidden_buf.zero_()
+        hidden_buf[:, 0] = h_storage.view(B, L, H)
+        # sanity check that the runtime path does see a non-canonical view
+        probe = hidden_buf[:, 0].transpose(-3, -2)
+        assert probe.is_contiguous()
+        from torchrl.modules.tensordict_module.rnn import _canonical_stride
+
+        assert tuple(probe.stride()) != _canonical_stride(probe.shape)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        data = TensorDict(
+            {
+                "obs": obs,
+                "hidden0": hidden_buf,
+                "hidden1": hidden_buf.clone().contiguous(),
+                "is_init": is_init,
+            },
+            [B, T],
+        )
+        canonical_data = TensorDict(
+            {
+                "obs": obs,
+                "hidden0": canonical_h.clone(),
+                "hidden1": canonical_h.clone(),
+                "is_init": is_init.clone(),
+            },
+            [B, T],
+        )
+        canonical_data["hidden0"][:, 0] = h_storage.view(B, L, H)
+        canonical_data["hidden1"][:, 0] = canonical_data["hidden0"][:, 0]
+
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(canonical_data.clone())
+            # The weird-stride buffer must not crash scan, and must produce
+            # the same outputs as the canonical-stride buffer with matching
+            # values.
+            scan_out = scan_module(data.clone())
+        torch.testing.assert_close(pad_out["feat"], scan_out["feat"])
+        torch.testing.assert_close(
+            pad_out["next", "hidden0"], scan_out["next", "hidden0"]
+        )
+        torch.testing.assert_close(
+            pad_out["next", "hidden1"], scan_out["next", "hidden1"]
+        )
+
 
 class TestGRUModule:
     def test_errs(self):
@@ -1616,6 +2008,10 @@ class TestGRUModule:
             in_key="embed",
             out_key="features",
             python_based=True,
+            # vmap cannot trace through ``torch._higher_order_ops.scan``; the
+            # 'pad' backend keeps the time loop as a plain Python call into
+            # the Python-based GRU, which is fully vmap-compatible.
+            recurrent_backend="pad",
         )
         mlp = TensorDictModule(
             MLP(
@@ -2104,6 +2500,120 @@ class TestGRUModule:
             torch.testing.assert_close(
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
+
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("backend", ["scan", "triton"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_module_backends_non_contiguous_recurrent_inputs(self, backend):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H, L = 4, 6, 3, 8, 1
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+            "device": device,
+        }
+        pad_module = GRUModule(**kwargs)
+        module = GRUModule(**kwargs, recurrent_backend=backend)
+        module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(T, B, F, device=device)
+        hidden_source = torch.randn(T, B, L, H, device=device)
+        is_init_source = torch.zeros(T, B, 1, dtype=torch.bool, device=device)
+        is_init_source[0] = True
+        is_init_source[2, 1] = True
+        is_init_source[4, 3] = True
+
+        def make_data():
+            obs_base = obs_source.detach().clone().requires_grad_()
+            hidden_base = hidden_source.detach().clone().requires_grad_()
+            obs = obs_base.transpose(0, 1)
+            hidden = hidden_base.transpose(0, 1)
+            is_init = is_init_source.transpose(0, 1)
+            assert not obs.is_contiguous()
+            assert not is_init.is_contiguous()
+            return (
+                TensorDict(
+                    {"obs": obs, "hidden": hidden, "is_init": is_init},
+                    [B, T],
+                ),
+                obs_base,
+                hidden_base,
+            )
+
+        pad_data, pad_obs, pad_hidden = make_data()
+        data, obs, hidden = make_data()
+        with set_recurrent_mode(True):
+            pad_out = pad_module(pad_data)
+            out = module(data)
+
+        tol = 5e-3
+        for key in ["feat", ("next", "hidden")]:
+            torch.testing.assert_close(pad_out[key], out[key], atol=tol, rtol=tol)
+
+        pad_out["feat"].square().mean().backward()
+        out["feat"].square().mean().backward()
+        torch.testing.assert_close(pad_obs.grad, obs.grad, atol=tol, rtol=tol)
+        torch.testing.assert_close(pad_hidden.grad, hidden.grad, atol=tol, rtol=tol)
+        for (_, pad_param), (_, param) in zip(
+            pad_module.named_parameters(), module.named_parameters()
+        ):
+            torch.testing.assert_close(pad_param.grad, param.grad, atol=tol, rtol=tol)
+
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_module_scan_non_canonical_hidden_strides(self):
+        # GRU counterpart of test_lstm_module_scan_non_canonical_hidden_strides.
+        torch.manual_seed(0)
+        B, T, F, H, L = 4, 6, 3, 8, 1
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": L,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+        }
+        pad_module = GRUModule(**kwargs)
+        scan_module = GRUModule(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F)
+        h_storage = torch.randn(B * L * H)
+        hidden_buf = torch.empty_strided((B, T, L, H), (L * H, L * H, H, 1))
+        hidden_buf.zero_()
+        hidden_buf[:, 0] = h_storage.view(B, L, H)
+        probe = hidden_buf[:, 0].transpose(-3, -2)
+        assert probe.is_contiguous()
+        from torchrl.modules.tensordict_module.rnn import _canonical_stride
+
+        assert tuple(probe.stride()) != _canonical_stride(probe.shape)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        canonical_h = torch.zeros(B, T, L, H)
+        canonical_h[:, 0] = h_storage.view(B, L, H)
+        canonical_data = TensorDict(
+            {"obs": obs, "hidden": canonical_h, "is_init": is_init.clone()},
+            [B, T],
+        )
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden_buf, "is_init": is_init},
+            [B, T],
+        )
+        with set_recurrent_mode(True), torch.no_grad():
+            pad_out = pad_module(canonical_data.clone())
+            scan_out = scan_module(data.clone())
+        torch.testing.assert_close(pad_out["feat"], scan_out["feat"])
+        torch.testing.assert_close(
+            pad_out["next", "hidden"], scan_out["next", "hidden"]
+        )
 
 
 def test_get_primers_from_module():
