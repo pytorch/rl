@@ -576,10 +576,10 @@ class TestDiscreteActionProjection(TransformBase):
 class _MultiDimActionEnv(EnvBase):
     """Helper env exposing a multi-dimensional bounded continuous action.
 
-    Stores the action received on each step for assertions.
+    Stores the action received on each step as an instance attribute so that
+    tests do not share state across env instances (which would otherwise race
+    under SerialEnv / ParallelEnv).
     """
-
-    last_action = None
 
     def __init__(self, action_shape=(3, 5), batch_size=(), action_key="action"):
         super().__init__(batch_size=torch.Size(batch_size))
@@ -614,6 +614,7 @@ class _MultiDimActionEnv(EnvBase):
             terminated=Categorical(2, shape=(*batch_size, 1), dtype=torch.bool),
             shape=batch_size,
         )
+        self.last_action = None
 
     def _reset(self, tensordict=None):
         out = TensorDict({}, batch_size=self.batch_size)
@@ -622,7 +623,7 @@ class _MultiDimActionEnv(EnvBase):
         return out
 
     def _step(self, tensordict):
-        type(self).last_action = tensordict.get(self._action_key).clone()
+        self.last_action = tensordict.get(self._action_key).clone()
         out = TensorDict({}, batch_size=self.batch_size)
         out.update(self.observation_spec.rand())
         out.update(self.full_done_spec.zero())
@@ -701,16 +702,15 @@ class TestFlattenAction(TransformBase):
         assert out["action"].shape == (3, 5)
 
     def test_transform_env(self):
-        env = TransformedEnv(self._env(), FlattenAction(first_dim=-2, last_dim=-1))
+        base = self._env()
+        env = TransformedEnv(base, FlattenAction(first_dim=-2, last_dim=-1))
         spec = env.action_spec
         assert tuple(spec.shape) == (15,)
         td = env.reset()
         td["action"] = torch.arange(15.0)
         env.step(td)
-        assert _MultiDimActionEnv.last_action.shape == (3, 5)
-        assert torch.allclose(
-            _MultiDimActionEnv.last_action, torch.arange(15.0).reshape(3, 5)
-        )
+        assert base.last_action.shape == (3, 5)
+        assert torch.allclose(base.last_action, torch.arange(15.0).reshape(3, 5))
 
     def test_transform_model(self):
         t = FlattenAction(first_dim=-2, last_dim=-1)
@@ -724,13 +724,10 @@ class TestFlattenAction(TransformBase):
     def test_transform_rb(self, rbclass):
         # ``extend`` runs the inv direction (flat -> shaped); ``sample`` runs
         # the forward direction (shaped -> flat). The round-trip recovers the
-        # flat representation.
-        t = FlattenAction(first_dim=-2, last_dim=-1)
+        # flat representation. ``action_shape`` lets the transform work without
+        # a parent env.
+        t = FlattenAction(first_dim=-2, last_dim=-1, action_shape=(3, 5))
         flat = torch.arange(60.0).reshape(4, 15)
-        # Seed the per-key unflatten span explicitly so the RB-only use case
-        # works without a parent env.
-        t._unflatten_shapes[("action",)] = (3, 5)
-        t._unflatten_shapes["action"] = (3, 5)
         td = TensorDict({"action": flat}, [4])
         rb = rbclass(storage=LazyTensorStorage(4))
         rb.append_transform(t)
@@ -742,8 +739,7 @@ class TestFlattenAction(TransformBase):
 
     def test_transform_inverse(self):
         # Round-trip: flatten then unflatten recovers the original.
-        t = FlattenAction(first_dim=-2, last_dim=-1)
-        t._unflatten_shapes["action"] = (3, 5)
+        t = FlattenAction(first_dim=-2, last_dim=-1, action_shape=(3, 5))
         action = torch.arange(15.0)
         unflat = t._inv_apply_transform(action)
         assert unflat.shape == (3, 5)
@@ -776,19 +772,18 @@ class TestFlattenAction(TransformBase):
         assert tuple(env.action_spec.shape) == (30,)
 
     def test_flatten_1d_noop(self):
-        env = TransformedEnv(
-            self._env(action_shape=(7,)),
-            FlattenAction(first_dim=-1, last_dim=-1),
-        )
+        base = self._env(action_shape=(7,))
+        env = TransformedEnv(base, FlattenAction(first_dim=-1, last_dim=-1))
         assert tuple(env.action_spec.shape) == (7,)
         td = env.reset()
         td["action"] = torch.ones(7)
         env.step(td)
-        assert _MultiDimActionEnv.last_action.shape == (7,)
+        assert base.last_action.shape == (7,)
 
     def test_nested_action_key(self):
+        base = self._env(action_shape=(3, 5), action_key=("nested", "action"))
         env = TransformedEnv(
-            self._env(action_shape=(3, 5), action_key=("nested", "action")),
+            base,
             FlattenAction(
                 first_dim=-2, last_dim=-1, in_keys_inv=[("nested", "action")]
             ),
@@ -798,10 +793,8 @@ class TestFlattenAction(TransformBase):
         td = env.reset()
         td["nested", "action"] = torch.arange(15.0)
         env.step(td)
-        assert _MultiDimActionEnv.last_action.shape == (3, 5)
-        assert torch.allclose(
-            _MultiDimActionEnv.last_action, torch.arange(15.0).reshape(3, 5)
-        )
+        assert base.last_action.shape == (3, 5)
+        assert torch.allclose(base.last_action, torch.arange(15.0).reshape(3, 5))
         check_env_specs(env)
 
     def test_positive_dim_raises(self):
@@ -815,26 +808,44 @@ class TestFlattenAction(TransformBase):
             FlattenAction(first_dim=-1, last_dim=-2)
 
     def test_allow_positive_dim(self):
-        # Smoke-check the override path - construction should not raise.
-        t = FlattenAction(first_dim=1, last_dim=2, allow_positive_dim=True)
-        assert t._first_dim == 1
-        assert t._last_dim == 2
+        # Construction with positive dims succeeds when ``allow_positive_dim``
+        # is set, and the runtime path picks up the same effective span as the
+        # negative-dim equivalent when attached to an env with batch_size=().
+        base = self._env(action_shape=(3, 5))
+        t = FlattenAction(first_dim=0, last_dim=1, allow_positive_dim=True)
+        env = TransformedEnv(base, t)
+        assert tuple(env.action_spec.shape) == (15,)
+        td = env.reset()
+        td["action"] = torch.arange(15.0)
+        env.step(td)
+        assert base.last_action.shape == (3, 5)
+        assert torch.allclose(base.last_action, torch.arange(15.0).reshape(3, 5))
+
+    def test_inv_apply_transform_multi_key_raises(self):
+        # ``_inv_apply_transform`` cannot disambiguate between multiple keys
+        # (no key information is passed to it), so it must raise rather than
+        # silently picking one. Multi-key inversion still works via
+        # ``inv()`` / ``_inv_call`` which iterate keys explicitly.
+        t = FlattenAction(
+            first_dim=-2,
+            last_dim=-1,
+            in_keys_inv=["a", "b"],
+            action_shape=(3, 5),
+        )
+        with pytest.raises(RuntimeError, match="disambiguate"):
+            t._inv_apply_transform(torch.arange(15.0))
 
     def test_inv_recovers_env_action(self):
         # Driving the env with several normalized actions and confirming the
         # captured env action always has the expected (3, 5) shape.
-        env = TransformedEnv(
-            self._env(action_shape=(3, 5)),
-            FlattenAction(first_dim=-2, last_dim=-1),
-        )
+        base = self._env(action_shape=(3, 5))
+        env = TransformedEnv(base, FlattenAction(first_dim=-2, last_dim=-1))
         for i in range(5):
             td = env.reset()
             td["action"] = torch.full((15,), float(i))
             env.step(td)
-            assert _MultiDimActionEnv.last_action.shape == (3, 5)
-            assert torch.allclose(
-                _MultiDimActionEnv.last_action, torch.full((3, 5), float(i))
-            )
+            assert base.last_action.shape == (3, 5)
+            assert torch.allclose(base.last_action, torch.full((3, 5), float(i)))
 
     def test_rollout_action_shape(self):
         env = TransformedEnv(
