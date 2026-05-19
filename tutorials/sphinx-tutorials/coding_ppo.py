@@ -35,6 +35,9 @@ We will cover six crucial components of TorchRL:
 
 """
 
+# sphinx_gallery_start_ignore
+import warnings
+
 ######################################################################
 # If you are running this in Google Colab, make sure you install the following dependencies:
 #
@@ -105,13 +108,11 @@ We will cover six crucial components of TorchRL:
 # description and more about the algorithm itself.
 #
 
-# sphinx_gallery_start_ignore
-import warnings
+from torch import multiprocessing
 
 warnings.filterwarnings("ignore")
 # Set multiprocessing start method to fork if not already set
 # This allows the tutorial to run as a script without if __name__ == "__main__"
-from torch import multiprocessing
 
 if multiprocessing.get_start_method(allow_none=True) is None:
     multiprocessing.set_start_method("fork")
