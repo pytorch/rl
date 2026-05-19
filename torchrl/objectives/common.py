@@ -356,14 +356,20 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
+        # Walk the MRO so subclasses don't have to redeclare annotations
+        # introduced by their parents — ``cls.__annotations__`` is *not*
+        # inherited automatically in Python.
+        inherited_annotations: set[str] = set()
+        for base in type(self).__mro__:
+            inherited_annotations.update(getattr(base, "__annotations__", {}).keys())
         for name in (
             module_name,
             module_name + "_params",
             "target_" + module_name + "_params",
         ):
-            if name not in self.__class__.__annotations__.keys():
+            if name not in inherited_annotations:
                 warnings.warn(
-                    f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
+                    f"The name {name} wasn't part of the annotations ({sorted(inherited_annotations)}). Make sure it is present in the definition class."
                 )
 
         if kwargs:
