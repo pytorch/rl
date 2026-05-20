@@ -490,7 +490,7 @@ class TestValues:
     @pytest.mark.parametrize("reset_steps", [[2], [1, 3]])
     def test_gae_shifted_compact_drop_retained_matches_unshifted(self, reset_steps):
         torch.manual_seed(0)
-        B, T, obs_dim = 2, 6, 4
+        B, T, obs_dim = 2, 6, 6
         all_obs = torch.randn(B, T + 1, obs_dim)
         obs = all_obs[:, :T].clone()
         next_obs = all_obs[:, 1:].clone()
@@ -548,7 +548,7 @@ class TestValues:
 
     def test_gae_shifted_compact_drop_without_next_observation(self):
         torch.manual_seed(0)
-        B, T, obs_dim = 2, 6, 4
+        B, T, obs_dim = 2, 6, 6
         obs = torch.randn(B, T, obs_dim)
         done = torch.zeros(B, T, 1, dtype=torch.bool)
         done[:, 2, 0] = True
@@ -583,6 +583,85 @@ class TestValues:
         assert torch.isfinite(out["advantage"]).all()
         assert out["compact_drop_valid"].shape == td.shape
         assert (~out["compact_drop_valid"]).sum() == done[..., :-1, :].sum()
+
+    def test_gae_shifted_compact_drop_does_not_keep_stale_valid_mask(self):
+        torch.manual_seed(0)
+        B, T, obs_dim = 2, 6, 6
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        gae = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted="compact-drop",
+        )
+        td_with_reset, _ = self._build_shifted_test_td(with_internal_done=True)
+        out_with_reset = gae(td_with_reset.clone())
+        assert out_with_reset.get("compact_drop_valid", default=None) is not None
+
+        all_obs = torch.randn(B, T + 1, obs_dim)
+        td_without_reset = TensorDict(
+            {
+                "observation": all_obs[:, :T].clone(),
+                "next": TensorDict(
+                    {
+                        "observation": all_obs[:, 1:].clone(),
+                        "reward": torch.randn(B, T, 1),
+                        "done": torch.zeros(B, T, 1, dtype=torch.bool),
+                        "terminated": torch.zeros(B, T, 1, dtype=torch.bool),
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        td_without_reset["next", "done"][:, -1, 0] = True
+        out_without_reset = gae(td_without_reset)
+        assert out_without_reset.get("compact_drop_valid", default=None) is None
+
+    def test_gae_shifted_compact_drop_average_gae_uses_valid_only(self):
+        torch.manual_seed(0)
+        B, T, obs_dim = 2, 6, 4
+        all_obs = torch.randn(B, T + 1, obs_dim)
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, 2, 0] = True
+        done[:, -1, 0] = True
+        td = TensorDict(
+            {
+                "observation": all_obs[:, :T].clone(),
+                "next": TensorDict(
+                    {
+                        "observation": all_obs[:, 1:].clone(),
+                        "reward": torch.randn(B, T, 1),
+                        "done": done,
+                        "terminated": torch.zeros_like(done),
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        td["next", "observation"][:, 2] = torch.randn(B, obs_dim)
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        out = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted="compact-drop",
+            average_gae=True,
+        )(td)
+        valid = out["compact_drop_valid"].unsqueeze(-1)
+        torch.testing.assert_close(
+            out["advantage"][valid].mean(),
+            torch.zeros((), dtype=out["advantage"].dtype),
+        )
 
     def test_compact_drop_valid_masks_loss_reduction(self):
         loss = LossModule()
