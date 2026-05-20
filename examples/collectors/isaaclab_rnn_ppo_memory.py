@@ -365,6 +365,9 @@ def parse_args() -> argparse.Namespace:
         "--compile-update", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
+        "--compile-gae", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
         "--compile-mode",
         choices=["default", "reduce-overhead", "max-autotune"],
         default="default",
@@ -419,7 +422,7 @@ def main() -> None:
             "--debug-nonfinite-update requires eager updates. Pass "
             "--no-compile-update --no-cudagraph-update."
         )
-    if args.compile_update or args.cudagraph_update:
+    if args.compile_update or args.compile_gae or args.cudagraph_update:
         torch._dynamo.config.capture_scalar_outputs = True
     gae_shifted: bool | str = False if args.gae_shifted == "false" else args.gae_shifted
 
@@ -463,6 +466,8 @@ def main() -> None:
         deactivate_vmap=args.deactivate_vmap,
         device=train_device,
     )
+    if args.compile_gae:
+        adv_module = torch.compile(adv_module, mode=args.compile_mode)
     optim = group_optimizers(
         torch.optim.Adam(
             actor.parameters(), lr=args.lr, eps=1e-5, capturable=args.cudagraph_update
