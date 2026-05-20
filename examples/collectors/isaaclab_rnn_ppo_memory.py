@@ -178,7 +178,9 @@ def _raise_nonfinite(
     batch: TensorDictBase | None = None,
     actor=None,
     critic=None,
+    optimizer=None,
     loss: TensorDictBase | None = None,
+    extra: dict | None = None,
 ) -> None:
     if torch.isfinite(value).all():
         return
@@ -211,6 +213,9 @@ def _raise_nonfinite(
                 if critic is not None
                 else None
             ),
+            "optimizer_state_dict": (
+                optimizer.state_dict() if optimizer is not None else None
+            ),
             "loss": loss.detach().to("cpu") if loss is not None else None,
             "actor_grads": (
                 {
@@ -230,6 +235,7 @@ def _raise_nonfinite(
                 if critic is not None
                 else None
             ),
+            "extra": extra,
             "torch_rng_state": torch.random.get_rng_state(),
             "cuda_rng_state_all": (
                 torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
@@ -240,6 +246,34 @@ def _raise_nonfinite(
         f"Non-finite tensor during {phase}: {name}; "
         f"context={context}; stats={stats}; saved_path={saved_path}"
     )
+
+
+def _raise_tensordict_nonfinite(
+    phase: str,
+    tensordict: TensorDictBase,
+    *,
+    context: dict[str, int],
+    save_dir: Path | None = None,
+    run_args: dict | None = None,
+    actor=None,
+    critic=None,
+    optimizer=None,
+) -> None:
+    for key, value in tensordict.items(include_nested=True, leaves_only=True):
+        if not isinstance(value, torch.Tensor) or not value.is_floating_point():
+            continue
+        _raise_nonfinite(
+            phase,
+            context=context,
+            name=str(key),
+            value=value,
+            save_dir=save_dir,
+            run_args=run_args,
+            batch=tensordict,
+            actor=actor,
+            critic=critic,
+            optimizer=optimizer,
+        )
 
 
 def _assert_rollout_shapes(
@@ -488,8 +522,36 @@ def main() -> None:
     run_args = vars(args)
 
     def update(batch):
-        with set_recurrent_mode(True):
-            loss = loss_module(batch)
+        if args.debug_nonfinite_update:
+            _raise_tensordict_nonfinite(
+                "minibatch",
+                batch,
+                context=debug_context,
+                save_dir=debug_save_dir,
+                run_args=run_args,
+                actor=actor,
+                critic=critic,
+                optimizer=optim,
+            )
+        try:
+            with set_recurrent_mode(True):
+                loss = loss_module(batch)
+        except Exception as err:
+            if args.debug_nonfinite_update:
+                _raise_nonfinite(
+                    "loss_exception",
+                    context=debug_context,
+                    name=type(err).__name__,
+                    value=torch.tensor(float("nan"), device=train_device),
+                    save_dir=debug_save_dir,
+                    run_args=run_args,
+                    batch=batch,
+                    actor=actor,
+                    critic=critic,
+                    optimizer=optim,
+                    extra={"exception": repr(err)},
+                )
+            raise
         total = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
         if args.debug_nonfinite_update:
             for key, value in loss.items():
@@ -503,6 +565,7 @@ def main() -> None:
                     batch=batch,
                     actor=actor,
                     critic=critic,
+                    optimizer=optim,
                     loss=loss,
                 )
             _raise_nonfinite(
@@ -515,6 +578,7 @@ def main() -> None:
                 batch=batch,
                 actor=actor,
                 critic=critic,
+                optimizer=optim,
                 loss=loss,
             )
         total.backward()
@@ -531,6 +595,7 @@ def main() -> None:
                         batch=batch,
                         actor=actor,
                         critic=critic,
+                        optimizer=optim,
                         loss=loss,
                     )
             for name, parameter in critic.named_parameters():
@@ -545,15 +610,32 @@ def main() -> None:
                         batch=batch,
                         actor=actor,
                         critic=critic,
+                        optimizer=optim,
                         loss=loss,
                     )
-        clip_kwargs = {}
         if args.debug_nonfinite_update:
-            clip_kwargs["error_if_nonfinite"] = True
+            grad_norms = [
+                parameter.grad.detach().norm(2)
+                for parameter in [*actor.parameters(), *critic.parameters()]
+                if parameter.grad is not None
+            ]
+            raw_grad_norm = torch.stack(grad_norms).norm(2)
+            _raise_nonfinite(
+                "grad_norm",
+                context=debug_context,
+                name="raw_grad_norm",
+                value=raw_grad_norm,
+                save_dir=debug_save_dir,
+                run_args=run_args,
+                batch=batch,
+                actor=actor,
+                critic=critic,
+                optimizer=optim,
+                loss=loss,
+            )
         grad_norm = torch.nn.utils.clip_grad_norm_(
             list(actor.parameters()) + list(critic.parameters()),
             max_norm=args.clip_grad_norm,
-            **clip_kwargs,
         )
         optim.step()
         optim.zero_grad(set_to_none=True)
