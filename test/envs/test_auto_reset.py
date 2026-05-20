@@ -99,7 +99,7 @@ class TestAutoReset:
             )
 
         assert tensordict["next", "done"].all()
-        assert (tensordict["next", "observation"] == 0).all()
+        assert (tensordict["next", "observation"] == tensordict["observation"]).all()
         assert not tensordict_["done"].any()
         assert tensordict_["is_init"].all()
 
