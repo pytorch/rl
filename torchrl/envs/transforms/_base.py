@@ -390,14 +390,17 @@ class Transform(nn.Module):
         self,
         tensordict: TensorDictBase,
         tensordict_: TensorDictBase,
-    ) -> TensorDictBase:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         """Hook called after :func:`~torchrl.envs.utils.step_mdp` inside ``step_and_maybe_reset``.
 
-        Override when a transform needs to modify the tensordict the policy
-        will read on the next iteration *after* root keys have been promoted
-        from ``("next", ...)``. This is the natural place to undo / rehydrate
-        a representation that was compressed in :meth:`_step` (for example
-        a low-precision delta) before the policy sees the next observation.
+        Override when a transform needs to modify either:
+
+        - the **post-step** tensordict (what the data collector will stack),
+          for example to drop a transient full-precision tensor that has
+          been replaced by a compressed sibling key; or
+        - the **post-step-mdp** tensordict (what the policy will read on the
+          next iteration), for example to undo a representation that was
+          compressed in :meth:`_step`.
 
         Args:
             tensordict (TensorDictBase): post-step tensordict, still carrying
@@ -407,7 +410,9 @@ class Transform(nn.Module):
                 policy call will receive (after a possible reset).
 
         Returns:
-            The (possibly modified) ``tensordict_``.
+            A ``(tensordict, tensordict_)`` tuple. Either tensordict may be
+            mutated in place; the tuple-return form is for explicitness and
+            lets implementations swap in fresh objects if needed.
 
         .. note:: Transforms that implement this hook must rely on the env they
             are attached to wiring it up. :class:`~torchrl.envs.TransformedEnv`
@@ -418,7 +423,7 @@ class Transform(nn.Module):
             data collectors and the non-stop path of :meth:`~torchrl.envs.EnvBase.rollout`)
             and from the stop-early path of :meth:`~torchrl.envs.EnvBase.rollout`.
         """
-        return tensordict_
+        return tensordict, tensordict_
 
     def _check_batched_worker_compat(self) -> None:
         """Raise if this transform should not live inside a batched-env worker.
@@ -1074,13 +1079,17 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self,
         tensordict: TensorDictBase,
         tensordict_: TensorDictBase,
-    ) -> TensorDictBase:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         """Run the transform-chain post-step-mdp hook, then the base env's own."""
-        tensordict_ = self.transform._post_step_mdp_hooks(tensordict, tensordict_)
+        tensordict, tensordict_ = self.transform._post_step_mdp_hooks(
+            tensordict, tensordict_
+        )
         base_env = self.base_env
         if base_env is not None and base_env._post_step_mdp_hooks is not None:
-            tensordict_ = base_env._post_step_mdp_hooks(tensordict, tensordict_)
-        return tensordict_
+            tensordict, tensordict_ = base_env._post_step_mdp_hooks(
+                tensordict, tensordict_
+            )
+        return tensordict, tensordict_
 
     def fake_tensordict(self) -> TensorDictBase:
         """Build a fake tensordict and let the transform chain post-process it."""
@@ -1676,10 +1685,10 @@ class Compose(Transform):
         self,
         tensordict: TensorDictBase,
         tensordict_: TensorDictBase,
-    ) -> TensorDictBase:
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         for t in self.transforms:
-            tensordict_ = t._post_step_mdp_hooks(tensordict, tensordict_)
-        return tensordict_
+            tensordict, tensordict_ = t._post_step_mdp_hooks(tensordict, tensordict_)
+        return tensordict, tensordict_
 
     def transform_fake_tensordict(
         self, fake_tensordict: TensorDictBase

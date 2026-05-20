@@ -278,6 +278,7 @@ Available Transforms
     ModuleTransform
     MultiAction
     NextObservationDelta
+    NextObservationDeltaReconstructor
     NextStateReconstructor
     NoopResetEnv
     ObservationNorm

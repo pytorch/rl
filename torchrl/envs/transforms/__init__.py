@@ -8,7 +8,11 @@ from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
-from .rb_transforms import MultiStepTransform, NextStateReconstructor
+from .rb_transforms import (
+    MultiStepTransform,
+    NextObservationDeltaReconstructor,
+    NextStateReconstructor,
+)
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
@@ -114,6 +118,7 @@ __all__ = [
     "MultiAction",
     "MultiStepTransform",
     "NextObservationDelta",
+    "NextObservationDeltaReconstructor",
     "NextStateReconstructor",
     "NoopResetEnv",
     "ObservationNorm",

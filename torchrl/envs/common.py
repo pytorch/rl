@@ -3739,10 +3739,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            if storing_device is None or tensordict.device == storing_device:
-                td_append = tensordict.copy()
+            # Run step_mdp + post-step-mdp hooks before copying the post-step
+            # tensordict for stacking: the hook is allowed to mutate it (e.g.
+            # to drop transient keys), and we want those mutations reflected
+            # in what gets stacked.
+            post_step_td = tensordict
+            next_td = self._step_mdp(post_step_td)
+            if self._post_step_mdp_hooks is not None:
+                post_step_td, next_td = self._post_step_mdp_hooks(post_step_td, next_td)
+
+            if storing_device is None or post_step_td.device == storing_device:
+                td_append = post_step_td.copy()
             else:
-                td_append = tensordict.to(storing_device)
+                td_append = post_step_td.to(storing_device)
             if break_when_all_done:
                 if partial_steps is not True and not partial_steps.all():
                     # At least one step is partial
@@ -3756,10 +3765,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
                 break
-            post_step_td = tensordict
-            tensordict = self._step_mdp(post_step_td)
-            if self._post_step_mdp_hooks is not None:
-                tensordict = self._post_step_mdp_hooks(post_step_td, tensordict)
+            tensordict = next_td
 
             if break_when_any_done:
                 # done and truncated are in done_keys
@@ -3896,7 +3902,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         tensordict_ = self._step_mdp(tensordict)
         if self._post_step_mdp_hooks is not None:
-            tensordict_ = self._post_step_mdp_hooks(tensordict, tensordict_)
+            tensordict, tensordict_ = self._post_step_mdp_hooks(tensordict, tensordict_)
         if native_autoreset:
             for obs_key, obs in reset_observations.items():
                 if obs_key in tensordict_.keys(True, True):
@@ -3912,16 +3918,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         return tensordict, tensordict_
 
     _post_step_mdp_hooks: Callable[
-        [TensorDictBase, TensorDictBase], TensorDictBase
+        [TensorDictBase, TensorDictBase], tuple[TensorDictBase, TensorDictBase]
     ] | None = None
     """Optional hook called after :meth:`_step_mdp` inside :meth:`step_and_maybe_reset`.
 
-    Signature: ``(tensordict, tensordict_) -> tensordict_`` where ``tensordict``
-    is the post-step tensordict (still carrying ``("next", ...)`` entries) and
-    ``tensordict_`` is the result of ``step_mdp``. Used by transforms that need
-    to modify the flowing tensordict the policy will read on the next iteration
-    (for example to rehydrate observations that were compressed in
-    :meth:`Transform._step`).
+    Signature: ``(tensordict, tensordict_) -> (tensordict, tensordict_)`` where
+    ``tensordict`` is the post-step tensordict (still carrying
+    ``("next", ...)`` entries) and ``tensordict_`` is the result of
+    ``step_mdp``. The hook may mutate either tensordict in place; both are
+    returned so the caller picks up any swaps. Used by transforms that need to
+    adjust the data the policy will see on the next iteration, or trim the
+    data that the data collector will stack (for example a low-precision
+    delta transform that drops the full-precision ``("next", obs)`` slot in
+    favour of a compressed sibling key).
 
     Defaults to ``None``: when unset, the hook is skipped. Transforms that need
     it are expected to expose a ``_post_step_mdp_hooks`` method themselves and

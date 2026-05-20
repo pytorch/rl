@@ -440,3 +440,106 @@ class NextStateReconstructor(Transform):
             )
             tensordict.set(next_k, next_view)
         return tensordict
+
+
+class NextObservationDeltaReconstructor(Transform):
+    """Reconstructs ``("next", k)`` from a delta stored at ``("next", "delta", k)``.
+
+    Paired with :class:`~torchrl.envs.transforms.NextObservationDelta` on the
+    env side: that transform writes a low-precision delta under the sibling
+    key ``("next", "delta", k)`` and drops the full-precision ``("next", k)``
+    from the post-step tensordict. The data collector stacks the delta into
+    its rollout output and (via a replay buffer) feeds it here.
+
+    At sample time this transform reads
+    ``data[k]`` (the root observation at step ``i``) and
+    ``data[("next", "delta", k)]`` (the casted delta
+    ``next_obs - obs``), writes
+    ``data[("next", k)] = (data[k] + data[("next", "delta", k)]).to(restore_dtype)``,
+    and optionally drops the delta key so downstream losses see the same
+    layout they would have seen without the compression.
+
+    Unlike :class:`NextStateReconstructor`, **no trajectory-boundary logic is
+    needed**: the delta encodes the actual transition that happened inside
+    ``env.step``, so end-of-trajectory transitions reconstruct correctly
+    (within the round-trip precision of ``delta_dtype``) rather than
+    falling back to NaN.
+
+    Args:
+        keys (sequence of NestedKey, optional): the root observation keys
+            whose ``("next", k)`` should be reconstructed. Defaults to
+            ``("observation",)``. For environments with nested observation
+            keys, pass the leaf list (e.g. ``[("agents", "pos")]``).
+
+    Keyword Args:
+        restore_dtype (torch.dtype or ``"root"``, optional): dtype of the
+            reconstructed ``("next", k)``. ``"root"`` (default) matches the
+            dtype of the corresponding root key in the sampled batch.
+        drop_delta (bool, optional): if ``True`` (default), the
+            ``("next", "delta", k)`` entry is removed from the sample after
+            reconstruction so downstream consumers see the same key layout as
+            an uncompressed pipeline.
+
+    Example:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data import LazyTensorStorage, ReplayBuffer
+        >>> from torchrl.envs.transforms import NextObservationDeltaReconstructor
+        >>> rb = ReplayBuffer(
+        ...     storage=LazyTensorStorage(4),
+        ...     transform=NextObservationDeltaReconstructor(keys=["observation"]),
+        ...     batch_size=4,
+        ... )
+        >>> # simulate what NextObservationDelta would have written:
+        >>> obs = torch.arange(4, dtype=torch.float32).view(4, 1)
+        >>> delta = (torch.arange(1, 5, dtype=torch.float32).view(4, 1) - obs).to(torch.float16)
+        >>> _ = rb.extend(TensorDict({
+        ...     "observation": obs,
+        ...     ("next", "delta", "observation"): delta,
+        ... }, batch_size=[4]))
+        >>> sample = rb.sample()
+        >>> ("next", "observation") in sample.keys(True, True)
+        True
+
+    .. seealso:: :class:`~torchrl.envs.transforms.NextObservationDelta`
+    """
+
+    def __init__(
+        self,
+        keys: Sequence[NestedKey] = ("observation",),
+        *,
+        restore_dtype: torch.dtype | str = "root",
+        drop_delta: bool = True,
+    ):
+        super().__init__()
+        self.keys = tuple(keys)
+        if restore_dtype != "root" and not (
+            isinstance(restore_dtype, torch.dtype) and restore_dtype.is_floating_point
+        ):
+            raise ValueError(
+                f"restore_dtype must be a floating-point dtype or 'root', got "
+                f"{restore_dtype!r}."
+            )
+        self.restore_dtype = restore_dtype
+        self.drop_delta = drop_delta
+
+    @staticmethod
+    def _as_key_tuple(key: NestedKey) -> tuple[str, ...]:
+        if isinstance(key, str):
+            return (key,)
+        return tuple(key)
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        for k in self.keys:
+            key_tuple = self._as_key_tuple(k)
+            delta_key = ("next", "delta") + key_tuple
+            obs = tensordict.get(key_tuple, default=None)
+            delta = tensordict.get(delta_key, default=None)
+            if obs is None or delta is None:
+                continue
+            dtype = obs.dtype if self.restore_dtype == "root" else self.restore_dtype
+            next_obs = obs.to(dtype) + delta.to(dtype)
+            tensordict.set(("next",) + key_tuple, next_obs)
+            if self.drop_delta:
+                tensordict.pop(delta_key)
+        return tensordict
