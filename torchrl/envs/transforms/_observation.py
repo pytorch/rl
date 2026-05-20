@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Sequence
 from copy import copy
-from typing import Any, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
@@ -1425,37 +1425,50 @@ class CatFrames(ObservationTransform):
 class NextObservationDelta(Transform):
     """Stores ``("next", obs)`` as a low-precision delta in a sibling key.
 
-    For environments with large continuous observations, rollouts collected by
-    :class:`~torchrl.collectors.SyncDataCollector` (and friends) hold both
-    the root observation and the full-precision ``("next", k)`` mirror in the
-    stacked output. This transform reduces that footprint by computing the
-    delta ``(next_obs - obs).to(delta_dtype)`` inside :meth:`_step` and
-    writing it under a sibling key ``("next", "delta", k)``. The original
-    ``("next", k)`` is dropped from the post-step tensordict (the one the
-    collector stacks) in :meth:`_post_step_mdp_hooks`; it survives only long
-    enough for :func:`~torchrl.envs.utils.step_mdp` to promote it to root,
-    giving the policy a full-precision observation for the next step.
+    A single transform handles both sides of the compression:
 
-    The transform is **stateless** and the rehydration is **trivial**:
-    ``step_mdp`` does the work for us, the hook only deletes the full-precision
-    slot from the post-step td. On the consumer side, pair this with
-    :class:`~torchrl.envs.transforms.NextObservationDeltaReconstructor`
-    appended to your replay buffer; the RB transform reconstructs
-    ``("next", k)`` from ``obs + ("next", "delta", k)`` at sample time, so
-    downstream losses and value estimators see a fully-precision next obs.
+    - **Env side** (``_step`` + ``_post_step_mdp_hooks``): for each
+      in-key ``k``, write ``(next_obs - obs).to(delta_dtype)`` under
+      the sibling key ``("next", "delta", k)``, then drop the full
+      ``("next", k)`` from the post-step tensordict that the collector
+      stacks. The full slot survives only long enough for
+      :func:`~torchrl.envs.utils.step_mdp` to promote it to root, so the
+      policy sees a full-precision observation on the next step.
+    - **RB side** (``forward``): on
+      :meth:`~torchrl.data.ReplayBuffer.sample`, reconstruct
+      ``("next", k) = data[k] + data[("next", "delta", k)]`` and
+      (optionally) drop the delta key. Unlike
+      :class:`~torchrl.envs.transforms.NextStateReconstructor`, the
+      delta encodes the actual transition, so trajectory-boundary
+      transitions reconstruct exactly within the round-trip precision
+      of ``delta_dtype`` rather than falling back to ``NaN``.
+
+    Use the **same instance** (or two instances with matching ``in_keys``)
+    on the env and on the replay buffer; the env-side and RB-side methods
+    are dispatched automatically.
 
     Args:
         in_keys (sequence of NestedKey, optional): observation keys to
             compress. Defaults to ``None``, in which case the transform
             lazily walks ``parent.observation_spec`` and picks every
             floating-point leaf whose dtype is not in ``excluded_dtypes``.
+            When the transform is used on a replay buffer (no env parent),
+            ``in_keys`` must be passed explicitly.
 
     Keyword Args:
         delta_dtype (torch.dtype, optional): dtype in which the delta is
             stored. Must be a floating dtype. Defaults to ``torch.float16``.
-        excluded_dtypes (tuple of torch.dtype, optional): dtypes to skip when
-            auto-inferring ``in_keys``. Defaults to the integer + bool
-            family. Pass an explicit ``in_keys`` list to override.
+        restore_dtype (torch.dtype or ``"root"``, optional): dtype of the
+            reconstructed ``("next", k)`` on the RB side. ``"root"``
+            (default) matches the dtype of the corresponding root key in
+            the sampled batch.
+        drop_delta (bool, optional): if ``True`` (default), the
+            ``("next", "delta", k)`` entry is removed from the sampled
+            tensordict after RB-side reconstruction so downstream consumers
+            see the same key layout as an uncompressed pipeline.
+        excluded_dtypes (tuple of torch.dtype, optional): dtypes to skip
+            when auto-inferring ``in_keys``. Defaults to the integer +
+            bool family.
 
     .. warning::
         The compression is **lossy**: round-tripping through ``delta_dtype``
@@ -1484,8 +1497,6 @@ class NextObservationDelta(Transform):
         False
         >>> td_["observation"].dtype
         torch.float32
-
-    .. seealso:: :class:`~torchrl.envs.transforms.NextObservationDeltaReconstructor`
     """
 
     def __init__(
@@ -1493,6 +1504,8 @@ class NextObservationDelta(Transform):
         in_keys: Sequence[NestedKey] | None = None,
         *,
         delta_dtype: torch.dtype = torch.float16,
+        restore_dtype: torch.dtype | Literal["root"] = "root",
+        drop_delta: bool = True,
         excluded_dtypes: tuple[torch.dtype, ...] = (
             torch.uint8,
             torch.int8,
@@ -1506,7 +1519,16 @@ class NextObservationDelta(Transform):
             raise ValueError(
                 f"delta_dtype must be a floating-point dtype, got {delta_dtype}."
             )
+        if restore_dtype != "root" and not (
+            isinstance(restore_dtype, torch.dtype) and restore_dtype.is_floating_point
+        ):
+            raise ValueError(
+                f"restore_dtype must be a floating-point dtype or 'root', got "
+                f"{restore_dtype!r}."
+            )
         self.delta_dtype = delta_dtype
+        self.restore_dtype = restore_dtype
+        self.drop_delta = drop_delta
         self.excluded_dtypes = tuple(excluded_dtypes)
         super().__init__(in_keys=in_keys, out_keys=in_keys)
 
@@ -1646,12 +1668,33 @@ class NextObservationDelta(Transform):
         return fake_tensordict
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        raise NotImplementedError(
-            f"{type(self).__name__} is an env-side transform; calling it "
-            "directly (e.g. as a replay-buffer transform) is not supported. "
-            "Use `NextObservationDeltaReconstructor` on the replay buffer "
-            "to recover `('next', obs)` from `obs + ('next', 'delta', obs)`."
-        )
+        """Reconstruct ``("next", k)`` from the stored delta at sample time.
+
+        Invoked by :meth:`~torchrl.data.ReplayBuffer.sample` when this
+        transform is appended to a replay buffer. Reads ``data[k]`` (root
+        observation at step ``i``) and ``data[("next", "delta", k)]`` (the
+        casted delta produced on the env side), writes
+        ``data[("next", k)] = (data[k] + delta).to(restore_dtype)``, and
+        (when ``drop_delta=True``, the default) removes the delta key.
+        Keys for which either side is missing are silently skipped.
+        """
+        in_keys = self.in_keys
+        if in_keys is None:
+            # No env parent in RB context: explicit in_keys are required
+            # so we know what to reconstruct.
+            return tensordict
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            delta_key = ("next", "delta") + key_tuple
+            obs = tensordict.get(key_tuple, default=None)
+            delta = tensordict.get(delta_key, default=None)
+            if obs is None or delta is None:
+                continue
+            dtype = obs.dtype if self.restore_dtype == "root" else self.restore_dtype
+            tensordict.set(("next",) + key_tuple, obs.to(dtype) + delta.to(dtype))
+            if self.drop_delta:
+                tensordict.pop(delta_key)
+        return tensordict
 
     def __repr__(self) -> str:
         return (

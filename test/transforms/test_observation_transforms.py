@@ -2864,17 +2864,21 @@ class TestNextObservationDelta(TransformBase):
             env.close()
 
     def test_transform_no_env(self):
-        # The transform is env-side only: calling it like a module / RB transform
-        # must raise.
+        # Calling the transform directly with only root obs (no stored delta)
+        # is a no-op for that key. Reconstruction needs both root and the
+        # ``("next", "delta", k)`` sibling to be present.
         t = NextObservationDelta(in_keys=["observation"])
-        with pytest.raises(NotImplementedError, match="env-side transform"):
-            t(TensorDict({"observation": torch.zeros(3)}, []))
+        td = TensorDict({"observation": torch.zeros(3, 1)}, batch_size=[3])
+        out = t(td)
+        assert ("next", "observation") not in out.keys(True, True)
 
     def test_transform_compose(self):
-        # Composed offline call still routes through forward, which is unsupported.
+        # Composed offline call reaches forward; with no delta key present
+        # the transform is a no-op for that key.
         t = Compose(NextObservationDelta(in_keys=["observation"]))
-        with pytest.raises(NotImplementedError, match="env-side transform"):
-            t(TensorDict({"observation": torch.zeros(3)}, []))
+        td = TensorDict({"observation": torch.zeros(3, 1)}, batch_size=[3])
+        out = t(td)
+        assert ("next", "observation") not in out.keys(True, True)
 
     def test_transform_env(self):
         # Stacked output carries the delta, not the full next obs.
@@ -2896,20 +2900,28 @@ class TestNextObservationDelta(TransformBase):
         pytest.skip("NextObservationDelta is an env-side transform; not a module hook.")
 
     def test_transform_rb(self):
+        # The same transform attached to a replay buffer reconstructs
+        # ``("next", k)`` from ``obs + ("next", "delta", k)`` at sample time.
         from torchrl.data import LazyTensorStorage, ReplayBuffer
 
+        obs = torch.linspace(-1.0, 1.0, 4, dtype=torch.float32).view(4, 1)
+        true_next = obs + 0.25
+        delta = (true_next - obs).to(torch.float16)
         rb = ReplayBuffer(
             storage=LazyTensorStorage(4),
             transform=NextObservationDelta(in_keys=["observation"]),
             batch_size=4,
         )
-        # `extend` goes through `inv`, a no-op (no in_keys_inv), so the write
-        # succeeds. `sample` routes through `forward`, which is unsupported
-        # for this env-side-only transform; users should pair it with the
-        # paired `NextObservationDeltaReconstructor` instead.
-        rb.extend(TensorDict({"observation": torch.zeros(4, 3)}, batch_size=[4]))
-        with pytest.raises(NotImplementedError, match="env-side transform"):
-            rb.sample()
+        rb.extend(
+            TensorDict(
+                {"observation": obs, ("next", "delta", "observation"): delta},
+                batch_size=[4],
+            )
+        )
+        sample = rb.sample()
+        assert ("next", "observation") in sample.keys(True, True)
+        assert ("next", "delta", "observation") not in sample.keys(True, True)
+        assert sample["next", "observation"].dtype == torch.float32
 
     def test_transform_inverse(self):
         pytest.skip("NextObservationDelta has no inverse (no in_keys_inv).")
@@ -3045,12 +3057,11 @@ class TestNextObservationDelta(TransformBase):
         assert out["observation"].dtype == torch.float32
 
 
-class TestNextObservationDeltaReconstructor:
-    """Tests for the paired RB-side reconstruction transform.
+class TestNextObservationDeltaForward:
+    """RB-side `forward()` tests for `NextObservationDelta`.
 
-    `forward(td)` reads ``data[k]`` and ``data[("next", "delta", k)]`` and
-    writes ``data[("next", k)] = data[k] + data[("next", "delta", k)]``,
-    optionally dropping the delta key.
+    The same class is used on the env (compress in `_step`) and on the
+    replay buffer (reconstruct in `forward` at sample time).
     """
 
     @staticmethod
@@ -3058,8 +3069,6 @@ class TestNextObservationDeltaReconstructor:
         return torch.finfo(delta_dtype).eps * 8.0 * scale
 
     def test_round_trip_basic(self):
-        from torchrl.envs.transforms import NextObservationDeltaReconstructor
-
         obs = torch.linspace(-1.0, 1.0, 8, dtype=torch.float32).view(8, 1)
         true_next = obs + 0.25
         delta = (true_next - obs).to(torch.float16)
@@ -3067,7 +3076,7 @@ class TestNextObservationDeltaReconstructor:
             {"observation": obs, ("next", "delta", "observation"): delta},
             batch_size=[8],
         )
-        td = NextObservationDeltaReconstructor(keys=["observation"])(td)
+        td = NextObservationDelta(in_keys=["observation"])(td)
         assert ("next", "observation") in td.keys(True, True)
         assert ("next", "delta", "observation") not in td.keys(True, True)
         tol = self._delta_tol(
@@ -3078,39 +3087,32 @@ class TestNextObservationDeltaReconstructor:
         )
 
     def test_drop_delta_false_keeps_key(self):
-        from torchrl.envs.transforms import NextObservationDeltaReconstructor
-
         obs = torch.zeros(4, 1)
         delta = torch.zeros(4, 1, dtype=torch.float16)
         td = TensorDict(
             {"observation": obs, ("next", "delta", "observation"): delta},
             batch_size=[4],
         )
-        td = NextObservationDeltaReconstructor(keys=["observation"], drop_delta=False)(
-            td
-        )
+        td = NextObservationDelta(in_keys=["observation"], drop_delta=False)(td)
         assert ("next", "observation") in td.keys(True, True)
         assert ("next", "delta", "observation") in td.keys(True, True)
 
     def test_restore_dtype_explicit(self):
-        from torchrl.envs.transforms import NextObservationDeltaReconstructor
-
         obs = torch.zeros(4, 1, dtype=torch.float64)
         delta = torch.ones(4, 1, dtype=torch.float16)
         td = TensorDict(
             {"observation": obs, ("next", "delta", "observation"): delta},
             batch_size=[4],
         )
-        td = NextObservationDeltaReconstructor(
-            keys=["observation"], restore_dtype=torch.float32
-        )(td)
+        td = NextObservationDelta(in_keys=["observation"], restore_dtype=torch.float32)(
+            td
+        )
         assert td["next", "observation"].dtype == torch.float32
 
     def test_no_boundary_nan(self):
-        # Unlike NextStateReconstructor, the delta transform reconstructs
-        # transitions at trajectory boundaries correctly -- no NaN.
-        from torchrl.envs.transforms import NextObservationDeltaReconstructor
-
+        # The delta encodes the actual transition that happened inside
+        # env.step, so end-of-trajectory positions reconstruct correctly --
+        # no NaN regardless of the done pattern.
         obs = torch.randn(8, 3)
         next_obs = torch.randn(8, 3)
         delta = (next_obs - obs).to(torch.float16)
@@ -3133,15 +3135,14 @@ class TestNextObservationDeltaReconstructor:
             },
             batch_size=[8],
         )
-        td = NextObservationDeltaReconstructor(keys=["observation"])(td)
+        td = NextObservationDelta(in_keys=["observation"])(td)
         assert torch.isfinite(td["next", "observation"]).all()
 
-    def test_end_to_end_env_to_rb_pair(self):
-        # The full pipeline: env compresses, collector stacks, RB stores,
-        # RB sample reconstructs.
+    def test_end_to_end_env_to_rb(self):
+        # env compresses → collector stacks → RB stores → RB sample
+        # reconstructs. Same transform class on both sides.
         from torchrl.collectors import SyncDataCollector
         from torchrl.data import LazyTensorStorage, ReplayBuffer
-        from torchrl.envs.transforms import NextObservationDeltaReconstructor
 
         torch.manual_seed(7)
 
@@ -3163,30 +3164,24 @@ class TestNextObservationDeltaReconstructor:
         finally:
             collector.shutdown()
 
-        # The collected batch has no ("next", observation), only the delta.
         assert ("next", "observation") not in batch.keys(True, True)
         assert batch[("next", "delta", "observation")].dtype == torch.float16
 
         rb = ReplayBuffer(
             storage=LazyTensorStorage(16),
-            transform=NextObservationDeltaReconstructor(keys=["observation"]),
+            transform=NextObservationDelta(in_keys=["observation"]),
             batch_size=8,
         )
         rb.extend(batch)
         sample = rb.sample()
-        # After reconstruction the sample has full ("next", observation)
-        # and the delta key has been dropped.
         assert ("next", "observation") in sample.keys(True, True)
         assert ("next", "delta", "observation") not in sample.keys(True, True)
         assert sample["next", "observation"].dtype == torch.float32
 
     def test_missing_key_is_noop(self):
         # If neither the root nor the delta key is in the td, the transform
-        # silently no-ops on that key (lets users compose freely with other
-        # keys not produced by the env transform).
-        from torchrl.envs.transforms import NextObservationDeltaReconstructor
-
+        # silently no-ops on that key.
         td = TensorDict({"some_other_key": torch.zeros(4)}, batch_size=[4])
-        out = NextObservationDeltaReconstructor(keys=["observation"])(td)
+        out = NextObservationDelta(in_keys=["observation"])(td)
         assert "some_other_key" in out.keys(True, True)
         assert ("next", "observation") not in out.keys(True, True)
