@@ -40,6 +40,7 @@ import argparse
 import logging
 import math
 from functools import partial
+from pathlib import Path
 
 import torch
 import torch.optim
@@ -150,6 +151,95 @@ def _cuda_metrics(prefix: str, device: torch.device) -> dict[str, float]:
         f"telemetry/{prefix}/max_reserved_gb": torch.cuda.max_memory_reserved(device)
         / 1e9,
     }
+
+
+def _finite_stats(prefix: str, value: torch.Tensor) -> dict[str, float | int | bool]:
+    value = value.detach()
+    finite = torch.isfinite(value)
+    stats: dict[str, float | int | bool] = {
+        f"{prefix}/numel": value.numel(),
+        f"{prefix}/finite": bool(finite.all().cpu()),
+        f"{prefix}/nonfinite": int((~finite).sum().cpu()),
+    }
+    if finite.any():
+        finite_value = value[finite].float()
+        stats.update(_tensor_stats(prefix, finite_value))
+    return stats
+
+
+def _raise_nonfinite(
+    phase: str,
+    *,
+    context: dict[str, int],
+    name: str,
+    value: torch.Tensor,
+    save_dir: Path | None = None,
+    run_args: dict | None = None,
+    batch: TensorDictBase | None = None,
+    actor=None,
+    critic=None,
+    loss: TensorDictBase | None = None,
+) -> None:
+    if torch.isfinite(value).all():
+        return
+    stats = _finite_stats(f"debug_nonfinite/{phase}/{name}", value)
+    saved_path = None
+    if save_dir is not None:
+        save_dir.mkdir(parents=True, exist_ok=True)
+        filename = (
+            f"nonfinite_{phase}_{name}"
+            f"_i{context['iteration']}_e{context['epoch']}"
+            f"_mb{context['minibatch']}_u{context['update']}.pt"
+        )
+        filename = filename.replace("/", "_").replace(" ", "_")
+        saved_path = save_dir / filename
+        bundle = {
+            "phase": phase,
+            "name": name,
+            "args": run_args,
+            "context": dict(context),
+            "stats": stats,
+            "offending_value": value.detach().cpu(),
+            "batch": batch.detach().to("cpu") if batch is not None else None,
+            "actor_state_dict": (
+                {key: val.detach().cpu() for key, val in actor.state_dict().items()}
+                if actor is not None
+                else None
+            ),
+            "critic_state_dict": (
+                {key: val.detach().cpu() for key, val in critic.state_dict().items()}
+                if critic is not None
+                else None
+            ),
+            "loss": loss.detach().to("cpu") if loss is not None else None,
+            "actor_grads": (
+                {
+                    key: param.grad.detach().cpu()
+                    for key, param in actor.named_parameters()
+                    if param.grad is not None
+                }
+                if actor is not None
+                else None
+            ),
+            "critic_grads": (
+                {
+                    key: param.grad.detach().cpu()
+                    for key, param in critic.named_parameters()
+                    if param.grad is not None
+                }
+                if critic is not None
+                else None
+            ),
+            "torch_rng_state": torch.random.get_rng_state(),
+            "cuda_rng_state_all": (
+                torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+            ),
+        }
+        torch.save(bundle, saved_path)
+    raise RuntimeError(
+        f"Non-finite tensor during {phase}: {name}; "
+        f"context={context}; stats={stats}; saved_path={saved_path}"
+    )
 
 
 def _assert_rollout_shapes(
@@ -283,6 +373,23 @@ def parse_args() -> argparse.Namespace:
         "--cudagraph-update", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument("--cudagraph-warmup", type=int, default=8)
+    parser.add_argument(
+        "--debug-nonfinite-update",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Eager-only diagnostic mode: fail at the first non-finite PPO loss "
+            "or parameter gradient and report iteration/epoch/minibatch context."
+        ),
+    )
+    parser.add_argument(
+        "--debug-nonfinite-save-dir",
+        default="nonfinite_debug",
+        help=(
+            "Directory where --debug-nonfinite-update writes the first failing "
+            "minibatch/model-state repro bundle."
+        ),
+    )
     # Devices
     parser.add_argument("--collector-device", default="cuda:0")
     parser.add_argument("--train-device", default="cuda:1")
@@ -307,6 +414,11 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, args.log_level))
     if args.num_envs % args.num_collectors:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
+    if args.debug_nonfinite_update and (args.compile_update or args.cudagraph_update):
+        raise ValueError(
+            "--debug-nonfinite-update requires eager updates. Pass "
+            "--no-compile-update --no-cudagraph-update."
+        )
     if args.compile_update or args.cudagraph_update:
         torch._dynamo.config.capture_scalar_outputs = True
     gae_shifted: bool | str = False if args.gae_shifted == "false" else args.gae_shifted
@@ -359,15 +471,84 @@ def main() -> None:
             critic.parameters(), lr=args.lr, eps=1e-5, capturable=args.cudagraph_update
         ),
     )
+    debug_context = {
+        "iteration": -1,
+        "epoch": -1,
+        "minibatch": -1,
+        "update": -1,
+    }
+    debug_save_dir = (
+        Path(args.debug_nonfinite_save_dir) if args.debug_nonfinite_update else None
+    )
+    run_args = vars(args)
 
     def update(batch):
         with set_recurrent_mode(True):
             loss = loss_module(batch)
         total = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
+        if args.debug_nonfinite_update:
+            for key, value in loss.items():
+                _raise_nonfinite(
+                    "loss",
+                    context=debug_context,
+                    name=str(key),
+                    value=value,
+                    save_dir=debug_save_dir,
+                    run_args=run_args,
+                    batch=batch,
+                    actor=actor,
+                    critic=critic,
+                    loss=loss,
+                )
+            _raise_nonfinite(
+                "loss",
+                context=debug_context,
+                name="loss_total",
+                value=total,
+                save_dir=debug_save_dir,
+                run_args=run_args,
+                batch=batch,
+                actor=actor,
+                critic=critic,
+                loss=loss,
+            )
         total.backward()
+        if args.debug_nonfinite_update:
+            for name, parameter in actor.named_parameters():
+                if parameter.grad is not None:
+                    _raise_nonfinite(
+                        "actor_grad",
+                        context=debug_context,
+                        name=name,
+                        value=parameter.grad,
+                        save_dir=debug_save_dir,
+                        run_args=run_args,
+                        batch=batch,
+                        actor=actor,
+                        critic=critic,
+                        loss=loss,
+                    )
+            for name, parameter in critic.named_parameters():
+                if parameter.grad is not None:
+                    _raise_nonfinite(
+                        "critic_grad",
+                        context=debug_context,
+                        name=name,
+                        value=parameter.grad,
+                        save_dir=debug_save_dir,
+                        run_args=run_args,
+                        batch=batch,
+                        actor=actor,
+                        critic=critic,
+                        loss=loss,
+                    )
+        clip_kwargs = {}
+        if args.debug_nonfinite_update:
+            clip_kwargs["error_if_nonfinite"] = True
         grad_norm = torch.nn.utils.clip_grad_norm_(
             list(actor.parameters()) + list(critic.parameters()),
             max_norm=args.clip_grad_norm,
+            **clip_kwargs,
         )
         optim.step()
         optim.zero_grad(set_to_none=True)
@@ -486,6 +667,14 @@ def main() -> None:
                             f"{train_buffer._storage._storage.shape}."
                         )
                     for mini_batch in train_buffer:
+                        debug_context["iteration"] = iteration
+                        debug_context["epoch"] = epoch
+                        debug_context["minibatch"] = loss_count
+                        debug_context["update"] = (
+                            iteration * args.ppo_epochs * updates_per_epoch
+                            + epoch * updates_per_epoch
+                            + loss_count
+                        )
                         with timeit("update"):
                             loss = update(mini_batch.to(train_device))
                         loss_acc = loss if loss_acc is None else loss_acc + loss
