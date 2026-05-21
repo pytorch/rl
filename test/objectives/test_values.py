@@ -184,7 +184,7 @@ class TestValues:
             (GAE, {"gamma": 0.9, "lmbda": 0.95}),
         ],
     )
-    def test_missing_next_obs_compact_shifted_is_safe(self, estimator_cls, kwargs):
+    def test_missing_next_obs_shifted_is_safe(self, estimator_cls, kwargs):
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1, bias=False),
@@ -197,7 +197,7 @@ class TestValues:
         done[:, 2] = True
         done[:, -1] = True
         reward = torch.ones(B, T, 1)
-        td_compact = TensorDict(
+        td_missing_next = TensorDict(
             {
                 "obs": obs,
                 "next": {
@@ -213,11 +213,11 @@ class TestValues:
         next_obs[:, :-1] = obs[:, 1:]
         next_obs[:, -1] = float("nan")
         next_obs[done.expand_as(next_obs)] = float("nan")
-        td_reference = td_compact.clone()
+        td_reference = td_missing_next.clone()
         td_reference["next", "obs"] = next_obs
 
         est = estimator_cls(**kwargs, value_network=value_net, shifted=True)
-        td_actual = td_compact.clone()
+        td_actual = td_missing_next.clone()
         actual = est(td_actual)
         expected = est(td_reference.clone())
 
@@ -414,20 +414,21 @@ class TestValues:
         td.refine_names(..., "time")
         return td, obs_dim
 
-    @pytest.mark.parametrize("shifted", ["compact", "compact-drop", "legacy"])
-    def test_gae_shifted_string_modes_deprecated(self, shifted):
+    def test_gae_shifted_requires_bool(self):
         torch.manual_seed(0)
-        td, obs_dim = self._build_shifted_test_td(with_internal_done=True)
+        _, obs_dim = self._build_shifted_test_td(with_internal_done=True)
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1),
             in_keys=["observation"],
             out_keys=["state_value"],
         )
-        with pytest.warns(DeprecationWarning, match="String shifted modes"):
-            gae = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=shifted)
-        assert gae.shifted is True
-        out = gae(td.copy())
-        assert torch.isfinite(out["advantage"]).all()
+        with pytest.raises(ValueError, match="shifted must be a boolean"):
+            GAE(
+                gamma=0.9,
+                lmbda=0.95,
+                value_network=value_net,
+                shifted="unexpected",
+            )
 
     def test_gae_shifted_true_uses_budgeted_backend(self):
         torch.manual_seed(0)
@@ -440,9 +441,9 @@ class TestValues:
         gae = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=True)
         out = gae(td.copy())
         assert gae.shifted is True
-        assert out["compact_drop_valid"].shape == td.shape
+        assert out["shifted_valid"].shape == td.shape
 
-    def _compact_drop_reference(self, td, shifted_budget=1):
+    def _shifted_reference(self, td, shifted_budget=1):
         done = td["next", "done"]
         reset = done.squeeze(-1).clone()
         reset[..., -1] = False
@@ -467,9 +468,7 @@ class TestValues:
 
     @pytest.mark.parametrize("reset_steps", [[2], [1, 3]])
     @pytest.mark.parametrize("shifted_budget", [1, 2])
-    def test_gae_shifted_compact_drop_retained_matches_unshifted(
-        self, reset_steps, shifted_budget
-    ):
+    def test_gae_shifted_retained_matches_unshifted(self, reset_steps, shifted_budget):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
         all_obs = torch.randn(B, T + 1, obs_dim)
@@ -502,7 +501,7 @@ class TestValues:
             in_keys=["observation"],
             out_keys=["state_value"],
         )
-        ref_td, valid = self._compact_drop_reference(td, shifted_budget=shifted_budget)
+        ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
         gae_unshifted = GAE(
             gamma=0.9,
             lmbda=0.95,
@@ -524,14 +523,14 @@ class TestValues:
         torch.testing.assert_close(
             out["value_target"][mask], ref_td["value_target"][mask]
         )
-        assert out["compact_drop_valid"].equal(valid)
+        assert out["shifted_valid"].equal(valid)
         internal_resets = done.squeeze(-1).clone()
         internal_resets[..., -1] = False
         expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)
         assert (~valid).sum() == expected_drops.sum()
         assert (out["advantage"][~mask] == 0).all()
 
-    def test_gae_shifted_compact_drop_without_next_observation(self):
+    def test_gae_shifted_without_next_observation(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
         obs = torch.randn(B, T, obs_dim)
@@ -566,10 +565,10 @@ class TestValues:
             shifted=True,
         )(td.clone())
         assert torch.isfinite(out["advantage"]).all()
-        assert out["compact_drop_valid"].shape == td.shape
-        assert (~out["compact_drop_valid"]).sum() == done[..., :-1, :].sum()
+        assert out["shifted_valid"].shape == td.shape
+        assert (~out["shifted_valid"]).sum() == done[..., :-1, :].sum()
 
-    def test_gae_shifted_compact_drop_does_not_keep_stale_valid_mask(self):
+    def test_gae_shifted_does_not_keep_stale_valid_mask(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
         value_net = TensorDictModule(
@@ -585,7 +584,7 @@ class TestValues:
         )
         td_with_reset, _ = self._build_shifted_test_td(with_internal_done=True)
         out_with_reset = gae(td_with_reset.clone())
-        assert out_with_reset.get("compact_drop_valid", default=None) is not None
+        assert out_with_reset.get("shifted_valid", default=None) is not None
 
         all_obs = torch.randn(B, T + 1, obs_dim)
         td_without_reset = TensorDict(
@@ -605,9 +604,10 @@ class TestValues:
         )
         td_without_reset["next", "done"][:, -1, 0] = True
         out_without_reset = gae(td_without_reset)
-        assert out_without_reset.get("compact_drop_valid", default=None) is None
+        assert out_without_reset["shifted_valid"].shape == td_without_reset.shape
+        assert out_without_reset["shifted_valid"].all()
 
-    def test_gae_shifted_compact_drop_average_gae_uses_valid_only(self):
+    def test_gae_shifted_average_gae_uses_valid_only(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 4
         all_obs = torch.randn(B, T + 1, obs_dim)
@@ -642,17 +642,17 @@ class TestValues:
             shifted=True,
             average_gae=True,
         )(td)
-        valid = out["compact_drop_valid"].unsqueeze(-1)
+        valid = out["shifted_valid"].unsqueeze(-1)
         torch.testing.assert_close(
             out["advantage"][valid].mean(),
             torch.zeros((), dtype=out["advantage"].dtype),
         )
 
-    def test_compact_drop_valid_masks_loss_reduction(self):
+    def test_shifted_valid_masks_loss_reduction(self):
         loss = LossModule()
         loss.reduction = "mean"
         td = TensorDict(
-            {"compact_drop_valid": torch.tensor([True, False, True])},
+            {"shifted_valid": torch.tensor([True, False, True])},
             [3],
         )
         value = torch.tensor([1.0, 100.0, 3.0])
@@ -660,12 +660,12 @@ class TestValues:
 
     @pytest.mark.skipif(
         _TORCH_VERSION < version.parse("2.7"),
-        reason="GAE compact recurrent path uses torch.vmap chunked semantics that fall "
+        reason="GAE shifted recurrent path uses torch.vmap chunked semantics that fall "
         "back to _pseudo_vmap on torch<2.7 (NotImplementedError).",
     )
     @pytest.mark.parametrize("module", ["lstm", "gru"])
     @pytest.mark.parametrize("shifted_budget", [1, 2])
-    def test_gae_recurrent_shifted_compact_matches_unshifted_isaac_shape(
+    def test_gae_recurrent_shifted_matches_unshifted_isaac_shape(
         self, module, shifted_budget
     ):
         # Isaac-shaped regression test: recurrent value network, multi-trajectory
@@ -675,20 +675,8 @@ class TestValues:
         # the true pre-reset terminal observation (not the post-reset first obs
         # of the new episode).
         #
-        # Under these conditions shifted=True must match shifted=False
-        # to within a small tolerance. The compact path currently builds
-        # ``data_in = [root_obs[0:T], boundary_obs]`` and reads
-        # ``value_[t] = V(data_in[t+1])``; for ``t < T-1`` that is
-        # ``V(root_obs[t+1])``, which at internal-done positions is the
-        # **post-reset** obs rather than ``("next", obs)[t]``. The
-        # boundary-override mechanism in ``_call_value_net_compact`` only fills
-        # the rollout-edge slot, leaving internal-done positions corrupted.
-        # GAE then bootstraps with ``(1 - terminated)`` (truncations are
-        # *not* masked), so the wrong ``next_state_value`` propagates straight
-        # into the value target / advantage.
-        #
-        # See ``examples/collectors/isaaclab_rnn_ppo_memory.py`` and
-        # ``torchrl/objectives/value/advantages.py:_call_value_net_compact``.
+        # Under these conditions shifted=True should agree with the reference
+        # path on retained samples and mark displaced suffix samples invalid.
         torch.manual_seed(0)
         B, T, obs_dim, hidden = 4, 16, 6, 8
         episode_len = 4  # internal truncation every 4 steps
@@ -768,8 +756,8 @@ class TestValues:
             deactivate_vmap=True,
             average_gae=False,
         )
-        ref_td, valid = self._compact_drop_reference(td, shifted_budget=shifted_budget)
-        gae_legacy_drop_ref = GAE(
+        ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
+        gae_unshifted_drop_ref = GAE(
             gamma=0.99,
             lmbda=0.95,
             value_network=value_net,
@@ -789,16 +777,16 @@ class TestValues:
             vectorized=False,
         )
         with set_recurrent_mode(True), torch.no_grad():
-            adv_legacy_drop = gae_legacy_drop_ref(ref_td.clone())["advantage"]
+            adv_unshifted_drop = gae_unshifted_drop_ref(ref_td.clone())["advantage"]
             out_drop = gae_shifted(td.clone())
         mask = valid.unsqueeze(-1)
         torch.testing.assert_close(
             out_drop["advantage"][mask],
-            adv_legacy_drop[mask],
+            adv_unshifted_drop[mask],
             atol=2.5e-1,
             rtol=2.5e-1,
         )
-        assert out_drop["compact_drop_valid"].equal(valid)
+        assert out_drop["shifted_valid"].equal(valid)
         internal_resets = done.squeeze(-1).clone()
         internal_resets[..., -1] = False
         expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)

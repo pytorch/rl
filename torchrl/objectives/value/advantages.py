@@ -11,7 +11,6 @@ from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Literal
 
 import torch
 from tensordict import is_tensor_collection, TensorDictBase
@@ -230,7 +229,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self,
         *,
         value_network: TensorDictModule,
-        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
+        shifted: bool = False,
         differentiable: bool = False,
         skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
@@ -371,12 +370,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @property
     def is_functional(self):
-        # legacy
         return False
 
     @property
     def is_stateless(self):
-        # legacy
         return False
 
     def _next_value(self, tensordict, target_params, kwargs):
@@ -498,107 +495,19 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @staticmethod
     def _normalize_shifted(
-        shifted: bool | Literal["compact", "compact-drop", "legacy"],
-    ) -> Literal[False, "compact", "compact-drop", "legacy"]:
+        shifted: bool,
+    ) -> bool:
         """Normalize the ``shifted`` argument.
 
-        ``shifted=True`` uses the budgeted compact-drop backend. The string
-        shifted modes were nightly-only aliases and now warn before routing to
-        the same backend.
+        ``shifted=True`` uses the budgeted shifted backend.
         """
         if shifted is False:
             return False
         if shifted is True:
             return True
-        if shifted in ("compact", "compact-drop", "legacy"):
-            warnings.warn(
-                "String shifted modes are deprecated. Pass shifted=True with "
-                "shifted_budget=<int> for the budgeted compact-drop backend, "
-                "or shifted=False for the reference path.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-            return True
-        raise ValueError(
-            "shifted must be False, True, or a deprecated string mode "
-            f"('compact', 'compact-drop', 'legacy'), got {shifted!r}."
-        )
+        raise ValueError(f"shifted must be a boolean, got {shifted!r}.")
 
-    def _call_value_net_compact(
-        self,
-        data: TensorDictBase,
-        params: TensorDictBase | None,
-        next_params: TensorDictBase | None,
-        value_key: NestedKey,
-        ndim: int,
-        value_net: TensorDictModuleBase,
-        _call_value_net,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Compact single-call path: constant-shape value-net call.
-
-        Always runs ``value_net`` once. The root and ``("next", ...)`` streams
-        are concatenated along a non-time batch dimension, so populated next
-        observations are evaluated directly without a second value-network
-        call. The boundary slot at ``T-1`` on the next side is filled per
-        value-net in-key with the first available of:
-
-        1. ``("next", k)[..., T-1:T]``: env-returned "next" value at the
-           last step. Present whenever the rollout is collected without
-           ``compact_obs=True``.
-        2. A duplicate of ``root[T-1]``: smoothness proxy used when
-           ``("next", k)`` is unavailable (e.g. Isaac with
-           ``compact_obs=True``), supplied by
-           :meth:`_fill_missing_next_inputs`.
-
-        For recurrent value nets, ``("next", "is_init")`` is OR-ed with
-        the root ``is_init`` so the RNN resets at every trajectory
-        boundary, matching the ``shifted=False`` reference.
-
-        Shape and code path are constant within a training run (the
-        collector config determines availability of ``("next", ...)``
-        deterministically across calls), so ``torch.compile`` specializes
-        once and stays specialized.
-        """
-        if next_params is not None and next_params is not params:
-            raise ValueError(
-                "the value at t and t+1 cannot be retrieved in a single call when both params and next params are passed."
-            )
-        in_keys = value_net.in_keys
-        time_idx = ndim - 1
-        root_part = data.select(*in_keys, value_key, strict=False)
-        next_part = data.get("next").select(*in_keys, value_key, strict=False)
-        next_part = self._fill_missing_next_inputs(next_part, root_part, in_keys)
-        next_part = next_part.copy()
-        if "is_init" in root_part.keys() and "is_init" in next_part.keys():
-            next_part["is_init"] = next_part["is_init"] | root_part["is_init"]
-        added_batch_dim = time_idx == 0
-        cat_dim = 0
-        if added_batch_dim:
-            root_part = root_part.unsqueeze(0)
-            next_part = next_part.unsqueeze(0)
-            time_idx = 1
-        data_in = torch.cat([root_part, next_part], dim=cat_dim)
-        if params is not None:
-            with params.to_module(value_net):
-                values_full = _call_value_net(data_in)
-        else:
-            values_full = _call_value_net(data_in)
-        batch_root = root_part.shape[cat_dim]
-        value = values_full[:batch_root]
-        value_ = values_full[batch_root : 2 * batch_root]
-        if added_batch_dim:
-            value = value.squeeze(0)
-            value_ = value_.squeeze(0)
-        done = data.get(("next", "done"), default=None)
-        if done is not None:
-            try:
-                value = value.view_as(done)
-                value_ = value_.view_as(done)
-            except RuntimeError:
-                pass
-        return value, value_
-
-    def _call_value_net_compact_drop(
+    def _call_value_net_shifted(
         self,
         data: TensorDictBase,
         params: TensorDictBase | None,
@@ -631,17 +540,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
         else:
             reset = done.any(-1)
         reset[(slice(None),) * time_idx + (-1,)] = False
-        if not is_dynamo_compiling() and not bool(reset.any()):
-            value, value_ = self._call_value_net_compact(
-                data=data,
-                params=params,
-                next_params=next_params,
-                value_key=value_key,
-                ndim=ndim,
-                value_net=value_net,
-                _call_value_net=_call_value_net,
-            )
-            return value, value_, None
         reset_long = reset.to(torch.long)
         reset_cs = reset_long.cumsum(time_idx)
         zero_shape = list(reset.shape)
@@ -735,16 +633,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
         data: TensorDictBase,
         params: TensorDictBase,
         next_params: TensorDictBase,
-        single_call: bool | Literal["compact", "compact-drop", "legacy"],
+        single_call: bool,
         value_key: NestedKey,
         detach_next: bool,
         vmap_randomness: str = "error",
         *,
         value_net: TensorDictModuleBase | None = None,
     ):
-        # ``single_call`` is either ``False`` or requests the budgeted compact-drop path.
-        if single_call in ("compact", "compact-drop", "legacy"):
-            single_call = True
+        # ``single_call`` is either ``False`` or requests the budgeted shifted path.
         if value_net is None:
             value_net = self.value_network
         in_keys = value_net.in_keys
@@ -773,7 +669,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         valid = None
         if single_call:
-            value, value_, valid = self._call_value_net_compact_drop(
+            value, value_, valid = self._call_value_net_shifted(
                 data=data,
                 params=params,
                 next_params=next_params,
@@ -782,71 +678,6 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 value_net=value_net,
                 _call_value_net=_call_value_net,
             )
-        elif single_call == "legacy":
-            # We are going to flatten the data, then interleave the last observation of each trajectory in between its
-            #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
-            #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
-            #  elements). Then, we can feed that to our RNN which will understand which trajectory is which, pad the data
-            #  accordingly and process each of them independently.
-            data_copy = data.copy()
-            # we are going to modify the done so let's clone it
-            done = data_copy["next", "done"].clone()
-            # Mark the last step of every sequence as done. We do this because flattening would cause the trajectories
-            #  of different batches to be merged.
-            done[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
-            truncated = data_copy.get(("next", "truncated"), done)
-            if truncated is not done:
-                truncated[(slice(None),) * (ndim - 1) + (-1,)].fill_(True)
-            data_copy["next", "done"] = done
-            data_copy["next", "truncated"] = truncated
-            # Reshape to -1 because we cannot guarantee that all dims have the same number of done states.
-            # Use reshape, not view: replay-buffer and memmap reads can expose non-canonical strides.
-            data_copy_view = data_copy.reshape(-1)
-            # Interleave next data when done
-            data_copy_select = data_copy_view.select(*in_keys, value_key, strict=False)
-            total_elts = (
-                data_copy_view.shape[0] + data_copy_view["next", "done"].sum().item()
-            )
-            data_in = data_copy_select.new_zeros((total_elts,))
-            # we can get the indices of non-done data by adding the shifted done cumsum to an arange
-            #    traj = [0, 0, 0, 1, 1, 2, 2]
-            #  arange = [0, 1, 2, 3, 4, 5, 6]
-            #    done = [0, 0, 1, 0, 1, 0, 1]
-            # done_cs = [0, 0, 0, 1, 1, 2, 2]
-            # indices = [0, 1, 2, 4, 5, 7, 8]
-            done_view = data_copy_view["next", "done"]
-            if done_view.shape[-1] == 1:
-                done_view = done_view.squeeze(-1)
-            else:
-                done_view = done_view.any(-1)
-            done_cs = done_view.cumsum(0)
-            done_cs = torch.cat([done_cs.new_zeros((1,)), done_cs[:-1]], dim=0)
-            indices = torch.arange(done_cs.shape[0], device=done_cs.device)
-            indices = indices + done_cs
-            data_in[indices] = data_copy_select
-            # To get the indices of the extra data, we can mask indices with done_view and add 1
-            indices_interleaved = indices[done_view] + 1
-            # assert not set(indices_interleaved.tolist()).intersection(indices.tolist())
-            root_done_data = data_copy_view[done_view]
-            next_done_data = root_done_data.get("next").select(
-                *in_keys, value_key, strict=False
-            )
-            next_done_data = self._fill_missing_next_inputs(
-                next_done_data, root_done_data, in_keys
-            )
-            data_in[indices_interleaved] = next_done_data
-            if next_params is not None and next_params is not params:
-                raise ValueError(
-                    "the value at t and t+1 cannot be retrieved in a single call without recurring to vmap when both params and next params are passed."
-                )
-            if params is not None:
-                with params.to_module(value_net):
-                    value_est = _call_value_net(data_in)
-            else:
-                value_est = _call_value_net(data_in)
-            value, value_ = value_est[indices], value_est[indices + 1]
-            value = value.view_as(done)
-            value_ = value_.view_as(done)
         else:
             data_root = data.select(*in_keys, value_key, strict=False)
             data_next = data.get("next").select(*in_keys, value_key, strict=False)
@@ -893,7 +724,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             value_ = value_.detach()
         return value, value_, valid
 
-    def _compact_drop_last_valid(self, valid: torch.Tensor, time_dim: int):
+    def _shifted_last_valid(self, valid: torch.Tensor, time_dim: int):
         next_valid = torch.cat(
             [
                 valid.narrow(time_dim, 1, valid.shape[time_dim] - 1),
@@ -915,12 +746,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
             source = source.unsqueeze(-1)
         return source.expand_as(target)
 
-    def _prepare_compact_drop_tensordict(
+    def _prepare_shifted_tensordict(
         self, tensordict: TensorDictBase, valid: torch.Tensor | None, time_dim: int
     ):
         if valid is None:
             return tensordict
-        last_valid = self._compact_drop_last_valid(valid, time_dim)
+        last_valid = self._shifted_last_valid(valid, time_dim)
         done = tensordict.get(("next", self.tensor_keys.done))
         terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         done_mask = self._expand_to_match(last_valid, done)
@@ -935,12 +766,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
         )
         return tensordict
 
-    def _mask_compact_drop_output(
+    def _mask_shifted_output(
         self, tensordict: TensorDictBase, valid: torch.Tensor | None
     ):
         if valid is None:
             return
-        tensordict.set("compact_drop_valid", valid)
+        tensordict.set("shifted_valid", valid)
         for key in (self.tensor_keys.advantage, self.tensor_keys.value_target):
             value = tensordict.get(key)
             mask = self._expand_to_match(valid, value)
@@ -963,28 +794,16 @@ class TD0Estimator(ValueEstimatorBase):
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``"compact"``: constant-shape single call along the time
-              dim of length ``T+1``. ``V(next_obs[t])`` is taken as
-              ``V(obs[t+1])`` for ``t<T-1`` (exact at non-trajectory-
-              boundary steps, small bias at internal truncations); at
-              the rollout boundary, uses ``V(("next", obs)[T-1])`` when
-              the rollout was collected without ``compact_obs=True``,
-              else copies ``V(obs[T-1])``. Compile-friendly — no Python
-              branches on tensor values, no ``.item()`` syncs.
-            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
-              true ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"compact_drop_valid"``. Retained samples
-              use exact next observations while keeping the old compact
-              compute budget.
-            - ``"legacy"``: original flatten/interleave path. Builds a 1D
-              sequence of size ``B*T + num_done`` with the real
-              ``next_obs`` interleaved at every ``done`` index, giving
-              exact ``V(next_obs)`` at internal truncations. Variable
-              shape, not compile-friendly with reset-aware recurrent
-              backends (``scan``/``triton``) — they serialize the scan
-              along ``[1, B*T]``.
-            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
-              :class:`DeprecationWarning`. The alias is removed in v0.15.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples use
+              exact next observations while keeping the static compute budget
+              configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples
+              use exact next observations while keeping the static compute
+              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1018,7 +837,7 @@ class TD0Estimator(ValueEstimatorBase):
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
-            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
             boundary without dropping samples, and so on. Defaults to ``1``.
 
@@ -1029,7 +848,7 @@ class TD0Estimator(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         value_network: TensorDictModule,
-        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
+        shifted: bool = False,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: NestedKey = None,
@@ -1156,19 +975,19 @@ class TD0Estimator(ValueEstimatorBase):
                     vmap_randomness=self.vmap_randomness,
                 )
                 if valid is not None:
-                    tensordict.set("compact_drop_valid", valid)
+                    tensordict.set("shifted_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(
             tensordict, valid, self._get_time_dim(None, tensordict)
         )
         value_target = self.value_estimate(data_for_value, next_value=next_value)
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
-        self._mask_compact_drop_output(tensordict, valid)
+        self._mask_shifted_output(tensordict, valid)
         return tensordict
 
     def value_estimate(
@@ -1242,28 +1061,16 @@ class TD1Estimator(ValueEstimatorBase):
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``"compact"``: constant-shape single call along the time
-              dim of length ``T+1``. ``V(next_obs[t])`` is taken as
-              ``V(obs[t+1])`` for ``t<T-1`` (exact at non-trajectory-
-              boundary steps, small bias at internal truncations); at
-              the rollout boundary, uses ``V(("next", obs)[T-1])`` when
-              the rollout was collected without ``compact_obs=True``,
-              else copies ``V(obs[T-1])``. Compile-friendly — no Python
-              branches on tensor values, no ``.item()`` syncs.
-            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
-              true ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"compact_drop_valid"``. Retained samples
-              use exact next observations while keeping the old compact
-              compute budget.
-            - ``"legacy"``: original flatten/interleave path. Builds a 1D
-              sequence of size ``B*T + num_done`` with the real
-              ``next_obs`` interleaved at every ``done`` index, giving
-              exact ``V(next_obs)`` at internal truncations. Variable
-              shape, not compile-friendly with reset-aware recurrent
-              backends (``scan``/``triton``) — they serialize the scan
-              along ``[1, B*T]``.
-            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
-              :class:`DeprecationWarning`. The alias is removed in v0.15.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples use
+              exact next observations while keeping the static compute budget
+              configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples
+              use exact next observations while keeping the static compute
+              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1284,7 +1091,7 @@ class TD1Estimator(ValueEstimatorBase):
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
-            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
             boundary without dropping samples, and so on. Defaults to ``1``.
 
@@ -1301,7 +1108,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
+        shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1423,20 +1230,20 @@ class TD1Estimator(ValueEstimatorBase):
                     vmap_randomness=self.vmap_randomness,
                 )
                 if valid is not None:
-                    tensordict.set("compact_drop_valid", valid)
+                    tensordict.set("shifted_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(
             tensordict, valid, self._get_time_dim(None, tensordict)
         )
         value_target = self.value_estimate(data_for_value, next_value=next_value)
 
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
-        self._mask_compact_drop_output(tensordict, valid)
+        self._mask_shifted_output(tensordict, valid)
         return tensordict
 
     def value_estimate(
@@ -1466,10 +1273,8 @@ class TD1Estimator(ValueEstimatorBase):
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
         time_dim = self._get_time_dim(time_dim, tensordict)
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
-            tensordict, valid, time_dim
-        )
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
         reward = data_for_value.get(("next", self.tensor_keys.reward))
         done = data_for_value.get(("next", self.tensor_keys.done))
         terminated = data_for_value.get(
@@ -1522,28 +1327,16 @@ class TDLambdaEstimator(ValueEstimatorBase):
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``"compact"``: constant-shape single call along the time
-              dim of length ``T+1``. ``V(next_obs[t])`` is taken as
-              ``V(obs[t+1])`` for ``t<T-1`` (exact at non-trajectory-
-              boundary steps, small bias at internal truncations); at
-              the rollout boundary, uses ``V(("next", obs)[T-1])`` when
-              the rollout was collected without ``compact_obs=True``,
-              else copies ``V(obs[T-1])``. Compile-friendly — no Python
-              branches on tensor values, no ``.item()`` syncs.
-            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
-              true ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"compact_drop_valid"``. Retained samples
-              use exact next observations while keeping the old compact
-              compute budget.
-            - ``"legacy"``: original flatten/interleave path. Builds a 1D
-              sequence of size ``B*T + num_done`` with the real
-              ``next_obs`` interleaved at every ``done`` index, giving
-              exact ``V(next_obs)`` at internal truncations. Variable
-              shape, not compile-friendly with reset-aware recurrent
-              backends (``scan``/``triton``) — they serialize the scan
-              along ``[1, B*T]``.
-            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
-              :class:`DeprecationWarning`. The alias is removed in v0.15.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples use
+              exact next observations while keeping the static compute budget
+              configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples
+              use exact next observations while keeping the static compute
+              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1564,7 +1357,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
-            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
             boundary without dropping samples, and so on. Defaults to ``1``.
 
@@ -1583,7 +1376,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
+        shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1718,19 +1511,19 @@ class TDLambdaEstimator(ValueEstimatorBase):
                     vmap_randomness=self.vmap_randomness,
                 )
                 if valid is not None:
-                    tensordict.set("compact_drop_valid", valid)
+                    tensordict.set("shifted_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(
             tensordict, valid, self._get_time_dim(None, tensordict)
         )
         value_target = self.value_estimate(data_for_value, next_value=next_value)
 
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
-        self._mask_compact_drop_output(tensordict, valid)
+        self._mask_shifted_output(tensordict, valid)
         return tensordict
 
     def value_estimate(
@@ -1765,10 +1558,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
         time_dim = self._get_time_dim(time_dim, tensordict)
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
-            tensordict, valid, time_dim
-        )
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
         reward = data_for_value.get(("next", self.tensor_keys.reward))
         done = data_for_value.get(("next", self.tensor_keys.done))
         terminated = data_for_value.get(
@@ -1839,28 +1630,16 @@ class GAE(ValueEstimatorBase):
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``"compact"``: constant-shape single call along the time
-              dim of length ``T+1``. ``V(next_obs[t])`` is taken as
-              ``V(obs[t+1])`` for ``t<T-1`` (exact at non-trajectory-
-              boundary steps, small bias at internal truncations); at
-              the rollout boundary, uses ``V(("next", obs)[T-1])`` when
-              the rollout was collected without ``compact_obs=True``,
-              else copies ``V(obs[T-1])``. Compile-friendly — no Python
-              branches on tensor values, no ``.item()`` syncs.
-            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
-              true ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"compact_drop_valid"``. Retained samples
-              use exact next observations while keeping the old compact
-              compute budget.
-            - ``"legacy"``: original flatten/interleave path. Builds a 1D
-              sequence of size ``B*T + num_done`` with the real
-              ``next_obs`` interleaved at every ``done`` index, giving
-              exact ``V(next_obs)`` at internal truncations. Variable
-              shape, not compile-friendly with reset-aware recurrent
-              backends (``scan``/``triton``) — they serialize the scan
-              along ``[1, B*T]``.
-            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
-              :class:`DeprecationWarning`. The alias is removed in v0.15.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples use
+              exact next observations while keeping the static compute budget
+              configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples
+              use exact next observations while keeping the static compute
+              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1884,7 +1663,7 @@ class GAE(ValueEstimatorBase):
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
-            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
             boundary without dropping samples, and so on. Defaults to ``1``.
 
@@ -1927,7 +1706,7 @@ class GAE(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
+        shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         auto_reset_env: bool = False,
@@ -2093,7 +1872,7 @@ class GAE(ValueEstimatorBase):
                     vmap_randomness=self.vmap_randomness,
                 )
                 if valid is not None:
-                    tensordict.set("compact_drop_valid", valid)
+                    tensordict.set("shifted_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
@@ -2108,10 +1887,8 @@ class GAE(ValueEstimatorBase):
                 )
 
         time_dim = self._get_time_dim(time_dim, tensordict)
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
-            tensordict, valid, time_dim
-        )
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
         reward = data_for_value.get(("next", self.tensor_keys.reward))
         done = data_for_value.get(("next", self.tensor_keys.done))
         terminated = data_for_value.get(
@@ -2159,7 +1936,7 @@ class GAE(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
-        self._mask_compact_drop_output(tensordict, valid)
+        self._mask_shifted_output(tensordict, valid)
 
         return tensordict
 
@@ -2258,14 +2035,12 @@ class GAE(ValueEstimatorBase):
                     vmap_randomness=self.vmap_randomness,
                 )
                 if valid is not None:
-                    tensordict.set("compact_drop_valid", valid)
+                    tensordict.set("shifted_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
-            tensordict, valid, time_dim
-        )
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
         reward = data_for_value.get(("next", self.tensor_keys.reward))
         done = data_for_value.get(("next", self.tensor_keys.done))
         terminated = data_for_value.get(
@@ -2430,28 +2205,16 @@ class VTrace(ValueEstimatorBase):
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``"compact"``: constant-shape single call along the time
-              dim of length ``T+1``. ``V(next_obs[t])`` is taken as
-              ``V(obs[t+1])`` for ``t<T-1`` (exact at non-trajectory-
-              boundary steps, small bias at internal truncations); at
-              the rollout boundary, uses ``V(("next", obs)[T-1])`` when
-              the rollout was collected without ``compact_obs=True``,
-              else copies ``V(obs[T-1])``. Compile-friendly — no Python
-              branches on tensor values, no ``.item()`` syncs.
-            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
-              true ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"compact_drop_valid"``. Retained samples
-              use exact next observations while keeping the old compact
-              compute budget.
-            - ``"legacy"``: original flatten/interleave path. Builds a 1D
-              sequence of size ``B*T + num_done`` with the real
-              ``next_obs`` interleaved at every ``done`` index, giving
-              exact ``V(next_obs)`` at internal truncations. Variable
-              shape, not compile-friendly with reset-aware recurrent
-              backends (``scan``/``triton``) — they serialize the scan
-              along ``[1, B*T]``.
-            - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
-              :class:`DeprecationWarning`. The alias is removed in v0.15.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples use
+              exact next observations while keeping the static compute budget
+              configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts true
+              ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"shifted_valid"``. Retained samples
+              use exact next observations while keeping the static compute
+              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -2470,7 +2233,7 @@ class VTrace(ValueEstimatorBase):
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
-            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
             boundary without dropping samples, and so on. Defaults to ``1``.
 
@@ -2498,7 +2261,7 @@ class VTrace(ValueEstimatorBase):
         advantage_key: NestedKey | None = None,
         value_target_key: NestedKey | None = None,
         value_key: NestedKey | None = None,
-        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
+        shifted: bool = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         value_chunk_size: int | None = None,
@@ -2679,7 +2442,7 @@ class VTrace(ValueEstimatorBase):
                     vmap_randomness=self.vmap_randomness,
                 )
                 if valid is not None:
-                    tensordict.set("compact_drop_valid", valid)
+                    tensordict.set("shifted_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
@@ -2701,10 +2464,8 @@ class VTrace(ValueEstimatorBase):
             log_pi = log_pi.view_as(value)
 
         time_dim = self._get_time_dim(time_dim, tensordict)
-        valid = tensordict.get("compact_drop_valid", default=None)
-        data_for_value = self._prepare_compact_drop_tensordict(
-            tensordict, valid, time_dim
-        )
+        valid = tensordict.get("shifted_valid", default=None)
+        data_for_value = self._prepare_shifted_tensordict(tensordict, valid, time_dim)
         reward = data_for_value.get(("next", self.tensor_keys.reward))
 
         # Compute the V-Trace correction
@@ -2733,7 +2494,7 @@ class VTrace(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
-        self._mask_compact_drop_output(tensordict, valid)
+        self._mask_shifted_output(tensordict, valid)
 
         return tensordict
 

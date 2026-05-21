@@ -279,7 +279,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if reduction is None:
             reduction = self.reduction
         if mask is None and tensordict is not None:
-            mask = tensordict.get("compact_drop_valid", default=None)
+            mask = tensordict.get("shifted_valid", default=None)
         if mask is not None:
             mask = self._expand_loss_mask(mask, loss)
             if weights is not None and weights.shape != loss.shape:
