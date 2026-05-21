@@ -41,14 +41,12 @@ warnings.filterwarnings("ignore")
 import tempfile
 
 import torch
-from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import GymEnv
 from torchrl.envs.transforms import NextStateReconstructor
-from torchrl.modules import RandomPolicy
 from torchrl.objectives.value import GAE
 
 torch.manual_seed(0)
@@ -196,7 +194,10 @@ sample = rb.sample()
 # ``("next", "observation")`` is back in the sample, even though it was
 # absent from the storage.
 print("sample keys:", sorted(str(k) for k in sample.keys(True, True))[:6])
-print("any NaN in ('next', observation')?", torch.isnan(sample[("next", "observation")]).any().item())
+print(
+    "any NaN in ('next', observation')?",
+    torch.isnan(sample[("next", "observation")]).any().item(),
+)
 
 ######################################################################
 # The NaN entries land exactly where the *real* next observation is no
@@ -209,12 +210,81 @@ done = sample[("next", "done")].squeeze(-1)
 boundary = torch.cat([(traj[1:] != traj[:-1]), torch.tensor([True])]) | done
 print(
     "rows with NaN next-obs:                ",
-    torch.isnan(sample[("next", "observation")]).any(-1).nonzero(as_tuple=True)[0].tolist(),
+    torch.isnan(sample[("next", "observation")])
+    .any(-1)
+    .nonzero(as_tuple=True)[0]
+    .tolist(),
 )
 print(
     "rows flagged as trajectory boundaries: ",
     boundary.nonzero(as_tuple=True)[0].tolist(),
 )
+
+######################################################################
+# Knob 2b — Lossy delta compression, boundary-preserving
+# ------------------------------------------------------
+#
+# ``compact_obs`` + :class:`~torchrl.envs.transforms.NextStateReconstructor`
+# is *lossless within a trajectory* but loses information at trajectory
+# boundaries (the NaN positions above). For tasks that bootstrap on
+# truncated transitions, or for users who'd rather not propagate ``NaN``
+# at all,
+# :class:`~torchrl.envs.transforms.NextObservationDelta` provides a
+# different trade-off: keep ``("next", obs)`` information at every step,
+# but store it at low precision.
+#
+# The env-side transform writes, for each step,
+# ``("next", "delta", obs) = (next_obs - obs).to(delta_dtype)`` (default
+# ``torch.float16``) and drops the full-precision ``("next", obs)`` from
+# the post-step tensordict before the collector stacks it. The same
+# transform attached to the replay buffer reconstructs
+# ``("next", obs) = obs + ("next", "delta", obs)`` at sample time.
+#
+# .. code-block:: python
+#
+#     from torchrl.envs import TransformedEnv
+#     from torchrl.envs.transforms import NextObservationDelta
+#
+#     env = TransformedEnv(base_env, NextObservationDelta())
+#     collector = SyncDataCollector(
+#         create_env_fn=lambda: env, policy=policy,
+#         frames_per_batch=1024, total_frames=1_000_000,
+#     )
+#     rb = ReplayBuffer(
+#         storage=LazyTensorStorage(1_000_000),
+#         sampler=SliceSampler(slice_len=64, traj_key=("collector", "traj_ids")),
+#         transform=NextObservationDelta(),  # SAME class, reconstruction side
+#         batch_size=8 * 64,
+#     )
+#
+# Trade-offs vs. Knob 1 + Knob 2:
+#
+# * **Memory.** Smaller saving (~25% of obs bytes for float32→float16,
+#   vs. ~50% for the compact-obs route — root ``obs`` is untouched
+#   either way; the half goes into a half-precision delta rather than
+#   disappearing).
+# * **Boundaries.** The delta encodes the *actual* transition that
+#   happened inside ``env.step``, so end-of-trajectory positions
+#   reconstruct correctly within the round-trip precision of
+#   ``delta_dtype``. No ``NaN``, no need for the value-estimator
+#   sanitizer at Knob 2.5.
+# * **Loss compatibility.** The reconstructed ``("next", obs)`` is
+#   bit-close to the original (subject to ``delta_dtype`` precision).
+#   Truncated-step bootstraps see the real next obs, not the
+#   ``V(obs[t]) ≈ V(real_next_obs)`` approximation.
+# * **MultiStep.** Still incompatible — the n-step transform needs
+#   ``data[t + n]`` materialised at every position; a one-step delta
+#   doesn't carry that information.
+# * **Precision.** Lossy. Round-trip error scales with ``delta_dtype``
+#   precision and observation magnitude — best when observations are
+#   roughly normalized.
+# * **Composition.** ``NextObservationDelta`` lives *outside* batched
+#   envs (``TransformedEnv(ParallelEnv(N, ...), NextObservationDelta())``);
+#   placing it inside a worker raises at construction time.
+#
+# Pick this knob when you want bootstrap-correct next-obs at boundaries
+# without surrendering all the saving, or when ``NaN``-propagation
+# concerns rule out the compact-obs route in your loss pipeline.
 
 ######################################################################
 # Knob 2.5 — value-estimator NaN safety
@@ -265,7 +335,11 @@ print("any -inf or +inf?", torch.isinf(out["advantage"]).any().item())
 #    ``V(obs[t]) ≈ V(real_next_obs)`` approximation that
 #    :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`
 #    falls back to. The approximation is fine for many tasks (it's
-#    consistent and finite) but it *is* an approximation.
+#    consistent and finite) but it *is* an approximation. For these
+#    cases, prefer
+#    :class:`~torchrl.envs.transforms.NextObservationDelta` (Knob 2b):
+#    it pays a smaller memory saving but reconstructs the real
+#    transition at every position, including trajectory boundaries.
 #
 # A second, smaller knob in the same area is the
 # ``shifted=True`` mode of the value estimators
@@ -405,6 +479,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # * :class:`~torchrl.envs.transforms.NextStateReconstructor` rebuilds
 #   it on the consumer side, with ``NaN`` at the (genuinely missing)
 #   trajectory ends.
+# * :class:`~torchrl.envs.transforms.NextObservationDelta` offers an
+#   alternative: store ``("next", obs)`` as a low-precision delta
+#   (smaller saving but boundary-preserving and ``NaN``-free).
 # * The value-estimator pipeline keeps GAE / TD targets numerically
 #   defined via
 #   :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`.
