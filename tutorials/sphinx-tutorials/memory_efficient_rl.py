@@ -17,6 +17,9 @@ Memory-Efficient RL Training
       * Rebuilding ``("next", obs)`` on the consumer side with
         :class:`~torchrl.envs.transforms.NextStateReconstructor`
       * Why the resulting ``NaN`` at trajectory ends does not crash GAE / TD
+      * The lossy-delta variant with
+        :class:`~torchrl.envs.transforms.NextObservationDelta` —
+        boundary-preserving but smaller saving
       * When *not* to take this path (MultiStep DQN, truncated transitions)
       * Other knobs: :class:`~torchrl.data.LazyMemmapStorage`,
         :class:`~torchrl.data.SliceSampler`, and the new padding-free RNN
