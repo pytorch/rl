@@ -230,7 +230,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self,
         *,
         value_network: TensorDictModule,
-        shifted: bool | Literal["compact", "legacy"] = False,
+        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
         differentiable: bool = False,
         skip_existing: bool | None = None,
         advantage_key: NestedKey = None,
@@ -501,8 +501,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
     @staticmethod
     def _normalize_shifted(
-        shifted: bool | Literal["compact", "legacy"],
-    ) -> Literal[False, "compact", "legacy"]:
+        shifted: bool | Literal["compact", "compact-drop", "legacy"],
+    ) -> Literal[False, "compact", "compact-drop", "legacy"]:
         """Normalize the ``shifted`` argument.
 
         ``shifted=True`` is deprecated; users must opt in explicitly to
@@ -526,11 +526,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 stacklevel=3,
             )
             return "legacy"
-        if shifted in ("compact", "legacy"):
+        if shifted in ("compact", "compact-drop", "legacy"):
             return shifted
         raise ValueError(
-            f"shifted must be one of False, 'compact', 'legacy' (or the "
-            f"deprecated True), got {shifted!r}."
+            "shifted must be one of False, 'compact', 'compact-drop', "
+            f"'legacy' (or the deprecated True), got {shifted!r}."
         )
 
     def _call_value_net_compact(
@@ -623,12 +623,143 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 pass
         return value, value_
 
+    def _call_value_net_compact_drop(
+        self,
+        data: TensorDictBase,
+        params: TensorDictBase | None,
+        next_params: TensorDictBase | None,
+        value_key: NestedKey,
+        ndim: int,
+        value_net: TensorDictModuleBase,
+        _call_value_net,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Compact single-call path that inserts reset next-observations.
+
+        This backend keeps the value-network input length fixed to ``T + 1``.
+        It inserts true ``("next", ...)`` entries after internal reset steps,
+        shifts subsequent root entries to the right, and marks the displaced
+        suffix as invalid. Retained samples have exact root and next values.
+        """
+        if next_params is not None and next_params is not params:
+            raise ValueError(
+                "the value at t and t+1 cannot be retrieved in a single call when both params and next params are passed."
+            )
+        in_keys = value_net.in_keys
+        time_idx = ndim - 1
+        T = data.shape[time_idx]
+        root_part = data.select(*in_keys, value_key, strict=False)
+        next_part = data.get("next").select(*in_keys, value_key, strict=False)
+        next_part = self._fill_missing_next_inputs(next_part, root_part, in_keys)
+        done = data.get(("next", self.tensor_keys.done))
+        if done.shape[-1] == 1:
+            reset = done.squeeze(-1).clone()
+        else:
+            reset = done.any(-1)
+        reset[(slice(None),) * time_idx + (-1,)] = False
+        if not is_dynamo_compiling() and not bool(reset.any()):
+            value, value_ = self._call_value_net_compact(
+                data=data,
+                params=params,
+                next_params=next_params,
+                value_key=value_key,
+                ndim=ndim,
+                value_net=value_net,
+                _call_value_net=_call_value_net,
+            )
+            return value, value_, None
+        reset_long = reset.to(torch.long)
+        reset_cs = reset_long.cumsum(time_idx)
+        zero_shape = list(reset.shape)
+        zero_shape[time_idx] = 1
+        reset_before = torch.cat(
+            [reset_cs.new_zeros(zero_shape), reset_cs.narrow(time_idx, 0, T - 1)],
+            dim=time_idx,
+        )
+        arange_shape = [1] * reset.ndim
+        arange_shape[time_idx] = T
+        arange = torch.arange(T, device=done.device).view(arange_shape)
+        root_slot = arange + reset_before
+        next_slot = root_slot + 1
+        valid = next_slot < (T + 1)
+        root_valid = root_slot < (T + 1)
+        reset_valid = reset & valid
+        boundary_slot = T + reset_long.sum(time_idx, keepdim=True)
+        boundary_valid = boundary_slot < (T + 1)
+        data_in_batch_size = list(root_part.batch_size)
+        data_in_batch_size[time_idx] = T + 1
+        data_in = root_part.new_zeros(data_in_batch_size)
+
+        def _expand_index(index: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
+            while index.ndim < source.ndim:
+                index = index.unsqueeze(-1)
+            return index.expand_as(source)
+
+        def _expand_mask(mask: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
+            while mask.ndim < source.ndim:
+                mask = mask.unsqueeze(-1)
+            return mask.expand_as(source)
+
+        def _scatter_time(
+            destination: torch.Tensor,
+            index: torch.Tensor,
+            source: torch.Tensor,
+            mask: torch.Tensor,
+        ) -> torch.Tensor:
+            index = index.clamp_max(T)
+            index_expand = _expand_index(index, source)
+            current = destination.gather(time_idx, index_expand)
+            source = torch.where(_expand_mask(mask, source), source, current)
+            return destination.scatter(time_idx, index_expand, source)
+
+        boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
+        for key in in_keys:
+            root_value = root_part.get(key, default=None)
+            if root_value is None:
+                continue
+            data_value = data_in.get(key)
+            data_value = _scatter_time(data_value, root_slot, root_value, root_valid)
+            next_value = next_part.get(key, default=None)
+            if next_value is not None:
+                data_value = _scatter_time(
+                    data_value, next_slot, next_value, reset_valid
+                )
+                data_value = _scatter_time(
+                    data_value,
+                    boundary_slot,
+                    next_value[boundary_index],
+                    boundary_valid,
+                )
+            data_in.set(key, data_value)
+        if params is not None:
+            with params.to_module(value_net):
+                values_full = _call_value_net(data_in)
+        else:
+            values_full = _call_value_net(data_in)
+
+        def _gather_time(source: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
+            index_expand = index.clamp_max(T)
+            while index_expand.ndim < source.ndim:
+                index_expand = index_expand.unsqueeze(-1)
+            target_shape = list(source.shape)
+            target_shape[time_idx] = index.shape[time_idx]
+            index_expand = index_expand.expand(target_shape)
+            return source.gather(time_idx, index_expand)
+
+        value = _gather_time(values_full, root_slot)
+        value_ = _gather_time(values_full, next_slot)
+        try:
+            value = value.view_as(done)
+            value_ = value_.view_as(done)
+        except RuntimeError:
+            pass
+        return value, value_, valid
+
     def _call_value_nets(
         self,
         data: TensorDictBase,
         params: TensorDictBase,
         next_params: TensorDictBase,
-        single_call: bool | Literal["compact", "legacy"],
+        single_call: bool | Literal["compact", "compact-drop", "legacy"],
         value_key: NestedKey,
         detach_next: bool,
         vmap_randomness: str = "error",
@@ -668,8 +799,19 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 values.append(value_net(chunk).get(value_key))
             return torch.cat(values, dim=0)
 
+        valid = None
         if single_call == "compact":
             value, value_ = self._call_value_net_compact(
+                data=data,
+                params=params,
+                next_params=next_params,
+                value_key=value_key,
+                ndim=ndim,
+                value_net=value_net,
+                _call_value_net=_call_value_net,
+            )
+        elif single_call == "compact-drop":
+            value, value_, valid = self._call_value_net_compact_drop(
                 data=data,
                 params=params,
                 next_params=next_params,
@@ -787,7 +929,60 @@ class ValueEstimatorBase(TensorDictModuleBase):
         data.set(("next", value_key), value_)
         if detach_next:
             value_ = value_.detach()
-        return value, value_
+        return value, value_, valid
+
+    def _compact_drop_last_valid(self, valid: torch.Tensor, time_dim: int):
+        next_valid = torch.cat(
+            [
+                valid.narrow(time_dim, 1, valid.shape[time_dim] - 1),
+                valid.new_zeros(
+                    [
+                        *valid.shape[:time_dim],
+                        1,
+                        *valid.shape[time_dim + 1 :],
+                    ]
+                ),
+            ],
+            dim=time_dim,
+        )
+        return valid & ~next_valid
+
+    @staticmethod
+    def _expand_to_match(source: torch.Tensor, target: torch.Tensor):
+        while source.ndim < target.ndim:
+            source = source.unsqueeze(-1)
+        return source.expand_as(target)
+
+    def _prepare_compact_drop_tensordict(
+        self, tensordict: TensorDictBase, valid: torch.Tensor | None, time_dim: int
+    ):
+        if valid is None:
+            return tensordict
+        last_valid = self._compact_drop_last_valid(valid, time_dim)
+        done = tensordict.get(("next", self.tensor_keys.done))
+        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
+        done_mask = self._expand_to_match(last_valid, done)
+        tensordict = tensordict.copy()
+        tensordict.set(
+            ("next", self.tensor_keys.done),
+            done.masked_fill(done_mask, True),
+        )
+        tensordict.set(
+            ("next", self.tensor_keys.terminated),
+            terminated.masked_fill(done_mask, False),
+        )
+        return tensordict
+
+    def _mask_compact_drop_output(
+        self, tensordict: TensorDictBase, valid: torch.Tensor | None
+    ):
+        if valid is None:
+            return
+        tensordict.set("compact_drop_valid", valid)
+        for key in (self.tensor_keys.advantage, self.tensor_keys.value_target):
+            value = tensordict.get(key)
+            mask = self._expand_to_match(valid, value)
+            tensordict.set(key, value.masked_fill(~mask, 0))
 
 
 class TD0Estimator(ValueEstimatorBase):
@@ -814,6 +1009,11 @@ class TD0Estimator(ValueEstimatorBase):
               the rollout was collected without ``compact_obs=True``,
               else copies ``V(obs[T-1])``. Compile-friendly — no Python
               branches on tensor values, no ``.item()`` syncs.
+            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
+              true ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"compact_drop_valid"``. Retained samples
+              use exact next observations while keeping the old compact
+              compute budget.
             - ``"legacy"``: original flatten/interleave path. Builds a 1D
               sequence of size ``B*T + num_done`` with the real
               ``next_obs`` interleaved at every ``done`` index, giving
@@ -824,7 +1024,7 @@ class TD0Estimator(ValueEstimatorBase):
             - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
               :class:`DeprecationWarning`. The alias is removed in v0.15.
 
-            Both single-call paths require that the parameters at time
+            All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
             used) and that the ``"next"`` value is shifted by exactly one
             time step (no multi-step returns). Defaults to ``False``.
@@ -867,7 +1067,7 @@ class TD0Estimator(ValueEstimatorBase):
         *,
         gamma: float | torch.Tensor,
         value_network: TensorDictModule,
-        shifted: bool | Literal["compact", "legacy"] = False,
+        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
         average_rewards: bool = False,
         differentiable: bool = False,
         advantage_key: NestedKey = None,
@@ -984,7 +1184,7 @@ class TD0Estimator(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = self._call_value_nets(
+                value, next_value, valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -993,13 +1193,20 @@ class TD0Estimator(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
+                if valid is not None:
+                    tensordict.set("compact_drop_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        value_target = self.value_estimate(tensordict, next_value=next_value)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, self._get_time_dim(None, tensordict)
+        )
+        value_target = self.value_estimate(data_for_value, next_value=next_value)
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._mask_compact_drop_output(tensordict, valid)
         return tensordict
 
     def value_estimate(
@@ -1081,6 +1288,11 @@ class TD1Estimator(ValueEstimatorBase):
               the rollout was collected without ``compact_obs=True``,
               else copies ``V(obs[T-1])``. Compile-friendly — no Python
               branches on tensor values, no ``.item()`` syncs.
+            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
+              true ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"compact_drop_valid"``. Retained samples
+              use exact next observations while keeping the old compact
+              compute budget.
             - ``"legacy"``: original flatten/interleave path. Builds a 1D
               sequence of size ``B*T + num_done`` with the real
               ``next_obs`` interleaved at every ``done`` index, giving
@@ -1091,7 +1303,7 @@ class TD1Estimator(ValueEstimatorBase):
             - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
               :class:`DeprecationWarning`. The alias is removed in v0.15.
 
-            Both single-call paths require that the parameters at time
+            All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
             used) and that the ``"next"`` value is shifted by exactly one
             time step (no multi-step returns). Defaults to ``False``.
@@ -1127,7 +1339,7 @@ class TD1Estimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool | Literal["compact", "legacy"] = False,
+        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1239,7 +1451,7 @@ class TD1Estimator(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = self._call_value_nets(
+                value, next_value, valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1248,14 +1460,21 @@ class TD1Estimator(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
+                if valid is not None:
+                    tensordict.set("compact_drop_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
 
-        value_target = self.value_estimate(tensordict, next_value=next_value)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, self._get_time_dim(None, tensordict)
+        )
+        value_target = self.value_estimate(data_for_value, next_value=next_value)
 
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._mask_compact_drop_output(tensordict, valid)
         return tensordict
 
     def value_estimate(
@@ -1284,9 +1503,16 @@ class TD1Estimator(ValueEstimatorBase):
         if next_value is None:
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
-        done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         time_dim = self._get_time_dim(time_dim, tensordict)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, time_dim
+        )
+        reward = data_for_value.get(("next", self.tensor_keys.reward))
+        done = data_for_value.get(("next", self.tensor_keys.done))
+        terminated = data_for_value.get(
+            ("next", self.tensor_keys.terminated), default=done
+        )
         value_target = vec_td1_return_estimate(
             gamma,
             next_value,
@@ -1342,6 +1568,11 @@ class TDLambdaEstimator(ValueEstimatorBase):
               the rollout was collected without ``compact_obs=True``,
               else copies ``V(obs[T-1])``. Compile-friendly — no Python
               branches on tensor values, no ``.item()`` syncs.
+            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
+              true ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"compact_drop_valid"``. Retained samples
+              use exact next observations while keeping the old compact
+              compute budget.
             - ``"legacy"``: original flatten/interleave path. Builds a 1D
               sequence of size ``B*T + num_done`` with the real
               ``next_obs`` interleaved at every ``done`` index, giving
@@ -1352,7 +1583,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
               :class:`DeprecationWarning`. The alias is removed in v0.15.
 
-            Both single-call paths require that the parameters at time
+            All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
             used) and that the ``"next"`` value is shifted by exactly one
             time step (no multi-step returns). Defaults to ``False``.
@@ -1390,7 +1621,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool | Literal["compact", "legacy"] = False,
+        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
@@ -1515,7 +1746,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = self._call_value_nets(
+                value, next_value, valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1524,13 +1755,20 @@ class TDLambdaEstimator(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
+                if valid is not None:
+                    tensordict.set("compact_drop_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
-        value_target = self.value_estimate(tensordict, next_value=next_value)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, self._get_time_dim(None, tensordict)
+        )
+        value_target = self.value_estimate(data_for_value, next_value=next_value)
 
         tensordict.set(self.tensor_keys.advantage, value_target - value)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._mask_compact_drop_output(tensordict, valid)
         return tensordict
 
     def value_estimate(
@@ -1564,9 +1802,16 @@ class TDLambdaEstimator(ValueEstimatorBase):
         if next_value is None:
             next_value = self._next_value(tensordict, target_params, kwargs=kwargs)
 
-        done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         time_dim = self._get_time_dim(time_dim, tensordict)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, time_dim
+        )
+        reward = data_for_value.get(("next", self.tensor_keys.reward))
+        done = data_for_value.get(("next", self.tensor_keys.done))
+        terminated = data_for_value.get(
+            ("next", self.tensor_keys.terminated), default=done
+        )
         if self.vectorized:
             val = vec_td_lambda_return_estimate(
                 gamma,
@@ -1640,6 +1885,11 @@ class GAE(ValueEstimatorBase):
               the rollout was collected without ``compact_obs=True``,
               else copies ``V(obs[T-1])``. Compile-friendly — no Python
               branches on tensor values, no ``.item()`` syncs.
+            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
+              true ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"compact_drop_valid"``. Retained samples
+              use exact next observations while keeping the old compact
+              compute budget.
             - ``"legacy"``: original flatten/interleave path. Builds a 1D
               sequence of size ``B*T + num_done`` with the real
               ``next_obs`` interleaved at every ``done`` index, giving
@@ -1650,7 +1900,7 @@ class GAE(ValueEstimatorBase):
             - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
               :class:`DeprecationWarning`. The alias is removed in v0.15.
 
-            Both single-call paths require that the parameters at time
+            All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
             used) and that the ``"next"`` value is shifted by exactly one
             time step (no multi-step returns). Defaults to ``False``.
@@ -1717,7 +1967,7 @@ class GAE(ValueEstimatorBase):
         advantage_key: NestedKey = None,
         value_target_key: NestedKey = None,
         value_key: NestedKey = None,
-        shifted: bool | Literal["compact", "legacy"] = False,
+        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         auto_reset_env: bool = False,
@@ -1873,7 +2123,7 @@ class GAE(ValueEstimatorBase):
                 # with torch.no_grad():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = self._call_value_nets(
+                value, next_value, valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -1882,6 +2132,8 @@ class GAE(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
+                if valid is not None:
+                    tensordict.set("compact_drop_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
@@ -1895,9 +2147,16 @@ class GAE(ValueEstimatorBase):
                     f"The tensor with key {('next', self.tensor_keys.value)} is missing, and no value network was provided."
                 )
 
-        done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
         time_dim = self._get_time_dim(time_dim, tensordict)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, time_dim
+        )
+        reward = data_for_value.get(("next", self.tensor_keys.reward))
+        done = data_for_value.get(("next", self.tensor_keys.done))
+        terminated = data_for_value.get(
+            ("next", self.tensor_keys.terminated), default=done
+        )
 
         # Subclass extension hook: lets subclasses reshape / broadcast the
         # reward and done signals to match the value tensor before the
@@ -1936,10 +2195,11 @@ class GAE(ValueEstimatorBase):
             )
 
         if self.average_gae:
-            adv = self._normalize_advantage(adv)
+            adv = self._normalize_advantage(adv, valid)
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._mask_compact_drop_output(tensordict, valid)
 
         return tensordict
 
@@ -1968,15 +2228,23 @@ class GAE(ValueEstimatorBase):
         """
         return tensor
 
-    def _normalize_advantage(self, adv: Tensor) -> Tensor:
+    def _normalize_advantage(
+        self, adv: Tensor, valid: torch.Tensor | None = None
+    ) -> Tensor:
         """Standardise the advantage tensor.
 
         Default standardises globally (single mean/std over the whole tensor).
         :class:`MultiAgentGAE` overrides this to leave the agent dim
         independent.
         """
-        loc = adv.mean()
-        scale = adv.std().clamp_min(1e-4)
+        if valid is None:
+            loc = adv.mean()
+            scale = adv.std().clamp_min(1e-4)
+            return (adv - loc) / scale
+        mask = self._expand_to_match(valid, adv).to(adv.dtype)
+        count = mask.sum().clamp_min(1)
+        loc = (adv * mask).sum() / count
+        scale = (((adv - loc).pow(2) * mask).sum() / count).sqrt().clamp_min(1e-4)
         return (adv - loc) / scale
 
     def value_estimate(
@@ -2020,7 +2288,7 @@ class GAE(ValueEstimatorBase):
             ) else nullcontext():
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = self._call_value_nets(
+                value, next_value, valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -2029,11 +2297,20 @@ class GAE(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
+                if valid is not None:
+                    tensordict.set("compact_drop_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
-        done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.terminated), default=done)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, time_dim
+        )
+        reward = data_for_value.get(("next", self.tensor_keys.reward))
+        done = data_for_value.get(("next", self.tensor_keys.done))
+        terminated = data_for_value.get(
+            ("next", self.tensor_keys.terminated), default=done
+        )
         reward, done, terminated = self._prepare_signals(
             reward, done, terminated, value
         )
@@ -2130,13 +2407,25 @@ class MultiAgentGAE(GAE):
         # broadcasting policy as the other team signals.
         return self._broadcast_to_agents(tensor, value, self.agent_dim)
 
-    def _normalize_advantage(self, adv: Tensor) -> Tensor:
+    def _normalize_advantage(
+        self, adv: Tensor, valid: torch.Tensor | None = None
+    ) -> Tensor:
         # Per-agent standardisation: normalise over batch + time but keep the
         # agent dim independent so high-variance agents are not flattened.
         agent_dim = self.agent_dim if self.agent_dim >= 0 else adv.ndim + self.agent_dim
         reduce_dims = [d for d in range(adv.ndim) if d != agent_dim]
-        loc = adv.mean(dim=reduce_dims, keepdim=True)
-        scale = adv.std(dim=reduce_dims, keepdim=True).clamp_min(1e-4)
+        if valid is None:
+            loc = adv.mean(dim=reduce_dims, keepdim=True)
+            scale = adv.std(dim=reduce_dims, keepdim=True).clamp_min(1e-4)
+            return (adv - loc) / scale
+        mask = self._expand_to_match(valid, adv).to(adv.dtype)
+        count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
+        loc = (adv * mask).sum(dim=reduce_dims, keepdim=True) / count
+        scale = (
+            (((adv - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True) / count)
+            .sqrt()
+            .clamp_min(1e-4)
+        )
         return (adv - loc) / scale
 
 
@@ -2189,6 +2478,11 @@ class VTrace(ValueEstimatorBase):
               the rollout was collected without ``compact_obs=True``,
               else copies ``V(obs[T-1])``. Compile-friendly — no Python
               branches on tensor values, no ``.item()`` syncs.
+            - ``"compact-drop"``: fixed ``T+1`` single-call path. Inserts
+              true ``next_obs`` after internal resets and masks the displaced
+              suffix samples via ``"compact_drop_valid"``. Retained samples
+              use exact next observations while keeping the old compact
+              compute budget.
             - ``"legacy"``: original flatten/interleave path. Builds a 1D
               sequence of size ``B*T + num_done`` with the real
               ``next_obs`` interleaved at every ``done`` index, giving
@@ -2199,7 +2493,7 @@ class VTrace(ValueEstimatorBase):
             - ``True`` (deprecated): aliased to ``"legacy"`` and emits a
               :class:`DeprecationWarning`. The alias is removed in v0.15.
 
-            Both single-call paths require that the parameters at time
+            All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
             used) and that the ``"next"`` value is shifted by exactly one
             time step (no multi-step returns). Defaults to ``False``.
@@ -2244,7 +2538,7 @@ class VTrace(ValueEstimatorBase):
         advantage_key: NestedKey | None = None,
         value_target_key: NestedKey | None = None,
         value_key: NestedKey | None = None,
-        shifted: bool | Literal["compact", "legacy"] = False,
+        shifted: bool | Literal["compact", "compact-drop", "legacy"] = False,
         device: torch.device | None = None,
         time_dim: int | None = None,
         value_chunk_size: int | None = None,
@@ -2415,7 +2709,7 @@ class VTrace(ValueEstimatorBase):
             with hold_out_net(self.value_network):
                 # we may still need to pass gradient, but we don't want to assign grads to
                 # value net params
-                value, next_value = self._call_value_nets(
+                value, next_value, valid = self._call_value_nets(
                     data=tensordict,
                     params=params,
                     next_params=target_params,
@@ -2424,6 +2718,8 @@ class VTrace(ValueEstimatorBase):
                     detach_next=True,
                     vmap_randomness=self.vmap_randomness,
                 )
+                if valid is not None:
+                    tensordict.set("compact_drop_valid", valid)
         else:
             value = tensordict.get(self.tensor_keys.value)
             next_value = tensordict.get(("next", self.tensor_keys.value))
@@ -2444,11 +2740,17 @@ class VTrace(ValueEstimatorBase):
             )
             log_pi = log_pi.view_as(value)
 
-        # Compute the V-Trace correction
-        done = tensordict.get(("next", self.tensor_keys.done))
-        terminated = tensordict.get(("next", self.tensor_keys.terminated))
-
         time_dim = self._get_time_dim(time_dim, tensordict)
+        valid = tensordict.get("compact_drop_valid", default=None)
+        data_for_value = self._prepare_compact_drop_tensordict(
+            tensordict, valid, time_dim
+        )
+        reward = data_for_value.get(("next", self.tensor_keys.reward))
+
+        # Compute the V-Trace correction
+        done = data_for_value.get(("next", self.tensor_keys.done))
+        terminated = data_for_value.get(("next", self.tensor_keys.terminated))
+
         adv, value_target = vtrace_advantage_estimate(
             gamma,
             log_pi,
@@ -2471,6 +2773,7 @@ class VTrace(ValueEstimatorBase):
 
         tensordict.set(self.tensor_keys.advantage, adv)
         tensordict.set(self.tensor_keys.value_target, value_target)
+        self._mask_compact_drop_output(tensordict, valid)
 
         return tensordict
 

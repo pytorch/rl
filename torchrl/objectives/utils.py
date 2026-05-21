@@ -654,9 +654,13 @@ def _reduce(
         if weights is not None:
             # Weighted average: (tensor * weights).sum() / weights.sum()
             if mask is not None:
-                masked_weight = weights[mask]
-                masked_tensor = tensor[mask]
-                result = (masked_tensor * masked_weight).sum() / masked_weight.sum()
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                mask = mask.to(dtype=weights.dtype)
+                masked_weight = weights * mask
+                result = (tensor * masked_weight).sum() / masked_weight.sum()
             else:
                 if tensor.shape != weights.shape:
                     raise ValueError(
@@ -664,16 +668,20 @@ def _reduce(
                     )
                 result = (tensor * weights).sum() / weights.sum()
         elif mask is not None:
-            result = tensor[mask].mean()
+            mask = mask.to(dtype=tensor.dtype)
+            result = (tensor * mask).sum() / mask.sum()
         else:
             result = tensor.mean()
     elif reduction == "sum":
         if weights is not None:
             # Weighted sum: (tensor * weights).sum()
             if mask is not None:
-                masked_weight = weights[mask]
-                masked_tensor = tensor[mask]
-                result = (masked_tensor * masked_weight).sum()
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                mask = mask.to(dtype=weights.dtype)
+                result = (tensor * weights * mask).sum()
             else:
                 if tensor.shape != weights.shape:
                     raise ValueError(
@@ -681,7 +689,8 @@ def _reduce(
                     )
                 result = (tensor * weights).sum()
         elif mask is not None:
-            result = tensor[mask].sum()
+            mask = mask.to(dtype=tensor.dtype)
+            result = (tensor * mask).sum()
         else:
             result = tensor.sum()
     else:

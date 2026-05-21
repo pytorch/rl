@@ -246,11 +246,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--gae-shifted",
-        choices=["false", "legacy", "compact"],
+        choices=["false", "legacy", "compact", "compact-drop"],
         default="compact",
         help=(
             "GAE shifted mode. Use 'false' for the full baseline path and "
-            "'compact' for the compile-friendly compact shifted path."
+            "'compact' or 'compact-drop' for compile-friendly compact shifted "
+            "paths."
         ),
     )
     parser.add_argument(

@@ -878,6 +878,32 @@ class PPOLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
+    def _standardize_advantage(
+        self, advantage: torch.Tensor, tensordict: TensorDictBase
+    ) -> torch.Tensor:
+        mask = tensordict.get("compact_drop_valid", default=None)
+        if mask is None:
+            return _standardize(advantage, self.normalize_advantage_exclude_dims)
+        while mask.ndim < advantage.ndim:
+            mask = mask.unsqueeze(-1)
+        mask = mask.expand_as(advantage).to(advantage.dtype)
+        exclude_dims = {
+            dim if dim >= 0 else advantage.ndim + dim
+            for dim in self.normalize_advantage_exclude_dims
+        }
+        reduce_dims = [dim for dim in range(advantage.ndim) if dim not in exclude_dims]
+        count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
+        loc = (advantage * mask).sum(dim=reduce_dims, keepdim=True) / count
+        scale = (
+            (
+                ((advantage - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True)
+                / count
+            )
+            .sqrt()
+            .clamp_min(1e-4)
+        )
+        return (advantage - loc) / scale
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -899,7 +925,7 @@ class PPOLoss(LossModule):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -927,8 +953,9 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict.get("compact_drop_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1282,7 +1309,7 @@ class ClipPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -1334,8 +1361,9 @@ class ClipPPOLoss(PPOLoss):
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())
             td_out.set("mean_ratio", ratio.mean())
+        loss_mask = tensordict.get("compact_drop_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1619,7 +1647,7 @@ class KLPENPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
@@ -1690,8 +1718,9 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict_copy.get("compact_drop_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

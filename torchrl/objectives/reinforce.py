@@ -23,7 +23,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
@@ -403,8 +402,9 @@ class ReinforceLoss(LossModule):
         td_out.set("loss_value", loss_value)
         if value_clip_fraction is not None:
             td_out.set("value_clip_fraction", value_clip_fraction)
+        loss_mask = tensordict.get("compact_drop_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
