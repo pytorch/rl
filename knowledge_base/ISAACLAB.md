@@ -320,11 +320,13 @@ from tensordict import TensorDict
 collector.update_policy_weights_(weights=TensorDict.from_module(actor).data)
 ```
 
-With compact rollout data, prefer `shifted="compact"` value estimation so the PPO
-batch does not need `("next", "policy")` rehydration. If a backend requires
-canonical strides, `td.contiguous()` and `td.clone()` may not be enough for
-size-1 dimensions; `torch.empty_like(td).update_(td)` is the stronger
-materialization pattern, and RNN backends should ideally handle this internally.
+With compact rollout data, prefer `shifted=True` value estimation so the PPO
+batch does not need `("next", "policy")` rehydration. Increase
+`shifted_budget` when a rollout can contain multiple internal resets. If a
+backend requires canonical strides, `td.contiguous()` and `td.clone()` may not
+be enough for size-1 dimensions; `torch.empty_like(td).update_(td)` is the
+stronger materialization pattern, and RNN backends should ideally handle this
+internally.
 
 ## Gotchas and Pitfalls
 

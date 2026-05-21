@@ -239,16 +239,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
-        compact_cat_dim: Literal["batch", "time"] = "batch",
+        shifted_budget: int = 1,
     ):
         super().__init__()
         if device is None:
             device = getattr(torch, "get_default_device", lambda: torch.device("cpu"))()
-        if compact_cat_dim not in ("batch", "time"):
-            raise ValueError(
-                "compact_cat_dim must be one of 'batch' or 'time', "
-                f"got {compact_cat_dim!r}."
-            )
         # this is saved for tracking only and should not be used to cast anything else than buffers during
         # init.
         self._device = device
@@ -256,7 +251,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self.differentiable = differentiable
         self.deactivate_vmap = deactivate_vmap
         self.value_chunk_size = value_chunk_size
-        self.compact_cat_dim = compact_cat_dim
+        if shifted_budget < 1:
+            raise ValueError(f"shifted_budget must be >= 1, got {shifted_budget}.")
+        self.shifted_budget = shifted_budget
         self.skip_existing = skip_existing
         self.__dict__["value_network"] = value_network
         self.dep_keys = {}
@@ -505,32 +502,26 @@ class ValueEstimatorBase(TensorDictModuleBase):
     ) -> Literal[False, "compact", "compact-drop", "legacy"]:
         """Normalize the ``shifted`` argument.
 
-        ``shifted=True`` is deprecated; users must opt in explicitly to
-        either ``"compact"`` (compile-friendly constant-shape single call,
-        small bias at trajectory boundaries) or ``"legacy"`` (current
-        flatten/interleave path, exact ``V(next_obs)`` but variable shape).
+        ``shifted=True`` uses the budgeted compact-drop backend. The string
+        shifted modes were nightly-only aliases and now warn before routing to
+        the same backend.
         """
         if shifted is False:
             return False
         if shifted is True:
+            return True
+        if shifted in ("compact", "compact-drop", "legacy"):
             warnings.warn(
-                "shifted=True is deprecated and will be removed in v0.15. "
-                "Pass shifted='legacy' to preserve the current "
-                "flatten/interleave behavior (exact V(next_obs), variable "
-                "shape, not compile-friendly), or shifted='compact' to opt "
-                "into the new constant-shape single-call path (small bias "
-                "at trajectory boundaries, compile-friendly). The default "
-                "for shifted=True is currently 'legacy'; this default will "
-                "be removed in v0.15.",
+                "String shifted modes are deprecated. Pass shifted=True with "
+                "shifted_budget=<int> for the budgeted compact-drop backend, "
+                "or shifted=False for the reference path.",
                 DeprecationWarning,
                 stacklevel=3,
             )
-            return "legacy"
-        if shifted in ("compact", "compact-drop", "legacy"):
-            return shifted
+            return True
         raise ValueError(
-            "shifted must be one of False, 'compact', 'compact-drop', "
-            f"'legacy' (or the deprecated True), got {shifted!r}."
+            "shifted must be False, True, or a deprecated string mode "
+            f"('compact', 'compact-drop', 'legacy'), got {shifted!r}."
         )
 
     def _call_value_net_compact(
@@ -546,8 +537,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         """Compact single-call path: constant-shape value-net call.
 
         Always runs ``value_net`` once. The root and ``("next", ...)`` streams
-        are concatenated along either a non-time batch dimension or the time
-        dimension according to ``compact_cat_dim``, so populated next
+        are concatenated along a non-time batch dimension, so populated next
         observations are evaluated directly without a second value-network
         call. The boundary slot at ``T-1`` on the next side is filled per
         value-net in-key with the first available of:
@@ -575,45 +565,30 @@ class ValueEstimatorBase(TensorDictModuleBase):
             )
         in_keys = value_net.in_keys
         time_idx = ndim - 1
-        T = data.shape[time_idx]
         root_part = data.select(*in_keys, value_key, strict=False)
         next_part = data.get("next").select(*in_keys, value_key, strict=False)
         next_part = self._fill_missing_next_inputs(next_part, root_part, in_keys)
         next_part = next_part.copy()
         if "is_init" in root_part.keys() and "is_init" in next_part.keys():
             next_part["is_init"] = next_part["is_init"] | root_part["is_init"]
-        if self.compact_cat_dim == "batch":
-            added_batch_dim = time_idx == 0
-            cat_dim = 0
-            if added_batch_dim:
-                root_part = root_part.unsqueeze(0)
-                next_part = next_part.unsqueeze(0)
-                time_idx = 1
-            data_in = torch.cat([root_part, next_part], dim=cat_dim)
-        else:
-            if "is_init" in next_part.keys():
-                first_index = (slice(None),) * time_idx + (slice(0, 1),)
-                next_is_init = next_part["is_init"].clone()
-                next_is_init[first_index] = True
-                next_part["is_init"] = next_is_init
-            data_in = torch.cat([root_part, next_part], dim=time_idx)
+        added_batch_dim = time_idx == 0
+        cat_dim = 0
+        if added_batch_dim:
+            root_part = root_part.unsqueeze(0)
+            next_part = next_part.unsqueeze(0)
+            time_idx = 1
+        data_in = torch.cat([root_part, next_part], dim=cat_dim)
         if params is not None:
             with params.to_module(value_net):
                 values_full = _call_value_net(data_in)
         else:
             values_full = _call_value_net(data_in)
-        if self.compact_cat_dim == "batch":
-            batch_root = root_part.shape[cat_dim]
-            value = values_full[:batch_root]
-            value_ = values_full[batch_root : 2 * batch_root]
-            if added_batch_dim:
-                value = value.squeeze(0)
-                value_ = value_.squeeze(0)
-        else:
-            root_idx = (slice(None),) * time_idx + (slice(0, T),)
-            next_idx = (slice(None),) * time_idx + (slice(T, 2 * T),)
-            value = values_full[root_idx]
-            value_ = values_full[next_idx]
+        batch_root = root_part.shape[cat_dim]
+        value = values_full[:batch_root]
+        value_ = values_full[batch_root : 2 * batch_root]
+        if added_batch_dim:
+            value = value.squeeze(0)
+            value_ = value_.squeeze(0)
         done = data.get(("next", "done"), default=None)
         if done is not None:
             try:
@@ -680,13 +655,14 @@ class ValueEstimatorBase(TensorDictModuleBase):
         arange = torch.arange(T, device=done.device).view(arange_shape)
         root_slot = arange + reset_before
         next_slot = root_slot + 1
-        valid = next_slot < (T + 1)
-        root_valid = root_slot < (T + 1)
+        L = T + self.shifted_budget
+        valid = next_slot < L
+        root_valid = root_slot < L
         reset_valid = reset & valid
         boundary_slot = T + reset_long.sum(time_idx, keepdim=True)
-        boundary_valid = boundary_slot < (T + 1)
+        boundary_valid = boundary_slot < L
         data_in_batch_size = list(root_part.batch_size)
-        data_in_batch_size[time_idx] = T + 1
+        data_in_batch_size[time_idx] = L
         data_in = root_part.new_zeros(data_in_batch_size)
 
         def _expand_index(index: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
@@ -705,7 +681,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             source: torch.Tensor,
             mask: torch.Tensor,
         ) -> torch.Tensor:
-            index = index.clamp_max(T)
+            index = index.clamp_max(L - 1)
             index_expand = _expand_index(index, source)
             current = destination.gather(time_idx, index_expand)
             source = torch.where(_expand_mask(mask, source), source, current)
@@ -737,7 +713,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             values_full = _call_value_net(data_in)
 
         def _gather_time(source: torch.Tensor, index: torch.Tensor) -> torch.Tensor:
-            index_expand = index.clamp_max(T)
+            index_expand = index.clamp_max(L - 1)
             while index_expand.ndim < source.ndim:
                 index_expand = index_expand.unsqueeze(-1)
             target_shape = list(source.shape)
@@ -766,13 +742,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         *,
         value_net: TensorDictModuleBase | None = None,
     ):
-        # ``single_call`` is passed by callers as ``self.shifted`` and is
-        # one of ``False``, ``"compact"``, or ``"legacy"`` after
-        # normalization. ``True`` still arrives untransformed from a few
-        # direct callers — fold it into the legacy path for backwards
-        # compat (the constructor already warned).
-        if single_call is True:
-            single_call = "legacy"
+        # ``single_call`` is either ``False`` or requests the budgeted compact-drop path.
+        if single_call in ("compact", "compact-drop", "legacy"):
+            single_call = True
         if value_net is None:
             value_net = self.value_network
         in_keys = value_net.in_keys
@@ -800,17 +772,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             return torch.cat(values, dim=0)
 
         valid = None
-        if single_call == "compact":
-            value, value_ = self._call_value_net_compact(
-                data=data,
-                params=params,
-                next_params=next_params,
-                value_key=value_key,
-                ndim=ndim,
-                value_net=value_net,
-                _call_value_net=_call_value_net,
-            )
-        elif single_call == "compact-drop":
+        if single_call:
             value, value_, valid = self._call_value_net_compact_drop(
                 data=data,
                 params=params,
@@ -820,7 +782,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 value_net=value_net,
                 _call_value_net=_call_value_net,
             )
-        elif single_call:
+        elif single_call == "legacy":
             # We are going to flatten the data, then interleave the last observation of each trajectory in between its
             #  previous obs (from the root TD) and the first of the next trajectory. Eventually, each trajectory will
             #  have T+1 elements (or, for a batch of N trajectories, we will have \Sum_{t=0}^{T-1} length_t + T
@@ -1055,10 +1017,10 @@ class TD0Estimator(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
-        compact_cat_dim ("batch" or "time", optional): layout used by
-            ``shifted="compact"``. ``"batch"`` concatenates root and next
-            streams along a non-time batch dimension. ``"time"`` concatenates
-            them along the time dimension. Defaults to ``"batch"``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
 
     """
 
@@ -1077,7 +1039,7 @@ class TD0Estimator(ValueEstimatorBase):
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
-        compact_cat_dim: Literal["batch", "time"] = "batch",
+        shifted_budget: int = 1,
     ):
         super().__init__(
             value_network=value_network,
@@ -1090,7 +1052,7 @@ class TD0Estimator(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
-            compact_cat_dim=compact_cat_dim,
+            shifted_budget=shifted_budget,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -1321,10 +1283,10 @@ class TD1Estimator(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
-        compact_cat_dim ("batch" or "time", optional): layout used by
-            ``shifted="compact"``. ``"batch"`` concatenates root and next
-            streams along a non-time batch dimension. ``"time"`` concatenates
-            them along the time dimension. Defaults to ``"batch"``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
 
     """
 
@@ -1344,7 +1306,7 @@ class TD1Estimator(ValueEstimatorBase):
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
-        compact_cat_dim: Literal["batch", "time"] = "batch",
+        shifted_budget: int = 1,
     ):
         super().__init__(
             value_network=value_network,
@@ -1357,7 +1319,7 @@ class TD1Estimator(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
-            compact_cat_dim=compact_cat_dim,
+            shifted_budget=shifted_budget,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.average_rewards = average_rewards
@@ -1601,10 +1563,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
-        compact_cat_dim ("batch" or "time", optional): layout used by
-            ``shifted="compact"``. ``"batch"`` concatenates root and next
-            streams along a non-time batch dimension. ``"time"`` concatenates
-            them along the time dimension. Defaults to ``"batch"``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
 
     """
 
@@ -1626,7 +1588,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
-        compact_cat_dim: Literal["batch", "time"] = "batch",
+        shifted_budget: int = 1,
     ):
         super().__init__(
             value_network=value_network,
@@ -1639,7 +1601,7 @@ class TDLambdaEstimator(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
-            compact_cat_dim=compact_cat_dim,
+            shifted_budget=shifted_budget,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
         self.register_buffer("lmbda", torch.tensor(lmbda, device=self._device))
@@ -1921,10 +1883,10 @@ class GAE(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
-        compact_cat_dim ("batch" or "time", optional): layout used by
-            ``shifted="compact"``. ``"batch"`` concatenates root and next
-            streams along a non-time batch dimension. ``"time"`` concatenates
-            them along the time dimension. Defaults to ``"batch"``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
 
     GAE will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the return value that is to be used
@@ -1940,10 +1902,8 @@ class GAE(ValueEstimatorBase):
 
     .. note:: GAE can be used with value networks that rely on recurrent neural networks, provided that the
         init markers (`"is_init"`) and terminated / truncated markers are properly set.
-        With ``shifted="legacy"``, the trajectory batch is flattened and the next state of each done step is
-        interleaved after its root state, giving exact ``V(next_obs)`` values at the cost of a data-dependent
-        shape. With ``shifted="compact"``, root and next streams are concatenated into a constant-shape
-        batch, which is friendlier to ``torch.compile`` and scan-style recurrent backends. If ``shifted=False``,
+        With ``shifted=True``, reset next-observations are inserted into a
+        fixed-shape value-network call according to ``shifted_budget``. If ``shifted=False``,
         the root and ``"next"`` trajectories are stacked and the value network is called with ``vmap`` over the
         stack of trajectories. Because RNNs require a fair amount of control flow, they are currently not
         compatible with ``torch.vmap`` and, as such, the ``deactivate_vmap`` option must be turned on in these
@@ -1973,7 +1933,7 @@ class GAE(ValueEstimatorBase):
         auto_reset_env: bool = False,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
-        compact_cat_dim: Literal["batch", "time"] = "batch",
+        shifted_budget: int = 1,
     ):
         super().__init__(
             shifted=shifted,
@@ -1986,7 +1946,7 @@ class GAE(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
-            compact_cat_dim=compact_cat_dim,
+            shifted_budget=shifted_budget,
         )
         self.register_buffer(
             "gamma",
@@ -2509,10 +2469,10 @@ class VTrace(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
-        compact_cat_dim ("batch" or "time", optional): layout used by
-            ``shifted="compact"``. ``"batch"`` concatenates root and next
-            streams along a non-time batch dimension. ``"time"`` concatenates
-            them along the time dimension. Defaults to ``"batch"``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` keeps the old compact ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
 
     VTrace will return an :obj:`"advantage"` entry containing the advantage value. It will also
     return a :obj:`"value_target"` entry with the V-Trace target value.
@@ -2542,7 +2502,7 @@ class VTrace(ValueEstimatorBase):
         device: torch.device | None = None,
         time_dim: int | None = None,
         value_chunk_size: int | None = None,
-        compact_cat_dim: Literal["batch", "time"] = "batch",
+        shifted_budget: int = 1,
     ):
         super().__init__(
             shifted=shifted,
@@ -2554,7 +2514,7 @@ class VTrace(ValueEstimatorBase):
             skip_existing=skip_existing,
             device=device,
             value_chunk_size=value_chunk_size,
-            compact_cat_dim=compact_cat_dim,
+            shifted_budget=shifted_budget,
         )
         if not isinstance(gamma, torch.Tensor):
             gamma = torch.tensor(gamma, device=self._device)

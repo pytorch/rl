@@ -32,8 +32,7 @@ Two main patterns coexist in TorchRL:
   trajectory structure (recurrent modules under
   :func:`~torchrl.modules.set_recurrent_mode`,
   :class:`~torchrl.data.SliceSampler`, value estimators in
-  explicit shifted modes such as ``shifted="compact"`` or
-  ``shifted="legacy"``) consumes this layout natively.
+  ``shifted=True`` value estimators) consumes this layout natively.
 
 The rest of this page walks through the building blocks.
 

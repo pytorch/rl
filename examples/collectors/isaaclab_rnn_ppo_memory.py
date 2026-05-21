@@ -18,9 +18,9 @@ Key TorchRL features exercised:
   Shifted value estimation reconstructs next observations by shifting the
   root observations when the next observations are absent.
 - Configurable :class:`~torchrl.objectives.value.GAE` shifted mode. The
-  ``shifted="compact"`` path keeps a constant-shape single value-network
-  call along the time dim and is friendly to ``torch.compile`` + scan/triton
-  LSTM. ``shifted="false"`` keeps the full observation representation.
+  ``shifted=True`` path keeps a budgeted constant-shape single value-network
+  call and is friendly to ``torch.compile`` + scan/triton LSTM.
+  ``shifted=False`` keeps the full observation representation.
 - :class:`~torchrl.modules.LSTMModule` with a configurable
   ``recurrent_backend``: during collection (``set_recurrent_mode=False``)
   the LSTM auto-uses cuDNN regardless of the backend; the configured
@@ -246,19 +246,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--gae-shifted",
-        choices=["false", "legacy", "compact", "compact-drop"],
-        default="compact",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
-            "GAE shifted mode. Use 'false' for the full baseline path and "
-            "'compact' or 'compact-drop' for compile-friendly compact shifted "
-            "paths."
+            "Use the budgeted constant-shape single-call GAE path. Use "
+            "--no-gae-shifted for the full shifted=False reference path."
         ),
     )
     parser.add_argument(
-        "--gae-compact-cat-dim",
-        choices=["batch", "time"],
-        default="batch",
-        help="Concatenation dimension used by GAE shifted='compact'.",
+        "--gae-shifted-budget",
+        type=int,
+        default=1,
+        help=(
+            "Number of extra value-network slots used by shifted GAE. "
+            "A budget of 2 can retain one internal reset plus the rollout "
+            "boundary without dropping samples."
+        ),
     )
     parser.add_argument(
         "--deactivate-vmap",
@@ -309,7 +312,7 @@ def main() -> None:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
     if args.compile_update or args.cudagraph_update:
         torch._dynamo.config.capture_scalar_outputs = True
-    gae_shifted: bool | str = False if args.gae_shifted == "false" else args.gae_shifted
+    gae_shifted = args.gae_shifted
 
     torch.manual_seed(args.seed)
     torch.set_float32_matmul_precision("high")
@@ -347,7 +350,7 @@ def main() -> None:
         value_network=full_value,
         average_gae=False,
         shifted=gae_shifted,
-        compact_cat_dim=args.gae_compact_cat_dim,
+        shifted_budget=args.gae_shifted_budget,
         deactivate_vmap=args.deactivate_vmap,
         device=train_device,
     )

@@ -291,8 +291,8 @@ class Collector(BaseCollector):
 
             ``compact_obs=True`` composes cleanly with
             :class:`~torchrl.objectives.value.advantages.GAE` configured with
-            ``shifted="compact"``: the compact shifted path can run the
-            on-policy advantage pass without rehydrating every per-step
+            ``shifted=True``: the budgeted shifted path can run the on-policy
+            advantage pass without rehydrating every per-step
             ``("next", "observation")`` mirror. For vectorized environments
             with large observations this is typically a sizeable GPU-memory
             win at near-zero CPU cost. Defaults to ``False``.

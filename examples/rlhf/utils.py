@@ -379,7 +379,7 @@ def make_loss(actor, critic, critic_head):
         gamma=0.99,
         lmbda=0.95,
         average_gae=True,
-        shifted="legacy",
+        shifted=True,
     )
     loss_fn = ClipPPOLoss(actor, critic_head)
     return loss_fn, advantage
