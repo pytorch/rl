@@ -13,6 +13,8 @@ Value networks estimate the value of states or state-action pairs.
     DuelingCnnDQNet
     DistributionalDQNnet
     ConvNet
+    CrossCriticGroupSpec
+    CrossGroupCritic
     MLP
     DdpgCnnActor
     DdpgCnnQNet

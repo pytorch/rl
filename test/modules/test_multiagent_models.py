@@ -618,8 +618,6 @@ class TestMultiAgent:
 
 class TestCrossGroupCritic:
     def _make_td(self, batch, group_map):
-        pass
-
         data = {}
         for name, spec in group_map.items():
             data[name] = {
@@ -706,6 +704,60 @@ class TestCrossGroupCritic:
         assert critic.module.shared_head is None
         assert set(critic.module.group_heads.keys()) == set(group_map.keys())
 
+    def test_cross_group_observations_affect_other_group_values(self):
+        group_map = self._make_group_map()
+        critic = CrossGroupCritic(group_map, d_model=8, trunk_depth=1, trunk_cells=16)
+        for parameter in critic.parameters():
+            nn.init.constant_(parameter, 0.1)
+        td = TensorDict(
+            {
+                "soldiers": {"observation": torch.zeros(4, 3, 12)},
+                "medics": {"observation": torch.zeros(4, 2, 8)},
+            },
+            batch_size=[4],
+        )
+        td_changed = td.clone()
+        td_changed["medics", "observation"][..., 0, 0] = 1
+
+        soldiers_value = critic(td.clone())["soldiers", "state_value"]
+        soldiers_value_changed = critic(td_changed)["soldiers", "state_value"]
+        assert not torch.allclose(soldiers_value, soldiers_value_changed)
+
+    def test_cross_group_gradients_flow_without_detach(self):
+        group_map = {
+            "active": CrossCriticGroupSpec(
+                obs_dim=6,
+                n_agents=2,
+                obs_key=("active", "obs"),
+                value_key=("active", "val"),
+            ),
+            "frozen": CrossCriticGroupSpec(
+                obs_dim=6,
+                n_agents=2,
+                obs_key=("frozen", "obs"),
+                value_key=("frozen", "val"),
+            ),
+        }
+        critic = CrossGroupCritic(
+            group_map,
+            d_model=8,
+            trunk_depth=1,
+            trunk_cells=16,
+        )
+        for parameter in critic.parameters():
+            nn.init.constant_(parameter, 0.1)
+        frozen_obs = torch.randn(4, 2, 6, requires_grad=True)
+        active_obs = torch.randn(4, 2, 6, requires_grad=True)
+        td = TensorDict(
+            {"active": {"obs": active_obs}, "frozen": {"obs": frozen_obs}},
+            batch_size=[4],
+        )
+        td = critic(td)
+        td["active", "val"].sum().backward()
+        assert frozen_obs.grad is not None
+        assert frozen_obs.grad.abs().sum() > 0
+        assert active_obs.grad is not None
+
     def test_detach_groups_blocks_gradient(self):
         group_map = {
             "active": CrossCriticGroupSpec(
@@ -728,6 +780,8 @@ class TestCrossGroupCritic:
             trunk_cells=16,
             detach_groups=["frozen"],
         )
+        for parameter in critic.parameters():
+            nn.init.constant_(parameter, 0.1)
         frozen_obs = torch.randn(4, 2, 6, requires_grad=True)
         active_obs = torch.randn(4, 2, 6, requires_grad=True)
         td = TensorDict(
@@ -767,7 +821,9 @@ class TestCrossGroupCritic:
 
     def test_device(self):
         group_map = self._make_group_map()
-        critic = CrossGroupCritic(group_map, d_model=8, trunk_depth=1, trunk_cells=16)
+        critic = CrossGroupCritic(
+            group_map, d_model=8, trunk_depth=1, trunk_cells=16, device="cpu"
+        )
         for p in critic.parameters():
             assert p.device.type == "cpu"
 

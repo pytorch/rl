@@ -11,6 +11,7 @@ References:
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterable
 
 import torch
 from tensordict.nn import TensorDictModule
@@ -56,53 +57,71 @@ class _CrossGroupNet(nn.Module):
         trunk_cells: int,
         activation_class: type[nn.Module],
         share_params: bool,
-        detach_groups: list[str] | None,
+        detach_groups: Iterable[str] | None,
+        device: DEVICE_TYPING | None,
     ) -> None:
         super().__init__()
         self._group_names: list[str] = list(group_specs.keys())
         self._group_n_agents: list[int] = [s.n_agents for s in group_specs.values()]
+        self._group_obs_dims: list[int] = [s.obs_dim for s in group_specs.values()]
+        self._n_agents_total = sum(self._group_n_agents)
+        self._joint_dim = self._n_agents_total * d_model
         self._detach_groups: frozenset[str] = frozenset(detach_groups or [])
+        self.shared_head: nn.Linear | None
+        self.group_heads: nn.ModuleDict | None
 
         # One encoder per group so heterogeneous obs_dims are handled uniformly.
         self.encoders = nn.ModuleDict(
             {
                 name: nn.Sequential(
-                    nn.Linear(spec.obs_dim, d_model), activation_class()
+                    nn.Linear(spec.obs_dim, d_model, device=device),
+                    activation_class(),
                 )
                 for name, spec in group_specs.items()
             }
         )
 
-        # Shared MLP trunk — processes the joint embedding of all groups.
+        # Shared MLP trunk processes the flattened team state, so each output
+        # embedding can depend on every group's observations.
         self.trunk = MLP(
-            in_features=d_model,
-            out_features=d_model,
+            in_features=self._joint_dim,
+            out_features=self._joint_dim,
             depth=trunk_depth,
             num_cells=trunk_cells,
             activation_class=activation_class,
+            device=device,
         )
 
         # Value heads — optionally shared across groups.
         if share_params:
-            self.shared_head: nn.Linear | None = nn.Linear(d_model, 1)
-            self.group_heads: nn.ModuleDict | None = None
+            self.shared_head = nn.Linear(d_model, 1, device=device)
+            self.group_heads = None
         else:
             self.shared_head = None
             self.group_heads = nn.ModuleDict(
-                {name: nn.Linear(d_model, 1) for name in group_specs}
+                {name: nn.Linear(d_model, 1, device=device) for name in group_specs}
             )
 
     def forward(self, *group_obs: torch.Tensor) -> tuple[torch.Tensor, ...]:
         # group_obs[i]: [*B, n_agents_i, obs_dim_i]
         encoded = []
-        for obs, name in zip(group_obs, self._group_names):
+        for obs, name, n_agents, obs_dim in zip(
+            group_obs, self._group_names, self._group_n_agents, self._group_obs_dims
+        ):
+            if obs.shape[-2:] != (n_agents, obs_dim):
+                raise ValueError(
+                    f"Group '{name}' expected observation shape ending in "
+                    f"{(n_agents, obs_dim)}, but got {obs.shape}."
+                )
             enc = self.encoders[name](obs)  # [*B, n_agents_i, d_model]
             if name in self._detach_groups:
                 enc = enc.detach()
             encoded.append(enc)
 
-        # Joint representation across all groups: [*B, n_total, d_model]
-        joint = self.trunk(torch.cat(encoded, dim=-2))
+        # Joint representation across all groups: [*B, n_total * d_model]
+        joint = torch.cat(encoded, dim=-2).flatten(-2, -1)
+        joint = self.trunk(joint)
+        joint = joint.view(*joint.shape[:-1], self._n_agents_total, -1)
 
         splits = torch.split(joint, self._group_n_agents, dim=-2)
         if self.shared_head is not None:
@@ -131,8 +150,9 @@ class CrossGroupCritic(TensorDictModule):
     - **Ad-hoc teamwork** — one group follows a fixed (non-training) policy
       but its observations still inform the value baseline of the training
       group. Pass the fixed group's name via ``detach_groups`` so its encoder
-      output is detached before the trunk: the critic sees the full team state
-      but gradients do not flow into the fixed group's observations.
+      output is detached before building the team state: the critic sees the
+      full team state but gradients do not flow into the fixed group's
+      observations.
 
     Because ``CrossGroupCritic`` is a plain :class:`~tensordict.nn.TensorDictModule`,
     it plugs into :class:`~torchrl.objectives.multiagent.MAPPOLoss` and
@@ -154,9 +174,10 @@ class CrossGroupCritic(TensorDictModule):
             trunk. Defaults to :class:`~torch.nn.Tanh`.
         share_params (bool): if ``True`` a single value head is shared across
             all groups (useful when groups are homogeneous or have the same
-            role). If ``False`` each group gets its own head. Defaults to
-            ``False``.
-        detach_groups (list[str], optional): names of groups whose encoder
+            role). If ``False`` each group gets its own head. Encoders are
+            always group-specific and the central trunk is always shared.
+            Defaults to ``False``.
+        detach_groups (iterable of str, optional): names of groups whose encoder
             outputs should be detached before the trunk. Use this to include
             fixed-policy agents in the centralised state without propagating
             gradients to their observations. Defaults to ``None``.
@@ -204,7 +225,7 @@ class CrossGroupCritic(TensorDictModule):
         trunk_cells: int = 256,
         activation_class: type[nn.Module] = nn.Tanh,
         share_params: bool = False,
-        detach_groups: list[str] | None = None,
+        detach_groups: Iterable[str] | None = None,
         device: DEVICE_TYPING | None = None,
     ) -> None:
         net = _CrossGroupNet(
@@ -215,9 +236,8 @@ class CrossGroupCritic(TensorDictModule):
             activation_class=activation_class,
             share_params=share_params,
             detach_groups=detach_groups,
+            device=device,
         )
-        if device is not None:
-            net = net.to(device)
         super().__init__(
             module=net,
             in_keys=[spec.obs_key for spec in group_map.values()],
