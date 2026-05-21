@@ -48,8 +48,8 @@ from tensordict.nn import TensorDictModule
 from torchrl.collectors import SyncDataCollector
 from torchrl.data import LazyMemmapStorage, LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
-from torchrl.envs import GymEnv
-from torchrl.envs.transforms import NextStateReconstructor
+from torchrl.envs import GymEnv, TransformedEnv
+from torchrl.envs.transforms import NextObservationDelta, NextStateReconstructor
 from torchrl.objectives.value import GAE
 
 torch.manual_seed(0)
@@ -240,25 +240,74 @@ print(
 # ``("next", "delta", obs) = (next_obs - obs).to(delta_dtype)`` (default
 # ``torch.float16``) and drops the full-precision ``("next", obs)`` from
 # the post-step tensordict before the collector stacks it. The same
-# transform attached to the replay buffer reconstructs
+# class attached to the replay buffer reconstructs
 # ``("next", obs) = obs + ("next", "delta", obs)`` at sample time.
+
+env_maker_delta = lambda: TransformedEnv(  # noqa: E731
+    GymEnv("CartPole-v1"), NextObservationDelta()
+)
+delta_collector = SyncDataCollector(
+    create_env_fn=env_maker_delta,
+    frames_per_batch=200,
+    total_frames=200,
+)
+delta_data = next(iter(delta_collector))
+delta_collector.shutdown()
+
+print(f"Default rollout bytes:    {data.bytes():>6d}")
+print(f"compact_obs=True bytes:   {compact_data.bytes():>6d}")
+print(f"NextObservationDelta:     {delta_data.bytes():>6d}")
+print(
+    f"  delta vs default saving:  {data.bytes() - delta_data.bytes():>6d} B  "
+    f"({100 * (data.bytes() - delta_data.bytes()) / data.bytes():.1f} %)"
+)
+print()
+print("Delta key dtype:", delta_data[("next", "delta", "observation")].dtype)
+print(
+    "('next', 'observation') in rollout?",
+    ("next", "observation") in delta_data.keys(True, True),
+)
+
+######################################################################
+# The collector batch carries ``("next", "delta", "observation")`` at
+# ``float16`` and the full-precision ``("next", "observation")`` is
+# gone. Root ``"observation"`` is untouched (full precision) so the
+# policy can still read it.
 #
-# .. code-block:: python
-#
-#     from torchrl.envs import TransformedEnv
-#     from torchrl.envs.transforms import NextObservationDelta
-#
-#     env = TransformedEnv(base_env, NextObservationDelta())
-#     collector = SyncDataCollector(
-#         create_env_fn=lambda: env, policy=policy,
-#         frames_per_batch=1024, total_frames=1_000_000,
-#     )
-#     rb = ReplayBuffer(
-#         storage=LazyTensorStorage(1_000_000),
-#         sampler=SliceSampler(slice_len=64, traj_key=("collector", "traj_ids")),
-#         transform=NextObservationDelta(),  # SAME class, reconstruction side
-#         batch_size=8 * 64,
-#     )
+# Attaching the same class to a replay buffer reconstructs
+# ``("next", "observation")`` at sample time. The reconstruction is
+# elementwise ``obs + delta``, so it does *not* depend on the sampler
+# layout or on trajectory boundaries.
+
+rb_delta = ReplayBuffer(
+    storage=LazyTensorStorage(200),
+    sampler=SliceSampler(slice_len=20, traj_key=("collector", "traj_ids")),
+    transform=NextObservationDelta(in_keys=["observation"]),
+    batch_size=40,
+)
+rb_delta.extend(delta_data)
+delta_sample = rb_delta.sample()
+
+print(
+    "('next', 'observation') in sample?",
+    ("next", "observation") in delta_sample.keys(True, True),
+)
+print(
+    "delta key dropped from sample?",
+    ("next", "delta", "observation") not in delta_sample.keys(True, True),
+)
+print(
+    "any NaN in reconstructed ('next', observation')?",
+    torch.isnan(delta_sample[("next", "observation")]).any().item(),
+)
+
+######################################################################
+# Compare with the compact-obs path above: there, the same sample
+# carried ``NaN`` at every position whose ``i + 1`` left the trajectory
+# (slice boundaries, ``done`` flags). With the delta path the
+# reconstructed next observation is finite *everywhere*, including the
+# trajectory ends — at the cost of storing a half-precision delta per
+# step instead of nothing.
 #
 # Trade-offs vs. Knob 1 + Knob 2:
 #
@@ -439,7 +488,12 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # -------------------
 #
 # A memory-conscious value-based pipeline (off-policy actor / critic,
-# GAE bootstraps, slice-sampled sequence training):
+# GAE bootstraps, slice-sampled sequence training). Two end-to-end
+# recipes — pick the one whose trade-offs match your loss.
+#
+# **Recipe A — compact_obs + NextStateReconstructor** (max saving,
+# ``NaN`` at boundaries, handled downstream by the value-estimator
+# sanitizer):
 #
 # .. code-block:: python
 #
@@ -463,6 +517,37 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #     advantage = GAE(                            # NaN-safe at boundaries
 #         gamma=0.99, lmbda=0.95,
 #         value_network=critic, shifted=True,     # one V-net call per step
+#     )
+#
+# **Recipe B — NextObservationDelta on both sides** (smaller saving,
+# boundary-preserving, no value-estimator workaround needed):
+#
+# .. code-block:: python
+#
+#     env_maker_delta = lambda: TransformedEnv(
+#         base_env_maker(), NextObservationDelta(),
+#     )
+#     collector = SyncDataCollector(
+#         create_env_fn=env_maker_delta,
+#         policy=policy,
+#         frames_per_batch=1024,
+#         total_frames=1_000_000,
+#     )
+#     rb = ReplayBuffer(
+#         storage=LazyMemmapStorage(1_000_000),
+#         sampler=SliceSampler(
+#             slice_len=64,
+#             traj_key=("collector", "traj_ids"),
+#         ),
+#         transform=NextObservationDelta(           # SAME class, RB side
+#             in_keys=["observation"],
+#         ),
+#         batch_size=8 * 64,
+#     )
+#     loss = ClipPPOLoss(actor=actor, critic=critic)
+#     advantage = GAE(
+#         gamma=0.99, lmbda=0.95,
+#         value_network=critic, shifted=True,
 #     )
 #
 # Every knob is independent — adopt them à la carte depending on what
