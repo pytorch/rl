@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import torch
 import torch.nn as nn
@@ -83,6 +84,7 @@ class NonFiniteChecker:
         actor: nn.Module | None = None,
         critic: nn.Module | None = None,
         optimizer: torch.optim.Optimizer | None = None,
+        ignore_terminal_next_keys: Sequence[tuple[str, ...]] = (),
     ) -> None:
         self.enabled = enabled
         self.save_dir = save_dir
@@ -90,6 +92,7 @@ class NonFiniteChecker:
         self.actor = actor
         self.critic = critic
         self.optimizer = optimizer
+        self.ignore_terminal_next_keys = set(ignore_terminal_next_keys)
 
     @staticmethod
     def _filename(phase: str, name: str, context: dict[str, int]) -> str:
@@ -106,6 +109,44 @@ class NonFiniteChecker:
         if bad.numel() == 0:
             return None
         return tuple(int(item) for item in bad[0].cpu())
+
+    @staticmethod
+    def _next_terminal_mask(tensordict: TensorDictBase) -> torch.Tensor | None:
+        mask = None
+        for key in ("done", "terminated", "truncated"):
+            try:
+                value = tensordict["next", key]
+            except KeyError:
+                continue
+            if not isinstance(value, torch.Tensor):
+                continue
+            value = value.to(torch.bool)
+            mask = value if mask is None else mask | value
+        return mask
+
+    def _without_ignored_values(
+        self,
+        key: str | tuple[str, ...],
+        value: torch.Tensor,
+        tensordict: TensorDictBase,
+    ) -> torch.Tensor:
+        if not isinstance(key, tuple):
+            key = (key,)
+        if key not in self.ignore_terminal_next_keys:
+            return value
+        terminal_mask = self._next_terminal_mask(tensordict)
+        if terminal_mask is None:
+            return value
+        while terminal_mask.ndim < value.ndim:
+            terminal_mask = terminal_mask.unsqueeze(-1)
+        terminal_mask = terminal_mask.to(device=value.device).expand_as(value)
+        if not terminal_mask.any():
+            return value
+        return torch.where(
+            terminal_mask,
+            torch.zeros((), device=value.device, dtype=value.dtype),
+            value,
+        )
 
     def _state_dict(self, module: nn.Module | None) -> dict[str, Any] | None:
         if module is None:
@@ -190,6 +231,7 @@ class NonFiniteChecker:
         for key, value in tensordict.items(include_nested=True, leaves_only=True):
             if not isinstance(value, torch.Tensor) or not value.is_floating_point():
                 continue
+            value = self._without_ignored_values(key, value, tensordict)
             self.check_tensor(
                 phase,
                 str(key),
@@ -219,6 +261,28 @@ class NonFiniteChecker:
                     phase,
                     f"{module_name}.{name}",
                     parameter.grad,
+                    context=context,
+                    batch=batch,
+                    loss=loss,
+                )
+
+    def check_parameters(
+        self,
+        phase: str,
+        named_modules: Sequence[tuple[str, nn.Module]],
+        *,
+        context: dict[str, int],
+        batch: TensorDictBase | None = None,
+        loss: TensorDictBase | None = None,
+    ) -> None:
+        if not self.enabled:
+            return
+        for module_name, module in named_modules:
+            for name, parameter in module.named_parameters():
+                self.check_tensor(
+                    phase,
+                    f"{module_name}.{name}",
+                    parameter,
                     context=context,
                     batch=batch,
                     loss=loss,

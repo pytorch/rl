@@ -333,11 +333,6 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, args.log_level))
     if args.num_envs % args.num_collectors:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
-    if args.debug_nonfinite_update and (args.compile_update or args.cudagraph_update):
-        raise ValueError(
-            "--debug-nonfinite-update requires eager updates. Pass "
-            "--no-compile-update --no-cudagraph-update."
-        )
     if args.compile_update or args.compile_gae or args.cudagraph_update:
         torch._dynamo.config.capture_scalar_outputs = True
     gae_shifted: bool | str = False if args.gae_shifted == "false" else args.gae_shifted
@@ -409,53 +404,60 @@ def main() -> None:
         actor=actor,
         critic=critic,
         optimizer=optim,
+        ignore_terminal_next_keys=(("next", "policy"),),
+    )
+    check_inside_update = args.debug_nonfinite_update and not (
+        args.compile_update or args.cudagraph_update
     )
 
     def update(batch):
-        finite_checker.check_tensordict(
-            "before_loss",
-            batch,
-            context=debug_context,
-            batch=batch,
-        )
+        if check_inside_update:
+            finite_checker.check_tensordict(
+                "before_loss",
+                batch,
+                context=debug_context,
+                batch=batch,
+            )
         try:
             with set_recurrent_mode(True):
                 loss = loss_module(batch)
         except Exception as err:
-            finite_checker.check_tensor(
-                "loss_exception",
-                type(err).__name__,
-                torch.tensor(float("nan"), device=train_device),
-                context=debug_context,
-                batch=batch,
-                extra={"exception": repr(err)},
-            )
+            if check_inside_update:
+                finite_checker.check_tensor(
+                    "loss_exception",
+                    type(err).__name__,
+                    torch.tensor(float("nan"), device=train_device),
+                    context=debug_context,
+                    batch=batch,
+                    extra={"exception": repr(err)},
+                )
             raise
         total = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
-        finite_checker.check_tensordict(
-            "after_loss",
-            loss,
-            context=debug_context,
-            batch=batch,
-            loss=loss,
-        )
-        finite_checker.check_tensor(
-            "after_loss",
-            "loss_total",
-            total,
-            context=debug_context,
-            batch=batch,
-            loss=loss,
-        )
+        if check_inside_update:
+            finite_checker.check_tensordict(
+                "after_loss",
+                loss,
+                context=debug_context,
+                batch=batch,
+                loss=loss,
+            )
+            finite_checker.check_tensor(
+                "after_loss",
+                "loss_total",
+                total,
+                context=debug_context,
+                batch=batch,
+                loss=loss,
+            )
         total.backward()
-        finite_checker.check_gradients(
-            "after_backward",
-            [("actor", actor), ("critic", critic)],
-            context=debug_context,
-            batch=batch,
-            loss=loss,
-        )
-        if args.debug_nonfinite_update:
+        if check_inside_update:
+            finite_checker.check_gradients(
+                "after_backward",
+                [("actor", actor), ("critic", critic)],
+                context=debug_context,
+                batch=batch,
+                loss=loss,
+            )
             grad_norms = [
                 parameter.grad.detach().norm(2)
                 for parameter in [*actor.parameters(), *critic.parameters()]
@@ -648,6 +650,13 @@ def main() -> None:
                         finite_checker.check_tensordict(
                             "after_update",
                             loss,
+                            context=debug_context,
+                            batch=mini_batch,
+                            loss=loss,
+                        )
+                        finite_checker.check_parameters(
+                            "after_update_parameters",
+                            [("actor", actor), ("critic", critic)],
                             context=debug_context,
                             batch=mini_batch,
                             loss=loss,
