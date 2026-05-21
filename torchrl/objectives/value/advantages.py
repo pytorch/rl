@@ -799,11 +799,6 @@ class TD0Estimator(ValueEstimatorBase):
               suffix samples via ``"shifted_valid"``. Retained samples use
               exact next observations while keeping the static compute budget
               configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1066,11 +1061,6 @@ class TD1Estimator(ValueEstimatorBase):
               suffix samples via ``"shifted_valid"``. Retained samples use
               exact next observations while keeping the static compute budget
               configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1332,11 +1322,6 @@ class TDLambdaEstimator(ValueEstimatorBase):
               suffix samples via ``"shifted_valid"``. Retained samples use
               exact next observations while keeping the static compute budget
               configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -1635,11 +1620,6 @@ class GAE(ValueEstimatorBase):
               suffix samples via ``"shifted_valid"``. Retained samples use
               exact next observations while keeping the static compute budget
               configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
@@ -2210,11 +2190,6 @@ class VTrace(ValueEstimatorBase):
               suffix samples via ``"shifted_valid"``. Retained samples use
               exact next observations while keeping the static compute budget
               configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
 
             All single-call paths require that the parameters at time
             ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
