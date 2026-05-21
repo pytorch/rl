@@ -279,6 +279,7 @@ Available Transforms
     MeanActionSelector
     ModuleTransform
     MultiAction
+    NextObservationDelta
     NextStateReconstructor
     NoopResetEnv
     ObservationNorm
