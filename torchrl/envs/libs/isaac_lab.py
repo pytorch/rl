@@ -61,7 +61,6 @@ class IsaacLabWrapper(GymWrapper):
         allow_done_after_reset: bool = True,
         convert_actions_to_numpy: bool = False,
         device: torch.device | None = None,
-        native_autoreset: bool = False,
         **kwargs,
     ):
         if device is None:
@@ -72,7 +71,6 @@ class IsaacLabWrapper(GymWrapper):
             categorical_action_encoding=categorical_action_encoding,
             allow_done_after_reset=allow_done_after_reset,
             convert_actions_to_numpy=convert_actions_to_numpy,
-            native_autoreset=native_autoreset,
             **kwargs,
         )
 
