@@ -45,7 +45,12 @@ from pathlib import Path
 import torch
 import torch.optim
 
-from isaaclab_rnn_ppo_memory_utils import _init_isaac_app, make_env, make_models
+from isaaclab_rnn_ppo_memory_utils import (
+    _init_isaac_app,
+    make_env,
+    make_models,
+    NonFiniteChecker,
+)
 from tensordict import TensorDictBase
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
@@ -151,129 +156,6 @@ def _cuda_metrics(prefix: str, device: torch.device) -> dict[str, float]:
         f"telemetry/{prefix}/max_reserved_gb": torch.cuda.max_memory_reserved(device)
         / 1e9,
     }
-
-
-def _finite_stats(prefix: str, value: torch.Tensor) -> dict[str, float | int | bool]:
-    value = value.detach()
-    finite = torch.isfinite(value)
-    stats: dict[str, float | int | bool] = {
-        f"{prefix}/numel": value.numel(),
-        f"{prefix}/finite": bool(finite.all().cpu()),
-        f"{prefix}/nonfinite": int((~finite).sum().cpu()),
-    }
-    if finite.any():
-        finite_value = value[finite].float()
-        stats.update(_tensor_stats(prefix, finite_value))
-    return stats
-
-
-def _raise_nonfinite(
-    phase: str,
-    *,
-    context: dict[str, int],
-    name: str,
-    value: torch.Tensor,
-    save_dir: Path | None = None,
-    run_args: dict | None = None,
-    batch: TensorDictBase | None = None,
-    actor=None,
-    critic=None,
-    optimizer=None,
-    loss: TensorDictBase | None = None,
-    extra: dict | None = None,
-) -> None:
-    if torch.isfinite(value).all():
-        return
-    stats = _finite_stats(f"debug_nonfinite/{phase}/{name}", value)
-    saved_path = None
-    if save_dir is not None:
-        save_dir.mkdir(parents=True, exist_ok=True)
-        filename = (
-            f"nonfinite_{phase}_{name}"
-            f"_i{context['iteration']}_e{context['epoch']}"
-            f"_mb{context['minibatch']}_u{context['update']}.pt"
-        )
-        filename = filename.replace("/", "_").replace(" ", "_")
-        saved_path = save_dir / filename
-        bundle = {
-            "phase": phase,
-            "name": name,
-            "args": run_args,
-            "context": dict(context),
-            "stats": stats,
-            "offending_value": value.detach().cpu(),
-            "batch": batch.detach().to("cpu") if batch is not None else None,
-            "actor_state_dict": (
-                {key: val.detach().cpu() for key, val in actor.state_dict().items()}
-                if actor is not None
-                else None
-            ),
-            "critic_state_dict": (
-                {key: val.detach().cpu() for key, val in critic.state_dict().items()}
-                if critic is not None
-                else None
-            ),
-            "optimizer_state_dict": (
-                optimizer.state_dict() if optimizer is not None else None
-            ),
-            "loss": loss.detach().to("cpu") if loss is not None else None,
-            "actor_grads": (
-                {
-                    key: param.grad.detach().cpu()
-                    for key, param in actor.named_parameters()
-                    if param.grad is not None
-                }
-                if actor is not None
-                else None
-            ),
-            "critic_grads": (
-                {
-                    key: param.grad.detach().cpu()
-                    for key, param in critic.named_parameters()
-                    if param.grad is not None
-                }
-                if critic is not None
-                else None
-            ),
-            "extra": extra,
-            "torch_rng_state": torch.random.get_rng_state(),
-            "cuda_rng_state_all": (
-                torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
-            ),
-        }
-        torch.save(bundle, saved_path)
-    raise RuntimeError(
-        f"Non-finite tensor during {phase}: {name}; "
-        f"context={context}; stats={stats}; saved_path={saved_path}"
-    )
-
-
-def _raise_tensordict_nonfinite(
-    phase: str,
-    tensordict: TensorDictBase,
-    *,
-    context: dict[str, int],
-    save_dir: Path | None = None,
-    run_args: dict | None = None,
-    actor=None,
-    critic=None,
-    optimizer=None,
-) -> None:
-    for key, value in tensordict.items(include_nested=True, leaves_only=True):
-        if not isinstance(value, torch.Tensor) or not value.is_floating_point():
-            continue
-        _raise_nonfinite(
-            phase,
-            context=context,
-            name=str(key),
-            value=value,
-            save_dir=save_dir,
-            run_args=run_args,
-            batch=tensordict,
-            actor=actor,
-            critic=critic,
-            optimizer=optimizer,
-        )
 
 
 def _assert_rollout_shapes(
@@ -520,99 +402,59 @@ def main() -> None:
         Path(args.debug_nonfinite_save_dir) if args.debug_nonfinite_update else None
     )
     run_args = vars(args)
+    finite_checker = NonFiniteChecker(
+        enabled=args.debug_nonfinite_update,
+        save_dir=debug_save_dir,
+        run_args=run_args,
+        actor=actor,
+        critic=critic,
+        optimizer=optim,
+    )
 
     def update(batch):
-        if args.debug_nonfinite_update:
-            _raise_tensordict_nonfinite(
-                "minibatch",
-                batch,
-                context=debug_context,
-                save_dir=debug_save_dir,
-                run_args=run_args,
-                actor=actor,
-                critic=critic,
-                optimizer=optim,
-            )
+        finite_checker.check_tensordict(
+            "before_loss",
+            batch,
+            context=debug_context,
+            batch=batch,
+        )
         try:
             with set_recurrent_mode(True):
                 loss = loss_module(batch)
         except Exception as err:
-            if args.debug_nonfinite_update:
-                _raise_nonfinite(
-                    "loss_exception",
-                    context=debug_context,
-                    name=type(err).__name__,
-                    value=torch.tensor(float("nan"), device=train_device),
-                    save_dir=debug_save_dir,
-                    run_args=run_args,
-                    batch=batch,
-                    actor=actor,
-                    critic=critic,
-                    optimizer=optim,
-                    extra={"exception": repr(err)},
-                )
+            finite_checker.check_tensor(
+                "loss_exception",
+                type(err).__name__,
+                torch.tensor(float("nan"), device=train_device),
+                context=debug_context,
+                batch=batch,
+                extra={"exception": repr(err)},
+            )
             raise
         total = loss["loss_objective"] + loss["loss_entropy"] + loss["loss_critic"]
-        if args.debug_nonfinite_update:
-            for key, value in loss.items():
-                _raise_nonfinite(
-                    "loss",
-                    context=debug_context,
-                    name=str(key),
-                    value=value,
-                    save_dir=debug_save_dir,
-                    run_args=run_args,
-                    batch=batch,
-                    actor=actor,
-                    critic=critic,
-                    optimizer=optim,
-                    loss=loss,
-                )
-            _raise_nonfinite(
-                "loss",
-                context=debug_context,
-                name="loss_total",
-                value=total,
-                save_dir=debug_save_dir,
-                run_args=run_args,
-                batch=batch,
-                actor=actor,
-                critic=critic,
-                optimizer=optim,
-                loss=loss,
-            )
+        finite_checker.check_tensordict(
+            "after_loss",
+            loss,
+            context=debug_context,
+            batch=batch,
+            loss=loss,
+        )
+        finite_checker.check_tensor(
+            "after_loss",
+            "loss_total",
+            total,
+            context=debug_context,
+            batch=batch,
+            loss=loss,
+        )
         total.backward()
-        if args.debug_nonfinite_update:
-            for name, parameter in actor.named_parameters():
-                if parameter.grad is not None:
-                    _raise_nonfinite(
-                        "actor_grad",
-                        context=debug_context,
-                        name=name,
-                        value=parameter.grad,
-                        save_dir=debug_save_dir,
-                        run_args=run_args,
-                        batch=batch,
-                        actor=actor,
-                        critic=critic,
-                        optimizer=optim,
-                        loss=loss,
-                    )
-            for name, parameter in critic.named_parameters():
-                if parameter.grad is not None:
-                    _raise_nonfinite(
-                        "critic_grad",
-                        context=debug_context,
-                        name=name,
-                        value=parameter.grad,
-                        save_dir=debug_save_dir,
-                        run_args=run_args,
-                        batch=batch,
-                        actor=actor,
-                        critic=critic,
-                        optimizer=optim,
-                        loss=loss,
-                    )
+        finite_checker.check_gradients(
+            "after_backward",
+            [("actor", actor), ("critic", critic)],
+            context=debug_context,
+            batch=batch,
+            loss=loss,
+        )
         if args.debug_nonfinite_update:
             grad_norms = [
                 parameter.grad.detach().norm(2)
@@ -620,17 +462,12 @@ def main() -> None:
                 if parameter.grad is not None
             ]
             raw_grad_norm = torch.stack(grad_norms).norm(2)
-            _raise_nonfinite(
-                "grad_norm",
+            finite_checker.check_tensor(
+                "after_backward",
+                "raw_grad_norm",
+                raw_grad_norm,
                 context=debug_context,
-                name="raw_grad_norm",
-                value=raw_grad_norm,
-                save_dir=debug_save_dir,
-                run_args=run_args,
                 batch=batch,
-                actor=actor,
-                critic=critic,
-                optimizer=optim,
                 loss=loss,
             )
         grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -711,11 +548,42 @@ def main() -> None:
                 collector.update_policy_weights_(actor)
             with timeit("collector_next"):
                 collected_batch = next(collector_iter)
+            debug_context.update(
+                {
+                    "iteration": iteration,
+                    "epoch": -1,
+                    "minibatch": -1,
+                    "update": iteration * args.ppo_epochs * updates_per_epoch,
+                }
+            )
+            finite_checker.check_tensordict(
+                "after_collection",
+                collected_batch,
+                context=debug_context,
+                batch=collected_batch,
+            )
             with timeit("training"):
                 data = _normalize_rollout_batch(collected_batch, expected_rollout_shape)
+                finite_checker.check_tensordict(
+                    "after_collection_normalize",
+                    data,
+                    context=debug_context,
+                    batch=data,
+                )
                 loss_acc = None
                 loss_count = 0
                 for epoch in range(args.ppo_epochs):
+                    debug_context.update(
+                        {
+                            "iteration": iteration,
+                            "epoch": epoch,
+                            "minibatch": -1,
+                            "update": (
+                                iteration * args.ppo_epochs * updates_per_epoch
+                                + epoch * updates_per_epoch
+                            ),
+                        }
+                    )
                     epoch_data = data.to(train_device)
                     _assert_rollout_shapes(
                         epoch_data,
@@ -723,8 +591,20 @@ def main() -> None:
                         hidden_size=args.hidden_size,
                         phase="before_gae",
                     )
+                    finite_checker.check_tensordict(
+                        "before_gae",
+                        epoch_data,
+                        context=debug_context,
+                        batch=epoch_data,
+                    )
                     with timeit("advantage"), torch.no_grad(), set_recurrent_mode(True):
                         epoch_data = adv_module(epoch_data)
+                    finite_checker.check_tensordict(
+                        "after_gae",
+                        epoch_data,
+                        context=debug_context,
+                        batch=epoch_data,
+                    )
                     _assert_rollout_shapes(
                         epoch_data,
                         expected_shape=expected_rollout_shape,
@@ -762,8 +642,16 @@ def main() -> None:
                             + epoch * updates_per_epoch
                             + loss_count
                         )
+                        mini_batch = mini_batch.to(train_device)
                         with timeit("update"):
-                            loss = update(mini_batch.to(train_device))
+                            loss = update(mini_batch)
+                        finite_checker.check_tensordict(
+                            "after_update",
+                            loss,
+                            context=debug_context,
+                            batch=mini_batch,
+                            loss=loss,
+                        )
                         loss_acc = loss if loss_acc is None else loss_acc + loss
                         loss_count += 1
             if experiment_logger is not None:
