@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import warnings
 from functools import partial
 
 import pytest
@@ -783,6 +784,29 @@ class TestMaskedCategorical:
         lp1 = cat.log_prob(action)
         torch.testing.assert_close(lp0, lp1)
 
+    @pytest.mark.parametrize("sparse", [True, False])
+    def test_log_prob_no_deprecated_reduce_kwarg(self, sparse: bool) -> None:
+        # Non-regression test: MaskedCategorical.log_prob with use_cross_entropy=True
+        # must call F.cross_entropy with `reduction="none"`, not the deprecated
+        # `reduce=False` alias which emits a UserWarning under newer torch versions.
+        torch.manual_seed(0)
+        logits = torch.randn(1, 4).log_softmax(dim=-1)
+        mask = torch.tensor([[True, False, True, True]])
+        indices = torch.tensor([[0, 2, 3]])
+        dist = MaskedCategorical(
+            logits=logits,
+            mask=None if sparse else mask,
+            indices=indices if sparse else None,
+            use_cross_entropy=True,
+        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error",
+                category=UserWarning,
+                message=r".*size_average and reduce args.*",
+            )
+            dist.log_prob(torch.tensor([0]))
+
 
 class TestOneHotCategorical:
     def test_one_hot(self):
@@ -983,6 +1007,30 @@ class TestMaskedOneHotCategorical:
 
 class TestLLMMaskedCategorical:
     """Test the LLM-optimized masked categorical distribution."""
+
+    @pytest.mark.parametrize("batched_value", [True, False])
+    def test_log_prob_no_deprecated_reduce_kwarg(self, batched_value: bool) -> None:
+        # Non-regression test: LLMMaskedCategorical.log_prob must call
+        # F.cross_entropy with `reduction="none"`, not the deprecated
+        # `reduce=False` alias which emits a UserWarning under newer torch
+        # versions.
+        torch.manual_seed(0)
+        if batched_value:
+            logits = torch.randn(2, 3, 5)
+            mask = torch.tensor([[True, False, True], [True, True, False]])
+            value = torch.randint(0, 5, (2, 3))
+        else:
+            logits = torch.randn(3, 5)
+            mask = torch.tensor([True, False, True])
+            value = torch.randint(0, 5, (3,))
+        dist = LLMMaskedCategorical(logits=logits, mask=mask, ignore_index=-100)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error",
+                category=UserWarning,
+                message=r".*size_average and reduce args.*",
+            )
+            dist.log_prob(value)
 
     @pytest.mark.parametrize("batch_dims", [0, 1, 2])
     def test_construction_position_level_batch_dims(self, batch_dims):

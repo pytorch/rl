@@ -8,7 +8,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Sequence
 from copy import copy
-from typing import Any, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
@@ -44,6 +44,7 @@ __all__ = [
     "Crop",
     "FlattenObservation",
     "GrayScale",
+    "NextObservationDelta",
     "PermuteTransform",
     "Resize",
     "SqueezeTransform",
@@ -1418,4 +1419,285 @@ class CatFrames(ObservationTransform):
         return (
             f"{self.__class__.__name__}(N={self.N}, dim"
             f"={self.dim}, keys={self.in_keys})"
+        )
+
+
+class NextObservationDelta(Transform):
+    """Stores ``("next", obs)`` as a low-precision delta in a sibling key.
+
+    A single transform handles both sides of the compression:
+
+    - **Env side** (``_step`` + ``_post_step_mdp_hooks``): for each
+      in-key ``k``, write ``(next_obs - obs).to(delta_dtype)`` under
+      the sibling key ``("next", "delta", k)``, then drop the full
+      ``("next", k)`` from the post-step tensordict that the collector
+      stacks. The full slot survives only long enough for
+      :func:`~torchrl.envs.utils.step_mdp` to promote it to root, so the
+      policy sees a full-precision observation on the next step.
+    - **RB side** (``forward``): on
+      :meth:`~torchrl.data.ReplayBuffer.sample`, reconstruct
+      ``("next", k) = data[k] + data[("next", "delta", k)]`` and
+      (optionally) drop the delta key. Unlike
+      :class:`~torchrl.envs.transforms.NextStateReconstructor`, the
+      delta encodes the actual transition, so trajectory-boundary
+      transitions reconstruct exactly within the round-trip precision
+      of ``delta_dtype`` rather than falling back to ``NaN``.
+
+    Use the **same instance** (or two instances with matching ``in_keys``)
+    on the env and on the replay buffer; the env-side and RB-side methods
+    are dispatched automatically.
+
+    Args:
+        in_keys (sequence of NestedKey, optional): observation keys to
+            compress. Defaults to ``None``, in which case the transform
+            lazily walks ``parent.observation_spec`` and picks every
+            floating-point leaf whose dtype is not in ``excluded_dtypes``.
+            When the transform is used on a replay buffer (no env parent),
+            ``in_keys`` must be passed explicitly.
+
+    Keyword Args:
+        delta_dtype (torch.dtype, optional): dtype in which the delta is
+            stored. Must be a floating dtype. Defaults to ``torch.float16``.
+        restore_dtype (torch.dtype or ``"root"``, optional): dtype of the
+            reconstructed ``("next", k)`` on the RB side. ``"root"``
+            (default) matches the dtype of the corresponding root key in
+            the sampled batch.
+        drop_delta (bool, optional): if ``True`` (default), the
+            ``("next", "delta", k)`` entry is removed from the sampled
+            tensordict after RB-side reconstruction so downstream consumers
+            see the same key layout as an uncompressed pipeline.
+        excluded_dtypes (tuple of torch.dtype, optional): dtypes to skip
+            when auto-inferring ``in_keys``. Defaults to the integer +
+            bool family.
+
+    .. warning::
+        The compression is **lossy**: round-tripping through ``delta_dtype``
+        loses precision, particularly for unnormalized observations whose
+        magnitudes exceed the dtype range or fall below its smallest
+        representable step.
+
+    .. warning::
+        The transform must live **outside** any batched env
+        (``TransformedEnv(ParallelEnv(N, factory), NextObservationDelta())``).
+        Building a :class:`~torchrl.envs.SerialEnv` /
+        :class:`~torchrl.envs.ParallelEnv` whose worker contains a
+        ``NextObservationDelta`` raises at construction time.
+
+    Example:
+        >>> import torch
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> from torchrl.envs.transforms import NextObservationDelta
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), NextObservationDelta())
+        >>> td_root = env.reset()
+        >>> _ = td_root.set("action", env.action_spec.rand())
+        >>> td, td_ = env.step_and_maybe_reset(td_root)
+        >>> td["next", "delta", "observation"].dtype
+        torch.float16
+        >>> ("next", "observation") in td.keys(True, True)
+        False
+        >>> td_["observation"].dtype
+        torch.float32
+    """
+
+    def __init__(
+        self,
+        in_keys: Sequence[NestedKey] | None = None,
+        *,
+        delta_dtype: torch.dtype = torch.float16,
+        restore_dtype: torch.dtype | Literal["root"] = "root",
+        drop_delta: bool = True,
+        excluded_dtypes: tuple[torch.dtype, ...] = (
+            torch.uint8,
+            torch.int8,
+            torch.int16,
+            torch.int32,
+            torch.int64,
+            torch.bool,
+        ),
+    ):
+        if not delta_dtype.is_floating_point:
+            raise ValueError(
+                f"delta_dtype must be a floating-point dtype, got {delta_dtype}."
+            )
+        if restore_dtype != "root" and not (
+            isinstance(restore_dtype, torch.dtype) and restore_dtype.is_floating_point
+        ):
+            raise ValueError(
+                f"restore_dtype must be a floating-point dtype or 'root', got "
+                f"{restore_dtype!r}."
+            )
+        self.delta_dtype = delta_dtype
+        self.restore_dtype = restore_dtype
+        self.drop_delta = drop_delta
+        self.excluded_dtypes = tuple(excluded_dtypes)
+        super().__init__(in_keys=in_keys, out_keys=in_keys)
+
+    @property
+    def in_keys(self) -> Sequence[NestedKey] | None:
+        in_keys = self.__dict__.get("_in_keys", None)
+        if in_keys is None:
+            parent = self.parent
+            if parent is None:
+                return None
+            in_keys = []
+            for key, spec in parent.observation_spec.items(True, True):
+                dtype = spec.dtype
+                if dtype is None:
+                    continue
+                if dtype in self.excluded_dtypes:
+                    continue
+                if not dtype.is_floating_point:
+                    continue
+                in_keys.append(unravel_key(key))
+            self._in_keys = in_keys
+            if self.__dict__.get("_out_keys", None) is None:
+                self._out_keys = copy(in_keys)
+        return in_keys
+
+    @in_keys.setter
+    def in_keys(self, value: Sequence[NestedKey] | None) -> None:
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(v) for v in value]
+        self._in_keys = value
+
+    @property
+    def out_keys(self) -> Sequence[NestedKey] | None:
+        out_keys = self.__dict__.get("_out_keys", None)
+        if out_keys is None:
+            in_keys = self.in_keys
+            if in_keys is None:
+                return None
+            out_keys = self._out_keys = copy(in_keys)
+        return out_keys
+
+    @out_keys.setter
+    def out_keys(self, value: Sequence[NestedKey] | None) -> None:
+        if value is not None:
+            if isinstance(value, (str, tuple)):
+                value = [value]
+            value = [unravel_key(v) for v in value]
+        self._out_keys = value
+
+    @staticmethod
+    def _as_key_tuple(key: NestedKey) -> tuple[str, ...]:
+        if isinstance(key, str):
+            return (key,)
+        return tuple(key)
+
+    def _delta_key(self, key: NestedKey) -> tuple[str, ...]:
+        # `key` is a root-level observation key; the delta lives under
+        # ("next", "delta", *key).
+        return ("delta",) + self._as_key_tuple(key)
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        in_keys = self.in_keys
+        if not in_keys:
+            return next_tensordict
+        for key in in_keys:
+            obs = tensordict.get(key, default=None)
+            next_obs = next_tensordict.get(key, default=None)
+            if obs is None or next_obs is None:
+                continue
+            # Subtract in the source (typically full-precision) dtype, then
+            # cast once. This loses fewer significant bits than casting each
+            # operand to ``delta_dtype`` first and subtracting in low precision
+            # (which would risk catastrophic cancellation for nearby values).
+            delta = (next_obs - obs).to(self.delta_dtype)
+            # Store the delta in a sibling sub-tensordict so a downstream
+            # consumer cannot mistake it for a full-precision observation.
+            next_tensordict.set(self._delta_key(key), delta)
+        return next_tensordict
+
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
+        # ``step_mdp`` has already promoted the still-full ``("next", k)`` to
+        # root in ``tensordict_`` (because the delta key is not in the env's
+        # observation spec, step_mdp leaves it alone). So the flowing td needs
+        # no further work for ``k``. We just drop the full ``("next", k)``
+        # from the post-step td so only the compressed delta survives into
+        # the stacked rollout.
+        in_keys = self.in_keys
+        if not in_keys:
+            return tensordict, tensordict_
+        next_td = tensordict.get("next", default=None)
+        if next_td is None:
+            return tensordict, tensordict_
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            if key_tuple in next_td.keys(include_nested=True, leaves_only=True):
+                next_td.pop(key_tuple)
+        return tensordict, tensordict_
+
+    def _check_batched_worker_compat(self) -> None:
+        raise RuntimeError(
+            f"{type(self).__name__} cannot live inside a SerialEnv/ParallelEnv "
+            "worker: the post-step-mdp delta key drop relies on the outer "
+            "env's `step_and_maybe_reset` invoking the hook, but a batched "
+            "env's `step_and_maybe_reset` does not propagate the worker's "
+            "transform hook. Place the transform OUTSIDE the batched env "
+            "instead, e.g. `TransformedEnv(ParallelEnv(N, base_env_factory), "
+            f"{type(self).__name__}(...))`."
+        )
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        # The runtime tensordict produced by `_step` + `_post_step_mdp_hooks`
+        # has ``("next", "delta", k)`` (delta_dtype) and no ``("next", k)``.
+        # Mirror that here so spec-vs-runtime key checks match.
+        in_keys = self.in_keys
+        if not in_keys:
+            return fake_tensordict
+        next_td = fake_tensordict.get("next", default=None)
+        if next_td is None:
+            return fake_tensordict
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            leaf = next_td.get(key_tuple, default=None)
+            if leaf is None:
+                continue
+            next_td.set(("delta",) + key_tuple, leaf.to(self.delta_dtype))
+            next_td.pop(key_tuple)
+        return fake_tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        """Reconstruct ``("next", k)`` from the stored delta at sample time.
+
+        Invoked by :meth:`~torchrl.data.ReplayBuffer.sample` when this
+        transform is appended to a replay buffer. Reads ``data[k]`` (root
+        observation at step ``i``) and ``data[("next", "delta", k)]`` (the
+        casted delta produced on the env side), writes
+        ``data[("next", k)] = (data[k] + delta).to(restore_dtype)``, and
+        (when ``drop_delta=True``, the default) removes the delta key.
+        Keys for which either side is missing are silently skipped.
+        """
+        in_keys = self.in_keys
+        if in_keys is None:
+            # No env parent in RB context: explicit in_keys are required
+            # so we know what to reconstruct.
+            return tensordict
+        for key in in_keys:
+            key_tuple = self._as_key_tuple(key)
+            delta_key = ("next", "delta") + key_tuple
+            obs = tensordict.get(key_tuple, default=None)
+            delta = tensordict.get(delta_key, default=None)
+            if obs is None or delta is None:
+                continue
+            dtype = obs.dtype if self.restore_dtype == "root" else self.restore_dtype
+            tensordict.set(("next",) + key_tuple, obs.to(dtype) + delta.to(dtype))
+            if self.drop_delta:
+                tensordict.pop(delta_key)
+        return tensordict
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(in_keys={self.__dict__.get('_in_keys', None)}, "
+            f"delta_dtype={self.delta_dtype})"
         )

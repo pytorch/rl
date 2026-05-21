@@ -14,7 +14,9 @@ from __future__ import annotations
 from torchrl.envs.transforms._action import (
     ActionDiscretizer,
     ActionMask,
+    ActionScaling,
     DiscreteActionProjection,
+    FlattenAction,
     MultiAction,
 )
 
@@ -78,6 +80,7 @@ from torchrl.envs.transforms._observation import (
     Crop,
     FlattenObservation,
     GrayScale,
+    NextObservationDelta,
     PermuteTransform,
     Resize,
     SqueezeTransform,
@@ -105,6 +108,7 @@ from torchrl.envs.transforms._timer import Timer
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "ActionScaling",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
@@ -125,6 +129,7 @@ __all__ = [
     "ExcludeTransform",
     "ExpandAs",
     "FiniteTensorDictCheck",
+    "FlattenAction",
     "FlattenObservation",
     "FlattenTensorDict",
     "FrameSkipTransform",
@@ -133,6 +138,7 @@ __all__ = [
     "InitTracker",
     "LineariseRewards",
     "MultiAction",
+    "NextObservationDelta",
     "NoopResetEnv",
     "ObservationNorm",
     "ObservationTransform",

@@ -804,6 +804,8 @@ class PettingZooWrapper(_EnvWrapper):
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
                 for index, agent in enumerate(agents):
+                    if agent not in observation_dict:
+                        continue
                     agent_obs = observation_dict[agent]
                     agent_info = info_dict[agent]
                     if isinstance(agent_obs, dict) and "action_mask" in agent_obs:

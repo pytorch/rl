@@ -261,10 +261,22 @@ class Collector(BaseCollector):
             RPCDataCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on the environment, tagging every collected frame with the current version
+            under the ``"policy_version"`` key. The transform's version is bumped exactly once
+            per :meth:`update_policy_weights_` call — for multi-process collectors this happens
+            in each worker after the new weights have actually been applied, so per-frame
+            tagging tracks real weight updates rather than rollout iterations.
+
+            The recommended path is ``track_policy_version=True``: let the collector own the
+            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
+            **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
+            a transform and passing it to a collector is supported but discouraged because it
+            invites a divergence between the transform on the env and the one the collector
+            increments.
+
+            Defaults to ``False``.
         compact_obs (bool, optional): if ``True``, the collector drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking per-step data. Those keys are bit-for-bit identical
@@ -279,13 +291,26 @@ class Collector(BaseCollector):
             value-estimator forward pass substitutes a finite placeholder so
             GAE / TD targets stay numerically defined (see
             :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`).
+
+            ``compact_obs=True`` composes cleanly with
+            :class:`~torchrl.objectives.value.advantages.GAE` configured with
+            ``shifted="compact"``: the compact shifted path can run the
+            on-policy advantage pass without rehydrating every per-step
+            ``("next", "observation")`` mirror. For vectorized environments
+            with large observations this is typically a sizeable GPU-memory
+            win at near-zero CPU cost.
+
             Default is ``False`` because the canonical ``("next", obs)`` is
             still required by some downstream losses — most notably
             :class:`~torchrl.envs.transforms.MultiStepTransform`, which uses
             the n-step ``("next", obs)`` (and its in-trajectory fallback at
             the last ``n - 1`` frames) and cannot reconstruct that from root
-            obs alone. See also the *Memory-efficient RL training* tutorial
-            for an end-to-end pipeline. Defaults to ``False``.
+            obs alone. For a lossy-precision alternative that *does* preserve
+            boundary transitions (at the cost of a smaller memory saving), see
+            :class:`~torchrl.envs.transforms.NextObservationDelta`. See also
+            the *Memory-efficient RL training* tutorial for an end-to-end
+            pipeline. Defaults to ``False``.
+
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -1345,6 +1370,16 @@ class Collector(BaseCollector):
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
 
+        # Bump the local PolicyVersion transform (if track_policy_version is on).
+        # This is the canonical bump point for the leaf collector — it covers:
+        #   - User calls collector.update_policy_weights_() on a single-process
+        #     SyncDataCollector / Collector.
+        #   - The receiver-side WeightSyncScheme cascade in a multi-process
+        #     worker (which calls inner_collector.update_policy_weights_()
+        #     after applying weights). MultiCollector does not inherit from
+        #     Collector, so its update_policy_weights_ does NOT bump here.
+        self.increment_version()
+
     def _maybe_fallback_update(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -1878,6 +1913,33 @@ class Collector(BaseCollector):
                 done | truncated
             )
         return final_rollout
+
+    @torch.no_grad()
+    def fake_tensordict(self) -> TensorDictBase:
+        """Return a zero-filled tensordict shaped like one batch from this collector.
+
+        The result mirrors what ``next(iter(collector))`` would yield:
+
+        - batch shape ``(*env.batch_size, frames_per_batch)`` with the last
+          dim named ``"time"``;
+        - env keys (observation / reward / done / terminated / truncated /
+          ``is_init`` when an :class:`~torchrl.envs.InitTracker` is on the
+          env), policy out-keys, and ``("collector", "traj_ids")`` when
+          trajectory tracking is enabled;
+        - ``compact_obs=True`` exclusions applied;
+        - ``set_truncated=True`` last-step ``truncated``/``done`` masking
+          applied;
+        - ``postproc`` / ``split_trajs`` / private-key exclusion applied,
+          mirroring :meth:`_postproc`.
+
+        Intended for storage initialization and ``torch.compile`` /
+        cudagraph warmup without having to step the environment first.
+        """
+        if getattr(self, "_final_rollout", None) is None:
+            self._maybe_make_final_rollout(make_rollout=True)
+        result = self._final_rollout.clone().zero_()
+        result = self._maybe_set_truncated(result)
+        return self._postproc(result)
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:

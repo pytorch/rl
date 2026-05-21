@@ -386,6 +386,77 @@ class Transform(nn.Module):
         next_tensordict = self._call(next_tensordict)
         return next_tensordict
 
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
+        """Hook called after :func:`~torchrl.envs.utils.step_mdp` inside ``step_and_maybe_reset``.
+
+        Override when a transform needs to modify either:
+
+        - the **post-step** tensordict (what the data collector will stack),
+          for example to drop a transient full-precision tensor that has
+          been replaced by a compressed sibling key; or
+        - the **post-step-mdp** tensordict (what the policy will read on the
+          next iteration), for example to undo a representation that was
+          compressed in :meth:`_step`.
+
+        Args:
+            tensordict (TensorDictBase): post-step tensordict, still carrying
+                the ``("next", ...)`` sub-tensordict.
+            tensordict_ (TensorDictBase): post-step-mdp tensordict, with root
+                keys promoted from ``("next", ...)``. This is what the next
+                policy call will receive (after a possible reset).
+
+        Returns:
+            A ``(tensordict, tensordict_)`` tuple. Either tensordict may be
+            mutated in place; the tuple-return form is for explicitness and
+            lets implementations swap in fresh objects if needed.
+
+        .. note:: Transforms that implement this hook must rely on the env they
+            are attached to wiring it up. :class:`~torchrl.envs.TransformedEnv`
+            delegates ``EnvBase._post_step_mdp_hooks`` to
+            ``self.transform._post_step_mdp_hooks``, so a transform appended to
+            a ``TransformedEnv`` is picked up automatically. The hook fires
+            from :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` (used by
+            data collectors and the non-stop path of :meth:`~torchrl.envs.EnvBase.rollout`)
+            and from the stop-early path of :meth:`~torchrl.envs.EnvBase.rollout`.
+        """
+        return tensordict, tensordict_
+
+    def _check_batched_worker_compat(self) -> None:
+        """Raise if this transform should not live inside a batched-env worker.
+
+        :class:`~torchrl.envs.SerialEnv` and :class:`~torchrl.envs.ParallelEnv`
+        call this on every transform of every worker env at construction
+        time. Transforms whose semantics rely on
+        :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` or
+        :meth:`~torchrl.envs.EnvBase.rollout` hooks running on the *outer*
+        env (rather than the worker) override this to raise a clear error.
+
+        The default is a no-op.
+        """
+        return None
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        """Adjust the env's ``fake_tensordict`` after it is built from specs.
+
+        :meth:`~torchrl.envs.EnvBase.fake_tensordict` constructs a zero-filled
+        tensordict from the env's specs, which is used by data collectors to
+        pre-allocate the rollout storage. The TorchRL spec system shares the
+        observation spec between the root and ``("next", ...)`` leaves, so
+        transforms that want the runtime ``("next", k)`` dtype to differ from
+        the root ``k`` dtype need a way to fix up the fake tensordict here.
+
+        The default is a no-op. Override only when the runtime tensordict your
+        transform produces does not match what the spec-derived fake
+        tensordict would imply.
+        """
+        return fake_tensordict
+
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         """Reads the input tensordict, and for the selected keys, applies the transform.
 
@@ -1004,12 +1075,28 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
         self.empty_cache()
         return self
 
-    # def _post_step_mdp_hooks(self, tensordict: TensorDictBase) -> TensorDictBase:
-    # """Allows modification of the tensordict after the step_mdp."""
-    # if type(self.base_env)._post_step_mdp_hooks is not None:
-    # If the base env has a _post_step_mdp_hooks, we call it
-    # tensordict = self.base_env._post_step_mdp_hooks(tensordict)
-    # return tensordict
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
+        """Run the transform-chain post-step-mdp hook, then the base env's own."""
+        tensordict, tensordict_ = self.transform._post_step_mdp_hooks(
+            tensordict, tensordict_
+        )
+        base_env = self.base_env
+        if base_env is not None and base_env._post_step_mdp_hooks is not None:
+            tensordict, tensordict_ = base_env._post_step_mdp_hooks(
+                tensordict, tensordict_
+            )
+        return tensordict, tensordict_
+
+    def fake_tensordict(self) -> TensorDictBase:
+        """Build a fake tensordict and let the transform chain post-process it."""
+        fake_td = super().fake_tensordict()
+        if self.transform is not None:
+            fake_td = self.transform.transform_fake_tensordict(fake_td)
+        return fake_td
 
     def _set_env(self, env: EnvBase, device) -> None:
         if device != env.device:
@@ -1593,6 +1680,26 @@ class Compose(Transform):
         for t in self.transforms:
             next_tensordict = t._step(tensordict, next_tensordict)
         return next_tensordict
+
+    def _post_step_mdp_hooks(
+        self,
+        tensordict: TensorDictBase,
+        tensordict_: TensorDictBase,
+    ) -> tuple[TensorDictBase, TensorDictBase]:
+        for t in self.transforms:
+            tensordict, tensordict_ = t._post_step_mdp_hooks(tensordict, tensordict_)
+        return tensordict, tensordict_
+
+    def transform_fake_tensordict(
+        self, fake_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        for t in self.transforms:
+            fake_tensordict = t.transform_fake_tensordict(fake_tensordict)
+        return fake_tensordict
+
+    def _check_batched_worker_compat(self) -> None:
+        for t in self.transforms:
+            t._check_batched_worker_compat()
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         for t in reversed(self.transforms):
