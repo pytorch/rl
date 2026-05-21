@@ -713,7 +713,7 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
             return {"observation": _ndarray_to_tensor(state.obs).to(self.device)}
         else:
             return {
-                key: _ndarray_to_tensor(getattr(state.obs, key)).to(self.device)
+                key: _ndarray_to_tensor(state.obs[key]).to(self.device)
                 for key in self._env.observation_size
             }
 
@@ -735,7 +735,7 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
 
         if obs_is_dict:
             obs_raw = {
-                key: _ndarray_to_tensor(getattr(state.obs, key)).to(self.device)
+                key: _ndarray_to_tensor(state.obs[key]).to(self.device)
                 for key in self._env.observation_size
             }
         else:
