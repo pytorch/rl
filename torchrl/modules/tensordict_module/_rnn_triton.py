@@ -65,10 +65,6 @@ if _has_triton:
     import triton
     import triton.language as tl
 
-    _libdevice = getattr(tl.extra, "libdevice", None)
-    if _libdevice is None:
-        _libdevice = tl.extra.cuda.libdevice
-
     # BLOCK_K=16 is the smallest, dictating the minimum padded hidden size.
     _MIN_H_PAD = 16
 
@@ -232,7 +228,7 @@ if _has_triton:
 
             r = tl.sigmoid(gx_r + gh_r)
             z = tl.sigmoid(gx_z + gh_z)
-            n = _libdevice.tanh(gx_n + r * gh_n)
+            n = tl.extra.cuda.libdevice.tanh(gx_n + r * gh_n)
             h = n + z * (h - n)
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
@@ -535,10 +531,10 @@ if _has_triton:
 
             i = tl.sigmoid(gx_i + gh_i)
             f = tl.sigmoid(gx_f + gh_f)
-            g = _libdevice.tanh(gx_g + gh_g)
+            g = tl.extra.cuda.libdevice.tanh(gx_g + gh_g)
             o = tl.sigmoid(gx_o + gh_o)
             c = f * c + i * g
-            tanh_c = _libdevice.tanh(c)
+            tanh_c = tl.extra.cuda.libdevice.tanh(c)
             h = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
