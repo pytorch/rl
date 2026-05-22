@@ -48,12 +48,8 @@ the package index selects the build. For example, PyTorch's nightly CUDA 13.0
 wheels come from `https://download.pytorch.org/whl/nightly/cu130`, while CPU
 wheels come from `https://download.pytorch.org/whl/nightly/cpu`.
 
-On Linux machines where you want CUDA 13.0 nightly wheels, pass the PyTorch
-nightly CUDA index explicitly:
-
-```shell
-uv run --index https://download.pytorch.org/whl/nightly/cu130 pytest test/test_tensordictmodules.py
-```
+The PyTorch index is marked as explicit, so unrelated packages continue to
+resolve from PyPI instead of the PyTorch wheel index.
 
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
