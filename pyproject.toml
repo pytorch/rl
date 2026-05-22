@@ -48,9 +48,16 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "gym",
     "gymnasium",
+    "hydra-core>=1.1",
+    "hydra-submitit-launcher",
     "mujoco",
     "mujoco-torch",
+    "pytest",
+    "tensorboard",
+    "tqdm",
+    "wandb",
 ]
 
 [tool.uv]
@@ -59,11 +66,9 @@ prerelease = "allow"
 [[tool.uv.index]]
 name = "pytorch-nightly"
 url = "https://download.pytorch.org/whl/nightly/cpu"
-explicit = true
 
 [tool.uv.sources]
 tensordict = { git = "https://github.com/pytorch/tensordict" }
-torch = { index = "pytorch-nightly", marker = "platform_system == 'Darwin'" }
 
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]

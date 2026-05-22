@@ -56,6 +56,8 @@ Strongly encouraged (not mandatory):
   extend it. Exception: a brand-new objective gets `test/test_<algo>.py`.
 - If your module accepts a `NestedKey` input, add a test exercising a nested
   key (not just a flat string).
+- Test files should end with an `if __name__ == "__main__":` block that invokes
+  `pytest.main(...)`, so the file can be executed directly.
 - New algorithms: also tested in the sota-implementations CI.
 
 ## 8. Documentation
@@ -102,7 +104,7 @@ in `0.(X+2)`.
 
 `[Tag]` prefix on PR title. Canonical set:
 
-```
+```text
 [Algorithm] [BE] [BugFix] [CI] [Deprecation] [Doc]
 [Feature] [Minor] [Performance] [Quality] [Refactor]
 [Test] [Versioning]
