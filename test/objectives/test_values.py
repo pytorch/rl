@@ -583,6 +583,110 @@ class TestValues:
         torch.testing.assert_close(out["advantage"], ref["advantage"])
         torch.testing.assert_close(out["value_target"], ref["value_target"])
 
+    @pytest.mark.parametrize("shifted_budget", [1, 2])
+    def test_gae_shifted_mixed_terminal_truncation_per_row(self, shifted_budget):
+        # Mixed-reset regression: each row in the batch carries a different
+        # internal-reset pattern. Only ``done & ~terminated`` (truncations)
+        # consume ``shifted_budget``; rows with terminal-only or no internal
+        # resets must retain every sample, and rows with truncations must
+        # drop exactly ``max(0, n_trunc + 1 - budget)`` samples from the
+        # tail. On the retained mask, advantages must match the shifted=False
+        # reference computed on the forward-shifted td bit-exactly.
+        torch.manual_seed(0)
+        B, T, obs_dim = 4, 8, 4
+        dtype = torch.float64
+        all_obs = torch.randn(B, T + 1, obs_dim, dtype=dtype)
+        obs = all_obs[:, :T].clone()
+        next_obs = all_obs[:, 1:].clone()
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        terminated = torch.zeros(B, T, 1, dtype=torch.bool)
+        # Row 0: 2 truncations at t=2, t=5. Decouple next_obs at truncation
+        # positions (env returned the pre-reset obs).
+        done[0, 2, 0] = True
+        next_obs[0, 2] = torch.randn(obs_dim, dtype=dtype)
+        done[0, 5, 0] = True
+        next_obs[0, 5] = torch.randn(obs_dim, dtype=dtype)
+        # Row 1: 2 terminations at t=2, t=5. V_next is masked by
+        # (1 - terminated) so leaving next_obs[t]==obs[t+1] is fine.
+        done[1, 2, 0] = True
+        terminated[1, 2, 0] = True
+        done[1, 5, 0] = True
+        terminated[1, 5, 0] = True
+        # Row 2: no internal resets, only the final rollout-boundary done.
+        # Row 3: mixed - truncation at t=2, termination at t=5.
+        done[3, 2, 0] = True
+        next_obs[3, 2] = torch.randn(obs_dim, dtype=dtype)
+        done[3, 5, 0] = True
+        terminated[3, 5, 0] = True
+        done[:, -1, 0] = True
+        terminated[:, -1, 0] = True
+        reward = torch.randn(B, T, 1, dtype=dtype)
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1, dtype=dtype),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
+        gae_shifted = GAE(
+            gamma=torch.tensor(0.9, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
+            value_network=value_net,
+            shifted=True,
+            shifted_budget=shifted_budget,
+        )
+        gae_unshifted = GAE(
+            gamma=torch.tensor(0.9, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
+            value_network=value_net,
+            shifted=False,
+        )
+        with torch.no_grad():
+            out = gae_shifted(td.clone())
+            ref = gae_unshifted(ref_td.clone())
+        # Per-row drop pattern: only truncations in [0..T-2] consume budget.
+        n_trunc_per_row = (done.squeeze(-1) & ~terminated.squeeze(-1))[..., :-1].sum(-1)
+        expected_drops = (n_trunc_per_row + 1 - shifted_budget).clamp_min(0)
+        actual_drops = (~valid).sum(-1)
+        assert actual_drops.equal(expected_drops), (
+            f"expected per-row drops {expected_drops.tolist()}, got "
+            f"{actual_drops.tolist()}"
+        )
+        # Terminal-only and no-reset rows must retain everything regardless
+        # of budget; only the truncation-bearing rows can lose samples.
+        assert valid[1].all() and valid[2].all()
+        assert (~valid[0]).any()
+        assert (valid[3].all()) == (shifted_budget >= 2)
+        # Retained samples must match the unshifted reference bit-exactly.
+        mask = valid.unsqueeze(-1)
+        torch.testing.assert_close(
+            out["advantage"][mask],
+            ref["advantage"][mask],
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        torch.testing.assert_close(
+            out["value_target"][mask],
+            ref["value_target"][mask],
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        assert (out["advantage"][~mask] == 0).all()
+
     def test_gae_shifted_without_next_observation(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
