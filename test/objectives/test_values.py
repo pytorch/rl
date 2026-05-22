@@ -359,6 +359,7 @@ class TestValues:
             lmbda=0.99,
             value_network=value_net,
             shifted=True,
+            shifted_budget=vals.shape[-1],
             vectorized=vectorized,
         )
         with set_recurrent_mode(True):
@@ -445,7 +446,9 @@ class TestValues:
 
     def _shifted_reference(self, td, shifted_budget=1):
         done = td["next", "done"]
-        reset = done.squeeze(-1).clone()
+        terminated = td["next", "terminated"]
+        reset = done.squeeze(-1) & ~terminated.squeeze(-1)
+        reset = reset.clone()
         reset[..., -1] = False
         reset_cs = reset.to(torch.long).cumsum(-1)
         reset_before = torch.cat(
@@ -454,7 +457,7 @@ class TestValues:
         root_slot = torch.arange(reset.shape[-1], device=reset.device) + reset_before
         valid = root_slot + 1 < reset.shape[-1] + shifted_budget
         next_valid = torch.cat(
-            [valid[..., 1:], valid.new_zeros((*valid.shape[:-1], 1))], -1
+            [valid[..., 1:], valid.new_ones((*valid.shape[:-1], 1))], -1
         )
         last_valid = valid & ~next_valid
         td = td.clone()
@@ -524,11 +527,61 @@ class TestValues:
             out["value_target"][mask], ref_td["value_target"][mask]
         )
         assert out["shifted_valid"].equal(valid)
-        internal_resets = done.squeeze(-1).clone()
+        internal_resets = done.squeeze(-1) & ~terminated.squeeze(-1)
+        internal_resets = internal_resets.clone()
         internal_resets[..., -1] = False
         expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)
         assert (~valid).sum() == expected_drops.sum()
         assert (out["advantage"][~mask] == 0).all()
+
+    def test_gae_shifted_terminal_done_does_not_drop_samples(self):
+        torch.manual_seed(0)
+        B, T, obs_dim = 2, 6, 6
+        all_obs = torch.randn(B, T + 1, obs_dim)
+        obs = all_obs[:, :T].clone()
+        next_obs = all_obs[:, 1:].clone()
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, 2, 0] = True
+        done[:, -1, 0] = True
+        terminated = done.clone()
+        reward = torch.randn(B, T, 1)
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        gae_unshifted = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted=False,
+        )
+        gae_shifted = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted=True,
+        )
+        ref = gae_unshifted(td.clone())
+        out = gae_shifted(td.clone())
+        assert out["shifted_valid"].all()
+        torch.testing.assert_close(out["advantage"], ref["advantage"])
+        torch.testing.assert_close(out["value_target"], ref["value_target"])
 
     def test_gae_shifted_without_next_observation(self):
         torch.manual_seed(0)
@@ -787,7 +840,8 @@ class TestValues:
             rtol=2.5e-1,
         )
         assert out_drop["shifted_valid"].equal(valid)
-        internal_resets = done.squeeze(-1).clone()
+        internal_resets = done.squeeze(-1) & ~terminated.squeeze(-1)
+        internal_resets = internal_resets.clone()
         internal_resets[..., -1] = False
         expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)
         assert (~valid).sum() == expected_drops.sum()
