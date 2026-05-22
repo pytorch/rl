@@ -44,13 +44,12 @@ from packaging import version
 def _check_triton_available() -> bool:
     """True if the installed Triton exposes everything this module needs.
 
-    The backend's kernels rely on ``triton.language.extra.libdevice.tanh``
-    (Triton >= 2.2) and on a backward path that uses ``tl.atomic_add`` with
-    a 2-D mask, which older Triton compilers reject. The version is read
-    from package metadata rather than probing
-    ``triton.language.extra.libdevice`` via ``find_spec`` because older
-    Triton builds lack the ``triton.language.extra`` parent and that probe
-    would raise ``ModuleNotFoundError`` at torchrl import time. Older
+    The backend's kernels rely on Triton's libdevice ``tanh`` and on a backward
+    path that uses ``tl.atomic_add`` with a 2-D mask, which older Triton
+    compilers reject. The version is read from package metadata rather than
+    probing libdevice via ``find_spec`` because older Triton builds lack the
+    ``triton.language.extra`` parent and that probe would raise
+    ``ModuleNotFoundError`` at torchrl import time. Older
     installations fall back transparently to the ``scan`` / ``pad`` backends.
     """
     try:
@@ -83,9 +82,6 @@ if _has_triton:
     ]
 
     _BWD_CONFIGS = [
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 16}, num_warps=2, num_stages=1),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=2, num_stages=1),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=4, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 16}, num_warps=2, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 32}, num_warps=2, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 64}, num_warps=4, num_stages=1),
@@ -229,7 +225,7 @@ if _has_triton:
 
             r = tl.sigmoid(gx_r + gh_r)
             z = tl.sigmoid(gx_z + gh_z)
-            n = tl.extra.libdevice.tanh(gx_n + r * gh_n)
+            n = tl.extra.cuda.libdevice.tanh(gx_n + r * gh_n)
             h = n + z * (h - n)
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
@@ -532,10 +528,10 @@ if _has_triton:
 
             i = tl.sigmoid(gx_i + gh_i)
             f = tl.sigmoid(gx_f + gh_f)
-            g = tl.extra.libdevice.tanh(gx_g + gh_g)
+            g = tl.extra.cuda.libdevice.tanh(gx_g + gh_g)
             o = tl.sigmoid(gx_o + gh_o)
             c = f * c + i * g
-            tanh_c = tl.extra.libdevice.tanh(c)
+            tanh_c = tl.extra.cuda.libdevice.tanh(c)
             h = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
