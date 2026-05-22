@@ -588,11 +588,16 @@ class ValueEstimatorBase(TensorDictModuleBase):
             return destination.scatter(time_idx, index_expand, source)
 
         boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
-        for key in in_keys:
+        scatter_keys = list(in_keys)
+        if value_key not in scatter_keys:
+            scatter_keys.append(value_key)
+        for key in scatter_keys:
             root_value = root_part.get(key, default=None)
             if root_value is None:
                 continue
-            data_value = data_in.get(key)
+            data_value = data_in.get(key, default=None)
+            if data_value is None:
+                continue
             data_value = _scatter_time(data_value, root_slot, root_value, root_valid)
             next_value = next_part.get(key, default=None)
             if next_value is not None:
