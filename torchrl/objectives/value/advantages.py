@@ -534,6 +534,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         root_part = data.select(*in_keys, value_key, strict=False)
         next_part = data.get("next").select(*in_keys, value_key, strict=False)
         next_part = self._fill_missing_next_inputs(next_part, root_part, in_keys)
+        if "is_init" in root_part.keys():
+            next_part = next_part.copy()
+            next_part["is_init"] = next_part["is_init"] | root_part["is_init"]
         done = data.get(("next", self.tensor_keys.done))
         terminated = data.get(("next", self.tensor_keys.terminated), default=done)
         if done.shape[-1] == 1:
@@ -559,6 +562,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
         valid = next_slot < L
         root_valid = root_slot < L
         reset_valid = reset & valid
+        last_valid = self._shifted_last_valid(valid, time_idx)
+        next_insert_valid = reset_valid | last_valid
         boundary_slot = T + reset_long.sum(time_idx, keepdim=True)
         boundary_valid = boundary_slot < L
         data_in_batch_size = list(root_part.batch_size)
@@ -581,11 +586,15 @@ class ValueEstimatorBase(TensorDictModuleBase):
             source: torch.Tensor,
             mask: torch.Tensor,
         ) -> torch.Tensor:
-            index = index.clamp_max(L - 1)
+            sentinel_shape = list(destination.shape)
+            sentinel_shape[time_idx] = 1
+            destination = torch.cat(
+                [destination, destination.new_empty(sentinel_shape)], dim=time_idx
+            )
+            index = torch.where(mask, index, index.new_full((), L)).clamp_max(L)
             index_expand = _expand_index(index, source)
-            current = destination.gather(time_idx, index_expand)
-            source = torch.where(_expand_mask(mask, source), source, current)
-            return destination.scatter(time_idx, index_expand, source)
+            destination = destination.scatter(time_idx, index_expand, source)
+            return destination.narrow(time_idx, 0, L)
 
         boundary_index = (slice(None),) * time_idx + (slice(T - 1, T),)
         scatter_keys = list(in_keys)
@@ -602,7 +611,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
             next_value = next_part.get(key, default=None)
             if next_value is not None:
                 data_value = _scatter_time(
-                    data_value, next_slot, next_value, reset_valid
+                    data_value, next_slot, next_value, next_insert_valid
                 )
                 data_value = _scatter_time(
                     data_value,

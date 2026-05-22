@@ -717,12 +717,13 @@ class TestValues:
         "back to _pseudo_vmap on torch<2.7 (NotImplementedError).",
     )
     @pytest.mark.parametrize("module", ["lstm", "gru"])
+    @pytest.mark.parametrize("terminal", [False, True])
     @pytest.mark.parametrize("shifted_budget", [1, 2])
     def test_gae_recurrent_shifted_matches_unshifted_isaac_shape(
-        self, module, shifted_budget
+        self, module, terminal, shifted_budget
     ):
         # Isaac-shaped regression test: recurrent value network, multi-trajectory
-        # rollout with truncations every `episode_len` steps (never terminations),
+        # rollout with internal resets every `episode_len` steps,
         # and ``compact_obs=False`` semantics — ``("next", obs)`` is populated
         # everywhere, in particular at internal-done positions where it carries
         # the true pre-reset terminal observation (not the post-reset first obs
@@ -732,9 +733,10 @@ class TestValues:
         # path on retained samples and mark displaced suffix samples invalid.
         torch.manual_seed(0)
         B, T, obs_dim, hidden = 4, 16, 6, 8
+        dtype = torch.float64
         episode_len = 4  # internal truncation every 4 steps
         g = torch.Generator(device="cpu").manual_seed(0)
-        all_obs = torch.randn(B, T + 1, obs_dim, generator=g)
+        all_obs = torch.randn(B, T + 1, obs_dim, dtype=dtype, generator=g)
         obs = all_obs[:, :T].clone()
         next_obs = all_obs[:, 1:].clone()
         done = torch.zeros(B, T, 1, dtype=torch.bool)
@@ -743,15 +745,14 @@ class TestValues:
             if t < T - 1:
                 # Decouple next_obs[t] from obs[t+1]: env returned the true
                 # truncation obs, then auto-reset gave a fresh obs[t+1].
-                next_obs[:, t] = torch.randn(B, obs_dim, generator=g)
-        # Isaac-Ant only ever truncates (max_episode_steps); never terminates.
-        terminated = torch.zeros_like(done)
-        truncated = done.clone()
+                next_obs[:, t] = torch.randn(B, obs_dim, dtype=dtype, generator=g)
+        terminated = done.clone() if terminal else torch.zeros_like(done)
+        truncated = done & ~terminated
         is_init = torch.zeros(B, T, 1, dtype=torch.bool)
         is_init[:, 0, 0] = True
         is_init[:, 1:][done[:, :-1]] = True
         next_is_init = done.clone()
-        reward = torch.randn(B, T, 1, generator=g) * 0.1
+        reward = torch.randn(B, T, 1, dtype=dtype, generator=g) * 0.1
         td = TensorDict(
             {
                 "observation": obs,
@@ -793,26 +794,56 @@ class TestValues:
                 recurrent_backend="pad",
                 dropout=0,
             )
+        recurrent_module = recurrent_module.to(dtype=dtype)
         recurrent_module.eval()
         value_net = Seq(
             recurrent_module,
             Mod(
-                nn.Linear(hidden, 1), in_keys=["intermediate"], out_keys=["state_value"]
+                nn.Linear(hidden, 1, dtype=dtype),
+                in_keys=["intermediate"],
+                out_keys=["state_value"],
             ),
         )
+        hidden_shape = (B, 1, hidden)
+        rs_h = torch.zeros(B, T, *hidden_shape[1:], dtype=dtype)
+        next_rs_h = torch.zeros_like(rs_h)
+        h = torch.zeros(hidden_shape, dtype=dtype)
+        if module == "lstm":
+            rs_c = torch.zeros_like(rs_h)
+            next_rs_c = torch.zeros_like(rs_h)
+            c = torch.zeros_like(h)
+        with torch.no_grad():
+            for t in range(T):
+                init = is_init[:, t]
+                init_hidden = init.unsqueeze(-1)
+                h = torch.where(init_hidden, torch.zeros_like(h), h)
+                step_data = {
+                    "observation": obs[:, t],
+                    "is_init": init,
+                    "rs_h": h,
+                }
+                rs_h[:, t] = h
+                if module == "lstm":
+                    c = torch.where(init_hidden, torch.zeros_like(c), c)
+                    step_data["rs_c"] = c
+                    rs_c[:, t] = c
+                step_td = TensorDict(step_data, [B])
+                step_td = recurrent_module(step_td)
+                h = step_td["next", "rs_h"]
+                next_rs_h[:, t] = h
+                if module == "lstm":
+                    c = step_td["next", "rs_c"]
+                    next_rs_c[:, t] = c
+        td["rs_h"] = rs_h
+        td["next", "rs_h"] = next_rs_h
+        if module == "lstm":
+            td["rs_c"] = rs_c
+            td["next", "rs_c"] = next_rs_c
 
-        gae_unshifted = GAE(
-            gamma=0.99,
-            lmbda=0.95,
-            value_network=value_net,
-            shifted=False,
-            deactivate_vmap=True,
-            average_gae=False,
-        )
         ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
         gae_unshifted_drop_ref = GAE(
-            gamma=0.99,
-            lmbda=0.95,
+            gamma=torch.tensor(0.99, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
             value_network=value_net,
             shifted=False,
             deactivate_vmap=True,
@@ -820,8 +851,8 @@ class TestValues:
             vectorized=False,
         )
         gae_shifted = GAE(
-            gamma=0.99,
-            lmbda=0.95,
+            gamma=torch.tensor(0.99, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
             value_network=value_net,
             shifted=True,
             shifted_budget=shifted_budget,
@@ -830,14 +861,20 @@ class TestValues:
             vectorized=False,
         )
         with set_recurrent_mode(True), torch.no_grad():
-            adv_unshifted_drop = gae_unshifted_drop_ref(ref_td.clone())["advantage"]
+            ref_drop = gae_unshifted_drop_ref(ref_td.clone())
             out_drop = gae_shifted(td.clone())
         mask = valid.unsqueeze(-1)
         torch.testing.assert_close(
             out_drop["advantage"][mask],
-            adv_unshifted_drop[mask],
-            atol=2.5e-1,
-            rtol=2.5e-1,
+            ref_drop["advantage"][mask],
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        torch.testing.assert_close(
+            out_drop["value_target"][mask],
+            ref_drop["value_target"][mask],
+            atol=1e-10,
+            rtol=1e-10,
         )
         assert out_drop["shifted_valid"].equal(valid)
         internal_resets = done.squeeze(-1) & ~terminated.squeeze(-1)
