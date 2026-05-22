@@ -49,7 +49,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "gymnasium",
-    "mujoco==3.4.0",
+    "mujoco",
     "mujoco-torch",
 ]
 
