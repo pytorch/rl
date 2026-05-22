@@ -803,28 +803,43 @@ class TD0Estimator(ValueEstimatorBase):
         gamma (scalar): exponential mean discount.
         value_network (TensorDictModule): value operator used to retrieve
             the value estimates.
-        shifted (bool or str, optional): controls how value and next-value
+        shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
             ``"next"``), which is correct whenever ``"next"`` may differ
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples use
-              exact next observations while keeping the static compute budget
-              configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts the true
+              ``("next", <in_key>)`` entry after every internal truncation
+              (``done & ~terminated``), shifts subsequent samples to the
+              right inside a sequence of length ``T + shifted_budget`` and
+              masks the displaced suffix via ``"shifted_valid"``. Terminal
+              steps (``done & terminated``) do not consume budget. Retained
+              samples use exact next observations.
 
-            All single-call paths require that the parameters at time
-            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
-            used) and that the ``"next"`` value is shifted by exactly one
-            time step (no multi-step returns). Defaults to ``False``.
+            .. note::
+              **Single-step rollout assumption.** ``shifted=True`` relies
+              on the standard one-step rollout layout produced by
+              ``env.step`` + auto-reset: at every position where
+              ``done[t] = False``, the value-net inputs in
+              ``("next", <in_key>)[t]`` are expected to equal
+              ``<in_key>[t+1]``. The backend uses this invariant to
+              evaluate ``V`` once over a fused
+              ``[T + shifted_budget]`` sequence instead of twice over
+              ``[T]`` streams.
+
+              The canonical pipeline that breaks the invariant is
+              **multi-step return processing** (``MultiStep`` / n-step
+              bootstrapping), which rewrites ``("next", obs)[t]`` to
+              ``obs[t+n]`` with ``n > 1``. ``shifted=True`` is unsupported
+              with multi-step returns — use ``shifted=False`` instead.
+
+              Single-call paths also require that the parameters at time
+              ``t`` and ``t+1`` are identical (i.e. ``target_params`` is
+              not used).
+
+            Defaults to ``False``.
         average_rewards (bool, optional): if ``True``, rewards will be standardized
             before the TD is computed.
         differentiable (bool, optional): if ``True``, gradients are propagated through
@@ -1070,28 +1085,43 @@ class TD1Estimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool or str, optional): controls how value and next-value
+        shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
             ``"next"``), which is correct whenever ``"next"`` may differ
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples use
-              exact next observations while keeping the static compute budget
-              configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts the true
+              ``("next", <in_key>)`` entry after every internal truncation
+              (``done & ~terminated``), shifts subsequent samples to the
+              right inside a sequence of length ``T + shifted_budget`` and
+              masks the displaced suffix via ``"shifted_valid"``. Terminal
+              steps (``done & terminated``) do not consume budget. Retained
+              samples use exact next observations.
 
-            All single-call paths require that the parameters at time
-            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
-            used) and that the ``"next"`` value is shifted by exactly one
-            time step (no multi-step returns). Defaults to ``False``.
+            .. note::
+              **Single-step rollout assumption.** ``shifted=True`` relies
+              on the standard one-step rollout layout produced by
+              ``env.step`` + auto-reset: at every position where
+              ``done[t] = False``, the value-net inputs in
+              ``("next", <in_key>)[t]`` are expected to equal
+              ``<in_key>[t+1]``. The backend uses this invariant to
+              evaluate ``V`` once over a fused
+              ``[T + shifted_budget]`` sequence instead of twice over
+              ``[T]`` streams.
+
+              The canonical pipeline that breaks the invariant is
+              **multi-step return processing** (``MultiStep`` / n-step
+              bootstrapping), which rewrites ``("next", obs)[t]`` to
+              ``obs[t+n]`` with ``n > 1``. ``shifted=True`` is unsupported
+              with multi-step returns — use ``shifted=False`` instead.
+
+              Single-call paths also require that the parameters at time
+              ``t`` and ``t+1`` are identical (i.e. ``target_params`` is
+              not used).
+
+            Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1336,28 +1366,43 @@ class TDLambdaEstimator(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool or str, optional): controls how value and next-value
+        shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
             ``"next"``), which is correct whenever ``"next"`` may differ
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples use
-              exact next observations while keeping the static compute budget
-              configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts the true
+              ``("next", <in_key>)`` entry after every internal truncation
+              (``done & ~terminated``), shifts subsequent samples to the
+              right inside a sequence of length ``T + shifted_budget`` and
+              masks the displaced suffix via ``"shifted_valid"``. Terminal
+              steps (``done & terminated``) do not consume budget. Retained
+              samples use exact next observations.
 
-            All single-call paths require that the parameters at time
-            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
-            used) and that the ``"next"`` value is shifted by exactly one
-            time step (no multi-step returns). Defaults to ``False``.
+            .. note::
+              **Single-step rollout assumption.** ``shifted=True`` relies
+              on the standard one-step rollout layout produced by
+              ``env.step`` + auto-reset: at every position where
+              ``done[t] = False``, the value-net inputs in
+              ``("next", <in_key>)[t]`` are expected to equal
+              ``<in_key>[t+1]``. The backend uses this invariant to
+              evaluate ``V`` once over a fused
+              ``[T + shifted_budget]`` sequence instead of twice over
+              ``[T]`` streams.
+
+              The canonical pipeline that breaks the invariant is
+              **multi-step return processing** (``MultiStep`` / n-step
+              bootstrapping), which rewrites ``("next", obs)[t]`` to
+              ``obs[t+n]`` with ``n > 1``. ``shifted=True`` is unsupported
+              with multi-step returns — use ``shifted=False`` instead.
+
+              Single-call paths also require that the parameters at time
+              ``t`` and ``t+1`` are identical (i.e. ``target_params`` is
+              not used).
+
+            Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -1639,28 +1684,43 @@ class GAE(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool or str, optional): controls how value and next-value
+        shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
             ``"next"``), which is correct whenever ``"next"`` may differ
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples use
-              exact next observations while keeping the static compute budget
-              configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts the true
+              ``("next", <in_key>)`` entry after every internal truncation
+              (``done & ~terminated``), shifts subsequent samples to the
+              right inside a sequence of length ``T + shifted_budget`` and
+              masks the displaced suffix via ``"shifted_valid"``. Terminal
+              steps (``done & terminated``) do not consume budget. Retained
+              samples use exact next observations.
 
-            All single-call paths require that the parameters at time
-            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
-            used) and that the ``"next"`` value is shifted by exactly one
-            time step (no multi-step returns). Defaults to ``False``.
+            .. note::
+              **Single-step rollout assumption.** ``shifted=True`` relies
+              on the standard one-step rollout layout produced by
+              ``env.step`` + auto-reset: at every position where
+              ``done[t] = False``, the value-net inputs in
+              ``("next", <in_key>)[t]`` are expected to equal
+              ``<in_key>[t+1]``. The backend uses this invariant to
+              evaluate ``V`` once over a fused
+              ``[T + shifted_budget]`` sequence instead of twice over
+              ``[T]`` streams.
+
+              The canonical pipeline that breaks the invariant is
+              **multi-step return processing** (``MultiStep`` / n-step
+              bootstrapping), which rewrites ``("next", obs)[t]`` to
+              ``obs[t+n]`` with ``n > 1``. ``shifted=True`` is unsupported
+              with multi-step returns — use ``shifted=False`` instead.
+
+              Single-call paths also require that the parameters at time
+              ``t`` and ``t+1`` are identical (i.e. ``target_params`` is
+              not used).
+
+            Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
@@ -2214,28 +2274,43 @@ class VTrace(ValueEstimatorBase):
             of the advantage entry.  Defaults to ``"value_target"``.
         value_key (str or tuple of str, optional): [Deprecated] the value key to
             read from the input tensordict.  Defaults to ``"state_value"``.
-        shifted (bool or str, optional): controls how value and next-value
+        shifted (bool, optional): controls how value and next-value
             are obtained from the value network. ``False`` (default) calls
             the value network twice (once on the root tensordict, once on
             ``"next"``), which is correct whenever ``"next"`` may differ
             non-trivially from ``obs[t+1]``. Truthy values request a single
             call:
 
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples use
-              exact next observations while keeping the static compute budget
-              configured by ``shifted_budget``.
-            - ``True``: fixed-budget single-call path. Inserts true
-              ``next_obs`` after internal resets and masks the displaced
-              suffix samples via ``"shifted_valid"``. Retained samples
-              use exact next observations while keeping the static compute
-              budget configured by ``shifted_budget``.
+            - ``True``: fixed-budget single-call path. Inserts the true
+              ``("next", <in_key>)`` entry after every internal truncation
+              (``done & ~terminated``), shifts subsequent samples to the
+              right inside a sequence of length ``T + shifted_budget`` and
+              masks the displaced suffix via ``"shifted_valid"``. Terminal
+              steps (``done & terminated``) do not consume budget. Retained
+              samples use exact next observations.
 
-            All single-call paths require that the parameters at time
-            ``t`` and ``t+1`` are identical (i.e. ``target_params`` is not
-            used) and that the ``"next"`` value is shifted by exactly one
-            time step (no multi-step returns). Defaults to ``False``.
+            .. note::
+              **Single-step rollout assumption.** ``shifted=True`` relies
+              on the standard one-step rollout layout produced by
+              ``env.step`` + auto-reset: at every position where
+              ``done[t] = False``, the value-net inputs in
+              ``("next", <in_key>)[t]`` are expected to equal
+              ``<in_key>[t+1]``. The backend uses this invariant to
+              evaluate ``V`` once over a fused
+              ``[T + shifted_budget]`` sequence instead of twice over
+              ``[T]`` streams.
+
+              The canonical pipeline that breaks the invariant is
+              **multi-step return processing** (``MultiStep`` / n-step
+              bootstrapping), which rewrites ``("next", obs)[t]`` to
+              ``obs[t+n]`` with ``n > 1``. ``shifted=True`` is unsupported
+              with multi-step returns — use ``shifted=False`` instead.
+
+              Single-call paths also require that the parameters at time
+              ``t`` and ``t+1`` are identical (i.e. ``target_params`` is
+              not used).
+
+            Defaults to ``False``.
         device (torch.device, optional): the device where the buffers will be instantiated.
             Defaults to ``torch.get_default_device()``.
         time_dim (int, optional): the dimension corresponding to the time
