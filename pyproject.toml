@@ -46,6 +46,25 @@ dependencies = [
     "tensordict>=0.12.0,<0.13.0",
 ]
 
+[dependency-groups]
+dev = [
+    "gymnasium",
+    "mujoco==3.4.0",
+    "mujoco-torch",
+]
+
+[tool.uv]
+prerelease = "allow"
+
+[[tool.uv.index]]
+name = "pytorch-nightly"
+url = "https://download.pytorch.org/whl/nightly/cpu"
+explicit = true
+
+[tool.uv.sources]
+tensordict = { git = "https://github.com/pytorch/tensordict" }
+torch = { index = "pytorch-nightly", marker = "platform_system == 'Darwin'" }
+
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
@@ -115,18 +134,18 @@ llm = [
 # LLM with vLLM backend
 llm-vllm = [
     "torchrl[llm]",
-    "vllm>=0.17",
+    "vllm>=0.17; platform_system == 'Linux'",
 ]
 # LLM with SGLang backend
 llm-sglang = [
     "torchrl[llm]",
-    "sglang[all]",
+    "sglang[all]; platform_system == 'Linux'",
 ]
 # LLM with both backends
 llm-all = [
     "torchrl[llm]",
-    "vllm>=0.17",
-    "sglang[all]",
+    "vllm>=0.17; platform_system == 'Linux'",
+    "sglang[all]; platform_system == 'Linux'",
 ]
 grpo = [
     # Core dependencies for GRPO training
