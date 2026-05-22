@@ -184,7 +184,7 @@ class TestValues:
             (GAE, {"gamma": 0.9, "lmbda": 0.95}),
         ],
     )
-    def test_missing_next_obs_compact_shifted_is_safe(self, estimator_cls, kwargs):
+    def test_missing_next_obs_shifted_is_safe(self, estimator_cls, kwargs):
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1, bias=False),
@@ -197,7 +197,7 @@ class TestValues:
         done[:, 2] = True
         done[:, -1] = True
         reward = torch.ones(B, T, 1)
-        td_compact = TensorDict(
+        td_missing_next = TensorDict(
             {
                 "obs": obs,
                 "next": {
@@ -213,11 +213,11 @@ class TestValues:
         next_obs[:, :-1] = obs[:, 1:]
         next_obs[:, -1] = float("nan")
         next_obs[done.expand_as(next_obs)] = float("nan")
-        td_reference = td_compact.clone()
+        td_reference = td_missing_next.clone()
         td_reference["next", "obs"] = next_obs
 
         est = estimator_cls(**kwargs, value_network=value_net, shifted=True)
-        td_actual = td_compact.clone()
+        td_actual = td_missing_next.clone()
         actual = est(td_actual)
         expected = est(td_reference.clone())
 
@@ -359,6 +359,7 @@ class TestValues:
             lmbda=0.99,
             value_network=value_net,
             shifted=True,
+            shifted_budget=vals.shape[-1],
             vectorized=vectorized,
         )
         with set_recurrent_mode(True):
@@ -414,39 +415,23 @@ class TestValues:
         td.refine_names(..., "time")
         return td, obs_dim
 
-    @pytest.mark.parametrize("with_internal_done", [False, True])
-    @pytest.mark.parametrize("compact_cat_dim", ["batch", "time"])
-    def test_gae_shifted_compact_and_legacy(self, with_internal_done, compact_cat_dim):
-        # Both shifted='compact' and shifted='legacy' must produce a valid
-        # advantage. 'legacy' must match shifted=False exactly. 'compact'
-        # is allowed a small boundary bias from copying V(obs[T-1]) at
-        # the rollout boundary; not asserted.
+    def test_gae_shifted_requires_bool(self):
         torch.manual_seed(0)
-        td, obs_dim = self._build_shifted_test_td(with_internal_done=with_internal_done)
+        _, obs_dim = self._build_shifted_test_td(with_internal_done=True)
         value_net = TensorDictModule(
             nn.Linear(obs_dim, 1),
             in_keys=["observation"],
             out_keys=["state_value"],
         )
-        gae_compact = GAE(
-            gamma=0.9,
-            lmbda=0.95,
-            value_network=value_net,
-            shifted="compact",
-            compact_cat_dim=compact_cat_dim,
-        )
-        gae_legacy = GAE(
-            gamma=0.9, lmbda=0.95, value_network=value_net, shifted="legacy"
-        )
-        gae_unshifted = GAE(
-            gamma=0.9, lmbda=0.95, value_network=value_net, shifted=False
-        )
-        gae_compact(td.copy())
-        adv_legacy = gae_legacy(td.copy())["advantage"]
-        adv_unshifted = gae_unshifted(td.copy())["advantage"]
-        torch.testing.assert_close(adv_legacy, adv_unshifted)
+        with pytest.raises(ValueError, match="shifted must be a boolean"):
+            GAE(
+                gamma=0.9,
+                lmbda=0.95,
+                value_network=value_net,
+                shifted="unexpected",
+            )
 
-    def test_gae_shifted_true_deprecation_aliases_legacy(self):
+    def test_gae_shifted_true_uses_budgeted_backend(self):
         torch.manual_seed(0)
         td, obs_dim = self._build_shifted_test_td(with_internal_done=True)
         value_net = TensorDictModule(
@@ -454,28 +439,25 @@ class TestValues:
             in_keys=["observation"],
             out_keys=["state_value"],
         )
-        with pytest.warns(DeprecationWarning, match="shifted=True is deprecated"):
-            gae_true = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=True)
-        gae_legacy = GAE(
-            gamma=0.9, lmbda=0.95, value_network=value_net, shifted="legacy"
-        )
-        assert gae_true.shifted == "legacy"
-        adv_true = gae_true(td.copy())["advantage"]
-        adv_legacy = gae_legacy(td.copy())["advantage"]
-        torch.testing.assert_close(adv_true, adv_legacy)
+        gae = GAE(gamma=0.9, lmbda=0.95, value_network=value_net, shifted=True)
+        out = gae(td.copy())
+        assert gae.shifted is True
+        assert out["shifted_valid"].shape == td.shape
 
-    def _compact_drop_reference(self, td):
+    def _shifted_reference(self, td, shifted_budget=1):
         done = td["next", "done"]
-        reset = done.squeeze(-1).clone()
+        terminated = td["next", "terminated"]
+        reset = done.squeeze(-1) & ~terminated.squeeze(-1)
+        reset = reset.clone()
         reset[..., -1] = False
         reset_cs = reset.to(torch.long).cumsum(-1)
         reset_before = torch.cat(
             [reset_cs.new_zeros((*reset.shape[:-1], 1)), reset_cs[..., :-1]], -1
         )
         root_slot = torch.arange(reset.shape[-1], device=reset.device) + reset_before
-        valid = root_slot + 1 < reset.shape[-1] + 1
+        valid = root_slot + 1 < reset.shape[-1] + shifted_budget
         next_valid = torch.cat(
-            [valid[..., 1:], valid.new_zeros((*valid.shape[:-1], 1))], -1
+            [valid[..., 1:], valid.new_ones((*valid.shape[:-1], 1))], -1
         )
         last_valid = valid & ~next_valid
         td = td.clone()
@@ -488,7 +470,8 @@ class TestValues:
         return td, valid
 
     @pytest.mark.parametrize("reset_steps", [[2], [1, 3]])
-    def test_gae_shifted_compact_drop_retained_matches_unshifted(self, reset_steps):
+    @pytest.mark.parametrize("shifted_budget", [1, 2])
+    def test_gae_shifted_retained_matches_unshifted(self, reset_steps, shifted_budget):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
         all_obs = torch.randn(B, T + 1, obs_dim)
@@ -521,7 +504,7 @@ class TestValues:
             in_keys=["observation"],
             out_keys=["state_value"],
         )
-        ref_td, valid = self._compact_drop_reference(td)
+        ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
         gae_unshifted = GAE(
             gamma=0.9,
             lmbda=0.95,
@@ -532,7 +515,8 @@ class TestValues:
             gamma=0.9,
             lmbda=0.95,
             value_network=value_net,
-            shifted="compact-drop",
+            shifted=True,
+            shifted_budget=shifted_budget,
         )
         ref_td = gae_unshifted(ref_td)
         ref = ref_td["advantage"]
@@ -542,11 +526,168 @@ class TestValues:
         torch.testing.assert_close(
             out["value_target"][mask], ref_td["value_target"][mask]
         )
-        assert out["compact_drop_valid"].equal(valid)
-        assert (~valid).sum() == done[..., :-1, :].sum()
+        assert out["shifted_valid"].equal(valid)
+        internal_resets = done.squeeze(-1) & ~terminated.squeeze(-1)
+        internal_resets = internal_resets.clone()
+        internal_resets[..., -1] = False
+        expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)
+        assert (~valid).sum() == expected_drops.sum()
         assert (out["advantage"][~mask] == 0).all()
 
-    def test_gae_shifted_compact_drop_without_next_observation(self):
+    def test_gae_shifted_terminal_done_does_not_drop_samples(self):
+        torch.manual_seed(0)
+        B, T, obs_dim = 2, 6, 6
+        all_obs = torch.randn(B, T + 1, obs_dim)
+        obs = all_obs[:, :T].clone()
+        next_obs = all_obs[:, 1:].clone()
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        done[:, 2, 0] = True
+        done[:, -1, 0] = True
+        terminated = done.clone()
+        reward = torch.randn(B, T, 1)
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        gae_unshifted = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted=False,
+        )
+        gae_shifted = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            shifted=True,
+        )
+        ref = gae_unshifted(td.clone())
+        out = gae_shifted(td.clone())
+        assert out["shifted_valid"].all()
+        torch.testing.assert_close(out["advantage"], ref["advantage"])
+        torch.testing.assert_close(out["value_target"], ref["value_target"])
+
+    @pytest.mark.parametrize("shifted_budget", [1, 2])
+    def test_gae_shifted_mixed_terminal_truncation_per_row(self, shifted_budget):
+        # Mixed-reset regression: each row in the batch carries a different
+        # internal-reset pattern. Only ``done & ~terminated`` (truncations)
+        # consume ``shifted_budget``; rows with terminal-only or no internal
+        # resets must retain every sample, and rows with truncations must
+        # drop exactly ``max(0, n_trunc + 1 - budget)`` samples from the
+        # tail. On the retained mask, advantages must match the shifted=False
+        # reference computed on the forward-shifted td bit-exactly.
+        torch.manual_seed(0)
+        B, T, obs_dim = 4, 8, 4
+        dtype = torch.float64
+        all_obs = torch.randn(B, T + 1, obs_dim, dtype=dtype)
+        obs = all_obs[:, :T].clone()
+        next_obs = all_obs[:, 1:].clone()
+        done = torch.zeros(B, T, 1, dtype=torch.bool)
+        terminated = torch.zeros(B, T, 1, dtype=torch.bool)
+        # Row 0: 2 truncations at t=2, t=5. Decouple next_obs at truncation
+        # positions (env returned the pre-reset obs).
+        done[0, 2, 0] = True
+        next_obs[0, 2] = torch.randn(obs_dim, dtype=dtype)
+        done[0, 5, 0] = True
+        next_obs[0, 5] = torch.randn(obs_dim, dtype=dtype)
+        # Row 1: 2 terminations at t=2, t=5. V_next is masked by
+        # (1 - terminated) so leaving next_obs[t]==obs[t+1] is fine.
+        done[1, 2, 0] = True
+        terminated[1, 2, 0] = True
+        done[1, 5, 0] = True
+        terminated[1, 5, 0] = True
+        # Row 2: no internal resets, only the final rollout-boundary done.
+        # Row 3: mixed - truncation at t=2, termination at t=5.
+        done[3, 2, 0] = True
+        next_obs[3, 2] = torch.randn(obs_dim, dtype=dtype)
+        done[3, 5, 0] = True
+        terminated[3, 5, 0] = True
+        done[:, -1, 0] = True
+        terminated[:, -1, 0] = True
+        reward = torch.randn(B, T, 1, dtype=dtype)
+        td = TensorDict(
+            {
+                "observation": obs,
+                "next": TensorDict(
+                    {
+                        "observation": next_obs,
+                        "reward": reward,
+                        "done": done,
+                        "terminated": terminated,
+                    },
+                    [B, T],
+                ),
+            },
+            [B, T],
+        )
+        value_net = TensorDictModule(
+            nn.Linear(obs_dim, 1, dtype=dtype),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        )
+        ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
+        gae_shifted = GAE(
+            gamma=torch.tensor(0.9, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
+            value_network=value_net,
+            shifted=True,
+            shifted_budget=shifted_budget,
+        )
+        gae_unshifted = GAE(
+            gamma=torch.tensor(0.9, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
+            value_network=value_net,
+            shifted=False,
+        )
+        with torch.no_grad():
+            out = gae_shifted(td.clone())
+            ref = gae_unshifted(ref_td.clone())
+        # Per-row drop pattern: only truncations in [0..T-2] consume budget.
+        n_trunc_per_row = (done.squeeze(-1) & ~terminated.squeeze(-1))[..., :-1].sum(-1)
+        expected_drops = (n_trunc_per_row + 1 - shifted_budget).clamp_min(0)
+        actual_drops = (~valid).sum(-1)
+        assert actual_drops.equal(expected_drops), (
+            f"expected per-row drops {expected_drops.tolist()}, got "
+            f"{actual_drops.tolist()}"
+        )
+        # Terminal-only and no-reset rows must retain everything regardless
+        # of budget; only the truncation-bearing rows can lose samples.
+        assert valid[1].all() and valid[2].all()
+        assert (~valid[0]).any()
+        assert (valid[3].all()) == (shifted_budget >= 2)
+        # Retained samples must match the unshifted reference bit-exactly.
+        mask = valid.unsqueeze(-1)
+        torch.testing.assert_close(
+            out["advantage"][mask],
+            ref["advantage"][mask],
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        torch.testing.assert_close(
+            out["value_target"][mask],
+            ref["value_target"][mask],
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        assert (out["advantage"][~mask] == 0).all()
+
+    def test_gae_shifted_without_next_observation(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
         obs = torch.randn(B, T, obs_dim)
@@ -578,13 +719,13 @@ class TestValues:
             gamma=0.9,
             lmbda=0.95,
             value_network=value_net,
-            shifted="compact-drop",
+            shifted=True,
         )(td.clone())
         assert torch.isfinite(out["advantage"]).all()
-        assert out["compact_drop_valid"].shape == td.shape
-        assert (~out["compact_drop_valid"]).sum() == done[..., :-1, :].sum()
+        assert out["shifted_valid"].shape == td.shape
+        assert (~out["shifted_valid"]).sum() == done[..., :-1, :].sum()
 
-    def test_gae_shifted_compact_drop_does_not_keep_stale_valid_mask(self):
+    def test_gae_shifted_does_not_keep_stale_valid_mask(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 6
         value_net = TensorDictModule(
@@ -596,11 +737,11 @@ class TestValues:
             gamma=0.9,
             lmbda=0.95,
             value_network=value_net,
-            shifted="compact-drop",
+            shifted=True,
         )
         td_with_reset, _ = self._build_shifted_test_td(with_internal_done=True)
         out_with_reset = gae(td_with_reset.clone())
-        assert out_with_reset.get("compact_drop_valid", default=None) is not None
+        assert out_with_reset.get("shifted_valid", default=None) is not None
 
         all_obs = torch.randn(B, T + 1, obs_dim)
         td_without_reset = TensorDict(
@@ -620,9 +761,10 @@ class TestValues:
         )
         td_without_reset["next", "done"][:, -1, 0] = True
         out_without_reset = gae(td_without_reset)
-        assert out_without_reset.get("compact_drop_valid", default=None) is None
+        assert out_without_reset["shifted_valid"].shape == td_without_reset.shape
+        assert out_without_reset["shifted_valid"].all()
 
-    def test_gae_shifted_compact_drop_average_gae_uses_valid_only(self):
+    def test_gae_shifted_average_gae_uses_valid_only(self):
         torch.manual_seed(0)
         B, T, obs_dim = 2, 6, 4
         all_obs = torch.randn(B, T + 1, obs_dim)
@@ -654,20 +796,20 @@ class TestValues:
             gamma=0.9,
             lmbda=0.95,
             value_network=value_net,
-            shifted="compact-drop",
+            shifted=True,
             average_gae=True,
         )(td)
-        valid = out["compact_drop_valid"].unsqueeze(-1)
+        valid = out["shifted_valid"].unsqueeze(-1)
         torch.testing.assert_close(
             out["advantage"][valid].mean(),
             torch.zeros((), dtype=out["advantage"].dtype),
         )
 
-    def test_compact_drop_valid_masks_loss_reduction(self):
+    def test_shifted_valid_masks_loss_reduction(self):
         loss = LossModule()
         loss.reduction = "mean"
         td = TensorDict(
-            {"compact_drop_valid": torch.tensor([True, False, True])},
+            {"shifted_valid": torch.tensor([True, False, True])},
             [3],
         )
         value = torch.tensor([1.0, 100.0, 3.0])
@@ -675,40 +817,30 @@ class TestValues:
 
     @pytest.mark.skipif(
         _TORCH_VERSION < version.parse("2.7"),
-        reason="GAE compact recurrent path uses torch.vmap chunked semantics that fall "
+        reason="GAE shifted recurrent path uses torch.vmap chunked semantics that fall "
         "back to _pseudo_vmap on torch<2.7 (NotImplementedError).",
     )
     @pytest.mark.parametrize("module", ["lstm", "gru"])
-    @pytest.mark.parametrize("compact_cat_dim", ["batch", "time"])
-    def test_gae_recurrent_shifted_compact_matches_unshifted_isaac_shape(
-        self, module, compact_cat_dim
+    @pytest.mark.parametrize("terminal", [False, True])
+    @pytest.mark.parametrize("shifted_budget", [1, 2])
+    def test_gae_recurrent_shifted_matches_unshifted_isaac_shape(
+        self, module, terminal, shifted_budget
     ):
         # Isaac-shaped regression test: recurrent value network, multi-trajectory
-        # rollout with truncations every `episode_len` steps (never terminations),
+        # rollout with internal resets every `episode_len` steps,
         # and ``compact_obs=False`` semantics — ``("next", obs)`` is populated
         # everywhere, in particular at internal-done positions where it carries
         # the true pre-reset terminal observation (not the post-reset first obs
         # of the new episode).
         #
-        # Under these conditions shifted="compact" must match shifted=False
-        # to within a small tolerance. The compact path currently builds
-        # ``data_in = [root_obs[0:T], boundary_obs]`` and reads
-        # ``value_[t] = V(data_in[t+1])``; for ``t < T-1`` that is
-        # ``V(root_obs[t+1])``, which at internal-done positions is the
-        # **post-reset** obs rather than ``("next", obs)[t]``. The
-        # boundary-override mechanism in ``_call_value_net_compact`` only fills
-        # the rollout-edge slot, leaving internal-done positions corrupted.
-        # GAE then bootstraps with ``(1 - terminated)`` (truncations are
-        # *not* masked), so the wrong ``next_state_value`` propagates straight
-        # into the value target / advantage.
-        #
-        # See ``examples/collectors/isaaclab_rnn_ppo_memory.py`` and
-        # ``torchrl/objectives/value/advantages.py:_call_value_net_compact``.
+        # Under these conditions shifted=True should agree with the reference
+        # path on retained samples and mark displaced suffix samples invalid.
         torch.manual_seed(0)
         B, T, obs_dim, hidden = 4, 16, 6, 8
+        dtype = torch.float64
         episode_len = 4  # internal truncation every 4 steps
         g = torch.Generator(device="cpu").manual_seed(0)
-        all_obs = torch.randn(B, T + 1, obs_dim, generator=g)
+        all_obs = torch.randn(B, T + 1, obs_dim, dtype=dtype, generator=g)
         obs = all_obs[:, :T].clone()
         next_obs = all_obs[:, 1:].clone()
         done = torch.zeros(B, T, 1, dtype=torch.bool)
@@ -717,15 +849,14 @@ class TestValues:
             if t < T - 1:
                 # Decouple next_obs[t] from obs[t+1]: env returned the true
                 # truncation obs, then auto-reset gave a fresh obs[t+1].
-                next_obs[:, t] = torch.randn(B, obs_dim, generator=g)
-        # Isaac-Ant only ever truncates (max_episode_steps); never terminates.
-        terminated = torch.zeros_like(done)
-        truncated = done.clone()
+                next_obs[:, t] = torch.randn(B, obs_dim, dtype=dtype, generator=g)
+        terminated = done.clone() if terminal else torch.zeros_like(done)
+        truncated = done & ~terminated
         is_init = torch.zeros(B, T, 1, dtype=torch.bool)
         is_init[:, 0, 0] = True
         is_init[:, 1:][done[:, :-1]] = True
         next_is_init = done.clone()
-        reward = torch.randn(B, T, 1, generator=g) * 0.1
+        reward = torch.randn(B, T, 1, dtype=dtype, generator=g) * 0.1
         td = TensorDict(
             {
                 "observation": obs,
@@ -767,89 +898,94 @@ class TestValues:
                 recurrent_backend="pad",
                 dropout=0,
             )
+        recurrent_module = recurrent_module.to(dtype=dtype)
         recurrent_module.eval()
         value_net = Seq(
             recurrent_module,
             Mod(
-                nn.Linear(hidden, 1), in_keys=["intermediate"], out_keys=["state_value"]
+                nn.Linear(hidden, 1, dtype=dtype),
+                in_keys=["intermediate"],
+                out_keys=["state_value"],
             ),
         )
+        hidden_shape = (B, 1, hidden)
+        rs_h = torch.zeros(B, T, *hidden_shape[1:], dtype=dtype)
+        next_rs_h = torch.zeros_like(rs_h)
+        h = torch.zeros(hidden_shape, dtype=dtype)
+        if module == "lstm":
+            rs_c = torch.zeros_like(rs_h)
+            next_rs_c = torch.zeros_like(rs_h)
+            c = torch.zeros_like(h)
+        with torch.no_grad():
+            for t in range(T):
+                init = is_init[:, t]
+                init_hidden = init.unsqueeze(-1)
+                h = torch.where(init_hidden, torch.zeros_like(h), h)
+                step_data = {
+                    "observation": obs[:, t],
+                    "is_init": init,
+                    "rs_h": h,
+                }
+                rs_h[:, t] = h
+                if module == "lstm":
+                    c = torch.where(init_hidden, torch.zeros_like(c), c)
+                    step_data["rs_c"] = c
+                    rs_c[:, t] = c
+                step_td = TensorDict(step_data, [B])
+                step_td = recurrent_module(step_td)
+                h = step_td["next", "rs_h"]
+                next_rs_h[:, t] = h
+                if module == "lstm":
+                    c = step_td["next", "rs_c"]
+                    next_rs_c[:, t] = c
+        td["rs_h"] = rs_h
+        td["next", "rs_h"] = next_rs_h
+        if module == "lstm":
+            td["rs_c"] = rs_c
+            td["next", "rs_c"] = next_rs_c
 
-        gae_unshifted = GAE(
-            gamma=0.99,
-            lmbda=0.95,
+        ref_td, valid = self._shifted_reference(td, shifted_budget=shifted_budget)
+        gae_unshifted_drop_ref = GAE(
+            gamma=torch.tensor(0.99, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
             value_network=value_net,
             shifted=False,
             deactivate_vmap=True,
             average_gae=False,
-        )
-        gae_compact = GAE(
-            gamma=0.99,
-            lmbda=0.95,
-            value_network=value_net,
-            shifted="compact",
-            compact_cat_dim=compact_cat_dim,
-            deactivate_vmap=False,
-            average_gae=False,
-        )
-        with set_recurrent_mode(True), torch.no_grad():
-            adv_unshifted = gae_unshifted(td.clone())["advantage"]
-            adv_compact = gae_compact(td.clone())["advantage"]
-        # Tolerance is generous because the recurrent value net has its own
-        # set of mild approximations (legacy/False stack-and-vmap; compact
-        # single-call with boundary overrides). The bound here is the level
-        # at which we have empirically observed the Isaac PPO run diverge
-        # from the shifted=False baseline; values above ~5% mean-rel-err
-        # corresponded to a ~20% relative reward shortfall at iter 1000 on
-        # Isaac-Ant. See the wandb runs cited above.
-        mean_abs_diff = (adv_compact - adv_unshifted).abs().mean()
-        mean_unshifted_mag = adv_unshifted.abs().mean().clamp_min(1e-6)
-        rel = mean_abs_diff / mean_unshifted_mag
-        assert rel < 0.05, (
-            f"shifted='compact' advantage diverges from shifted=False by "
-            f"mean rel-err={float(rel):.4f} on the Isaac-shaped fixture. "
-            "This indicates the compact path's _call_value_net_compact is "
-            "not overriding internal-done positions of `data_in` with the "
-            "env-returned `('next', obs)` even when it is populated, so the "
-            "bootstrap value at every truncation step is computed against "
-            "the post-reset observation instead of the true truncation "
-            "observation. Bootstraps for truncations are not masked by "
-            "GAE's (1 - terminated) factor on Isaac-Ant (where every "
-            "episode boundary is a truncation), so the bias propagates "
-            "into the value target."
-        )
-
-        ref_td, valid = self._compact_drop_reference(td)
-        gae_legacy_drop_ref = GAE(
-            gamma=0.99,
-            lmbda=0.95,
-            value_network=value_net,
-            shifted="legacy",
-            deactivate_vmap=False,
-            average_gae=False,
             vectorized=False,
         )
-        gae_compact_drop = GAE(
-            gamma=0.99,
-            lmbda=0.95,
+        gae_shifted = GAE(
+            gamma=torch.tensor(0.99, dtype=dtype),
+            lmbda=torch.tensor(0.95, dtype=dtype),
             value_network=value_net,
-            shifted="compact-drop",
+            shifted=True,
+            shifted_budget=shifted_budget,
             deactivate_vmap=False,
             average_gae=False,
             vectorized=False,
         )
         with set_recurrent_mode(True), torch.no_grad():
-            adv_legacy_drop = gae_legacy_drop_ref(ref_td.clone())["advantage"]
-            out_drop = gae_compact_drop(td.clone())
+            ref_drop = gae_unshifted_drop_ref(ref_td.clone())
+            out_drop = gae_shifted(td.clone())
         mask = valid.unsqueeze(-1)
         torch.testing.assert_close(
             out_drop["advantage"][mask],
-            adv_legacy_drop[mask],
-            atol=2.5e-1,
-            rtol=2.5e-1,
+            ref_drop["advantage"][mask],
+            atol=1e-10,
+            rtol=1e-10,
         )
-        assert out_drop["compact_drop_valid"].equal(valid)
-        assert (~valid).sum() == done[..., :-1, :].sum()
+        torch.testing.assert_close(
+            out_drop["value_target"][mask],
+            ref_drop["value_target"][mask],
+            atol=1e-10,
+            rtol=1e-10,
+        )
+        assert out_drop["shifted_valid"].equal(valid)
+        internal_resets = done.squeeze(-1) & ~terminated.squeeze(-1)
+        internal_resets = internal_resets.clone()
+        internal_resets[..., -1] = False
+        expected_drops = (internal_resets.sum(-1) + 1 - shifted_budget).clamp_min(0)
+        assert (~valid).sum() == expected_drops.sum()
         assert (out_drop["advantage"][~mask] == 0).all()
 
     @pytest.mark.parametrize("device", get_default_devices())

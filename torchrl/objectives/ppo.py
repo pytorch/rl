@@ -881,7 +881,7 @@ class PPOLoss(LossModule):
     def _standardize_advantage(
         self, advantage: torch.Tensor, tensordict: TensorDictBase
     ) -> torch.Tensor:
-        mask = tensordict.get("compact_drop_valid", default=None)
+        mask = tensordict.get("shifted_valid", default=None)
         if mask is None:
             return _standardize(advantage, self.normalize_advantage_exclude_dims)
         while mask.ndim < advantage.ndim:
@@ -953,7 +953,7 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
-        loss_mask = tensordict.get("compact_drop_valid", default=None)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
             lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
@@ -1361,7 +1361,7 @@ class ClipPPOLoss(PPOLoss):
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())
             td_out.set("mean_ratio", ratio.mean())
-        loss_mask = tensordict.get("compact_drop_valid", default=None)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
             lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
@@ -1718,7 +1718,7 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
-        loss_mask = tensordict_copy.get("compact_drop_valid", default=None)
+        loss_mask = tensordict_copy.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
             lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
