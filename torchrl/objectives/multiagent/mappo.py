@@ -4,8 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 """Multi-agent PPO objectives.
 
-Implements :class:`MAPPOLoss` (centralised critic) and :class:`IPPOLoss`
-(independent / decentralised critic).
+Implements :class:`MultiPPOLoss` — the unified multi-agent PPO loss that
+covers both MAPPO (centralised critic) and IPPO (independent critic) via a
+``critic_type`` field.
+
+:class:`MAPPOLoss` and :class:`IPPOLoss` are retained as deprecated aliases
+and will be removed in v0.11.
 
 References:
     - Yu, C. et al. *The Surprising Effectiveness of PPO in Cooperative
@@ -15,7 +19,8 @@ References:
 """
 from __future__ import annotations
 
-from typing import Any
+import warnings
+from typing import Any, Literal
 
 from tensordict.nn import TensorDictModule
 from tensordict.nn.probabilistic import ProbabilisticTensorDictSequential
@@ -26,7 +31,7 @@ from torchrl.objectives.utils import ValueEstimators
 
 
 class _MultiAgentPPOMixin:
-    """Shared plumbing for :class:`MAPPOLoss` and :class:`IPPOLoss`.
+    """Shared plumbing for :class:`MultiPPOLoss` and its deprecated aliases.
 
     Two pieces:
 
@@ -48,8 +53,8 @@ class _MultiAgentPPOMixin:
 
     default_value_estimator = ValueEstimators.MAGAE
 
-    # Subclasses (MAPPOLoss / IPPOLoss) wire this up in ``__init__`` —
-    # populated here as a type hint only so static checkers know it exists.
+    # Subclasses wire this up in ``__init__`` — populated here as a type hint
+    # only so static checkers know it exists.
     value_norm: ValueNorm | None
 
     def _critic_loss_inputs(self, target_return, state_value, old_state_value):
@@ -80,23 +85,29 @@ class _MultiAgentPPOMixin:
         return normalised_target, normalised_pred, normalised_old
 
 
-class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
-    """Multi-Agent PPO loss with a centralised critic (Yu et al. 2022).
+class MultiPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
+    """Unified multi-agent PPO loss covering MAPPO and IPPO.
 
-    MAPPO trains a *decentralised actor* (each agent's policy conditions only
-    on its local observation) together with a *centralised critic* (single
-    value function that conditions on the full team state or concatenated
-    observations). The decentralised actor lets policies run independently at
-    execution time, while the centralised critic reduces variance during
-    training by giving every agent the same value baseline derived from full
-    state information.
+    Pass ``critic_type="centralized"`` (default) for **MAPPO** — a
+    decentralised actor together with a centralised critic that conditions on
+    the full team state, reducing variance at the cost of requiring global
+    information during training (Yu et al. 2022).
 
-    This class is a thin specialisation of :class:`ClipPPOLoss`. The
-    differences:
+    Pass ``critic_type="independent"`` for **IPPO** — each agent has its own
+    value function conditioned only on its local observation. No global state
+    is required, and the approach is surprisingly competitive on many SMAC
+    scenarios (de Witt et al. 2020).
+
+    The loss computation is identical in both modes — the only difference is
+    the critic network you supply. ``critic_type`` is stored as
+    ``self.critic_type`` for introspection and self-documentation; it does not
+    alter the gradient computation.
+
+    This class is a thin specialisation of :class:`ClipPPOLoss`. Differences:
 
     - The default value estimator is :class:`~torchrl.objectives.value.MultiAgentGAE`,
-      which broadcasts team-shared rewards / done flags along the agent
-      dimension before computing returns.
+      which broadcasts team-shared rewards / done flags along the agent dim
+      before computing returns.
     - ``normalize_advantage_exclude_dims`` defaults to ``(-2,)`` so the agent
       dim is excluded when standardising advantages.
     - An optional :class:`~torchrl.modules.ValueNorm` can be supplied via
@@ -111,25 +122,26 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
             :class:`~torchrl.modules.MultiAgentMLP` using
             ``centralized=False, share_params=True`` for cooperative
             homogeneous teams.
-        critic_network (TensorDictModule): centralised value operator. Build
-            this with :class:`~torchrl.modules.MultiAgentMLP` and
-            ``centralized=True, share_params=True``, or with any module that
-            consumes a global ``"state"`` key and returns
-            ``("agents", "state_value")`` of shape ``[*B, n_agents, 1]``.
+        critic_network (TensorDictModule): value operator. For
+            ``critic_type="centralized"`` build with
+            ``MultiAgentMLP(centralized=True, share_params=True)``; for
+            ``critic_type="independent"`` use
+            ``MultiAgentMLP(centralized=False, share_params=True)``.
 
     Keyword Args:
+        critic_type (str): ``"centralized"`` (MAPPO, default) or
+            ``"independent"`` (IPPO). Stored for introspection only; does not
+            alter the loss computation.
         value_norm (ValueNorm, optional): if supplied, the critic target and
             prediction are normalised by this running normaliser before the
             MSE / smooth-L1 distance. Composes correctly with ``clip_value``
             (the clip radius is applied in normalised space).
             Defaults to ``None`` (no value norm).
         clip_epsilon (float): PPO ratio clip. Defaults to ``0.2``.
-        entropy_coeff (float): entropy bonus weight. Defaults to ``0.01``
-            (MAPPO default).
+        entropy_coeff (float): entropy bonus weight. Defaults to ``0.01``.
         critic_coef (float, optional): critic loss weight. Defaults to ``1.0``.
         normalize_advantage (bool): whether to standardise the advantage.
-            Defaults to ``True`` (MAPPO default; differs from base
-            :class:`ClipPPOLoss` which defaults to ``False``).
+            Defaults to ``True``.
         normalize_advantage_exclude_dims (tuple of int): dimensions to
             exclude from advantage standardisation. Defaults to ``(-2,)``
             (the agent dim).
@@ -153,7 +165,7 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         ...     MultiAgentMLP, PopArtValueNorm, ProbabilisticActor,
         ... )
         >>> from torchrl.modules.distributions import NormalParamExtractor, TanhNormal
-        >>> from torchrl.objectives.multiagent import MAPPOLoss
+        >>> from torchrl.objectives.multiagent import MultiPPOLoss
         >>> n_agents, obs_dim, action_dim = 3, 6, 2
         >>> actor_net = torch.nn.Sequential(
         ...     MultiAgentMLP(
@@ -173,6 +185,7 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         ...     out_keys=[("agents", "action")],
         ...     distribution_class=TanhNormal,
         ... )
+        >>> # Centralised critic (MAPPO)
         >>> critic = TensorDictModule(
         ...     MultiAgentMLP(
         ...         n_agent_inputs=obs_dim, n_agent_outputs=1,
@@ -181,7 +194,8 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         ...     in_keys=[("agents", "observation")],
         ...     out_keys=[("agents", "state_value")],
         ... )
-        >>> loss = MAPPOLoss(actor, critic, value_norm=PopArtValueNorm(shape=1))
+        >>> loss = MultiPPOLoss(actor, critic, critic_type="centralized",
+        ...                     value_norm=PopArtValueNorm(shape=1))
         >>> loss.set_keys(value=("agents", "state_value"), action=("agents", "action"))
     """
 
@@ -190,12 +204,17 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
         actor_network: ProbabilisticTensorDictSequential | None = None,
         critic_network: TensorDictModule | None = None,
         *,
+        critic_type: Literal["centralized", "independent"] = "centralized",
         value_norm: ValueNorm | None = None,
         entropy_coeff: float | dict[str, float] = 0.01,
         normalize_advantage: bool = True,
         normalize_advantage_exclude_dims: tuple[int, ...] = (-2,),
         **kwargs: Any,
     ) -> None:
+        if critic_type not in ("centralized", "independent"):
+            raise ValueError(
+                f"critic_type must be 'centralized' or 'independent', got {critic_type!r}"
+            )
         super().__init__(
             actor_network,
             critic_network,
@@ -204,39 +223,46 @@ class MAPPOLoss(_MultiAgentPPOMixin, ClipPPOLoss):
             normalize_advantage_exclude_dims=normalize_advantage_exclude_dims,
             **kwargs,
         )
+        self.critic_type = critic_type
         # ``nn.Module.__setattr__`` registers the ``ValueNorm`` as a child
         # module automatically, so ``.to(device)`` / ``state_dict()`` / etc.
         # pick it up without us calling ``add_module`` a second time.
         self.value_norm = value_norm
 
 
-class IPPOLoss(MAPPOLoss):
-    """Independent PPO loss (de Witt et al. 2020).
+class MAPPOLoss(MultiPPOLoss):
+    """Deprecated alias for ``MultiPPOLoss(critic_type='centralized')``.
 
-    IPPO is the decentralised counterpart of MAPPO: each agent has its *own*
-    value function that conditions only on its local observation. There is no
-    centralised critic and no global state required. Surprisingly competitive
-    with MAPPO on many SMAC scenarios (the de Witt et al. paper is titled
-    *Is Independent Learning All You Need...*).
-
-    Structurally this loss is identical to :class:`MAPPOLoss`; the difference
-    lives entirely in the critic the user passes in. We expose it as a
-    separate class so the API is self-documenting: when you import
-    ``IPPOLoss`` it is unambiguous which algorithm you are running, and the
-    docstring spells out the critic-construction recipe.
-
-    Args:
-        actor_network (ProbabilisticTensorDictSequential): per-agent policy.
-            Build with ``MultiAgentMLP(centralized=False, share_params=True)``.
-        critic_network (TensorDictModule): per-agent value operator. Build
-            with ``MultiAgentMLP(centralized=False, share_params=True)`` so
-            each agent values its own observation.
-
-    Keyword Args:
-        value_norm (ValueNorm, optional): rarely used with IPPO; defaults to
-            ``None``.
-        entropy_coeff (float): defaults to ``0.01``.
-        normalize_advantage (bool): defaults to ``True``.
-        normalize_advantage_exclude_dims (tuple of int): defaults to ``(-2,)``.
-        **kwargs: forwarded to :class:`ClipPPOLoss`.
+    .. deprecated:: 0.9
+        Use :class:`MultiPPOLoss` with ``critic_type='centralized'`` instead.
+        ``MAPPOLoss`` will be removed in v0.11.
     """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "MAPPOLoss is deprecated and will be removed in v0.11. "
+            "Use MultiPPOLoss(critic_type='centralized') instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        kwargs.setdefault("critic_type", "centralized")
+        super().__init__(*args, **kwargs)
+
+
+class IPPOLoss(MultiPPOLoss):
+    """Deprecated alias for ``MultiPPOLoss(critic_type='independent')``.
+
+    .. deprecated:: 0.9
+        Use :class:`MultiPPOLoss` with ``critic_type='independent'`` instead.
+        ``IPPOLoss`` will be removed in v0.11.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "IPPOLoss is deprecated and will be removed in v0.11. "
+            "Use MultiPPOLoss(critic_type='independent') instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        kwargs.setdefault("critic_type", "independent")
+        super().__init__(*args, **kwargs)

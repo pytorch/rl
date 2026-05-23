@@ -30,7 +30,7 @@ from torchrl.objectives.dreamer_v3 import (
 )
 from torchrl.objectives.gail import GAILLoss
 from torchrl.objectives.iql import DiscreteIQLLoss, IQLLoss
-from torchrl.objectives.multiagent import IPPOLoss, MAPPOLoss, QMixerLoss
+from torchrl.objectives.multiagent import IPPOLoss, MAPPOLoss, MultiPPOLoss, QMixerLoss
 from torchrl.objectives.pilco import ExponentialQuadraticCost
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.redq import REDQLoss
@@ -80,6 +80,7 @@ __all__ = [
     "KLPENPPOLoss",
     "LossModule",
     "MAPPOLoss",
+    "MultiPPOLoss",
     "OnlineDTLoss",
     "PPOLoss",
     "QMixerLoss",
