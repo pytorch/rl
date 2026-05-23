@@ -3693,8 +3693,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if obs is None or not isinstance(obs, torch.Tensor):
                 continue
             reset_observations[obs_key] = obs.clone()
+            current_obs = tensordict.get(obs_key, None)
             if obs.is_floating_point():
-                obs[done] = torch.nan
+                obs[done] = current_obs[done]
             else:
                 obs[done] = 0
         return reset_observations

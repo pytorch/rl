@@ -955,8 +955,8 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             observation returned by the environment as the next root observation
             instead of calling reset from
             :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`. The terminal
-            ``"next"`` observation is still invalid and filled with ``NaN`` for
-            floating point observations. Defaults to ``False``.
+            ``"next"`` observation is replaced with the current (root)
+            observation. Defaults to ``False``.
 
     Attributes:
         available_envs (List[str]): a list of environments to build.
