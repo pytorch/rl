@@ -211,6 +211,11 @@ class TimeMaxPool(Transform):
                     raise KeyError(f"Could not find {in_key} in the reset data.")
             return self._call(tensordict_reset, _reset=_reset)
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
     def _make_missing_buffer(self, tensordict, in_key, buffer_name):
         buffer = getattr(self, buffer_name)
         data = tensordict.get(in_key)
