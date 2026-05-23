@@ -1724,7 +1724,8 @@ class Compose(Transform):
             t._check_batched_worker_compat()
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._inv_call(tensordict)
         return tensordict
 
@@ -1836,7 +1837,8 @@ class Compose(Transform):
         return tensordict_reset
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._reset_env_preprocess(tensordict)
         return tensordict
 

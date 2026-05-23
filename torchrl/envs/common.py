@@ -3854,6 +3854,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
+        compiled = self.__dict__.get("_compiled_step_and_maybe_reset", None)
+        if compiled is not None:
+            return compiled(tensordict)
+        return self._step_and_maybe_reset(tensordict)
+
+    def _step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         """Runs a step in the environment and (partially) resets it if needed.
 
         Args:
@@ -3931,6 +3939,18 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         else:
             tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
+
+    def compile(self, **kwargs):
+        """Compile :meth:`step_and_maybe_reset` and return ``self``."""
+        self.__dict__["_compiled_step_and_maybe_reset"] = torch.compile(
+            self._step_and_maybe_reset, **kwargs
+        )
+        return self
+
+    def eager(self):
+        """Restore eager :meth:`step_and_maybe_reset` execution and return ``self``."""
+        self.__dict__.pop("_compiled_step_and_maybe_reset", None)
+        return self
 
     _post_step_mdp_hooks: Callable[
         [TensorDictBase, TensorDictBase], tuple[TensorDictBase, TensorDictBase]
