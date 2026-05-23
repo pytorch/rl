@@ -1677,6 +1677,30 @@ class Collector(BaseCollector):
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
+        Each call runs ``frames_per_batch`` env steps and returns (or writes
+        to the replay buffer) the resulting batch.  The per-timestep flow is:
+
+        1. **Carrier prep** — read ``self._carrier``, the deviceless
+           tensordict that survives across timesteps (allocated once in
+           :meth:`_make_shuttle`).  If ``reset_at_each_iter=True``, reset
+           the env first.
+        2. **Policy step** — cast the carrier to ``policy_device`` if it
+           differs from ``env_device`` (then ``_sync_policy()``), invoke
+           the policy, and merge its outputs back into the carrier.
+        3. **Env step** — cast the carrier to ``env_device`` if needed
+           (then ``_sync_env()``), call ``env.step_and_maybe_reset``, and
+           write the returned ``"next"`` sub-tensordict back into the
+           carrier.
+        4. **Persist** — append the per-step snapshot to a list (or
+           ``replay_buffer.add(...)``) after casting to ``storing_device``
+           and ``_sync_storage()`` if needed.
+        5. **Advance** — swap the carrier for the post-reset
+           ``env_next_output`` and update ``("collector", "traj_ids")`` for
+           any envs that finished.
+
+        See :ref:`ref_collectors_internals` for the full flow diagram and
+        an explanation of the carrier / sync / device-cast machinery.
+
         Returns:
             TensorDictBase containing the computed rollout.
 

@@ -58,6 +58,35 @@ Besides those compute parameters, users may choose to configure the following pa
   along with a ``"mask"`` key that will point to a boolean mask representing the valid values.
 - exploration_type: the exploration strategy to be used with the policy.
 - reset_when_done: whether environments should be reset when reaching a done state.
+- track_traj_ids: if ``True`` (default), the collector writes a unique
+  ``("collector", "traj_ids")`` integer per frame and updates it on every
+  env reset.  Setting it to ``False`` skips the per-step bookkeeping —
+  useful when neither :func:`~torchrl.collectors.utils.split_trajectories`
+  nor :class:`~torchrl.data.SliceSampler` are used downstream.  Note that
+  ``split_trajs=True`` requires ``track_traj_ids=True``.
+
+Trajectory IDs
+--------------
+
+When ``track_traj_ids=True``, every frame yielded by a collector carries a
+``("collector", "traj_ids")`` integer that uniquely identifies the trajectory
+it belongs to.  IDs are drawn from a process-local pool so they remain
+unique across resets within a single worker.
+
+This is what makes trajectory-aware downstream consumers possible:
+
+- :class:`~torchrl.data.SliceSampler` draws whole trajectories (or slices of
+  them) from a replay buffer by grouping frames by ``traj_ids``.
+- :func:`~torchrl.collectors.utils.split_trajectories` reshapes a flat batch
+  into a padded ``[n_trajs, max_len]`` tensordict using ``traj_ids`` to find
+  the boundaries.
+
+Set ``track_traj_ids=False`` only when the downstream consumer does not need
+trajectory identity — e.g. step-level off-policy training that samples
+i.i.d. transitions from a uniform buffer.
+
+See :ref:`ref_collectors_internals` for the per-step bookkeeping that
+maintains these IDs.
 
 Collectors and batch size
 -------------------------
