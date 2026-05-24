@@ -563,8 +563,15 @@ def mlflow_fixture():
 
     with tempfile.TemporaryDirectory() as log_dir:
         exp_name = "ramala"
-        log_dir_uri = pathlib.Path(log_dir).as_uri()
-        logger = MLFlowLogger(exp_name=exp_name, tracking_uri=log_dir_uri)
+        artifact_uri = pathlib.Path(log_dir).as_uri()
+        # MLflow >= 3.10 no longer supports the filesystem tracking backend, so
+        # we use a SQLite database for tracking and keep artifacts on disk.
+        tracking_uri = f"sqlite:///{log_dir}/mlflow.db"
+        logger = MLFlowLogger(
+            exp_name=exp_name,
+            tracking_uri=tracking_uri,
+            artifact_location=artifact_uri,
+        )
         client = mlflow.MlflowClient()
         yield logger, client
         mlflow.end_run()
