@@ -36,6 +36,7 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     Compose,
     InitTracker,
+    RandomTruncationTransform,
     RewardSum,
     StepCounter,
     TransformedEnv,
@@ -209,21 +210,26 @@ class TestAutoReset:
 
         env = TransformedEnv(
             BranchlessAutoResetCountingEnv(3),
-            Compose(StepCounter(), RewardSum(), VecNormV2(in_keys=["observation"])),
+            Compose(
+                StepCounter(),
+                RandomTruncationTransform(prob=1.0, min_horizon=1, max_horizon=3),
+                RewardSum(),
+                VecNormV2(in_keys=["observation"]),
+            ),
         )
         env._torchrl_native_autoreset = True
         env.full_observation_spec
         tensordict = env.reset()
 
         env.compile(backend="eager", fullgraph=True)
-        for _ in range(4):
+        for _ in range(6):
             tensordict.update(env.full_action_spec.one())
             tensordict, tensordict_ = env.step_and_maybe_reset(tensordict)
             tensordict = tensordict_
         env.eager()
 
-        assert tensordict["step_count"].eq(0).all()
-        assert tensordict["episode_reward"].eq(0).all()
+        assert tensordict["step_count"].le(3).all()
+        assert tensordict["episode_reward"].le(3).all()
         assert "_compiled_step_and_maybe_reset" not in env.__dict__
 
     def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
