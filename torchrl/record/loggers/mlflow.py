@@ -27,9 +27,18 @@ class MLFlowLogger(Logger):
 
     Args:
         exp_name (str): The name of the experiment.
-        tracking_uri (str): A tracking URI to a datastore that supports MLFlow or a local directory.
+        tracking_uri (str): A tracking URI to a datastore that supports MLFlow.
+            Since MLFlow 3.10, filesystem tracking backends (e.g. ``./mlruns``)
+            are no longer supported and a database backend such as
+            ``sqlite:///path/to/mlflow.db`` must be used. See the
+            `MLflow migration guide <https://mlflow.org/docs/latest/self-hosting/migrate-from-file-store>`_.
 
     Keyword Args:
+        artifact_location (str, optional): Location used to store run artifacts
+            (videos, models, ...). When ``None`` (default), MLFlow uses its
+            default artifact location. When ``tracking_uri`` is a filesystem
+            URI, it is also used as ``artifact_location`` for backward
+            compatibility.
         fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
 
     """
@@ -40,14 +49,17 @@ class MLFlowLogger(Logger):
         tracking_uri: str,
         tags: dict[str, Any] | None = None,
         *,
+        artifact_location: str | None = None,
         video_fps: int = 30,
         **kwargs,
     ) -> None:
         import mlflow
 
+        if artifact_location is None and tracking_uri.startswith("file:"):
+            artifact_location = tracking_uri
         self._mlflow_kwargs = {
             "name": exp_name,
-            "artifact_location": tracking_uri,
+            "artifact_location": artifact_location,
             "tags": tags,
         }
         mlflow.set_tracking_uri(tracking_uri)

@@ -191,6 +191,11 @@ class TargetReturn(Transform):
             )
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
     def _call(self, next_tensordict: TensorDict) -> TensorDict:
         for in_key, out_key in _zip_strict(self.in_keys, self.out_keys):
             val_in = next_tensordict.get(in_key, None)
@@ -538,6 +543,11 @@ class RewardSum(Transform):
                 value = torch.where(expand_as_right(~_reset, value), value, 0.0)
             tensordict_reset.set(out_key, value)
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
