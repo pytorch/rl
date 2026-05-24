@@ -24,8 +24,14 @@ from tensordict import (
 
 from torchrl import set_auto_unwrap_transformed_env
 from torchrl.data import LazyStackStorage, ReplayBuffer, SliceSampler
-from torchrl.data.tensor_specs import Composite, NonTensor, Unbounded
-from torchrl.envs import CatFrames, ParallelEnv, SerialEnv, TrajCounter
+from torchrl.data.tensor_specs import (
+    Binary,
+    Categorical,
+    Composite,
+    NonTensor,
+    Unbounded,
+)
+from torchrl.envs import CatFrames, EnvBase, ParallelEnv, SerialEnv, TrajCounter
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -157,6 +163,68 @@ class TestAutoReset:
         assert tensordict["next", "done"].all()
         assert not tensordict_["done"].any()
         assert (tensordict_["observation"] == 0).all()
+
+    def test_native_auto_reset_compile_step_and_maybe_reset(self):
+        class BranchlessAutoResetCountingEnv(EnvBase):
+            def __init__(self, max_steps=3, **kwargs):
+                super().__init__(**kwargs)
+                self.max_steps = max_steps
+                self.observation_spec = Composite(
+                    observation=Unbounded((1,), dtype=torch.float32)
+                )
+                self.reward_spec = Unbounded((1,))
+                self.done_spec = Categorical(2, dtype=torch.bool, shape=(1,))
+                self.action_spec = Binary(n=1, shape=(1,))
+                self.register_buffer("count", torch.zeros(1, dtype=torch.float32))
+
+            def _reset(self, tensordict=None, **kwargs):
+                self.count.zero_()
+                done = self.count.bool()
+                return TensorDict(
+                    {
+                        "observation": self.count.clone(),
+                        "done": done,
+                        "terminated": done,
+                    },
+                    [],
+                )
+
+            def _step(self, tensordict):
+                next_count = self.count + tensordict["action"].to(torch.float32)
+                done = next_count > self.max_steps
+                count = torch.where(done, torch.zeros_like(next_count), next_count)
+                self.count.copy_(count)
+                return TensorDict(
+                    {
+                        "observation": count.clone(),
+                        "done": done,
+                        "terminated": done,
+                        "reward": torch.ones_like(count),
+                    },
+                    [],
+                )
+
+            def _set_seed(self, seed):
+                return None
+
+        env = TransformedEnv(
+            BranchlessAutoResetCountingEnv(3),
+            Compose(StepCounter(), RewardSum(), VecNormV2(in_keys=["observation"])),
+        )
+        env._torchrl_native_autoreset = True
+        env.full_observation_spec
+        tensordict = env.reset()
+
+        env.compile(backend="eager", fullgraph=True)
+        for _ in range(4):
+            tensordict.update(env.full_action_spec.one())
+            tensordict, tensordict_ = env.step_and_maybe_reset(tensordict)
+            tensordict = tensordict_
+        env.eager()
+
+        assert tensordict["step_count"].eq(0).all()
+        assert tensordict["episode_reward"].eq(0).all()
+        assert "_compiled_step_and_maybe_reset" not in env.__dict__
 
     def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
         class CountingVecNormV2(VecNormV2):
