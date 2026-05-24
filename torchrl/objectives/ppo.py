@@ -45,6 +45,7 @@ from torchrl.objectives.utils import (
 )
 from torchrl.objectives.value import (
     GAE,
+    MultiAgentGAE,
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
@@ -762,6 +763,23 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
+    def _critic_loss_inputs(
+        self,
+        target_return: torch.Tensor,
+        state_value: torch.Tensor,
+        old_state_value: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        """Transform the critic-loss inputs before distance / clip.
+
+        Default implementation is identity. Subclasses (notably
+        :class:`~torchrl.objectives.multiagent.MAPPOLoss`) override this to
+        push the three tensors through a running
+        :class:`~torchrl.modules.ValueNorm` so the MSE / smooth-L1 distance
+        lives on a fixed scale -- and so the PPO value-clip radius stays
+        meaningful when reward scales drift.
+        """
+        return target_return, state_value, old_state_value
+
     def loss_critic(
         self, tensordict: TensorDictBase
     ) -> tuple[torch.Tensor | TensorDict, ...]:
@@ -782,6 +800,7 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        old_state_value = None
         if self.clip_value:
             old_state_value = tensordict.get(self.tensor_keys.value)
             if old_state_value is None:
@@ -804,6 +823,14 @@ class PPOLoss(LossModule):
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
                 f"Make sure that the 'value_key' passed to PPO is accurate."
             )
+
+        # Subclass hook: lets e.g. MAPPOLoss inject PopArt-style value
+        # normalisation uniformly across target_return / state_value /
+        # old_state_value so the MSE and the clip radius both live in
+        # normalised space.
+        target_return, state_value, old_state_value = self._critic_loss_inputs(
+            target_return, state_value, old_state_value
+        )
 
         loss_value = distance_loss(
             target_return,
@@ -851,6 +878,32 @@ class PPOLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
+    def _standardize_advantage(
+        self, advantage: torch.Tensor, tensordict: TensorDictBase
+    ) -> torch.Tensor:
+        mask = tensordict.get("shifted_valid", default=None)
+        if mask is None:
+            return _standardize(advantage, self.normalize_advantage_exclude_dims)
+        while mask.ndim < advantage.ndim:
+            mask = mask.unsqueeze(-1)
+        mask = mask.expand_as(advantage).to(advantage.dtype)
+        exclude_dims = {
+            dim if dim >= 0 else advantage.ndim + dim
+            for dim in self.normalize_advantage_exclude_dims
+        }
+        reduce_dims = [dim for dim in range(advantage.ndim) if dim not in exclude_dims]
+        count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
+        loc = (advantage * mask).sum(dim=reduce_dims, keepdim=True) / count
+        scale = (
+            (
+                ((advantage - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True)
+                / count
+            )
+            .sqrt()
+            .clamp_min(1e-4)
+        )
+        return (advantage - loc) / scale
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -872,7 +925,7 @@ class PPOLoss(LossModule):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -900,8 +953,9 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -940,6 +994,10 @@ class PPOLoss(LossModule):
             )
         elif value_type == ValueEstimators.GAE:
             self._value_estimator = GAE(value_network=self.critic_network, **hp)
+        elif value_type == ValueEstimators.MAGAE:
+            self._value_estimator = MultiAgentGAE(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
                 value_network=self.critic_network, **hp
@@ -1216,7 +1274,7 @@ class ClipPPOLoss(PPOLoss):
                 keys.append("loss_critic")
             if self.clip_value:
                 keys.append("value_clip_fraction")
-            keys.append("ESS")
+            keys.extend(["ESS", "kl_approx", "max_ratio", "mean_ratio"])
             self._out_keys = keys
         return self._out_keys
 
@@ -1251,7 +1309,7 @@ class ClipPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -1299,8 +1357,13 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("explained_variance", explained_variance)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        with torch.no_grad():
+            ratio = log_weight.exp()
+            td_out.set("max_ratio", ratio.max())
+            td_out.set("mean_ratio", ratio.mean())
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1584,7 +1647,7 @@ class KLPENPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
@@ -1655,8 +1718,9 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict_copy.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

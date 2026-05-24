@@ -37,6 +37,7 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _get_default_mp_start_method,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     logger as torchrl_logger,
     rl_warnings,
     timeit,
@@ -713,13 +714,29 @@ class BatchedEnvBase(EnvBase):
     def _has_dynamic_specs(self):
         return not self._use_buffers
 
+    @staticmethod
+    def _validate_worker_env(env) -> None:
+        """Check that each transform on a worker env is batched-env compatible.
+
+        Walks ``env.transform`` and invokes
+        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`
+        on each entry. Transforms that should not live inside a batched-env
+        worker raise here so the user gets immediate feedback rather than
+        silently-wrong runtime behavior.
+        """
+        transform = getattr(env, "transform", None)
+        if transform is not None:
+            transform._check_batched_worker_compat()
+
     def _get_metadata(
         self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
             meta_data: EnvMetaData = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
+                create_env_fn[0],
+                create_env_kwargs[0],
+                env_validator=self._validate_worker_env,
             )
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
@@ -739,7 +756,11 @@ class BatchedEnvBase(EnvBase):
             self.meta_data: list[EnvMetaData] = []
             for i in range(n_tasks):
                 self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
+                    get_env_metadata(
+                        create_env_fn[i],
+                        create_env_kwargs[i],
+                        env_validator=self._validate_worker_env,
+                    ).clone()
                 )
             if self.share_individual_td is not True:
                 share_individual_td = not _stackable(
@@ -1246,6 +1267,7 @@ class SerialEnv(BatchedEnvBase):
         return seed
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
         if kwargs is not list_of_kwargs[0] and kwargs:
@@ -1364,6 +1386,7 @@ class SerialEnv(BatchedEnvBase):
         return out
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._step")
     def _step(
         self,
         tensordict: TensorDict,
@@ -1901,6 +1924,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
@@ -2249,6 +2273,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self._use_buffers:
             return self._step_no_buffers(tensordict)
@@ -2459,6 +2484,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
 
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)

@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import textwrap
 import warnings
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from collections import OrderedDict
 from copy import copy, deepcopy
 from multiprocessing.context import get_spawning_popen
@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import torch
 from pyvers import implement_for
-from tensordict import MemoryMappedTensor, TensorDict
+from tensordict import is_tensor_collection, MemoryMappedTensor, TensorDict
 from tensordict.utils import NestedKey
 from torch.utils._pytree import tree_map
 from torchrl._extension import EXTENSION_WARNING
@@ -39,10 +39,64 @@ except ImportError:
     SumSegmentTreeFp32 = None
     SumSegmentTreeFp64 = None
 
+try:
+    from torchrl._torchrl import (
+        CudaMinSegmentTreeFp32,
+        CudaMinSegmentTreeFp64,
+        CudaSumSegmentTreeFp32,
+        CudaSumSegmentTreeFp64,
+    )
+except ImportError:
+    CudaMinSegmentTreeFp32 = None
+    CudaMinSegmentTreeFp64 = None
+    CudaSumSegmentTreeFp32 = None
+    CudaSumSegmentTreeFp64 = None
+
 _EMPTY_STORAGE_ERROR = "Cannot sample from an empty storage."
 
 
-class Sampler(ABC):
+# Maps a "with replacement" sampler class to its "without replacement" counterpart.
+# Populated at module import time after the relevant classes are defined.
+# Consumed by :class:`_SamplerMeta` to dispatch ``Cls(replacement=False, ...)`` calls
+# to ``_REPLACEMENT_DISPATCH[Cls](...)``.
+_REPLACEMENT_DISPATCH: dict[type, type] = {}
+
+
+class _SamplerMeta(ABCMeta):
+    """Metaclass enabling ``replacement=False`` dispatch on with-replacement samplers.
+
+    When a class registered in :data:`_REPLACEMENT_DISPATCH` (e.g.
+    :class:`RandomSampler`, :class:`SliceSampler`) is instantiated with
+    ``replacement=False``, the call is dispatched to its without-replacement
+    counterpart (:class:`SamplerWithoutReplacement` or
+    :class:`SliceSamplerWithoutReplacement`).
+
+    Calls with ``replacement=True`` (the default) behave exactly like a normal
+    instantiation: the ``replacement`` kwarg is popped before the constructor
+    runs, so existing ``__init__`` signatures don't need to be changed.
+
+    Passing ``replacement=False`` to a sampler that has no without-replacement
+    variant raises :class:`TypeError`. Passing ``replacement=False`` to a
+    sampler that is itself already a without-replacement variant is allowed
+    and treated as a no-op.
+    """
+
+    def __call__(cls, *args, **kwargs):
+        if "replacement" in kwargs:
+            replacement = kwargs.pop("replacement")
+            if not replacement:
+                alt = _REPLACEMENT_DISPATCH.get(cls)
+                if alt is not None:
+                    return alt(*args, **kwargs)
+                if cls not in _REPLACEMENT_DISPATCH.values():
+                    raise TypeError(
+                        f"{cls.__name__} has no without-replacement variant; "
+                        "cannot be instantiated with replacement=False."
+                    )
+        return super().__call__(*args, **kwargs)
+
+
+class Sampler(ABC, metaclass=_SamplerMeta):
     """A generic sampler base class for composable Replay Buffers."""
 
     # Some samplers - mainly those without replacement -
@@ -120,9 +174,23 @@ class Sampler(ABC):
 class RandomSampler(Sampler):
     """A uniformly random sampler for composable replay buffers.
 
-    Args:
-        batch_size (int, optional): if provided, the batch size to be used by
-            the replay buffer when calling :meth:`ReplayBuffer.sample`.
+    Keyword Args:
+        replacement (bool, optional): if ``False``, the call is dispatched to
+            :class:`SamplerWithoutReplacement`, and any additional keyword
+            arguments (e.g. ``drop_last``, ``shuffle``) are forwarded to its
+            constructor. Defaults to ``True``.
+
+    Examples:
+        >>> from torchrl.data import RandomSampler, SamplerWithoutReplacement
+        >>> isinstance(RandomSampler(), RandomSampler)
+        True
+        >>> isinstance(RandomSampler(replacement=False), SamplerWithoutReplacement)
+        True
+        >>> isinstance(
+        ...     RandomSampler(replacement=False, drop_last=True),
+        ...     SamplerWithoutReplacement,
+        ... )
+        True
 
     """
 
@@ -294,6 +362,218 @@ class SamplerWithoutReplacement(Sampler):
         return f"{self.__class__.__name__}({perc: 4.4f}% sampled)"
 
 
+def _default_staleness_weight(s: torch.Tensor) -> torch.Tensor:
+    """Default freshness weighting: 1 / (staleness + 1)."""
+    return 1.0 / (s.float() + 1.0)
+
+
+class StalenessAwareSampler(Sampler):
+    """A sampler that weights entries by freshness and filters stale entries.
+
+    This sampler is designed for asynchronous training setups (e.g., async PPO)
+    where collected data may come from older policy versions. It reads a
+    ``policy_version`` field from the storage and uses it to:
+
+    - **Hard gate**: Exclude entries whose staleness exceeds ``max_staleness``.
+    - **Freshness weighting**: Sample proportionally to a weight that decays
+      with staleness (default: ``1 / (staleness + 1)``).
+
+    The training loop is responsible for updating :attr:`consumer_version`
+    (typically after each optimizer step or weight update) so the sampler
+    can compute staleness = ``consumer_version - policy_version``.
+
+    Args:
+        max_staleness (int, optional): Hard cutoff. Entries with
+            ``staleness > max_staleness`` are excluded from sampling.
+            ``-1`` (default) means no cutoff.
+        staleness_weight_fn (callable, optional): A callable that maps a
+            staleness tensor (int) to a weight tensor (float). Defaults to
+            ``lambda s: 1.0 / (s.float() + 1.0)``.
+        version_key (NestedKey, optional): The key in the storage holding
+            the policy version. Defaults to ``"policy_version"``.
+
+    Examples:
+        >>> from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage
+        >>> from torchrl.data.replay_buffers.samplers import StalenessAwareSampler
+        >>> sampler = StalenessAwareSampler(max_staleness=5)
+        >>> buffer = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(1000),
+        ...     sampler=sampler,
+        ...     batch_size=32,
+        ... )
+        >>> # In training loop:
+        >>> # sampler.consumer_version = current_training_step
+
+    Integration with :class:`~torchrl.collectors.Collector` and
+    :class:`~torchrl.envs.transforms.PolicyVersion`::
+
+        from torchrl.collectors import Collector
+        from torchrl.envs.transforms import PolicyVersion
+        from torchrl.data import TensorDictReplayBuffer, LazyTensorStorage
+
+        sampler = StalenessAwareSampler(max_staleness=10)
+        buffer = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10_000),
+            sampler=sampler,
+            batch_size=256,
+        )
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=1000,
+            total_frames=100_000,
+            env_transforms=[PolicyVersion(collector)],
+        )
+        for step, data in enumerate(collector):
+            buffer.extend(data)
+            sampler.consumer_version = step
+            batch = buffer.sample()
+            # ... train on batch ...
+
+    .. note::
+        ``StalenessAwareSampler`` intentionally does **not** inherit from
+        :class:`PrioritizedSampler`.  ``PrioritizedSampler`` maintains a
+        segment-tree over per-transition TD-error priorities that are
+        updated after each training step.  Staleness weighting is
+        fundamentally different: weights are derived from a single scalar
+        (``consumer_version``) and per-entry ``policy_version`` stamps,
+        and are recomputed on every :meth:`sample` call rather than
+        maintained incrementally.  Sharing the segment-tree machinery
+        would add complexity without benefit.
+    """
+
+    def __init__(
+        self,
+        max_staleness: int = -1,
+        staleness_weight_fn: callable | None = None,
+        version_key: NestedKey = "policy_version",
+    ):
+        self._consumer_version = 0
+        self._max_staleness = max_staleness
+        self._version_key = version_key
+        if staleness_weight_fn is None:
+            staleness_weight_fn = _default_staleness_weight
+        self._weight_fn = staleness_weight_fn
+
+    @property
+    def consumer_version(self) -> int:
+        """The current training iteration / consumer version."""
+        return self._consumer_version
+
+    @consumer_version.setter
+    def consumer_version(self, v: int):
+        self._consumer_version = v
+
+    def increment_consumer_version(self):
+        """Increment the consumer version by 1."""
+        self._consumer_version += 1
+
+    @property
+    def max_staleness(self) -> int:
+        """The maximum allowed staleness. -1 means no limit."""
+        return self._max_staleness
+
+    @max_staleness.setter
+    def max_staleness(self, v: int):
+        self._max_staleness = v
+
+    def _get_versions(self, storage: Storage, n: int):
+        if isinstance(storage, TensorStorage):
+            backing_storage = getattr(storage, "_storage", None)
+            if backing_storage is not None:
+                versions = backing_storage.get(self._version_key, None)
+                if versions is not None:
+                    if storage.ndim > 1:
+                        versions = versions[: storage._len_along_dim0].flatten(
+                            0, storage.ndim - 1
+                        )
+                    elif n != storage.max_size:
+                        versions = versions[:n]
+                    return versions
+
+        # Fallback: storage[:n] materialises all data. This path is used for
+        # non-TensorStorage backends (e.g. ListStorage). For hot-path
+        # performance, prefer TensorStorage where versions are read directly.
+        all_data = storage[:n]
+        return all_data.get(self._version_key, None)
+
+    def sample(self, storage: Storage, batch_size: int) -> tuple[torch.Tensor, dict]:
+        n = len(storage)
+        if n == 0:
+            raise RuntimeError(_EMPTY_STORAGE_ERROR)
+
+        versions = self._get_versions(storage, n)
+        if versions is None:
+            raise KeyError(
+                f"Could not find key {self._version_key!r} in the replay buffer "
+                f"storage. Make sure data written to the buffer contains this key "
+                "(e.g., by adding the PolicyVersion transform to the environment "
+                "or enabling policy-version tracking on the collector)."
+            )
+        versions = versions.view(-1).float()
+
+        # Compute staleness
+        staleness = self._consumer_version - versions
+
+        # Hard gate
+        if self._max_staleness >= 0:
+            valid_mask = staleness <= self._max_staleness
+            valid_indices = valid_mask.nonzero(as_tuple=True)[0]
+            if len(valid_indices) == 0:
+                raise RuntimeError(
+                    f"All {n} entries in the buffer exceed max_staleness="
+                    f"{self._max_staleness} (consumer_version="
+                    f"{self._consumer_version}). Increase max_staleness or "
+                    f"update collector policy weights more frequently."
+                )
+        else:
+            valid_indices = torch.arange(n, device=versions.device)
+
+        # Compute freshness weights for valid entries
+        valid_staleness = staleness[valid_indices]
+        weights = self._weight_fn(valid_staleness)
+        weights = weights / weights.sum()
+
+        # Weighted sampling
+        sampled_local = torch.multinomial(
+            weights, batch_size, replacement=batch_size > len(valid_indices)
+        )
+        index = valid_indices[sampled_local]
+
+        return index, {
+            "staleness": staleness[index],
+        }
+
+    def _empty(self):
+        self._consumer_version = 0
+
+    def dumps(self, path):
+        path = Path(path)
+        path.mkdir(exist_ok=True)
+        TensorDict(self.state_dict()).memmap(path)
+
+    def loads(self, path):
+        sd = TensorDict.load_memmap(path).to_dict()
+        self.load_state_dict(sd)
+
+    def state_dict(self) -> dict[str, Any]:
+        return OrderedDict(
+            consumer_version=self._consumer_version,
+            max_staleness=self._max_staleness,
+        )
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self._consumer_version = int(state_dict["consumer_version"])
+        self._max_staleness = int(state_dict["max_staleness"])
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}("
+            f"consumer_version={self._consumer_version}, "
+            f"max_staleness={self._max_staleness})"
+        )
+
+
 class PrioritizedSampler(Sampler):
     r"""Prioritized sampler for replay buffer.
 
@@ -333,6 +613,10 @@ class PrioritizedSampler(Sampler):
         max_priority_within_buffer (bool, optional): if ``True``, the max-priority
             is tracked within the buffer. When ``False``, the max-priority tracks
             the maximum value since the instantiation of the sampler.
+        device (torch.device or str, optional): device that holds the priority
+            trees. Defaults to ``None``, in which case CUDA storage selects a CUDA
+            tree when the installed TorchRL extension was built with CUDA support,
+            and CPU storage keeps the existing CPU tree.
 
     **Parameter Guidelines**:
 
@@ -408,6 +692,7 @@ class PrioritizedSampler(Sampler):
         dtype: torch.dtype = torch.float,
         reduction: str = "max",
         max_priority_within_buffer: bool = False,
+        device: torch.device | str | None = None,
     ) -> None:
         if alpha < 0:
             raise ValueError(
@@ -423,6 +708,7 @@ class PrioritizedSampler(Sampler):
         self.reduction = reduction
         self.dtype = dtype
         self._max_priority_within_buffer = max_priority_within_buffer
+        self._device = torch.device(device) if device is not None else None
         self._init()
         if rl_warnings() and SumSegmentTreeFp32 is None:
             logger.warning(EXTENSION_WARNING)
@@ -433,6 +719,15 @@ class PrioritizedSampler(Sampler):
     @property
     def max_size(self):
         return self._max_capacity
+
+    @property
+    def device(self) -> torch.device:
+        tree_device = getattr(self._sum_tree, "device", None)
+        if tree_device is not None:
+            return torch.device(tree_device)
+        if self._device is not None:
+            return self._device
+        return torch.device("cpu")
 
     @property
     def alpha(self):
@@ -453,9 +748,31 @@ class PrioritizedSampler(Sampler):
     def __getstate__(self):
         if get_spawning_popen() is not None:
             raise RuntimeError(
-                f"Samplers of type {type(self)} cannot be shared between processes."
+                f"Samplers of type {type(self)} cannot be shared between processes. "
+                "Use TensorDictPrioritizedReplayBuffer(sync=False) instead: "
+                "the writer process gets a uniform sampler and the learner "
+                "keeps a local prioritized sampler."
             )
         return super().__getstate__()
+
+    def _tree_device_from_storage(self, storage: Storage | None) -> torch.device | None:
+        if self._device is not None:
+            return self._device
+        if storage is None:
+            return None
+        device = getattr(storage, "device", None)
+        if device is None or device == "auto":
+            return None
+        device = torch.device(device)
+        if device.type == "cuda":
+            return device
+        return None
+
+    def _maybe_init_from_storage(self, storage: Storage | None) -> None:
+        device = self._tree_device_from_storage(storage)
+        if device is not None and device != self.device:
+            self._device = device
+            self._init()
 
     def _init(self) -> None:
         if SumSegmentTreeFp32 is None:
@@ -474,6 +791,31 @@ class PrioritizedSampler(Sampler):
             raise RuntimeError(
                 "MinSegmentTreeFp64 is not available. See warning above."
             )
+        device = self._device
+        if device is not None and device.type == "cuda":
+            if (
+                CudaSumSegmentTreeFp32 is None
+                or CudaMinSegmentTreeFp32 is None
+                or CudaSumSegmentTreeFp64 is None
+                or CudaMinSegmentTreeFp64 is None
+            ):
+                raise RuntimeError(
+                    "CUDA prioritized replay buffers require a TorchRL CUDA wheel. "
+                    "Install a TorchRL wheel matching your PyTorch CUDA variant or "
+                    "rebuild TorchRL with FORCE_CUDA=1."
+                )
+            if self.dtype in (torch.float, torch.FloatType, torch.float32):
+                self._sum_tree = CudaSumSegmentTreeFp32(self._max_capacity, device)
+                self._min_tree = CudaMinSegmentTreeFp32(self._max_capacity, device)
+            elif self.dtype in (torch.double, torch.DoubleTensor, torch.float64):
+                self._sum_tree = CudaSumSegmentTreeFp64(self._max_capacity, device)
+                self._min_tree = CudaMinSegmentTreeFp64(self._max_capacity, device)
+            else:
+                raise NotImplementedError(
+                    f"dtype {self.dtype} not supported by PrioritizedSampler"
+                )
+            self._max_priority = None
+            return
         if self.dtype in (torch.float, torch.FloatType, torch.float32):
             self._sum_tree = SumSegmentTreeFp32(self._max_capacity)
             self._min_tree = MinSegmentTreeFp32(self._max_capacity)
@@ -533,6 +875,11 @@ class PrioritizedSampler(Sampler):
             return is_overwritten
 
         is_overwritten = check_index()
+        if isinstance(is_overwritten, torch.Tensor):
+            if is_overwritten.device.type == "cuda":
+                self._max_priority = None
+                return
+            is_overwritten = bool(is_overwritten.item())
         if is_overwritten:
             self._max_priority = None
 
@@ -541,21 +888,36 @@ class PrioritizedSampler(Sampler):
         mp = self._max_priority[0]
         if mp is None:
             mp = 1
+        if isinstance(mp, torch.Tensor):
+            mp = mp.to(self.device)
         return (mp + self._eps) ** self._alpha
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
+        self._maybe_init_from_storage(storage)
         if len(storage) == 0:
             raise RuntimeError(_EMPTY_STORAGE_ERROR)
-        p_sum = self._sum_tree.query(0, len(storage))
-        p_min = self._min_tree.query(0, len(storage))
+        tree_device = self.device
+        is_cuda = tree_device.type == "cuda"
+        if is_cuda:
+            left = torch.zeros((), dtype=torch.long, device=tree_device)
+            right = torch.full((), len(storage), dtype=torch.long, device=tree_device)
+            p_sum = self._sum_tree.query(left, right)
+            p_min = self._min_tree.query(left, right)
+        else:
+            p_sum = self._sum_tree.query(0, len(storage))
+            p_min = self._min_tree.query(0, len(storage))
 
-        if p_sum <= 0:
-            raise RuntimeError("non-positive p_sum")
-        if p_min <= 0:
-            raise RuntimeError("non-positive p_min")
+        if not is_cuda:
+            if p_sum <= 0:
+                raise RuntimeError("non-positive p_sum")
+            if p_min <= 0:
+                raise RuntimeError("non-positive p_min")
         # For some undefined reason, only np.random works here.
         # All PT attempts fail, even when subsequently transformed into numpy
-        if self._rng is None:
+        if is_cuda:
+            mass = torch.rand(batch_size, device=tree_device, generator=self._rng)
+            mass = mass * p_sum
+        elif self._rng is None:
             mass = np.random.uniform(0.0, p_sum, size=batch_size)
         else:
             mass = torch.rand(batch_size, generator=self._rng) * p_sum
@@ -564,19 +926,21 @@ class PrioritizedSampler(Sampler):
         # mass = torch.rand(batch_size).mul_(p_sum)
         index = self._sum_tree.scan_lower_bound(mass)
         index = torch.as_tensor(index)
+        if index.device != tree_device:
+            index = index.to(tree_device)
         if not index.ndim:
             index = index.unsqueeze(0)
         index.clamp_max_(len(storage) - 1)
-        weight = torch.as_tensor(self._sum_tree[index])
-        # get indices where weight is 0
-        zero_weight = weight == 0
-        index = index
-        while zero_weight.any():
-            index = torch.where(zero_weight, index - 1, index)
-            if (index < 0).any():
-                raise RuntimeError("Failed to find a suitable index")
-            weight = torch.as_tensor(self._sum_tree[index])
+        weight = torch.as_tensor(self._sum_tree[index], device=tree_device)
+        if not is_cuda:
+            # get indices where weight is 0
             zero_weight = weight == 0
+            while zero_weight.any():
+                index = torch.where(zero_weight, index - 1, index)
+                if (index < 0).any():
+                    raise RuntimeError("Failed to find a suitable index")
+                weight = torch.as_tensor(self._sum_tree[index])
+                zero_weight = weight == 0
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -621,8 +985,10 @@ class PrioritizedSampler(Sampler):
                 ``index.ndim > 2``.
 
         """
-        priority = torch.as_tensor(priority, device=torch.device("cpu")).detach()
-        index = torch.as_tensor(index, dtype=torch.long, device=torch.device("cpu"))
+        self._maybe_init_from_storage(storage)
+        tree_device = self.device
+        priority = torch.as_tensor(priority, device=tree_device).detach()
+        index = torch.as_tensor(index, dtype=torch.long, device=tree_device)
         # we need to reshape priority if it has more than one element or if it has
         # a different shape than index
         if priority.numel() > 1 and priority.shape != index.shape:
@@ -639,10 +1005,14 @@ class PrioritizedSampler(Sampler):
 
         # MaxValueWriter will set -1 for items in the data that we don't want
         # to update. We therefore have to keep only the non-negative indices.
-        if _is_int(index):
+        if _is_int(index) and not isinstance(index, torch.Tensor):
             if index == -1:
                 return
         else:
+            if index.ndim == 0:
+                index = index.view(1)
+                if priority.ndim == 0:
+                    priority = priority.view(1)
             if index.ndim > 1:
                 if storage is None:
                     raise RuntimeError(
@@ -656,18 +1026,49 @@ class PrioritizedSampler(Sampler):
                         "Could not retrieve the storage shape. If your storage is not a TensorStorage subclass "
                         "or its shape isn't accessible via the shape attribute, submit an issue on GitHub."
                     )
-                index = torch.as_tensor(np.ravel_multi_index(index.unbind(-1), shape))
+                if tree_device.type == "cuda":
+                    multipliers = torch.ones(
+                        index.shape[-1], dtype=torch.long, device=tree_device
+                    )
+                    for dim in range(index.shape[-1] - 2, -1, -1):
+                        multipliers[dim] = multipliers[dim + 1] * shape[dim + 1]
+                    index = (index * multipliers).sum(-1)
+                else:
+                    index = torch.as_tensor(
+                        np.ravel_multi_index(index.unbind(-1), shape)
+                    )
             valid_index = index >= 0
-            if not valid_index.any():
+            if tree_device.type == "cuda":
+                index = index[valid_index]
+                if priority.ndim:
+                    priority = priority[valid_index]
+                if index.numel() == 0:
+                    return
+            elif not valid_index.any():
                 return
-            if not valid_index.all():
+            elif not valid_index.all():
                 index = index[valid_index]
                 if priority.ndim:
                     priority = priority[valid_index]
 
         max_p, max_p_idx = priority.max(dim=0)
         cur_max_priority, cur_max_priority_index = self._max_priority
-        if cur_max_priority is None or max_p > cur_max_priority:
+        if cur_max_priority is None:
+            cur_max_priority, cur_max_priority_index = self._max_priority = (
+                max_p,
+                index[max_p_idx] if index.ndim else index,
+            )
+        elif tree_device.type == "cuda":
+            if self._max_priority_within_buffer:
+                cur_max_priority, cur_max_priority_index = max_p, (
+                    index[max_p_idx] if index.ndim else index
+                )
+            else:
+                cur_max_priority = torch.maximum(
+                    max_p, torch.as_tensor(cur_max_priority, device=tree_device)
+                )
+                self._max_priority = (cur_max_priority, cur_max_priority_index)
+        elif max_p > cur_max_priority:
             cur_max_priority, cur_max_priority_index = self._max_priority = (
                 max_p,
                 index[max_p_idx] if index.ndim else index,
@@ -675,14 +1076,18 @@ class PrioritizedSampler(Sampler):
         priority = torch.pow(priority + self._eps, self._alpha)
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
-        if (
-            self._max_priority_within_buffer
-            and cur_max_priority_index is not None
-            and (index == cur_max_priority_index).any()
-        ):
-            maxval, maxidx = torch.tensor(
-                [self._sum_tree[i] for i in range(self._max_capacity)]
-            ).max(0)
+        if self._max_priority_within_buffer and cur_max_priority_index is not None:
+            if tree_device.type == "cuda":
+                all_indices = torch.arange(
+                    self._max_capacity, dtype=torch.long, device=tree_device
+                )
+                maxval, maxidx = self._sum_tree[all_indices].max(0)
+            elif (index == cur_max_priority_index).any():
+                maxval, maxidx = torch.tensor(
+                    [self._sum_tree[i] for i in range(self._max_capacity)]
+                ).max(0)
+            else:
+                return
             self._max_priority = (maxval, maxidx)
 
     def mark_update(
@@ -804,12 +1209,19 @@ class SliceSampler(Sampler):
 
     This class samples sub-trajectories with replacement. For a version without
     replacement, see :class:`~torchrl.data.replay_buffers.samplers.SliceSamplerWithoutReplacement`.
+    Equivalently, ``SliceSampler(replacement=False, ...)`` dispatches to
+    :class:`SliceSamplerWithoutReplacement` and forwards the remaining keyword
+    arguments (including ``drop_last`` and ``shuffle``).
 
     .. note:: `SliceSampler` can be slow to retrieve the trajectory indices. To accelerate
         its execution, prefer using `end_key` over `traj_key`, and consider the following
         keyword arguments: :attr:`compile`, :attr:`cache_values` and :attr:`use_gpu`.
 
     Keyword Args:
+        replacement (bool, optional): if ``False``, the call is dispatched to
+            :class:`SliceSamplerWithoutReplacement` (which accepts the same
+            keyword arguments as well as ``drop_last`` and ``shuffle``).
+            Defaults to ``True``.
         num_slices (int): the number of slices to be sampled. The batch-size
             must be greater or equal to the ``num_slices`` argument. Exclusive
             with ``slice_len``.
@@ -868,6 +1280,25 @@ class SliceSampler(Sampler):
             Be mindful that this can result in effective `batch_size`  shorter
             than the one asked for! Trajectories can be split using
             :func:`~torchrl.collectors.split_trajectories`. Defaults to ``True``.
+        pad_output (bool, optional): **discouraged. Prefer the default
+            (``False``).** When ``True`` (and ``strict_length=False``),
+            short trajectories are padded by *duplicating their last real
+            timestep* up to ``slice_len`` so the output's ``B * T`` is a
+            fixed product. The output is still a 1D batch of shape
+            ``[B * T]`` — the sample is not reshaped to ``[B, T]``. A 1D
+            boolean mask of shape ``[B * T]`` is written to
+            ``("collector", "mask")`` flagging real (``True``) vs
+            duplicated-last-step (``False``) positions. TorchRL's primitives
+            (recurrent modules under
+            :func:`~torchrl.modules.set_recurrent_mode`, mask-aware loss
+            modules, ``split_trajectories``, etc.) are all designed to
+            consume concatenated variable-length slices directly via the
+            ``is_init`` / ``truncated`` markers the sampler already emits,
+            so padding is a niche escape hatch for downstream code that
+            genuinely cannot accept a ragged batch (e.g. a custom op that
+            requires a fixed time dimension before a manual reshape).
+            Combining ``pad_output=True`` with ``strict_length=True`` raises
+            :class:`ValueError`. Defaults to ``False``.
         compile (bool or dict of kwargs, optional): if ``True``, the bottleneck of
             the :meth:`~sample` method will be compiled with :func:`~torch.compile`.
             Keyword arguments can also be passed to torch.compile with this arg.
@@ -1088,6 +1519,7 @@ class SliceSampler(Sampler):
         cache_values: bool = False,
         truncated_key: NestedKey | None = ("next", "truncated"),
         strict_length: bool = True,
+        pad_output: bool = False,
         compile: bool | dict = False,
         span: bool | int | tuple[bool | int, bool | int] = False,
         use_gpu: torch.device | bool = False,
@@ -1100,6 +1532,13 @@ class SliceSampler(Sampler):
         self.cache_values = cache_values
         self._fetch_traj = True
         self.strict_length = strict_length
+        if pad_output and strict_length:
+            raise ValueError(
+                "pad_output=True is incompatible with strict_length=True: "
+                "padding only happens when short trajectories are kept, which "
+                "requires strict_length=False."
+            )
+        self.pad_output = pad_output
         self._cache = {}
         self.use_gpu = bool(use_gpu)
         self._gpu_device = (
@@ -1148,14 +1587,19 @@ class SliceSampler(Sampler):
         else:
             if traj_key is not None:
                 self._fetch_traj = True
+                self._traj_key_auto = False
             elif end_key is not None:
                 self._fetch_traj = False
+                self._traj_key_auto = False
+            else:
+                # Neither provided: auto-detect from storage on first sample call.
+                # Prefer ("collector", "traj_ids") (written by collectors) over "episode".
+                self._fetch_traj = True
+                self._traj_key_auto = True
             if end_key is None:
                 end_key = ("next", "done")
-            if traj_key is None:
-                traj_key = "episode"
             self.end_key = end_key
-            self.traj_key = traj_key
+            self.traj_key = traj_key  # may be None when _traj_key_auto=True
 
         if not ((num_slices is None) ^ (slice_len is None)):
             raise TypeError(
@@ -1201,7 +1645,8 @@ class SliceSampler(Sampler):
             f"end_key={self.end_key}, "
             f"traj_key={self.traj_key}, "
             f"truncated_key={self.truncated_key}, "
-            f"strict_length={self.strict_length})"
+            f"strict_length={self.strict_length}, "
+            f"pad_output={getattr(self, 'pad_output', False)})"
         )
 
     def _find_start_stop_traj(
@@ -1350,9 +1795,80 @@ class SliceSampler(Sampler):
         result[:, 0] = result[:, 0] % storage_length
         return result
 
+    def _resolve_traj_key(self, storage):
+        """Auto-detect traj_key from storage on first sample call.
+
+        Probes for ``("collector", "traj_ids")`` first (written by TorchRL
+        collectors), then falls back to ``"episode"``, then to ``end_key``
+        reconstruction. Schema is read from ``storage._storage`` keys when
+        possible to avoid materialising any data.
+
+        Note: this method runs *once* per sampler lifetime (the
+        ``_traj_key_auto`` flag is cleared on the first call). If the storage
+        schema changes after the first sample call — e.g. data with a different
+        traj key is added later — the resolved key won't be updated. In
+        practice this only matters if the user is mixing storages, which is
+        unusual.
+        """
+        self._traj_key_auto = False
+        keys = None
+        # Cheap path: read the schema from the underlying TensorDict without
+        # fetching any data.
+        underlying = getattr(storage, "_storage", None)
+        if is_tensor_collection(underlying):
+            try:
+                keys = set(underlying.keys(include_nested=True))
+            except (RuntimeError, AttributeError, TypeError):
+                keys = None
+        if keys is None:
+            # Fallback: read one row. May be costly for remote storages.
+            try:
+                sample = storage[0:1]
+            except (IndexError, KeyError, RuntimeError):
+                sample = None
+            if sample is not None and hasattr(sample, "keys"):
+                try:
+                    keys = set(sample.keys(include_nested=True))
+                except (RuntimeError, AttributeError, TypeError):
+                    keys = None
+
+        if keys is None:
+            # Could not introspect schema: fall back to end_key reconstruction.
+            self._fetch_traj = False
+            return
+
+        has_collector = ("collector", "traj_ids") in keys
+        has_episode = "episode" in keys
+        if has_collector:
+            if has_episode:
+                # BC change: pre-0.13 the default was traj_key="episode" so a
+                # storage carrying both keys would have used "episode". From
+                # 0.13 onwards we prefer ("collector", "traj_ids"). Warn so
+                # users who relied on the old default can pin it explicitly.
+                warnings.warn(
+                    "SliceSampler auto-detected both ('collector', 'traj_ids') "
+                    "and 'episode' in the storage and is now using the former. "
+                    "Prior to v0.13 the default was 'episode'. To silence this "
+                    "warning, pass traj_key=... explicitly.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+            self.traj_key = ("collector", "traj_ids")
+            self._fetch_traj = True
+            return
+        if has_episode:
+            self.traj_key = "episode"
+            self._fetch_traj = True
+            return
+        # Neither traj key found: reconstruct from end_key
+        self._fetch_traj = False
+
     def _get_stop_and_length(self, storage, fallback=True):
         if self.cache_values and "stop-and-length" in self._cache:
             return self._cache.get("stop-and-length")
+
+        if getattr(self, "_traj_key_auto", False):
+            self._resolve_traj_key(storage)
 
         if self._fetch_traj:
             # We first try with the traj_key
@@ -1473,6 +1989,7 @@ class SliceSampler(Sampler):
                 maxval, (num_slices,), device=lengths.device, generator=self._rng
             )
 
+        _target_seq_length = None
         if (lengths < seq_length).any():
             if self.strict_length:
                 idx = lengths >= seq_length
@@ -1518,12 +2035,14 @@ class SliceSampler(Sampler):
                     num_slices = traj_idx.shape[0]
 
                 # make seq_length a tensor with values clamped by lengths
+                _target_seq_length = seq_length if self.pad_output else None
                 seq_length = lengths[traj_idx].clamp_max(seq_length)
         else:
             if traj_idx is None:
                 traj_idx = get_traj_idx(lengths.shape[0])
             else:
                 num_slices = traj_idx.shape[0]
+            _target_seq_length = None
         return self._get_index(
             lengths=lengths,
             start_idx=start_idx,
@@ -1532,6 +2051,7 @@ class SliceSampler(Sampler):
             seq_length=seq_length,
             storage_length=storage_length,
             traj_idx=traj_idx,
+            target_seq_length=_target_seq_length,
             storage=storage,
         )
 
@@ -1545,6 +2065,7 @@ class SliceSampler(Sampler):
         storage_length: int,
         traj_idx: torch.Tensor | None = None,
         *,
+        target_seq_length: int | None = None,
         storage,
     ) -> tuple[torch.Tensor, dict]:
         # end_point is the last possible index for start
@@ -1601,7 +2122,46 @@ class SliceSampler(Sampler):
             ],
             1,
         )
-        index = self._tensor_slices_from_startend(seq_length, starts, storage_length)
+
+        # When strict_length=False produced variable per-slice lengths, pad all
+        # slices to target_seq_length and emit a boolean mask so callers can
+        # distinguish real timesteps from padded ones.
+        if target_seq_length is not None and isinstance(seq_length, torch.Tensor):
+            T = target_seq_length
+            n_extra_dims = starts.shape[1] - 1
+
+            # time offsets: [T, n_extra_dims+1] — only the first dim advances
+            time_offsets = torch.zeros(
+                T, n_extra_dims + 1, device=starts.device, dtype=starts.dtype
+            )
+            time_offsets[:, 0] = torch.arange(
+                T, device=starts.device, dtype=starts.dtype
+            )
+
+            # full index before masking: [B, T, n_extra_dims+1]
+            index_full = starts.unsqueeze(1) + time_offsets.unsqueeze(0)
+
+            # real_mask[i, t] == True iff timestep t is a real (non-padded) step
+            arange = torch.arange(T, device=seq_length.device)
+            real_mask = arange.unsqueeze(0) < seq_length.unsqueeze(1)  # [B, T]
+
+            # padded positions repeat the last real index so storage access is safe
+            last_valid = starts.clone()
+            last_valid[:, 0] = starts[:, 0] + (seq_length - 1).clamp(min=0)
+            index_full = torch.where(
+                real_mask.unsqueeze(-1),
+                index_full,
+                last_valid.unsqueeze(1).expand_as(index_full),
+            )
+            index_full[:, :, 0] = index_full[:, :, 0] % storage_length
+            index = index_full.reshape(-1, n_extra_dims + 1)
+            mask_flat = real_mask.reshape(-1)  # [B*T]
+        else:
+            index = self._tensor_slices_from_startend(
+                seq_length, starts, storage_length
+            )
+            mask_flat = None
+
         if self.truncated_key is not None:
             truncated_key = self.truncated_key
             done_key = _replace_last(truncated_key, "done")
@@ -1610,7 +2170,14 @@ class SliceSampler(Sampler):
             truncated = torch.zeros(
                 (index.shape[0], 1), dtype=torch.bool, device=index.device
             )
-            if isinstance(seq_length, int):
+            if target_seq_length is not None and isinstance(seq_length, torch.Tensor):
+                # mark the last *real* timestep of each slice as truncated
+                T = target_seq_length
+                trunc_positions = torch.arange(
+                    num_slices, device=seq_length.device
+                ) * T + (seq_length - 1).clamp(min=0)
+                truncated[trunc_positions] = 1
+            elif isinstance(seq_length, int):
                 truncated.view(num_slices, -1)[:, -1] = 1
             else:
                 truncated[seq_length.cumsum(0) - 1] = 1
@@ -1624,13 +2191,80 @@ class SliceSampler(Sampler):
             terminated = st_index.get(terminated_key, default=None)
             if terminated is None:
                 terminated = torch.zeros_like(truncated)
-            return index, {
+            info = {
                 truncated_key: truncated,
                 done_key: done,
                 terminated_key: terminated,
             }
+            if mask_flat is not None:
+                info[("collector", "mask")] = mask_flat
+            self._maybe_emit_init_marker(
+                info, st_index, num_slices, seq_length, target_seq_length
+            )
+            return index, info
         index = index.to(torch.long).unbind(-1)
-        return index, {}
+        info = {}
+        if mask_flat is not None:
+            info[("collector", "mask")] = mask_flat
+        # Fetch st_index lazily so the marker logic can OR with existing
+        # is_init. Cheap because index is already computed.
+        st_index = storage[index]
+        self._maybe_emit_init_marker(
+            info, st_index, num_slices, seq_length, target_seq_length
+        )
+        return index, info
+
+    def _maybe_emit_init_marker(
+        self,
+        info: dict,
+        st_index,
+        num_slices: int,
+        seq_length,
+        target_seq_length: int | None,
+    ) -> None:
+        """Mark every slice start with ``is_init=True``.
+
+        Recurrent modules (:class:`~torchrl.modules.LSTMModule`,
+        :class:`~torchrl.modules.GRUModule`) under
+        :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")`` split a
+        flat sequence on ``is_init`` and use the stored hidden state at each
+        split as the initial state. By marking the first timestep of every
+        slice we let the user pass the concatenated flat sample straight to a
+        recurrent policy: the RNN sees the slices as independent
+        sub-trajectories and uses each slice's stored ``recurrent_state[0]``
+        as its initial hidden state.
+
+        We OR our markers with the storage's existing ``is_init`` so episode
+        resets that fall *inside* a slice are preserved. If the storage
+        doesn't carry an ``is_init`` field (no :class:`InitTracker`), we don't
+        introduce one — we'd be lying about real resets we can't see.
+        """
+        existing_is_init = (
+            st_index.get("is_init", default=None) if hasattr(st_index, "get") else None
+        )
+        if existing_is_init is None:
+            return
+        init_marker = torch.zeros_like(existing_is_init)
+        device = init_marker.device
+        if target_seq_length is not None:
+            # pad_output path: every slice is target_seq_length long.
+            slice_starts = (
+                torch.arange(num_slices, device=device, dtype=torch.long)
+                * target_seq_length
+            )
+        elif isinstance(seq_length, int):
+            # Uniform slices (strict_length=True, or strict_length=False with
+            # all sufficiently-long trajectories).
+            slice_starts = (
+                torch.arange(num_slices, device=device, dtype=torch.long) * seq_length
+            )
+        else:
+            # Variable per-slice length: starts are at cumulative offsets,
+            # i.e. [0, len_0, len_0+len_1, ...].
+            slice_starts = torch.zeros(num_slices, device=device, dtype=torch.long)
+            slice_starts[1:] = seq_length.to(device).cumsum(0)[:-1].to(torch.long)
+        init_marker[slice_starts] = True
+        info["is_init"] = init_marker | existing_is_init
 
     @property
     def _used_traj_key(self):
@@ -2601,3 +3235,14 @@ class SamplerEnsemble(Sampler):
     def __repr__(self):
         samplers = textwrap.indent(f"samplers={self._samplers}", " " * 4)
         return f"{self.__class__.__name__}(\n{samplers})"
+
+
+# Register without-replacement dispatch targets. Importing this module makes
+# ``RandomSampler(replacement=False)`` dispatch to ``SamplerWithoutReplacement``
+# and ``SliceSampler(replacement=False)`` to ``SliceSamplerWithoutReplacement``.
+_REPLACEMENT_DISPATCH.update(
+    {
+        RandomSampler: SamplerWithoutReplacement,
+        SliceSampler: SliceSamplerWithoutReplacement,
+    }
+)

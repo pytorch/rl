@@ -17,10 +17,12 @@ import pytest
 import torch
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
 from tensordict.utils import _zip_strict
+from torchrl import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
+from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
@@ -369,9 +371,6 @@ def create_batching_test_wrapper(
 @pytest.fixture
 def monkey_patch_forward_for_timing():
     """Fixture to monkey patch the forward method to add timing and batch size tracking."""
-    import threading
-    import time
-
     # Track processing times and batch sizes
     processing_times = []
     batch_sizes = []
@@ -2112,10 +2111,6 @@ class TestLogProbsComparison:
         sync_model, sync_tokenizer = vllm_instance
         async_model, async_tokenizer = async_vllm_instance
 
-        from tensordict import TensorDict
-        from torchrl.modules.llm.policies.common import Text
-        from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
-
         # Test prompts
         test_prompts = [
             "Hello, how are you?",
@@ -2517,8 +2512,6 @@ class TestBatching:
         async_vllm_instance,
         vllm_backend,
     ):
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         # Handle the case where vLLM is not available
         if wrapper_class == vLLMWrapper:
             try:
@@ -2573,8 +2566,6 @@ class TestBatching:
         async_vllm_instance,
         vllm_backend,
     ):
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         if wrapper_class == vLLMWrapper:
             if vllm_backend == "async":
                 model, tokenizer = async_vllm_instance
@@ -2669,8 +2660,6 @@ class TestBatching:
         input2 = TensorDict(text=Text(prompt=["Test 2"]), batch_size=(1,))
 
         # Submit inputs (they won't be processed immediately due to batch size)
-        from concurrent.futures import ThreadPoolExecutor
-
         pool = ThreadPoolExecutor(max_workers=1)
         try:
             # Submit work
@@ -3025,8 +3014,6 @@ class TestBatching:
 
         # Test 4: Verify that the _batching decorator correctly handles the squeeze logic
         # This tests the specific fix in the _batching decorator
-        from torchrl.modules.llm.policies.common import _batching
-
         # Create a simple mock function to test the decorator
         def mock_forward(self, td_input, **kwargs):
             # Return the input as-is for testing
@@ -3068,12 +3055,6 @@ class TestRayWrapper:
     @pytest.mark.parametrize("backend", ["transformers"])
     @pytest.mark.skip(reason="Ray wrapper tests hang in CI - needs investigation")
     def test_ray_wrapper(self, sample_text, backend):
-        import gc
-        from concurrent.futures import ThreadPoolExecutor
-
-        from torchrl import logger as torchrl_logger
-        from torchrl.modules.llm.policies import RemoteTransformersWrapper
-
         # check that the wrapper is remote
         if backend == "vllm":
             raise ValueError("vllm backend is not supported")
@@ -3121,7 +3102,6 @@ class TestActorSharing:
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
-        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # Initialize Ray if not already done
         if not ray.is_initialized():

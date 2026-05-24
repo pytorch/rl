@@ -28,6 +28,7 @@ from tensordict.utils import is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     _replace_last,
     implement_for,
     prod,
@@ -260,6 +261,7 @@ class _EnvPostInit(abc.ABCMeta):
         spec_locked = kwargs.pop("spec_locked", True)
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
+        policy = kwargs.pop("policy", None)
         instance: EnvBase = super().__call__(*args, **kwargs)
         if "_cache" not in instance.__dict__:
             instance._cache = {}
@@ -284,9 +286,17 @@ class _EnvPostInit(abc.ABCMeta):
                 AutoResetTransform,
             )
 
-            return AutoResetEnv(
+            instance = AutoResetEnv(
                 instance, AutoResetTransform(replace=auto_reset_replace)
             )
+            if policy is not None:
+                # Local import: torchrl.modules imports torchrl.envs at module import time.
+                from torchrl.modules.utils.utils import (
+                    _maybe_append_env_transforms_from_module,
+                )
+
+                instance = _maybe_append_env_transforms_from_module(instance, policy)
+            return instance
 
         done_keys = set(instance.full_done_spec.keys(True, True))
         obs_keys = set(instance.full_observation_spec.keys(True, True))
@@ -308,6 +318,13 @@ class _EnvPostInit(abc.ABCMeta):
                     f"The set of keys of one spec collides (culprit: {total_set.intersection(keyset)}) with another."
                 )
             total_set = total_set.union(keyset)
+        if policy is not None:
+            # Local import: torchrl.modules imports torchrl.envs at module import time.
+            from torchrl.modules.utils.utils import (
+                _maybe_append_env_transforms_from_module,
+            )
+
+            instance = _maybe_append_env_transforms_from_module(instance, policy)
         return instance
 
 
@@ -327,6 +344,22 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             at every reset and every step. Defaults to ``False``.
         allow_done_after_reset (bool, optional): if ``True``, an environment can
             be done after a call to :meth:`reset` is made. Defaults to ``False``.
+        policy (torch.nn.Module, optional): a policy module used to infer and
+            append any environment transforms it needs, such as
+            :class:`~torchrl.envs.transforms.InitTracker` and recurrent-state
+            :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms.
+            This returns a :class:`~torchrl.envs.TransformedEnv` when transforms
+            are added.
+
+            .. note:: The auto-wrapping is achieved by the `EnvBase` metaclass.
+                It does not appear in the `__init__` method of subclasses
+                (:class:`~torchrl.envs.GymEnv`,
+                :class:`~torchrl.envs.DMControlEnv`, custom subclasses, etc.)
+                but is supported on every one of them, and is included in the
+                keyword arguments here strictly for type-hinting purposes.
+
+            .. seealso:: :ref:`Auto-wrapping recurrent transforms via the
+                policy= argument <Environment-policy-arg>`.
         spec_locked (bool, optional): if ``True``, the specs are locked and can only be
             modified if :meth:`~torchrl.envs.EnvBase.set_spec_lock_` is called.
 
@@ -2194,6 +2227,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         result.update(next_tensordict.exclude(*keys).filter_empty_())
         return result
 
+    @_maybe_record_function_decorator("EnvBase.step")
     def step(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Makes a step in the environment.
 
@@ -2961,6 +2995,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         raise NotImplementedError
 
+    @_maybe_record_function_decorator("EnvBase.reset")
     def reset(
         self,
         tensordict: TensorDictBase | None = None,
@@ -3212,6 +3247,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def _has_dynamic_specs(self) -> bool:
         return _has_dynamic_specs(self.specs)
 
+    @_maybe_record_function_decorator("EnvBase.rollout")
     def rollout(
         self,
         max_steps: int,
@@ -3640,6 +3676,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         """
         return self._step_mdp(next_tensordict)
 
+    def _native_autoreset_set_invalid_next_observation(
+        self, tensordict: TensorDictBase
+    ) -> dict[NestedKey, torch.Tensor]:
+        next_tensordict = tensordict.get("next")
+        done = False
+        for done_key in self.done_keys:
+            done = done | next_tensordict.get(done_key)
+        if done is False or not done.any():
+            return {}
+        done = done.squeeze(-1)
+
+        reset_observations = {}
+        for obs_key in self._observation_keys_step_mdp:
+            obs = next_tensordict.get(obs_key, None)
+            if obs is None or not isinstance(obs, torch.Tensor):
+                continue
+            reset_observations[obs_key] = obs.clone()
+            if obs.is_floating_point():
+                obs[done] = torch.nan
+            else:
+                obs[done] = 0
+        return reset_observations
+
     @property
     @_cache_value
     def _step_mdp(self) -> Callable[[TensorDictBase], TensorDictBase]:
@@ -3680,10 +3739,19 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 else:
                     tensordict.clear_device_()
             tensordict = self.step(tensordict)
-            if storing_device is None or tensordict.device == storing_device:
-                td_append = tensordict.copy()
+            # Run step_mdp + post-step-mdp hooks before copying the post-step
+            # tensordict for stacking: the hook is allowed to mutate it (e.g.
+            # to drop transient keys), and we want those mutations reflected
+            # in what gets stacked.
+            post_step_td = tensordict
+            next_td = self._step_mdp(post_step_td)
+            if self._post_step_mdp_hooks is not None:
+                post_step_td, next_td = self._post_step_mdp_hooks(post_step_td, next_td)
+
+            if storing_device is None or post_step_td.device == storing_device:
+                td_append = post_step_td.copy()
             else:
-                td_append = tensordict.to(storing_device)
+                td_append = post_step_td.to(storing_device)
             if break_when_all_done:
                 if partial_steps is not True and not partial_steps.all():
                     # At least one step is partial
@@ -3697,7 +3765,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if i == max_steps - 1:
                 # we don't truncate as one could potentially continue the run
                 break
-            tensordict = self._step_mdp(tensordict)
+            tensordict = next_td
 
             if break_when_any_done:
                 # done and truncated are in done_keys
@@ -3779,6 +3847,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
         return tensordicts
 
+    @_maybe_record_function_decorator("EnvBase.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
@@ -3826,13 +3895,47 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         tensordict = self.step(tensordict)
         # done and truncated are in done_keys
         # We read if any key is done.
+        native_autoreset = self.__dict__.get("_torchrl_native_autoreset", False)
+        if native_autoreset:
+            reset_observations = self._native_autoreset_set_invalid_next_observation(
+                tensordict
+            )
         tensordict_ = self._step_mdp(tensordict)
-        # if self._post_step_mdp_hooks is not None:
-        # tensordict_ = self._post_step_mdp_hooks(tensordict_)
-        tensordict_ = self.maybe_reset(tensordict_)
+        if self._post_step_mdp_hooks is not None:
+            tensordict, tensordict_ = self._post_step_mdp_hooks(tensordict, tensordict_)
+        if native_autoreset:
+            for obs_key, obs in reset_observations.items():
+                if obs_key in tensordict_.keys(True, True):
+                    tensordict_.set(obs_key, obs)
+            for done_key in self.done_keys:
+                done = tensordict_.get(done_key).clone()
+                init_key = _replace_last(done_key, "is_init")
+                if init_key in tensordict_.keys(True, True):
+                    tensordict_.set(init_key, done.clone())
+                tensordict_.set(done_key, done.zero_())
+        else:
+            tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
 
-    # _post_step_mdp_hooks: Callable[[TensorDictBase], TensorDictBase] | None = None
+    _post_step_mdp_hooks: Callable[
+        [TensorDictBase, TensorDictBase], tuple[TensorDictBase, TensorDictBase]
+    ] | None = None
+    """Optional hook called after :meth:`_step_mdp` inside :meth:`step_and_maybe_reset`.
+
+    Signature: ``(tensordict, tensordict_) -> (tensordict, tensordict_)`` where
+    ``tensordict`` is the post-step tensordict (still carrying
+    ``("next", ...)`` entries) and ``tensordict_`` is the result of
+    ``step_mdp``. The hook may mutate either tensordict in place; both are
+    returned so the caller picks up any swaps. Used by transforms that need to
+    adjust the data the policy will see on the next iteration, or trim the
+    data that the data collector will stack (for example a low-precision
+    delta transform that drops the full-precision ``("next", obs)`` slot in
+    favour of a compressed sibling key).
+
+    Defaults to ``None``: when unset, the hook is skipped. Transforms that need
+    it are expected to expose a ``_post_step_mdp_hooks`` method themselves and
+    rely on :class:`~torchrl.envs.TransformedEnv` to delegate the call.
+    """
 
     @property
     @_cache_value

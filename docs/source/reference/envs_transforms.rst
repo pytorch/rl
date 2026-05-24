@@ -247,6 +247,7 @@ Available Transforms
     TransformedEnv
     ActionDiscretizer
     ActionMask
+    ActionScaling
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
@@ -266,7 +267,9 @@ Available Transforms
     DoubleToFloat
     EndOfLifeTransform
     ExcludeTransform
+    ExpandAs
     FiniteTensorDictCheck
+    FlattenAction
     FlattenObservation
     FrameSkipTransform
     GrayScale
@@ -276,6 +279,8 @@ Available Transforms
     MeanActionSelector
     ModuleTransform
     MultiAction
+    NextObservationDelta
+    NextStateReconstructor
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -283,6 +288,7 @@ Available Transforms
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RandomTruncationTransform
     RemoveEmptySpecs
     RenameTransform
     Resize

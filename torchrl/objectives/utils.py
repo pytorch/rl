@@ -60,6 +60,7 @@ class ValueEstimators(Enum):
     TD1 = "TD(1) (infinity-step return)"
     TDLambda = "TD(lambda)"
     GAE = "Generalized advantage estimate"
+    MAGAE = "Multi-agent generalized advantage estimate"
     VTrace = "V-trace"
 
 
@@ -80,6 +81,8 @@ def default_value_kwargs(value_type: ValueEstimators):
     elif value_type == ValueEstimators.TD0:
         return {"gamma": 0.99, "differentiable": True}
     elif value_type == ValueEstimators.GAE:
+        return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
+    elif value_type == ValueEstimators.MAGAE:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     elif value_type == ValueEstimators.TDLambda:
         return {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
@@ -651,9 +654,13 @@ def _reduce(
         if weights is not None:
             # Weighted average: (tensor * weights).sum() / weights.sum()
             if mask is not None:
-                masked_weight = weights[mask]
-                masked_tensor = tensor[mask]
-                result = (masked_tensor * masked_weight).sum() / masked_weight.sum()
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                mask = mask.to(dtype=weights.dtype)
+                masked_weight = weights * mask
+                result = (tensor * masked_weight).sum() / masked_weight.sum()
             else:
                 if tensor.shape != weights.shape:
                     raise ValueError(
@@ -661,16 +668,20 @@ def _reduce(
                     )
                 result = (tensor * weights).sum() / weights.sum()
         elif mask is not None:
-            result = tensor[mask].mean()
+            mask = mask.to(dtype=tensor.dtype)
+            result = (tensor * mask).sum() / mask.sum()
         else:
             result = tensor.mean()
     elif reduction == "sum":
         if weights is not None:
             # Weighted sum: (tensor * weights).sum()
             if mask is not None:
-                masked_weight = weights[mask]
-                masked_tensor = tensor[mask]
-                result = (masked_tensor * masked_weight).sum()
+                if tensor.shape != weights.shape:
+                    raise ValueError(
+                        f"Tensor and weights shapes must match, but got {tensor.shape} and {weights.shape}"
+                    )
+                mask = mask.to(dtype=weights.dtype)
+                result = (tensor * weights * mask).sum()
             else:
                 if tensor.shape != weights.shape:
                     raise ValueError(
@@ -678,7 +689,8 @@ def _reduce(
                     )
                 result = (tensor * weights).sum()
         elif mask is not None:
-            result = tensor[mask].sum()
+            mask = mask.to(dtype=tensor.dtype)
+            result = (tensor * mask).sum()
         else:
             result = tensor.sum()
     else:

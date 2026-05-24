@@ -412,7 +412,11 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
                     )
 
                     if weights is not None:
-                        # Cascade weight update to sub-collectors if context supports it
+                        # Cascade weight update to sub-collectors if context
+                        # supports it. When the context is a leaf Collector,
+                        # its update_policy_weights_ bumps the local
+                        # PolicyVersion transform — no separate
+                        # increment_version() call needed here.
                         model_id = self._model_id or "policy"
                         if self.context is not None and hasattr(
                             self.context, "update_policy_weights_"

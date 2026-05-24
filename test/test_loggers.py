@@ -18,7 +18,7 @@ from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
-from torchrl.record.loggers.common import _has_torchcodec, _has_tv
+from torchrl.record.loggers.common import _has_torchcodec, _has_tv, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.ray import RayLogger
@@ -616,9 +616,18 @@ class TestMLFlowLogger:
             videos_dir = client.download_artifacts(run_id, "videos", artifacts_dir)
             for i, video_name in enumerate(os.listdir(videos_dir)):
                 video_path = os.path.join(videos_dir, video_name)
-                loaded_video, _, _ = torchvision.io.read_video(
-                    video_path, pts_unit="sec", output_format="TCHW"
-                )
+                if _has_torchcodec:
+                    from torchcodec.decoders import VideoDecoder
+
+                    loaded_video = (
+                        VideoDecoder(video_path)
+                        .get_frames_in_range(start=0, stop=128)
+                        .data
+                    )
+                else:
+                    loaded_video, _, _ = torchvision.io.read_video(
+                        video_path, pts_unit="sec", output_format="TCHW"
+                    )
                 if steps:
                     assert torch.allclose(loaded_video.int(), videos[i].int(), rtol=0.1)
                 else:
@@ -677,6 +686,7 @@ class TestPixelRenderTransform:
 
 @pytest.fixture()
 def trackio_logger():
+    pytest.importorskip("trackio")
     exp_name = "ramala"
     logger = TrackioLogger(project="test", exp_name=exp_name)
     yield logger
@@ -809,8 +819,6 @@ class TestRayLogger:
         pass
 
     def test_csv_logger_returns_ray_logger(self):
-        from torchrl.record.loggers.common import Logger
-
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
             assert isinstance(logger, RayLogger)

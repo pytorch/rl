@@ -16,6 +16,7 @@ from tensordict.nn import (
     TensorDictModuleWrapper,
     TensorDictSequential,
 )
+from tensordict.nn.distributions import Delta
 from tensordict.nn.probabilistic import interaction_type, InteractionType
 from tensordict.utils import expand_as_right, NestedKey
 from torch import nn
@@ -123,12 +124,31 @@ class Actor(SafeModule):
             **kwargs,
         )
 
+    def get_dist(self, tensordict: TensorDictBase) -> torch.distributions.Distribution:
+        """Returns a Delta distribution centered at the deterministic action.
+
+        For deterministic actors, this returns a Delta distribution which has
+        log-probability 0 for the exact action and -inf for any other action.
+
+        Args:
+            tensordict (TensorDictBase): input tensordict containing observations.
+
+        Returns:
+            torch.distributions.Distribution: A Delta distribution.
+        """
+        # Forward pass to get the action
+        td_out = self(tensordict)
+        action = td_out.get(self.out_keys[0])
+
+        return Delta(action)
+
 
 class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
     """General class for probabilistic actors in RL.
 
-    The Actor class comes with default values for the out_keys (["action"])
-    and if the spec is provided but not as a Composite object, it will be
+    The ProbabilisticActor class comes with default values for the out_keys (["action"])
+    and if the spec is provided but not as a
+    Composite object, it will be
     automatically translated into :obj:`spec = Composite(action=spec)`
 
     Args:
@@ -200,6 +220,17 @@ class ProbabilisticActor(SafeProbabilisticTensorDictSequential):
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
+        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
+            Routes sampling through an explicit RNG instead of the global PyTorch RNG.
+            Accepts a :class:`torch.Generator` (used in place, advances across calls),
+            an :class:`int` (shorthand for ``Generator().manual_seed(int)``), or a
+            :class:`NestedKey` to fetch the generator from the input tensordict on every
+            call (the value can be a ``Generator`` or a scalar int / Tensor used as a
+            JAX-style stream-key with a ``next_seed`` written back). Defaults to ``None``,
+            in which case the global RNG is used. Useful when the agent's RNG stream must
+            be isolated from the environment's — see Patterson et al.,
+            "Empirical Design in Reinforcement Learning" (`arXiv:2304.01315
+            <https://arxiv.org/abs/2304.01315>`_).
 
     Examples:
         >>> import torch
@@ -1112,6 +1143,10 @@ class QValueActor(SafeSequential):
             is a :class:`tensordict.nn.TensorDictModuleBase` instance, it must
             match one of its output keys. Otherwise, this string represents
             the name of the action-value entry in the output tensordict.
+        action_key (str or tuple of str, optional): The output key for the selected
+            action. Defaults to ``"action"``.
+        chosen_action_value_key (str or tuple of str, optional): The output key for
+            the selected action value. Defaults to ``"chosen_action_value"``.
         action_mask_key (str or tuple of str, optional): The input key
             representing the action mask. Defaults to ``"None"`` (equivalent to no masking).
 
@@ -1171,6 +1206,8 @@ class QValueActor(SafeSequential):
         safe=False,
         action_space: str | None = None,
         action_value_key=None,
+        action_key: NestedKey | None = None,
+        chosen_action_value_key: NestedKey | None = None,
         action_mask_key: NestedKey | None = None,
         strict_shape: bool | str | None = None,
     ):
@@ -1185,10 +1222,14 @@ class QValueActor(SafeSequential):
         self.action_value_key = action_value_key
         if action_value_key is None:
             action_value_key = "action_value"
+        if action_key is None:
+            action_key = "action"
+        if chosen_action_value_key is None:
+            chosen_action_value_key = "chosen_action_value"
         out_keys = [
-            "action",
+            action_key,
             action_value_key,
-            "chosen_action_value",
+            chosen_action_value_key,
         ]
         if isinstance(module, TensorDictModuleBase):
             if action_value_key not in module.out_keys:
@@ -1205,12 +1246,12 @@ class QValueActor(SafeSequential):
             spec = Composite()
         if isinstance(spec, Composite):
             spec = spec.clone()
-            if "action" not in spec.keys():
-                spec["action"] = None
+            if action_key not in spec.keys(True, True):
+                spec[action_key] = None
         else:
-            spec = Composite(action=spec, shape=spec.shape[:-1])
+            spec = Composite({action_key: spec}, shape=spec.shape[:-1])
         spec[action_value_key] = None
-        spec["chosen_action_value"] = None
+        spec[chosen_action_value_key] = None
         qvalue = QValueModule(
             action_value_key=action_value_key,
             out_keys=out_keys,

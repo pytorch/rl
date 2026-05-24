@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from torchrl.objectives.a2c import A2CLoss
+from torchrl.objectives.act import ACTLoss
+from torchrl.objectives.bc import BCLoss
 from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.cql import CQLLoss, DiscreteCQLLoss
 from torchrl.objectives.crossq import CrossQLoss
@@ -16,9 +18,19 @@ from torchrl.objectives.dreamer import (
     DreamerModelLoss,
     DreamerValueLoss,
 )
+from torchrl.objectives.dreamer_v3 import (
+    categorical_kl_balanced,
+    DreamerV3ActorLoss,
+    DreamerV3ModelLoss,
+    DreamerV3ValueLoss,
+    symexp,
+    symlog,
+    two_hot_decode,
+    two_hot_encode,
+)
 from torchrl.objectives.gail import GAILLoss
 from torchrl.objectives.iql import DiscreteIQLLoss, IQLLoss
-from torchrl.objectives.multiagent import QMixerLoss
+from torchrl.objectives.multiagent import IPPOLoss, MAPPOLoss, QMixerLoss
 from torchrl.objectives.pilco import ExponentialQuadraticCost
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.redq import REDQLoss
@@ -41,6 +53,8 @@ from torchrl.objectives.utils import (
 
 __all__ = [
     "A2CLoss",
+    "ACTLoss",
+    "BCLoss",
     "CQLLoss",
     "DiffusionBCLoss",
     "ClipPPOLoss",
@@ -54,13 +68,18 @@ __all__ = [
     "DistributionalDQNLoss",
     "DreamerActorLoss",
     "DreamerModelLoss",
+    "DreamerV3ActorLoss",
+    "DreamerV3ModelLoss",
+    "DreamerV3ValueLoss",
     "DreamerValueLoss",
     "ExponentialQuadraticCost",
     "GAILLoss",
     "HardUpdate",
+    "IPPOLoss",
     "IQLLoss",
     "KLPENPPOLoss",
     "LossModule",
+    "MAPPOLoss",
     "OnlineDTLoss",
     "PPOLoss",
     "QMixerLoss",
@@ -73,10 +92,15 @@ __all__ = [
     "TargetNetUpdater",
     "ValueEstimators",
     "add_random_module",
+    "categorical_kl_balanced",
     "default_value_kwargs",
     "distance_loss",
     "group_optimizers",
     "hold_out_net",
     "hold_out_params",
     "next_state_value",
+    "symexp",
+    "symlog",
+    "two_hot_decode",
+    "two_hot_encode",
 ]

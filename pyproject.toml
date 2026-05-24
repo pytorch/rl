@@ -46,12 +46,38 @@ dependencies = [
     "tensordict>=0.12.0,<0.13.0",
 ]
 
+[dependency-groups]
+dev = [
+    "gym",
+    "gymnasium",
+    "hydra-core>=1.1",
+    "hydra-submitit-launcher",
+    "mujoco",
+    "mujoco-torch",
+    "pytest",
+    "tensorboard",
+    "tqdm",
+    "wandb",
+]
+
+[tool.uv]
+prerelease = "allow"
+
+[[tool.uv.index]]
+name = "pytorch-nightly"
+url = "https://download.pytorch.org/whl/nightly/cpu"
+explicit = true
+
+[tool.uv.sources]
+tensordict = { git = "https://github.com/pytorch/tensordict" }
+torch = { index = "pytorch-nightly" }
+
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
-rendering = ["moviepy<2.0.0", "torchcodec>=0.10.0"]
+rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
@@ -92,7 +118,8 @@ offline-data = [
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
-procgen = ["procgen"]
+genesis = ["genesis-world"]
+procgen = ["procgen; python_version<'3.10'"]
 pilco = [
     "botorch",
     "gpytorch",
@@ -114,18 +141,18 @@ llm = [
 # LLM with vLLM backend
 llm-vllm = [
     "torchrl[llm]",
-    "vllm>=0.17",
+    "vllm>=0.17; platform_system == 'Linux'",
 ]
 # LLM with SGLang backend
 llm-sglang = [
     "torchrl[llm]",
-    "sglang[all]",
+    "sglang[all]; platform_system == 'Linux'",
 ]
 # LLM with both backends
 llm-all = [
     "torchrl[llm]",
-    "vllm>=0.17",
-    "sglang[all]",
+    "vllm>=0.17; platform_system == 'Linux'",
+    "sglang[all]; platform_system == 'Linux'",
 ]
 grpo = [
     # Core dependencies for GRPO training
@@ -176,7 +203,7 @@ exclude = [
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
-"torchrl" = ["csrc/*.h"]
+"torchrl" = ["csrc/*.h", "csrc/*.cu"]
 
 [tool.codespell]
 skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/reference/generated,torchrl/_version.py,.worktrees,0.9"
@@ -185,7 +212,8 @@ skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/re
 # splitted: used as variable name
 # te: Telugu language code in ifeval
 # uncompressible: used as class/function name in benchmarks
-ignore-words-list = "multicat,nd,splitted,te,uncompressible"
+# dout: standard autograd shorthand for gradient w.r.t. ``out``
+ignore-words-list = "multicat,nd,splitted,te,uncompressible,dout"
 
 [tool.usort]
 first_party_detection = false

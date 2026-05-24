@@ -62,7 +62,7 @@ jobs:
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
       # macOS only supports CPU builds
-      with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
+      with-cpu: ${{ inputs.with-cpu || (github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable')) || 'enable' }}
   build:
     needs: generate-matrix
     strategy:

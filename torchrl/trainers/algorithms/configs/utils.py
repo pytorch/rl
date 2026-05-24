@@ -12,13 +12,22 @@ from torchrl.trainers.algorithms.configs.common import ConfigBase
 
 @dataclass
 class AdamConfig(ConfigBase):
-    """Configuration for Adam optimizer."""
+    """Hydra configuration for :class:`torch.optim.Adam`.
+
+    Every kwarg accepted by ``torch.optim.Adam.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-4
     weight_decay: float = 0.0
     amsgrad: bool = False
+    foreach: bool | None = None
+    maximize: bool = False
+    capturable: bool = False
+    differentiable: bool = False
+    fused: bool | None = None
+    decoupled_weight_decay: bool = False
     _target_: str = "torch.optim.Adam"
     _partial_: bool = True
 
@@ -28,7 +37,10 @@ class AdamConfig(ConfigBase):
 
 @dataclass
 class AdamWConfig(ConfigBase):
-    """Configuration for AdamW optimizer."""
+    """Hydra configuration for :class:`torch.optim.AdamW`.
+
+    Every kwarg accepted by ``torch.optim.AdamW.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.999)
@@ -49,12 +61,19 @@ class AdamWConfig(ConfigBase):
 
 @dataclass
 class AdamaxConfig(ConfigBase):
-    """Configuration for Adamax optimizer."""
+    """Hydra configuration for :class:`torch.optim.Adamax`.
+
+    Every kwarg accepted by ``torch.optim.Adamax.__init__`` is exposed as a field here.
+    """
 
     lr: float = 2e-3
     betas: tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-8
     weight_decay: float = 0.0
+    foreach: bool | None = None
+    maximize: bool = False
+    differentiable: bool = False
+    capturable: bool = False
     _target_: str = "torch.optim.Adamax"
     _partial_: bool = True
 
@@ -64,7 +83,10 @@ class AdamaxConfig(ConfigBase):
 
 @dataclass
 class SGDConfig(ConfigBase):
-    """Configuration for SGD optimizer."""
+    """Hydra configuration for :class:`torch.optim.SGD`.
+
+    Every kwarg accepted by ``torch.optim.SGD.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-3
     momentum: float = 0.0
@@ -74,6 +96,7 @@ class SGDConfig(ConfigBase):
     maximize: bool = False
     foreach: bool | None = None
     differentiable: bool = False
+    fused: bool | None = None
     _target_: str = "torch.optim.SGD"
     _partial_: bool = True
 
@@ -83,7 +106,10 @@ class SGDConfig(ConfigBase):
 
 @dataclass
 class RMSpropConfig(ConfigBase):
-    """Configuration for RMSprop optimizer."""
+    """Hydra configuration for :class:`torch.optim.RMSprop`.
+
+    Every kwarg accepted by ``torch.optim.RMSprop.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-2
     alpha: float = 0.99
@@ -91,8 +117,9 @@ class RMSpropConfig(ConfigBase):
     weight_decay: float = 0.0
     momentum: float = 0.0
     centered: bool = False
-    maximize: bool = False
+    capturable: bool = False
     foreach: bool | None = None
+    maximize: bool = False
     differentiable: bool = False
     _target_: str = "torch.optim.RMSprop"
     _partial_: bool = True
@@ -103,16 +130,20 @@ class RMSpropConfig(ConfigBase):
 
 @dataclass
 class AdagradConfig(ConfigBase):
-    """Configuration for Adagrad optimizer."""
+    """Hydra configuration for :class:`torch.optim.Adagrad`.
+
+    Every kwarg accepted by ``torch.optim.Adagrad.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-2
     lr_decay: float = 0.0
     weight_decay: float = 0.0
     initial_accumulator_value: float = 0.0
     eps: float = 1e-10
-    maximize: bool = False
     foreach: bool | None = None
+    maximize: bool = False
     differentiable: bool = False
+    fused: bool | None = None
     _target_: str = "torch.optim.Adagrad"
     _partial_: bool = True
 
@@ -122,13 +153,17 @@ class AdagradConfig(ConfigBase):
 
 @dataclass
 class AdadeltaConfig(ConfigBase):
-    """Configuration for Adadelta optimizer."""
+    """Hydra configuration for :class:`torch.optim.Adadelta`.
+
+    Every kwarg accepted by ``torch.optim.Adadelta.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1.0
     rho: float = 0.9
     eps: float = 1e-6
     weight_decay: float = 0.0
     foreach: bool | None = None
+    capturable: bool = False
     maximize: bool = False
     differentiable: bool = False
     _target_: str = "torch.optim.Adadelta"
@@ -140,11 +175,15 @@ class AdadeltaConfig(ConfigBase):
 
 @dataclass
 class RpropConfig(ConfigBase):
-    """Configuration for Rprop optimizer."""
+    """Hydra configuration for :class:`torch.optim.Rprop`.
+
+    Every kwarg accepted by ``torch.optim.Rprop.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-2
     etas: tuple[float, float] = (0.5, 1.2)
     step_sizes: tuple[float, float] = (1e-6, 50.0)
+    capturable: bool = False
     foreach: bool | None = None
     maximize: bool = False
     differentiable: bool = False
@@ -157,7 +196,10 @@ class RpropConfig(ConfigBase):
 
 @dataclass
 class ASGDConfig(ConfigBase):
-    """Configuration for ASGD optimizer."""
+    """Hydra configuration for :class:`torch.optim.ASGD`.
+
+    Every kwarg accepted by ``torch.optim.ASGD.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-2
     lambd: float = 1e-4
@@ -167,6 +209,7 @@ class ASGDConfig(ConfigBase):
     foreach: bool | None = None
     maximize: bool = False
     differentiable: bool = False
+    capturable: bool = False
     _target_: str = "torch.optim.ASGD"
     _partial_: bool = True
 
@@ -194,12 +237,20 @@ class LBFGSConfig(ConfigBase):
 
 @dataclass
 class RAdamConfig(ConfigBase):
-    """Configuration for RAdam optimizer."""
+    """Hydra configuration for :class:`torch.optim.RAdam`.
+
+    Every kwarg accepted by ``torch.optim.RAdam.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-8
     weight_decay: float = 0.0
+    decoupled_weight_decay: bool = False
+    foreach: bool | None = None
+    maximize: bool = False
+    capturable: bool = False
+    differentiable: bool = False
     _target_: str = "torch.optim.RAdam"
     _partial_: bool = True
 
@@ -209,14 +260,21 @@ class RAdamConfig(ConfigBase):
 
 @dataclass
 class NAdamConfig(ConfigBase):
-    """Configuration for NAdam optimizer."""
+    """Hydra configuration for :class:`torch.optim.NAdam`.
+
+    Every kwarg accepted by ``torch.optim.NAdam.__init__`` is exposed as a field here.
+    """
 
     lr: float = 2e-3
     betas: tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-8
     weight_decay: float = 0.0
     momentum_decay: float = 4e-3
+    decoupled_weight_decay: bool = False
     foreach: bool | None = None
+    maximize: bool = False
+    capturable: bool = False
+    differentiable: bool = False
     _target_: str = "torch.optim.NAdam"
     _partial_: bool = True
 
@@ -226,11 +284,15 @@ class NAdamConfig(ConfigBase):
 
 @dataclass
 class SparseAdamConfig(ConfigBase):
-    """Configuration for SparseAdam optimizer."""
+    """Hydra configuration for :class:`torch.optim.SparseAdam`.
+
+    Every kwarg accepted by ``torch.optim.SparseAdam.__init__`` is exposed as a field here.
+    """
 
     lr: float = 1e-3
     betas: tuple[float, float] = (0.9, 0.999)
     eps: float = 1e-8
+    maximize: bool = False
     _target_: str = "torch.optim.SparseAdam"
     _partial_: bool = True
 

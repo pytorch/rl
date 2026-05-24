@@ -28,6 +28,7 @@ Value Estimators
     TD1Estimator
     TDLambdaEstimator
     GAE
+    MultiAgentGAE
 
 .. currentmodule:: torchrl.objectives
 

@@ -11,6 +11,7 @@ import torch
 
 from _transforms_common import _has_ale, TransformBase
 from tensordict import TensorDict
+from tensordict.nn import TensorDictModule
 from tensordict.utils import assert_allclose_td
 from torch import nn, Tensor
 from torchrl._utils import prod
@@ -29,6 +30,7 @@ from torchrl.envs import (
     Crop,
     FlattenObservation,
     GrayScale,
+    NextObservationDelta,
     ObservationNorm,
     ParallelEnv,
     PermuteTransform,
@@ -45,6 +47,7 @@ from torchrl.envs.utils import check_env_specs, step_mdp
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -210,8 +213,6 @@ class TestCatFrames(TransformBase):
     def test_catframes_batching(
         self, batched_class, break_when_any_done, maybe_fork_ParallelEnv
     ):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         if batched_class is ParallelEnv:
             batched_class = maybe_fork_ParallelEnv
 
@@ -2522,8 +2523,6 @@ class TestTimeMaxPool(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_timemax_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TimeMaxPool(
@@ -2747,8 +2746,6 @@ class TestPermuteTransform(TransformBase):
         )  # DxWxHxC => CxDxHxW
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         out_channels = 4
-        from tensordict.nn import TensorDictModule
-
         model = nn.Sequential(
             trans,
             TensorDictModule(
@@ -2794,3 +2791,397 @@ class TestPermuteTransform(TransformBase):
         td = TensorDict({"pixels": torch.randn((*batch, D, W, H, C))}, batch_size=batch)
         td = trans(td)
         assert td["pixels"].shape == torch.Size((*batch, C, D, H, W))
+
+
+class TestNextObservationDelta(TransformBase):
+    """Tests for the env-side delta-compression transform.
+
+    Under the sub-td contract, after one step the post-step tensordict
+    carries ``("next", "delta", k)`` at ``delta_dtype`` and the full
+    ``("next", k)`` slot is absent. The flowing tensordict that the policy
+    reads next iteration has full-precision root ``k`` (promoted by
+    ``step_mdp`` before the hook drops the full slot from the post-step td).
+    """
+
+    DELTA_KEY = ("next", "delta", "observation")
+
+    @staticmethod
+    def _smoke_one_step(env):
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        post_step, flowing = env.step_and_maybe_reset(td)
+        assert post_step[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in post_step.keys(True, True)
+        assert flowing["observation"].dtype == torch.float32
+
+    def test_single_trans_env_check(self):
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        self._smoke_one_step(env)
+
+    def test_serial_trans_env_check(self):
+        # NextObservationDelta inside a batched-env worker must raise at
+        # construction time.
+        with pytest.raises(RuntimeError, match="cannot live inside a SerialEnv"):
+            SerialEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    NextObservationDelta(in_keys=["observation"]),
+                ),
+            )
+
+    def test_parallel_trans_env_check(self):
+        with pytest.raises(RuntimeError, match="cannot live inside a SerialEnv"):
+            ParallelEnv(
+                2,
+                lambda: TransformedEnv(
+                    ContinuousActionVecMockEnv(),
+                    NextObservationDelta(in_keys=["observation"]),
+                ),
+                mp_start_method="fork",
+            )
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: ContinuousActionVecMockEnv()),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        self._smoke_one_step(env)
+
+    def test_trans_parallel_env_check(self):
+        env = TransformedEnv(
+            ParallelEnv(
+                2, lambda: ContinuousActionVecMockEnv(), mp_start_method="fork"
+            ),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        try:
+            self._smoke_one_step(env)
+        finally:
+            env.close()
+
+    def test_transform_no_env(self):
+        # Calling the transform directly with only root obs (no stored delta)
+        # is a no-op for that key. Reconstruction needs both root and the
+        # ``("next", "delta", k)`` sibling to be present.
+        t = NextObservationDelta(in_keys=["observation"])
+        td = TensorDict({"observation": torch.zeros(3, 1)}, batch_size=[3])
+        out = t(td)
+        assert ("next", "observation") not in out.keys(True, True)
+
+    def test_transform_compose(self):
+        # Composed offline call reaches forward; with no delta key present
+        # the transform is a no-op for that key.
+        t = Compose(NextObservationDelta(in_keys=["observation"]))
+        td = TensorDict({"observation": torch.zeros(3, 1)}, batch_size=[3])
+        out = t(td)
+        assert ("next", "observation") not in out.keys(True, True)
+
+    def test_transform_env(self):
+        # Stacked output carries the delta, not the full next obs.
+        torch.manual_seed(0)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        post_step, flowing = env.step_and_maybe_reset(td)
+
+        assert post_step[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in post_step.keys(True, True)
+        assert post_step["observation"].dtype == torch.float32
+        assert flowing["observation"].dtype == torch.float32
+
+    def test_transform_model(self):
+        pytest.skip("NextObservationDelta is an env-side transform; not a module hook.")
+
+    def test_transform_rb(self):
+        # The same transform attached to a replay buffer reconstructs
+        # ``("next", k)`` from ``obs + ("next", "delta", k)`` at sample time.
+        from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+        obs = torch.linspace(-1.0, 1.0, 4, dtype=torch.float32).view(4, 1)
+        true_next = obs + 0.25
+        delta = (true_next - obs).to(torch.float16)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(4),
+            transform=NextObservationDelta(in_keys=["observation"]),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict(
+                {"observation": obs, ("next", "delta", "observation"): delta},
+                batch_size=[4],
+            )
+        )
+        sample = rb.sample()
+        assert ("next", "observation") in sample.keys(True, True)
+        assert ("next", "delta", "observation") not in sample.keys(True, True)
+        assert sample["next", "observation"].dtype == torch.float32
+
+    def test_transform_inverse(self):
+        pytest.skip("NextObservationDelta has no inverse (no in_keys_inv).")
+
+    def test_auto_infer_keys_skips_uint8(self):
+        # The auto-inferred in_keys should include float keys and exclude
+        # integer / uint8 image-like keys.
+        from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(
+                observation_spec=Composite(
+                    observation=Unbounded(shape=(7,)),
+                    pixels=Bounded(low=0, high=255, shape=(3, 4, 4), dtype=torch.uint8),
+                )
+            ),
+            NextObservationDelta(),
+        )
+        in_keys = list(env.transform.in_keys)
+        assert ("observation",) in [
+            (k,) if isinstance(k, str) else tuple(k) for k in in_keys
+        ]
+        for k in in_keys:
+            spec = env.observation_spec[k]
+            assert spec.dtype.is_floating_point
+
+    def test_multi_in_keys_explicit(self):
+        torch.manual_seed(1)
+        from torchrl.data.tensor_specs import Composite, Unbounded
+
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(
+                observation_spec=Composite(
+                    observation=Unbounded(shape=(7,)),
+                    observation_orig=Unbounded(shape=(7,)),
+                )
+            ),
+            NextObservationDelta(in_keys=["observation", "observation_orig"]),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert out[("next", "delta", "observation_orig")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert ("next", "observation_orig") not in out.keys(True, True)
+        assert out_["observation"].dtype == torch.float32
+        assert out_["observation_orig"].dtype == torch.float32
+
+    def test_reset_between_steps(self):
+        torch.manual_seed(2)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        td0 = env.reset()
+        td0.set("action", env.action_spec.rand())
+        env.step_and_maybe_reset(td0)
+        td1 = env.reset()
+        td1.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td1)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert out_["observation"].dtype == torch.float32
+
+    def test_compose_with_downstream_transform(self):
+        from torchrl.envs.transforms import RewardSum
+
+        torch.manual_seed(3)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            Compose(
+                NextObservationDelta(in_keys=["observation"]),
+                RewardSum(),
+            ),
+        )
+        td = env.reset()
+        td.set("action", env.action_spec.rand())
+        out, out_ = env.step_and_maybe_reset(td)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert out_["observation"].dtype == torch.float32
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_collector_compressed(self, use_buffers):
+        from torchrl.collectors import SyncDataCollector
+
+        torch.manual_seed(4)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            )
+
+        collector = SyncDataCollector(
+            create_env_fn=make_env,
+            policy=None,
+            frames_per_batch=16,
+            total_frames=16,
+            use_buffers=use_buffers,
+        )
+        try:
+            batch = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert batch[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in batch.keys(True, True)
+        assert batch["observation"].dtype == torch.float32
+
+    def test_env_rollout_hook_fires(self):
+        # env.rollout() must drop ("next", obs) on every stacked step,
+        # including on the stop-early path.
+        torch.manual_seed(5)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        out = env.rollout(8, break_when_any_done=True)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert out["observation"].dtype == torch.float32
+
+    def test_env_rollout_nonstop_hook_fires(self):
+        torch.manual_seed(6)
+        env = TransformedEnv(
+            ContinuousActionVecMockEnv(),
+            NextObservationDelta(in_keys=["observation"]),
+        )
+        out = env.rollout(8, break_when_any_done=False)
+        assert out[("next", "delta", "observation")].dtype == torch.float16
+        assert ("next", "observation") not in out.keys(True, True)
+        assert out["observation"].dtype == torch.float32
+
+
+class TestNextObservationDeltaForward:
+    """RB-side `forward()` tests for `NextObservationDelta`.
+
+    The same class is used on the env (compress in `_step`) and on the
+    replay buffer (reconstruct in `forward` at sample time).
+    """
+
+    @staticmethod
+    def _delta_tol(delta_dtype: torch.dtype, scale: float = 1.0) -> float:
+        return torch.finfo(delta_dtype).eps * 8.0 * scale
+
+    def test_round_trip_basic(self):
+        obs = torch.linspace(-1.0, 1.0, 8, dtype=torch.float32).view(8, 1)
+        true_next = obs + 0.25
+        delta = (true_next - obs).to(torch.float16)
+        td = TensorDict(
+            {"observation": obs, ("next", "delta", "observation"): delta},
+            batch_size=[8],
+        )
+        td = NextObservationDelta(in_keys=["observation"])(td)
+        assert ("next", "observation") in td.keys(True, True)
+        assert ("next", "delta", "observation") not in td.keys(True, True)
+        tol = self._delta_tol(
+            torch.float16, scale=max(1.0, true_next.abs().max().item())
+        )
+        torch.testing.assert_close(
+            td["next", "observation"], true_next, atol=tol, rtol=tol
+        )
+
+    def test_drop_delta_false_keeps_key(self):
+        obs = torch.zeros(4, 1)
+        delta = torch.zeros(4, 1, dtype=torch.float16)
+        td = TensorDict(
+            {"observation": obs, ("next", "delta", "observation"): delta},
+            batch_size=[4],
+        )
+        td = NextObservationDelta(in_keys=["observation"], drop_delta=False)(td)
+        assert ("next", "observation") in td.keys(True, True)
+        assert ("next", "delta", "observation") in td.keys(True, True)
+
+    def test_restore_dtype_explicit(self):
+        obs = torch.zeros(4, 1, dtype=torch.float64)
+        delta = torch.ones(4, 1, dtype=torch.float16)
+        td = TensorDict(
+            {"observation": obs, ("next", "delta", "observation"): delta},
+            batch_size=[4],
+        )
+        td = NextObservationDelta(in_keys=["observation"], restore_dtype=torch.float32)(
+            td
+        )
+        assert td["next", "observation"].dtype == torch.float32
+
+    def test_no_boundary_nan(self):
+        # The delta encodes the actual transition that happened inside
+        # env.step, so end-of-trajectory positions reconstruct correctly --
+        # no NaN regardless of the done pattern.
+        obs = torch.randn(8, 3)
+        next_obs = torch.randn(8, 3)
+        delta = (next_obs - obs).to(torch.float16)
+        td = TensorDict(
+            {
+                "observation": obs,
+                ("next", "delta", "observation"): delta,
+                ("next", "done"): torch.tensor(
+                    [
+                        [False],
+                        [True],
+                        [False],
+                        [False],
+                        [True],
+                        [False],
+                        [False],
+                        [False],
+                    ]
+                ),
+            },
+            batch_size=[8],
+        )
+        td = NextObservationDelta(in_keys=["observation"])(td)
+        assert torch.isfinite(td["next", "observation"]).all()
+
+    def test_end_to_end_env_to_rb(self):
+        # env compresses → collector stacks → RB stores → RB sample
+        # reconstructs. Same transform class on both sides.
+        from torchrl.collectors import SyncDataCollector
+        from torchrl.data import LazyTensorStorage, ReplayBuffer
+
+        torch.manual_seed(7)
+
+        def make_env():
+            return TransformedEnv(
+                ContinuousActionVecMockEnv(),
+                NextObservationDelta(in_keys=["observation"]),
+            )
+
+        collector = SyncDataCollector(
+            create_env_fn=make_env,
+            policy=None,
+            frames_per_batch=16,
+            total_frames=16,
+            use_buffers=False,
+        )
+        try:
+            batch = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert ("next", "observation") not in batch.keys(True, True)
+        assert batch[("next", "delta", "observation")].dtype == torch.float16
+
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(16),
+            transform=NextObservationDelta(in_keys=["observation"]),
+            batch_size=8,
+        )
+        rb.extend(batch)
+        sample = rb.sample()
+        assert ("next", "observation") in sample.keys(True, True)
+        assert ("next", "delta", "observation") not in sample.keys(True, True)
+        assert sample["next", "observation"].dtype == torch.float32
+
+    def test_missing_key_is_noop(self):
+        # If neither the root nor the delta key is in the td, the transform
+        # silently no-ops on that key.
+        td = TensorDict({"some_other_key": torch.zeros(4)}, batch_size=[4])
+        out = NextObservationDelta(in_keys=["observation"])(td)
+        assert "some_other_key" in out.keys(True, True)
+        assert ("next", "observation") not in out.keys(True, True)

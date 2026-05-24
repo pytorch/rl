@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 import pytest
 import torch
+import torchrl.objectives.utils
 from _objectives_common import _has_functorch, FUNCTORCH_ERR
 
 from tensordict import TensorDict, TensorDictBase
@@ -686,8 +687,8 @@ class TestUtils:
             ...
 
         add_random_module(MyMod)
-        import torchrl.objectives.utils
-
+        # add_random_module rebinds torchrl.objectives.utils.RANDOM_MODULE_LIST
+        # to a new tuple, so the live attribute must be read each time.
         assert MyMod in torchrl.objectives.utils.RANDOM_MODULE_LIST
 
     def test_standardization(self):

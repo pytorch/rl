@@ -17,6 +17,8 @@ from torchrl.envs import SerialEnv
 from torchrl.envs.llm import make_mlgym
 from torchrl.modules.llm import TransformersWrapper
 
+_has_transformers = importlib.util.find_spec("transformers") is not None
+
 pytestmark = pytest.mark.skipif(
     not importlib.util.find_spec("mlgym"), reason="mlgym not available"
 )

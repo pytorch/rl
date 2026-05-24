@@ -584,7 +584,7 @@ class PettingZooWrapper(_EnvWrapper):
                         )
 
         if self.return_state:
-            state = torch.as_tensor(self.state(), device=self.device)
+            state = self.observation_spec["state"].encode(self.state())
             tensordict_out.set("state", state)
 
         return tensordict_out
@@ -707,7 +707,7 @@ class PettingZooWrapper(_EnvWrapper):
         tensordict_out.set("truncated", truncated)
 
         if self.return_state:
-            state = torch.as_tensor(self.state(), device=self.device)
+            state = self.observation_spec["state"].encode(self.state())
             tensordict_out.set("state", state)
 
         return tensordict_out
@@ -804,6 +804,8 @@ class PettingZooWrapper(_EnvWrapper):
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
                 for index, agent in enumerate(agents):
+                    if agent not in observation_dict:
+                        continue
                     agent_obs = observation_dict[agent]
                     agent_info = info_dict[agent]
                     if isinstance(agent_obs, dict) and "action_mask" in agent_obs:

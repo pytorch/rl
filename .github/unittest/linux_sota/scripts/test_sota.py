@@ -307,6 +307,24 @@ commands = {
   replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
 """,
+    "dreamer_v3": """python sota-implementations/dreamer_v3/dreamer_v3.py \
+  collector.total_frames=400 \
+  collector.frames_per_batch=200 \
+  replay_buffer.batch_size=2 \
+  replay_buffer.seq_len=4 \
+  replay_buffer.warmup_factor=1 \
+  optimization.updates_per_batch=1 \
+  logger.eval_every=200 \
+  logger.eval_episodes=1 \
+  logger.output_plot= \
+  networks.hidden_dim=8 \
+  networks.depth=1 \
+  networks.num_categoricals=2 \
+  networks.num_classes=2 \
+  networks.num_reward_bins=11 \
+  networks.rnn_hidden_dim=8 \
+  networks.obs_embed_dim=8
+""",
 }
 
 

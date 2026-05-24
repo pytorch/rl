@@ -1,0 +1,4 @@
+hydra-core
+tqdm
+wandb
+mujoco-torch @ git+https://github.com/vmoens/mujoco-torch.git@main

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import re
+import uuid
 from collections.abc import Mapping
 
 import pytest
@@ -21,8 +23,15 @@ from torchrl.data import (
     ReplayBuffer,
     SamplerWithoutReplacement,
 )
-from torchrl.data.llm.history import ContentBase
+from torchrl.data.llm.history import (
+    _CHAT_TEMPLATES,
+    _CUSTOM_INVERSE_PARSERS,
+    _CUSTOM_MODEL_FAMILY_KEYWORDS,
+    add_chat_template,
+    ContentBase,
+)
 from torchrl.data.llm.topk import TopKRewardSelector
+from torchrl.modules.llm.policies.common import _extract_responses_from_full_histories
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")
@@ -646,8 +655,6 @@ The result is""",
     )
     def test_custom_template_equivalence(self, model_name, template_name):
         """Test that our custom templates produce the same output as the model's default template (except for masking)."""
-        import re
-
         import transformers
 
         # Simple multi-turn chat for each model
@@ -707,10 +714,6 @@ The result is""",
 
     def test_add_chat_template_parameters_used(self):
         """Test that add_chat_template actually uses inverse_parser and model_family_keywords parameters with a real tokenizer."""
-        import re
-        import uuid
-
-        from torchrl.data.llm.history import add_chat_template, History
         from transformers import AutoTokenizer
 
         try:
@@ -789,12 +792,6 @@ The result is""",
             assert parsed.role == history.role
             assert parsed.content == history.content
         finally:
-            from torchrl.data.llm.history import (
-                _CHAT_TEMPLATES,
-                _CUSTOM_INVERSE_PARSERS,
-                _CUSTOM_MODEL_FAMILY_KEYWORDS,
-            )
-
             if template_name in _CHAT_TEMPLATES:
                 del _CHAT_TEMPLATES[template_name]
             if template_name in _CUSTOM_INVERSE_PARSERS:
@@ -843,8 +840,6 @@ The result is""",
         self, tokenizer_name, use_tokenizer_chat_template, chat
     ):
         """Test round-trip conversion: History -> string -> History for various templates and tokenizers."""
-        import re
-
         from transformers import AutoTokenizer
 
         # Example chats
@@ -923,8 +918,6 @@ The result is""",
         """Test that truncated strings are properly parsed with the last message marked as incomplete."""
         if chat[0]["role"] != "system":
             pytest.xfail("Skipping test for non-system message")
-        import re
-
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
@@ -1001,9 +994,6 @@ The result is""",
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
     def test_extract_responses_from_full_histories_batch_issue(self):
         """Test the isolated function for handling different response shapes in batch processing."""
-        from torchrl.modules.llm.policies.common import (
-            _extract_responses_from_full_histories,
-        )
         from transformers import AutoTokenizer
 
         # Create a batch of 2 prompt histories

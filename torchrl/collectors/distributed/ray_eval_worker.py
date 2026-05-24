@@ -221,14 +221,24 @@ class RayEvalWorker:
         return result
 
     def shutdown(self) -> None:
-        """Close the environment and kill the actor."""
+        """Close the environment and kill the actor.
+
+        Safe to call multiple times or after ``ray.shutdown()`` has already
+        torn down the actor (e.g. via a test fixture).
+        """
         import ray
 
+        if self._actor is None:
+            return
         try:
             ray.get(self._actor.shutdown.remote())
         except Exception:
             logger.warning("RayEvalWorker: error during shutdown", exc_info=True)
-        ray.kill(self._actor)
+        try:
+            ray.kill(self._actor)
+        except Exception:
+            # The actor may already be dead (e.g. ray.shutdown() ran first).
+            logger.debug("RayEvalWorker: actor already terminated", exc_info=True)
         self._actor = None
         self._pending_ref = None
 
@@ -288,8 +298,11 @@ class _EvalActor:
 
         from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
 
-        # Load weights into the eval policy (move to policy device first)
-        weights.to(self._device).to_module(self.policy)
+        # Load weights into the eval policy (move to policy device first).
+        # ``weights`` can legitimately be None when the caller asks for an
+        # evaluation of the current policy (no fresh weights to inject).
+        if weights is not None:
+            weights.to(self._device).to_module(self.policy)
 
         frames = []
         total_reward = 0.0

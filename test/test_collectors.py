@@ -8,11 +8,14 @@ import argparse
 import contextlib
 import functools
 import gc
+import os
 import subprocess
 import sys
 import time
 import traceback
+import warnings
 from contextlib import nullcontext
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
@@ -49,10 +52,13 @@ from torchrl.collectors import (
     MultiAsyncCollector,
     MultiSyncCollector,
     ProfileConfig,
+    SyncDataCollector,
     WeightUpdaterBase,
 )
+from torchrl.collectors._base import _ProfilerHook
 from torchrl.collectors._constants import _Interruptor
 from torchrl.collectors._multi_base import MultiCollector
+from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 
 from torchrl.collectors.utils import (
     _make_policy_factory,
@@ -90,9 +96,13 @@ from torchrl.envs.utils import (
 )
 from torchrl.modules import (
     Actor,
+    GRUModule,
+    NormalParamExtractor,
     OrnsteinUhlenbeckProcessModule,
+    ProbabilisticActor,
     RandomPolicy,
     SafeModule,
+    TanhNormal,
 )
 from torchrl.testing import (
     CARTPOLE_VERSIONED,
@@ -126,6 +136,7 @@ from torchrl.testing.modules import BiasModule, NonSerializableBiasModule
 from torchrl.testing.mp_helpers import decorate_thread_sub_func
 from torchrl.weight_update import (
     MultiProcessWeightSyncScheme,
+    SharedMemTransport,
     SharedMemWeightSyncScheme,
 )
 
@@ -372,6 +383,9 @@ class TestMakePolicyFactory:
         collector = MultiSyncCollector(
             create_env_fn=[ContinuousActionVecMockEnv] * 3,
             policy_factory=policy_factories,
+            weight_sync_schemes={
+                "policy": SharedMemWeightSyncScheme(per_worker_weights=True)
+            },
             frames_per_batch=30,  # 10 per worker
             total_frames=90,  # 3 batches
             cat_results="stack",
@@ -446,6 +460,9 @@ class TestMakePolicyFactory:
         collector = MultiSyncCollector(
             create_env_fn=[ContinuousActionVecMockEnv] * 3,
             policy_factory=policy_factories,
+            weight_sync_schemes={
+                "policy": SharedMemWeightSyncScheme(per_worker_weights=True)
+            },
             frames_per_batch=30,
             total_frames=60,
             cat_results="stack",
@@ -502,7 +519,99 @@ class TestMakePolicyFactory:
             collector.shutdown()
 
 
+class TestRandomPolicyLazyInit:
+    """Tests for lazy initialization of ``RandomPolicy`` from the env's action_spec."""
+
+    def test_standalone_random_policy_requires_spec(self):
+        """Calling a spec-less ``RandomPolicy`` outside a collector raises a clear error."""
+        pol = RandomPolicy()
+        assert pol.action_spec is None
+        with pytest.raises(RuntimeError, match="action_spec is not set"):
+            pol(TensorDict())
+
+    def test_set_action_spec_from_env_is_idempotent(self):
+        """``set_action_spec_from_env`` only fills the spec when unset."""
+        env = ContinuousActionVecMockEnv()
+        pol = RandomPolicy()
+        pol.set_action_spec_from_env(env)
+        assert pol.action_spec is not None
+        first_spec = pol.action_spec
+        # Second call is a no-op — should not overwrite
+        pol.set_action_spec_from_env(env)
+        assert pol.action_spec is first_spec
+
+    def test_sync_collector_lazy_policy_instance(self):
+        """``Collector(env, RandomPolicy())`` fills the spec from the env."""
+        pol = RandomPolicy()
+        env = ContinuousActionVecMockEnv()
+        collector = Collector(
+            env,
+            policy=pol,
+            total_frames=20,
+            frames_per_batch=10,
+        )
+        try:
+            # Spec is filled by the collector, the user's policy instance is mutated.
+            assert pol.action_spec is not None
+            data = next(iter(collector))
+            assert "action" in data.keys()
+            assert data["action"].shape[-1] == env.full_action_spec["action"].shape[-1]
+        finally:
+            collector.shutdown()
+
+    def test_sync_collector_lazy_policy_factory(self):
+        """``policy_factory=RandomPolicy`` (returning a spec-less instance) also works."""
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            policy_factory=RandomPolicy,
+            total_frames=20,
+            frames_per_batch=10,
+        )
+        try:
+            data = next(iter(collector))
+            assert "action" in data.keys()
+        finally:
+            collector.shutdown()
+
+    def test_multi_sync_collector_lazy_policy_instance(self):
+        """Multi-worker collectors inherit the lazy-init path via the inner ``Collector``."""
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(),
+            total_frames=40,
+            frames_per_batch=20,
+        )
+        try:
+            data = next(iter(collector))
+            assert "action" in data.keys()
+        finally:
+            collector.shutdown()
+
+    def test_explicit_spec_still_works(self):
+        """Passing an explicit ``action_spec`` keeps the original behavior unchanged."""
+        env = ContinuousActionVecMockEnv()
+        pol = RandomPolicy(env.full_action_spec)
+        td = pol(TensorDict())
+        assert "action" in td.keys()
+
+
 class TestCollectorGeneric:
+    def test_collector_without_traj_ids(self):
+        env = CountingEnv(max_steps=3)
+        collector = Collector(
+            env,
+            policy=RandomPolicy(env.action_spec),
+            total_frames=4,
+            frames_per_batch=4,
+            track_traj_ids=False,
+        )
+        try:
+            data = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        assert "collector" not in data.keys()
+
     @pytest.mark.parametrize("num_env", [1, 2])
     # 1226: for efficiency, we just test vec, not "conv"
     @pytest.mark.parametrize("env_name", ["vec"])
@@ -1242,6 +1351,135 @@ if __name__ == "__main__":
         dummy_env.close()
         del collector
 
+    @pytest.mark.parametrize(
+        "collector_class",
+        [
+            Collector,
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+        ],
+    )
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_compact_obs_drops_next_obs(self, collector_class, use_buffers):
+        """``compact_obs=True`` drops obs/state keys from ``('next', ...)``.
+
+        Verifies that the rollout output has the observation keys dropped under
+        ``('next', ...)`` while ``('next', 'reward'/'done'/'truncated')`` are
+        preserved and root keys are intact. Also checks the round-trip identity
+        ``data[obs][..., 1:] == ref_data[('next', obs)][..., :-1]`` against a
+        parallel non-compact reference.
+        """
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        dummy_env = make_env()
+        obs_keys = list(dummy_env._observation_keys_step_mdp)
+        state_keys = list(dummy_env._state_keys_step_mdp)
+        assert obs_keys, "test env must expose at least one observation key"
+        dummy_env.close()
+
+        collector_kwargs = {
+            "create_env_fn": make_env,
+            "policy": RandomPolicy(dummy_env.action_spec),
+            "frames_per_batch": 30,
+            "total_frames": 30,
+            "use_buffers": use_buffers,
+        }
+        if collector_class is not Collector:
+            collector_kwargs["create_env_fn"] = [make_env for _ in range(2)]
+            collector_kwargs["frames_per_batch"] = 60
+
+        # Reference: non-compact rollout
+        ref = collector_class(compact_obs=False, **collector_kwargs)
+        ref_data = next(iter(ref))
+        ref.shutdown()
+        del ref
+
+        # Compact rollout
+        comp = collector_class(compact_obs=True, **collector_kwargs)
+        comp_data = next(iter(comp))
+        comp.shutdown()
+        del comp
+
+        comp_keys = set(comp_data.keys(True, True))
+        ref_keys = set(ref_data.keys(True, True))
+
+        # All obs/state keys gone from ('next', ...)
+        for k in obs_keys + state_keys:
+            full = ("next", *k) if isinstance(k, tuple) else ("next", k)
+            assert full not in comp_keys, f"{full} should be dropped"
+            assert full in ref_keys, f"{full} should be present in reference"
+            # Root key preserved
+            assert k in comp_keys, f"root key {k} dropped unexpectedly"
+
+        # Reward/done/truncated under ('next', ...) preserved
+        for k in ("reward", "done", "terminated"):
+            assert ("next", k) in comp_keys, f"('next', {k!r}) dropped unexpectedly"
+
+        # Identity: root obs at t+1 == ref ('next', obs) at t (within trajectory)
+        for k in obs_keys:
+            full = ("next", *k) if isinstance(k, tuple) else ("next", k)
+            done = ref_data.get(("next", "done")).squeeze(-1)
+            mask = ~done[..., :-1]
+            ref_next = ref_data.get(full)[..., :-1, :]
+            root_shifted = ref_data.get(k)[..., 1:, :]
+            torch.testing.assert_close(ref_next[mask], root_shifted[mask])
+
+    @pytest.mark.parametrize("use_buffers", [True, False])
+    def test_fake_tensordict_single_matches_iter(self, use_buffers):
+        """``Collector.fake_tensordict()`` mirrors the shape and keys of a real batch."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = Collector(
+            create_env_fn=make_env,
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            use_buffers=use_buffers,
+        )
+        try:
+            fake = c.fake_tensordict()
+            torch.manual_seed(0)
+            real = next(iter(c))
+            assert fake.batch_size == real.batch_size, (
+                fake.batch_size,
+                real.batch_size,
+            )
+            assert fake.names == real.names
+            fake_keys = sorted(map(str, fake.keys(True, True)))
+            real_keys = sorted(map(str, real.keys(True, True)))
+            assert fake_keys == real_keys, set(real_keys) ^ set(fake_keys)
+            for key, val in fake.items(True, True):
+                if (
+                    val.dtype in (torch.bool, torch.uint8)
+                    or not val.is_floating_point()
+                ):
+                    continue
+                assert not val.any(), f"{key} is not zeroed"
+        finally:
+            c.shutdown()
+
+    def test_fake_tensordict_multi_raises(self):
+        """``MultiCollector.fake_tensordict()`` is intentionally not implemented."""
+
+        def make_env():
+            return TransformedEnv(ContinuousActionVecMockEnv(), InitTracker())
+
+        c = MultiCollector(
+            create_env_fn=[make_env, make_env],
+            policy=RandomPolicy(make_env().action_spec),
+            frames_per_batch=20,
+            total_frames=20,
+            sync=True,
+        )
+        try:
+            with pytest.raises(NotImplementedError, match="fake_tensordict"):
+                c.fake_tensordict()
+        finally:
+            c.shutdown()
+
     @pytest.mark.parametrize("env_class", [CountingEnv, CountingBatchedEnv])
     def test_initial_obs_consistency(self, env_class, seed=1):
         # non regression test on #938
@@ -1822,6 +2060,24 @@ if __name__ == "__main__":
             collector.shutdown()
             del collector
 
+    def test_shared_mem_transport_logs_weight_sync(self):
+        transport = SharedMemTransport()
+        buffer = TensorDict({"weight": torch.zeros(2, 3)}, [])
+        source = TensorDict({"weight": torch.ones(2, 3)}, [])
+        transport.register_weights(
+            params_map={0: buffer},
+            init_queues={},
+        )
+
+        with patch.object(torchrl_logger, "debug") as debug:
+            transport.send_weights(source)
+
+        debug.assert_called()
+        args = debug.call_args.args
+        assert args[0].startswith("Synced weights")
+        assert args[3] == 6
+        assert args[4] == 24
+
     @pytest.mark.parametrize(
         "use_async", [True]
     )  # MultiSync has known indexing issues with SharedMem
@@ -1977,7 +2233,7 @@ if __name__ == "__main__":
         """
         A simple mock environment that returns a fixed ID as its sole observation.
 
-        This environment is designed to test MultiSyncDataCollector ordering.
+        This environment is designed to test MultiSyncCollector ordering.
         Each environment instance is initialized with a unique env_id, which it
         returns as the observation at every step.
         """
@@ -2073,7 +2329,7 @@ if __name__ == "__main__":
         self, num_envs: int, n_steps: int, with_preempt: bool, cat_results: str | int
     ):
         """
-        Test that MultiSyncDataCollector returns data in the correct order.
+        Test that MultiSyncCollector returns data in the correct order.
 
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
@@ -2196,7 +2452,7 @@ if __name__ == "__main__":
     ):
         """Regression test for issue #3137: traj_ids shape inconsistency with unbatched envs.
 
-        When using SyncDataCollector with an unbatched environment (batch_size=()),
+        When using Collector with an unbatched environment (batch_size=()),
         the traj_ids should maintain consistent shapes across all steps, even when
         done=True triggers trajectory updates.
 
@@ -2432,7 +2688,6 @@ class TestCollectorDevices:
     @pytest.mark.parametrize("main_device", get_default_devices())
     @pytest.mark.parametrize("storing_device", [None, *get_default_devices()])
     def test_output_device(self, main_device, storing_device):
-
         # env has no device, policy is strictly on GPU
         device = None
         env_device = None
@@ -3007,6 +3262,186 @@ class TestAutoWrap:
             )
 
 
+@pytest.mark.skipif(not _has_gym, reason="gym/gymnasium not available")
+class TestEnvTransformAutoWrap:
+    """Tests for `_maybe_append_env_transforms_from_module`.
+
+    The collector and env post-init hook share the same helper, so these
+    cover the full surface: bare env + recurrent policy, idempotency when
+    the env was already wrapped via the env hook, and BatchedEnv/ParallelEnv
+    where transforms live inside child envs and aren't visible at the top
+    of the transform stack.
+    """
+
+    @staticmethod
+    def _make_recurrent_policy():
+        gru = GRUModule(
+            input_size=4,
+            hidden_size=8,
+            num_layers=1,
+            in_keys=["observation", "recurrent_state", "is_init"],
+            out_keys=["features", ("next", "recurrent_state")],
+        )
+        return TensorDictSequential(gru)
+
+    @staticmethod
+    def _count_init_keys(spec):
+        return sum(
+            1
+            for k in spec.keys(True, True)
+            if k == "is_init" or (isinstance(k, tuple) and k and k[-1] == "is_init")
+        )
+
+    def test_bare_env_collector_appends_init_and_primer(self):
+        policy = self._make_recurrent_policy()
+        env = GymEnv(CARTPOLE_VERSIONED())
+        keys_before = set(env.full_observation_spec.keys(True, True))
+        assert "is_init" not in keys_before
+
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            keys_after = set(collector.env.full_observation_spec.keys(True, True))
+            assert "is_init" in keys_after
+            assert "recurrent_state" in keys_after
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_env_hook_then_collector_is_idempotent(self):
+        policy = self._make_recurrent_policy()
+        # The env-side hook fires when policy= is passed at construction.
+        env = GymEnv(CARTPOLE_VERSIONED(), policy=policy)
+        assert "is_init" in env.full_observation_spec.keys(True, True)
+        assert "recurrent_state" in env.full_observation_spec.keys(True, True)
+
+        # The collector hook must not double-wrap.
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_serial_env_with_inner_init_tracker_no_double_wrap(self):
+        policy = self._make_recurrent_policy()
+
+        def make_inner():
+            return TransformedEnv(GymEnv(CARTPOLE_VERSIONED()), InitTracker())
+
+        env = SerialEnv(2, make_inner)
+        # is_init is exposed at the SerialEnv level even though InitTracker
+        # lives inside child envs.
+        assert "is_init" in env.full_observation_spec.keys(True, True)
+
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_parallel_env_with_inner_init_tracker_no_double_wrap(self):
+        policy = self._make_recurrent_policy()
+
+        def make_inner():
+            return TransformedEnv(GymEnv(CARTPOLE_VERSIONED()), InitTracker())
+
+        env = ParallelEnv(2, make_inner, mp_start_method="fork")
+        assert "is_init" in env.full_observation_spec.keys(True, True)
+        collector = SyncDataCollector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            assert self._count_init_keys(collector.env.full_observation_spec) == 1
+        finally:
+            collector.shutdown()
+
+    def test_default_emits_future_warning_about_v0_15_flip(self):
+        """Default (None) preserves pre-0.13 behavior and emits a FutureWarning.
+
+        The collector currently does *not* auto-wrap; the warning informs the
+        user that the default flips to True in v0.15. Construction itself
+        fails downstream (the policy expects ``is_init`` on a bare env), but
+        the warning is what we're asserting here.
+        """
+        policy = self._make_recurrent_policy()
+        env = GymEnv(CARTPOLE_VERSIONED())
+        with pytest.warns(FutureWarning, match="auto_register_policy_transforms"):
+            with pytest.raises(KeyError, match="is_init"):
+                SyncDataCollector(env, policy, frames_per_batch=10, total_frames=10)
+
+    def test_explicit_false_is_silent_and_does_not_wrap(self):
+        """auto_register_policy_transforms=False suppresses the warning and the wrap."""
+        policy = self._make_recurrent_policy()
+        env = GymEnv(CARTPOLE_VERSIONED())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            with pytest.raises(KeyError, match="is_init"):
+                SyncDataCollector(
+                    env,
+                    policy,
+                    frames_per_batch=10,
+                    total_frames=10,
+                    auto_register_policy_transforms=False,
+                )
+
+    def test_policy_factory_recurrent_auto_register(self):
+        """policy_factory + auto_register_policy_transforms=True must:
+
+        - Instantiate the policy, walk it for InitTracker / TensorDictPrimer
+          requirements, and append both transforms to the env.
+        - Leave the transforms with live parents (not None) so their spec
+          transforms work — the bug this guards against was Compose
+          temporarily parenting the children to a throwaway container.
+        - Keep env.action_spec accessible.
+        """
+        env = GymEnv(CARTPOLE_VERSIONED())
+        keys_before = set(env.full_observation_spec.keys(True, True))
+        assert "is_init" not in keys_before
+        assert "recurrent_state" not in keys_before
+
+        collector = SyncDataCollector(
+            env,
+            policy_factory=self._make_recurrent_policy,
+            frames_per_batch=10,
+            total_frames=10,
+            auto_register_policy_transforms=True,
+        )
+        try:
+            keys_after = set(collector.env.full_observation_spec.keys(True, True))
+            assert "is_init" in keys_after
+            assert "recurrent_state" in keys_after
+            # action_spec must remain reachable — Compose-parenting bug
+            # used to break this by leaving InitTracker.parent=None.
+            assert collector.env.action_spec is not None
+            for transform in collector.env.transform:
+                assert (
+                    transform.parent is not None
+                ), f"transform {type(transform).__name__} has parent=None"
+        finally:
+            collector.shutdown()
+
+
 def weight_reset(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         m.reset_parameters()
@@ -3047,7 +3482,6 @@ class TestPreemptiveThreshold:
         "env_name", ["vec"]
     )  # 1226: removing "conv" for efficiency
     def test_multisync_collector_interruptor_mechanism(self, env_name, seed=100):
-
         frames_per_batch = 800
 
         def env_fn(seed):
@@ -3081,8 +3515,6 @@ class TestPreemptiveThreshold:
 
     def test_multisync_split_trajs_set_seed(self):
         """Test that MultiSyncCollector with split_trajs=True and set_seed works without errors."""
-        from torchrl.testing.mocking_classes import CountingEnv
-
         env_maker = lambda: CountingEnv(max_steps=100)
         policy = RandomPolicy(env_maker().action_spec)
         collector = MultiSyncCollector(
@@ -3708,6 +4140,163 @@ class TestUpdateParams:
             del collector
 
 
+class TestPolicyVersion:
+    """End-to-end checks for ``track_policy_version`` on data collectors.
+
+    The contract: when a collector is constructed with
+    ``track_policy_version=True``, every collected frame must carry a
+    ``policy_version`` key, and that value must bump exactly once per real
+    weight update (``update_policy_weights_()``), regardless of how many
+    iterations are pulled from the collector.
+    """
+
+    class _Env(EnvBase):
+        def __init__(self, device="cpu"):
+            super().__init__(batch_size=(), device=device)
+            self.observation_spec = Composite(
+                observation=Unbounded(shape=(2,), device=device)
+            )
+            self.action_spec = Unbounded(shape=(2,), device=device)
+            self.reward_spec = Unbounded(shape=(1,), device=device)
+
+        def _step(self, td):
+            return TensorDict(
+                {
+                    "observation": torch.zeros(2, device=self.device),
+                    "reward": torch.zeros(1, device=self.device),
+                    **self.full_done_spec.zero(),
+                },
+                (),
+                device=self.device,
+            )
+
+        def _reset(self, td=None):
+            return TensorDict(
+                {"observation": torch.zeros(2, device=self.device)},
+                (),
+                device=self.device,
+            )
+
+        def _set_seed(self, seed):
+            ...
+
+    @staticmethod
+    def _make_policy():
+        return TensorDictModule(
+            nn.Linear(2, 2), in_keys=["observation"], out_keys=["action"]
+        )
+
+    def test_single_collector_bumps_on_update(self):
+        """``SyncDataCollector`` bumps policy_version on each weight update."""
+        policy = self._make_policy()
+        collector = SyncDataCollector(
+            self._Env,
+            policy=policy,
+            total_frames=60,
+            frames_per_batch=10,
+            track_policy_version=True,
+        )
+        try:
+            it = iter(collector)
+            batch0 = next(it)
+            v0 = batch0["next", "policy_version"]
+            assert v0.dtype == torch.int64
+            # Version is constant within a batch (no update happened mid-batch).
+            assert (v0 == v0[0]).all()
+
+            # No update yet -> next batch keeps the same version.
+            batch1 = next(it)
+            assert (batch1["next", "policy_version"] == v0[0]).all()
+
+            collector.update_policy_weights_()
+            batch2 = next(it)
+            assert (batch2["next", "policy_version"] == v0[0] + 1).all()
+
+            # A second update bumps again, but a continue-without-update doesn't.
+            collector.update_policy_weights_()
+            batch3 = next(it)
+            assert (batch3["next", "policy_version"] == v0[0] + 2).all()
+            batch4 = next(it)
+            assert (batch4["next", "policy_version"] == v0[0] + 2).all()
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize(
+        "collector_cls",
+        [
+            functools.partial(MultiSyncCollector, cat_results="stack"),
+            MultiAsyncCollector,
+        ],
+        ids=["multi_sync", "multi_async"],
+    )
+    @pytest.mark.parametrize(
+        "weight_sync_scheme_cls",
+        [MultiProcessWeightSyncScheme, SharedMemWeightSyncScheme],
+        ids=["mp", "shared_mem"],
+    )
+    def test_multi_collector_bumps_on_update(
+        self, collector_cls, weight_sync_scheme_cls
+    ):
+        """Worker-side policy_version follows real weight updates.
+
+        Regression for the case where the worker's ``PolicyVersion`` transform
+        was never incremented from the parent's ``update_policy_weights_()``,
+        leaving all worker batches tagged with version 0.
+        """
+        policy = self._make_policy()
+        collector = collector_cls(
+            [self._Env, self._Env],
+            policy=policy,
+            frames_per_batch=20,
+            total_frames=200,
+            track_policy_version=True,
+            weight_sync_schemes={"policy": weight_sync_scheme_cls()},
+        )
+        try:
+            it = iter(collector)
+            batch0 = next(it)
+            v0 = batch0["next", "policy_version"]
+            # All workers start at the same initial version (0 by default).
+            v0_val = int(v0.flatten()[0].item())
+            assert (v0 == v0_val).all()
+
+            # Iterations without weight updates must not bump the version.
+            for _ in range(2):
+                batch = next(it)
+                assert (batch["next", "policy_version"] == v0_val).all(), (
+                    f"Worker version drifted without weight update: "
+                    f"{batch['next', 'policy_version']}"
+                )
+
+            collector.update_policy_weights_()
+            # The worker bumps once it has actually applied the new weights.
+            # In async mode, a batch already in flight at the time of the
+            # update may straddle the bump (some frames pre-, some post-).
+            # Drain until we see a batch fully at the bumped version, with
+            # a sane safety cap so we don't loop forever on a regression.
+            target = v0_val + 1
+            for _ in range(10):
+                batch = next(it)
+                if (batch["next", "policy_version"] == target).all():
+                    break
+            else:
+                raise AssertionError(
+                    f"Worker version did not reach {target} within 10 batches "
+                    f"after a single update_policy_weights_(); last batch: "
+                    f"{batch['next', 'policy_version']}"
+                )
+
+            # And no further bumps should occur on subsequent continues that
+            # are not preceded by an update.
+            batch_no_update = next(it)
+            assert (batch_no_update["next", "policy_version"] == target).all(), (
+                f"Worker version drifted past {target} without an update: "
+                f"{batch_no_update['next', 'policy_version']}"
+            )
+        finally:
+            collector.shutdown()
+
+
 class TestAggregateReset:
     def test_aggregate_reset_to_root(self):
         # simple
@@ -4255,6 +4844,288 @@ class TestCollectorsNonTensor:
         finally:
             collector.shutdown()
             del collector
+
+
+class TestCollectHooks:
+    def test_post_collect_hook_called(self):
+        call_count = 0
+
+        def hook(result):
+            nonlocal call_count
+            call_count += 1
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            post_collect_hook=hook,
+        )
+        try:
+            batches = list(collector)
+            assert len(batches) > 0, "collector should yield batches"
+            assert call_count == len(
+                batches
+            ), f"hook was called {call_count} times, expected {len(batches)}"
+        finally:
+            collector.shutdown()
+
+    def test_post_collect_hook_receives_yielded_batch(self):
+        received_batches = []
+
+        def postproc(result):
+            result = result.clone()
+            result.set("hook_marker", torch.ones(result.batch_size, dtype=torch.bool))
+            return result
+
+        def hook(result):
+            assert "hook_marker" in result.keys()
+            received_batches.append(result)
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            postproc=postproc,
+            post_collect_hook=hook,
+        )
+        try:
+            batches = list(collector)
+            assert len(batches) > 0
+            assert len(received_batches) == len(batches)
+            for batch, received in zip(batches, received_batches):
+                assert batch is received
+        finally:
+            collector.shutdown()
+
+    def test_post_collect_hook_for_metrics(self):
+        total_frames = 0
+
+        def compute_metrics(result):
+            nonlocal total_frames
+            total_frames += result.numel()
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            post_collect_hook=compute_metrics,
+        )
+        try:
+            list(collector)
+            assert total_frames == 64
+        finally:
+            collector.shutdown()
+
+    def test_hooks_none_by_default(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+        )
+        try:
+            assert collector.pre_collect_hook is None
+            assert collector.post_collect_hook is None
+            list(collector)
+        finally:
+            collector.shutdown()
+
+    def test_pre_collect_hook_called_from_constructor(self):
+        call_count = 0
+
+        def hook():
+            nonlocal call_count
+            call_count += 1
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            pre_collect_hook=hook,
+        )
+        try:
+            batches = list(collector)
+            assert call_count == len(batches)
+        finally:
+            collector.shutdown()
+
+    def test_hook_setters(self):
+        pre_count = 0
+        post_count = 0
+
+        def pre_hook():
+            nonlocal pre_count
+            pre_count += 1
+
+        def post_hook(result):
+            nonlocal post_count
+            post_count += 1
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+        )
+        assert collector.pre_collect_hook is None
+        assert collector.post_collect_hook is None
+
+        collector.pre_collect_hook = pre_hook
+        collector.post_collect_hook = post_hook
+        assert collector.pre_collect_hook is pre_hook
+        assert collector.post_collect_hook is post_hook
+
+        try:
+            batches = list(collector)
+            assert pre_count == len(batches)
+            assert post_count == len(batches)
+        finally:
+            collector.shutdown()
+
+    def test_hook_exception_propagates(self):
+        def hook(result):
+            raise RuntimeError("hook failed")
+
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+            post_collect_hook=hook,
+        )
+        try:
+            with pytest.raises(RuntimeError, match="hook failed"):
+                list(collector)
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
+    def test_hooks_run_in_multiprocess_workers(self, collector_cls):
+        manager = torch.multiprocessing.Manager()
+        hook_calls = manager.list()
+
+        def pre_hook():
+            hook_calls.append(("pre", os.getpid()))
+
+        def post_hook(result):
+            hook_calls.append(("post", os.getpid(), result.numel()))
+
+        collector = collector_cls(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=128,
+            pre_collect_hook=pre_hook,
+            post_collect_hook=post_hook,
+        )
+        try:
+            list(collector)
+            pids = {entry[1] for entry in hook_calls}
+            assert pids
+            assert os.getpid() not in pids
+            assert len(pids) == 2
+            assert {entry[0] for entry in hook_calls} == {"pre", "post"}
+        finally:
+            collector.shutdown()
+            manager.shutdown()
+
+    def test_multiprocess_hook_setters_update_workers(self):
+        manager = torch.multiprocessing.Manager()
+        hook_calls = manager.list()
+        collector = MultiSyncCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=64,
+        )
+
+        def pre_hook():
+            hook_calls.append(("pre", os.getpid()))
+
+        def post_hook(result):
+            hook_calls.append(("post", os.getpid()))
+
+        try:
+            collector.pre_collect_hook = pre_hook
+            collector.post_collect_hook = post_hook
+            list(collector)
+            pids = {entry[1] for entry in hook_calls}
+            assert os.getpid() not in pids
+            assert len(pids) == 2
+            assert {entry[0] for entry in hook_calls} == {"pre", "post"}
+        finally:
+            collector.shutdown()
+            manager.shutdown()
+
+
+class TestCollectorRemoteHelpers:
+    def test_local_map_fn_and_get_distant_attr(self):
+        collector = Collector(
+            ContinuousActionVecMockEnv,
+            RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=16,
+            worker_idx=5,
+        )
+        try:
+            assert collector.get_distant_attr("worker_idx") == 5
+            assert collector.map_fn(
+                "get_distant_attr",
+                list_of_args=[("worker_idx",), ("frames_per_batch",)],
+            ) == [5, 16]
+            with pytest.raises(ValueError, match="same length"):
+                collector.map_fn(
+                    "get_distant_attr",
+                    list_of_args=[("worker_idx",)],
+                    list_of_kwargs=[{}, {}],
+                )
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.parametrize("collector_cls", [MultiSyncCollector, MultiAsyncCollector])
+    def test_multiprocess_map_fn_and_get_distant_attr(self, collector_cls):
+        collector = collector_cls(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+        )
+        try:
+            assert collector.get_distant_attr("worker_idx") == [0, 1]
+            assert collector.map_fn(
+                "get_distant_attr",
+                list_of_args=[("worker_idx",), ("worker_idx",)],
+            ) == [0, 1]
+            with pytest.raises(ValueError, match="Expected 2 argument entries"):
+                collector.map_fn("get_distant_attr", list_of_args=[("worker_idx",)])
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.skipif(not _has_ray, reason="requires ray.")
+    def test_ray_map_fn_and_get_distant_attr(self):
+        collector = RayCollector(
+            [ContinuousActionVecMockEnv, ContinuousActionVecMockEnv],
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=16,
+            total_frames=32,
+            num_collectors=2,
+            ray_init_config={"num_cpus": 2, "include_dashboard": False},
+            remote_configs={"num_cpus": 1, "num_gpus": 0},
+        )
+        try:
+            assert collector.get_distant_attr("worker_idx") == [0, 1]
+            assert collector.map_fn(
+                "get_distant_attr",
+                list_of_args=[("worker_idx",), ("worker_idx",)],
+            ) == [0, 1]
+            with pytest.raises(ValueError, match="Expected 2 argument entries"):
+                collector.map_fn("get_distant_attr", list_of_args=[("worker_idx",)])
+        finally:
+            collector.shutdown()
 
 
 class TestCollectorRB:
@@ -5252,8 +6123,6 @@ class TestCollectorProfiling:
 
     def test_profile_config_get_save_path(self):
         """Test ProfileConfig.get_save_path method."""
-        from pathlib import Path
-
         # Default path
         config = ProfileConfig(save_path=None)
         path = config.get_save_path(worker_idx=0)
@@ -5408,6 +6277,85 @@ class TestCollectorProfiling:
         expected_trace = tmp_path / "trace_0.json"
         assert expected_trace.exists(), f"Trace file not found at {expected_trace}"
 
+    def test_enable_profile_installs_profiler_hook_single(self, tmp_path):
+        """``enable_profile`` should install a ``_ProfilerHook`` as the
+        ``post_collect_hook`` and self-stop after ``num_rollouts``.
+        """
+        env = ContinuousActionVecMockEnv()
+        collector = Collector(
+            create_env_fn=lambda: ContinuousActionVecMockEnv(),
+            policy=RandomPolicy(env.action_spec),
+            frames_per_batch=4,
+            total_frames=20,
+        )
+        try:
+            collector.enable_profile(
+                num_rollouts=3,
+                warmup_rollouts=1,
+                save_path=str(tmp_path / "trace_{worker_idx}.json"),
+            )
+            assert isinstance(collector.post_collect_hook, _ProfilerHook)
+            for _ in collector:
+                pass
+            assert (tmp_path / "trace_0.json").exists()
+        finally:
+            collector.shutdown()
+
+    def test_disable_profile_clears_hook_and_restores(self, tmp_path):
+        """``disable_profile`` clears the profiler hook and restores any prior
+        ``post_collect_hook``.
+        """
+        seen = []
+
+        def user_hook(batch):
+            seen.append(batch.numel())
+
+        collector = Collector(
+            create_env_fn=lambda: ContinuousActionVecMockEnv(),
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=4,
+            total_frames=20,
+            post_collect_hook=user_hook,
+        )
+        try:
+            collector.enable_profile(
+                num_rollouts=3,
+                warmup_rollouts=1,
+                save_path=str(tmp_path / "trace_{worker_idx}.json"),
+            )
+            assert collector.post_collect_hook is not user_hook
+            collector.disable_profile()
+            assert collector.profile_config is None
+            assert collector.post_collect_hook is user_hook
+        finally:
+            collector.shutdown()
+
+    @pytest.mark.slow
+    def test_enable_profile_multi_per_worker_idx(self, tmp_path):
+        """Per-worker ``_ProfilerHook`` instances resolve their own
+        ``{worker_idx}`` placeholder in ``save_path``.
+        """
+        trace_path = tmp_path / "trace_{worker_idx}.json"
+        collector = MultiSyncCollector(
+            create_env_fn=[ContinuousActionVecMockEnv] * 2,
+            policy=RandomPolicy(ContinuousActionVecMockEnv().action_spec),
+            frames_per_batch=4,
+            total_frames=40,
+        )
+        try:
+            collector.enable_profile(
+                workers=[0, 1],
+                num_rollouts=3,
+                warmup_rollouts=1,
+                save_path=str(trace_path),
+            )
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+        assert (tmp_path / "trace_0.json").exists()
+        assert (tmp_path / "trace_1.json").exists()
+
 
 class TestTrajsPerBatch:
     """Tests for the ``trajs_per_batch`` kwarg on collectors."""
@@ -5454,6 +6402,18 @@ class TestTrajsPerBatch:
         _traj_ingest(batch1, partial, complete)
         assert len(complete) == 2
         assert complete[0].shape[0] == 5  # traj 0: 5 steps
+
+    def test_ingest_interleaved_ids_preserves_step_order(self):
+        batch = self._make_batch(
+            traj_ids=[0, 1, 0, 1],
+            done_flags=[False, False, True, True],
+            obs_start=0,
+        )
+        partial, complete = {}, []
+        _traj_ingest(batch, partial, complete)
+        assert len(complete) == 2
+        assert complete[0]["obs"].tolist() == [0.0, 2.0]
+        assert complete[1]["obs"].tolist() == [1.0, 3.0]
 
     def test_ingest_partial_not_promoted(self):
         """Incomplete trajectories stay in partial_trajs."""
@@ -5571,6 +6531,38 @@ class TestTrajsPerBatch:
                 env.close(raise_if_closed=False)
 
 
+class _PolicyWithInfo(nn.Module):
+    def __init__(self, action_dim):
+        super().__init__()
+        self.action_dim = action_dim
+
+    def forward(self, obs):
+        action = obs.new_zeros(*obs.shape[:-1], self.action_dim)
+        policy_info = obs.sum(-1, keepdim=True)
+        return action, policy_info
+
+
+def _make_policy_with_info():
+    return TensorDictModule(
+        _PolicyWithInfo(7),
+        in_keys=["observation"],
+        out_keys=["action", "policy_info"],
+    )
+
+
+class _CountingPolicyWithInfoFactory:
+    def __init__(self, counter, lock, pids):
+        self.counter = counter
+        self.lock = lock
+        self.pids = pids
+
+    def __call__(self):
+        with self.lock:
+            self.counter.value += 1
+            self.pids.append(os.getpid())
+        return _make_policy_with_info()
+
+
 class TestTrajsPerBatchReplayBuffer:
     """Tests for trajs_per_batch + ReplayBuffer integration.
 
@@ -5604,6 +6596,53 @@ class TestTrajsPerBatchReplayBuffer:
         finally:
             probe.close(raise_if_closed=False)
         return env_fn, policy
+
+    @staticmethod
+    def _make_continuous_env_and_probabilistic_policy(max_steps=4):
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            ContinuousActionVecMockEnv(maxstep=max_steps), StepCounter(max_steps)
+        )
+        probe = env_fn()
+        try:
+            obs_dim = probe.observation_spec["observation"].shape[-1]
+            action_dim = probe.action_spec.shape[-1]
+            module = TensorDictModule(
+                nn.Sequential(
+                    nn.Linear(obs_dim, 2 * action_dim), NormalParamExtractor()
+                ),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            )
+            try:
+                policy = ProbabilisticActor(
+                    module=module,
+                    in_keys=["loc", "scale"],
+                    out_keys=["action"],
+                    spec=probe.action_spec,
+                    distribution_class=TanhNormal,
+                    return_log_prob=True,
+                )
+            except TypeError as err:
+                if "generator" not in str(err):
+                    raise
+                pytest.skip("Installed tensordict is too old for this checkout.")
+        finally:
+            probe.close(raise_if_closed=False)
+        return env_fn, policy
+
+    @staticmethod
+    def _make_continuous_env_and_policy_with_info(max_steps=4):
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            ContinuousActionVecMockEnv(maxstep=max_steps), StepCounter(max_steps)
+        )
+        probe = env_fn()
+        try:
+            action_dim = probe.action_spec.shape[-1]
+            if action_dim != 7:
+                raise RuntimeError(f"Expected action_dim=7 but got {action_dim}.")
+        finally:
+            probe.close(raise_if_closed=False)
+        return env_fn, _make_policy_with_info
 
     @staticmethod
     def _make_batched_env_fn(max_steps=4, num_envs=2):
@@ -5670,6 +6709,69 @@ class TestTrajsPerBatchReplayBuffer:
         sample = rb.sample(num_trajs)
         assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
         assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_write_batches_replay_buffer_extends(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        extend_sizes = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_sizes.append(td.shape[0])
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+            trajs_per_write=2,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert any(size >= 2 * max_steps for size in extend_sizes)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_write_defaults_to_all_queued_replay_buffer_extends(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200))
+        extend_sizes = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_sizes.append(td.shape[0])
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert any(size >= 3 * max_steps for size in extend_sizes)
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_batch_replay_buffer_start_async(self):
@@ -6102,6 +7204,96 @@ class TestTrajsPerBatchReplayBuffer:
         assert len(rb) > 0, "replay buffer must be non-empty"
         assert ("collector", "traj_ids") in rb.sample(2).keys(True)
         self._assert_rb_trajectories_complete(rb)
+
+    def test_multi_async_probabilistic_actor_writes_log_prob_to_rb(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_continuous_env_and_probabilistic_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn, env_fn],
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        all_data = rb.storage[: len(rb)]
+        assert "action_log_prob" in all_data.keys(True, True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_multi_async_policy_writes_extra_output_to_rb(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy_factory = self._make_continuous_env_and_policy_with_info(
+            max_steps
+        )
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn, env_fn],
+            policy_factory=policy_factory,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+        finally:
+            collector.shutdown()
+
+        assert len(rb) > 0, "replay buffer must be non-empty"
+        all_data = rb.storage[: len(rb)]
+        assert "policy_info" in all_data.keys(True, True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_multi_async_policy_factory_is_built_only_in_workers(self):
+        max_steps = 4
+        num_trajs = 2
+        num_workers = 2
+        env_fn, _ = self._make_continuous_env_and_policy_with_info(max_steps)
+        manager = torch.multiprocessing.Manager()
+        policy_factory_calls = manager.Value("i", 0)
+        policy_factory_call_lock = manager.Lock()
+        policy_factory_pids = manager.list()
+        policy_factory = _CountingPolicyWithInfoFactory(
+            policy_factory_calls, policy_factory_call_lock, policy_factory_pids
+        )
+        rb = ReplayBuffer(storage=LazyTensorStorage(400), shared=True)
+        collector = MultiAsyncCollector(
+            [env_fn for _ in range(num_workers)],
+            policy_factory=policy_factory,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 4,
+            total_frames=max_steps * 24,
+            trajs_per_batch=num_trajs,
+            cat_results="stack",
+        )
+        try:
+            for _ in collector:
+                pass
+            collector.shutdown()
+            assert os.getpid() not in set(policy_factory_pids)
+            assert len(set(policy_factory_pids)) == num_workers
+            assert policy_factory_calls.value == num_workers
+            assert len(rb) > 0, "replay buffer must be non-empty"
+            all_data = rb.storage[: len(rb)]
+            assert "policy_info" in all_data.keys(True, True)
+            self._assert_rb_trajectories_complete(rb)
+        finally:
+            with contextlib.suppress(Exception):
+                collector.shutdown()
+            manager.shutdown()
 
     # ------------------------------------------------------------------
     # Batched env: trajectory completeness (yielded batches, not RB)

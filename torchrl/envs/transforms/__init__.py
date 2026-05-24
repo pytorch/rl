@@ -8,10 +8,11 @@ from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
-from .rb_transforms import MultiStepTransform
+from .rb_transforms import MultiStepTransform, NextStateReconstructor
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
+    ActionScaling,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -30,7 +31,9 @@ from .transforms import (
     DoubleToFloat,
     DTypeCastTransform,
     ExcludeTransform,
+    ExpandAs,
     FiniteTensorDictCheck,
+    FlattenAction,
     FlattenObservation,
     FrameSkipTransform,
     GrayScale,
@@ -39,12 +42,14 @@ from .transforms import (
     InitTracker,
     LineariseRewards,
     MultiAction,
+    NextObservationDelta,
     NoopResetEnv,
     ObservationNorm,
     ObservationTransform,
     PermuteTransform,
     PinMemoryTransform,
     RandomCropTensorDict,
+    RandomTruncationTransform,
     RemoveEmptySpecs,
     RenameTransform,
     Resize,
@@ -75,9 +80,11 @@ from .vc1 import VC1Transform
 from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
+
 __all__ = [
     "ActionDiscretizer",
     "ActionMask",
+    "ActionScaling",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
@@ -97,7 +104,9 @@ __all__ = [
     "DoubleToFloat",
     "EndOfLifeTransform",
     "ExcludeTransform",
+    "ExpandAs",
     "FiniteTensorDictCheck",
+    "FlattenAction",
     "FlattenObservation",
     "FrameSkipTransform",
     "GrayScale",
@@ -108,6 +117,8 @@ __all__ = [
     "ModuleTransform",
     "MultiAction",
     "MultiStepTransform",
+    "NextObservationDelta",
+    "NextStateReconstructor",
     "NoopResetEnv",
     "ObservationNorm",
     "ObservationTransform",
@@ -115,6 +126,7 @@ __all__ = [
     "PinMemoryTransform",
     "R3MTransform",
     "RandomCropTensorDict",
+    "RandomTruncationTransform",
     "RayTransform",
     "RemoveEmptySpecs",
     "RenameTransform",

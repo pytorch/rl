@@ -844,7 +844,11 @@ def test_a2c_speed(
 
     loss = A2CLoss(actor_network=actor, critic_network=critic)
     advantage = GAE(
-        value_network=critic, gamma=0.99, lmbda=0.95, shifted=True, device=device
+        value_network=critic,
+        gamma=0.99,
+        lmbda=0.95,
+        shifted=True,
+        device=device,
     )
     advantage(td)
     loss(td)
@@ -949,7 +953,11 @@ def test_ppo_speed(
 
     loss = ClipPPOLoss(actor_network=actor, critic_network=critic)
     advantage = GAE(
-        value_network=critic, gamma=0.99, lmbda=0.95, shifted=True, device=device
+        value_network=critic,
+        gamma=0.99,
+        lmbda=0.95,
+        shifted=True,
+        device=device,
     )
     advantage(td)
     loss(td)
@@ -1054,7 +1062,11 @@ def test_reinforce_speed(
 
     loss = ReinforceLoss(actor_network=actor, critic_network=critic)
     advantage = GAE(
-        value_network=critic, gamma=0.99, lmbda=0.95, shifted=True, device=device
+        value_network=critic,
+        gamma=0.99,
+        lmbda=0.95,
+        shifted=True,
+        device=device,
     )
     advantage(td)
     loss(td)
