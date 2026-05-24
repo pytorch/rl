@@ -1129,6 +1129,25 @@ class CatFrames(ObservationTransform):
 
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        tensordict_reset = tensordict_reset.copy()
+        for in_key in self.in_keys:
+            buffer_name = f"_cat_buffers_{in_key}"
+            buffer = getattr(self, buffer_name)
+            if isinstance(buffer, torch.nn.parameter.UninitializedBuffer):
+                continue
+            data = tensordict_reset.get(in_key)
+            if data.size(self.dim) != buffer.size(self.dim):
+                continue
+            d = data.size(self.dim) // self.N
+            dim = data.ndim + self.dim if self.dim < 0 else self.dim
+            index = [slice(None, None) for _ in range(data.ndim)]
+            index[dim] = slice(-d, None)
+            tensordict_reset.set(in_key, data[tuple(index)])
+        return self._reset(tensordict, tensordict_reset)
+
     def _make_missing_buffer(self, data, buffer_name):
         shape = list(data.shape)
         d = shape[self.dim]

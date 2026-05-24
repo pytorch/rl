@@ -24,7 +24,7 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT
-from tensordict.utils import is_non_tensor, NestedKey
+from tensordict.utils import expand_as_right, is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
@@ -3680,10 +3680,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self, tensordict: TensorDictBase
     ) -> dict[NestedKey, torch.Tensor]:
         next_tensordict = tensordict.get("next")
-        done = False
+        done = None
         for done_key in self.done_keys:
-            done = done | next_tensordict.get(done_key)
-        if done is False or not done.any():
+            done_value = next_tensordict.get(done_key)
+            done = done_value if done is None else done | done_value
+        if done is None:
             return {}
         done = done.squeeze(-1)
 
@@ -3693,10 +3694,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if obs is None or not isinstance(obs, torch.Tensor):
                 continue
             reset_observations[obs_key] = obs.clone()
+            done_obs = expand_as_right(done, obs)
             if obs.is_floating_point():
-                obs[done] = torch.nan
+                obs = torch.where(done_obs, torch.full_like(obs, torch.nan), obs)
             else:
-                obs[done] = 0
+                obs = torch.where(done_obs, torch.zeros_like(obs), obs)
+            next_tensordict.set(obs_key, obs)
         return reset_observations
 
     @property
@@ -3851,6 +3854,14 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
+        compiled = self.__dict__.get("_compiled_step_and_maybe_reset", None)
+        if compiled is not None:
+            return compiled(tensordict)
+        return self._step_and_maybe_reset(tensordict)
+
+    def _step_and_maybe_reset(
+        self, tensordict: TensorDictBase
+    ) -> tuple[TensorDictBase, TensorDictBase]:
         """Runs a step in the environment and (partially) resets it if needed.
 
         Args:
@@ -3907,8 +3918,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             for obs_key, obs in reset_observations.items():
                 if obs_key in tensordict_.keys(True, True):
                     tensordict_.set(obs_key, obs)
+            done_by_key = {
+                done_key: tensordict_.get(done_key).clone()
+                for done_key in self.done_keys
+            }
+            for done_group in self.done_keys_groups:
+                reset = False
+                for done_key in done_group:
+                    reset = reset | done_by_key[done_key]
+                tensordict_.set(_replace_last(done_group[0], "_reset"), reset.clone())
+            tensordict_ = self._reset_on_native_autoreset(tensordict_, tensordict_)
+            for reset_key in self.reset_keys:
+                tensordict_.pop(reset_key, None)
             for done_key in self.done_keys:
-                done = tensordict_.get(done_key).clone()
+                done = done_by_key[done_key]
                 init_key = _replace_last(done_key, "is_init")
                 if init_key in tensordict_.keys(True, True):
                     tensordict_.set(init_key, done.clone())
@@ -3916,6 +3939,36 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         else:
             tensordict_ = self.maybe_reset(tensordict_)
         return tensordict, tensordict_
+
+    def compile(self, *, warmup: int | None = None, **kwargs):
+        """Compile :meth:`step_and_maybe_reset` and return ``self``.
+
+        Args:
+            warmup (int, optional): if provided, the first ``warmup`` calls to
+                :meth:`step_and_maybe_reset` will run eagerly so the input
+                :class:`~tensordict.TensorDict` layout (keys, names, nesting)
+                stabilizes before tracing. Compilation kicks in on call
+                ``warmup``. This avoids the recompile that otherwise happens
+                because the first post-:meth:`reset` tensordict and the
+                steady-state post-``step_mdp`` tensordict have different
+                layouts. Defaults to ``None`` (compile immediately).
+            **kwargs: forwarded to :func:`torch.compile`.
+        """
+        from torchrl._utils import compile_with_warmup
+
+        if warmup is None:
+            compiled = torch.compile(self._step_and_maybe_reset, **kwargs)
+        else:
+            compiled = compile_with_warmup(
+                self._step_and_maybe_reset, warmup=warmup, **kwargs
+            )
+        self.__dict__["_compiled_step_and_maybe_reset"] = compiled
+        return self
+
+    def eager(self):
+        """Restore eager :meth:`step_and_maybe_reset` execution and return ``self``."""
+        self.__dict__.pop("_compiled_step_and_maybe_reset", None)
+        return self
 
     _post_step_mdp_hooks: Callable[
         [TensorDictBase, TensorDictBase], tuple[TensorDictBase, TensorDictBase]
@@ -3936,6 +3989,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     it are expected to expose a ``_post_step_mdp_hooks`` method themselves and
     rely on :class:`~torchrl.envs.TransformedEnv` to delegate the call.
     """
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
 
     @property
     @_cache_value

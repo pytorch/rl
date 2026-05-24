@@ -36,6 +36,11 @@ from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms.utils import _get_reset
 from torchrl.envs.utils import step_mdp
 
+try:
+    from torch.compiler import is_compiling
+except ImportError:
+    from torch._dynamo import is_compiling
+
 if TYPE_CHECKING:
     pass
 
@@ -564,6 +569,11 @@ class TensorDictPrimer(Transform):
             return tensordict_reset
         return self._reset_func(tensordict, tensordict_reset)
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.call_before_env_reset:
             return tensordict
@@ -936,6 +946,11 @@ class StepCounter(Transform):
                     tensordict_reset.set(done_key, truncated)
                 tensordict_reset.set(truncated_key, truncated)
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -1320,6 +1335,36 @@ class RandomTruncationTransform(Transform):
         reset_mask = tensordict.get("_reset", None)
         if reset_mask is not None:
             mask = reset_mask.view_as(self._horizons).bool()
+            if is_compiling():
+                new_h = torch.randint(
+                    self.min_horizon,
+                    self.max_horizon + 1,
+                    self._horizons.shape,
+                    device=self._horizons.device,
+                )
+                effective_prob = torch.where(
+                    self._first_episode,
+                    torch.full_like(
+                        self._horizons,
+                        self.first_episode_prob,
+                        dtype=torch.get_default_dtype(),
+                    ),
+                    torch.full_like(
+                        self._horizons,
+                        self.prob,
+                        dtype=torch.get_default_dtype(),
+                    ),
+                )
+                keep_full = (
+                    torch.rand(self._horizons.shape, device=self._horizons.device)
+                    > effective_prob
+                )
+                new_h = torch.where(keep_full, self.max_horizon, new_h)
+                self._horizons = torch.where(mask, new_h, self._horizons)
+                self._first_episode = torch.where(
+                    mask, torch.zeros_like(self._first_episode), self._first_episode
+                )
+                return tensordict_reset
             if mask.any():
                 if self.prob == 0.0 and self.first_episode_prob == 0.0:
                     self._horizons[mask] = self.max_horizon
@@ -1346,6 +1391,11 @@ class RandomTruncationTransform(Transform):
                 # First episode is over for these envs
                 self._first_episode[mask] = False
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         full_done_spec = self.parent.output_spec["full_done_spec"]
@@ -2318,6 +2368,11 @@ class TrajCounter(Transform):
             )
             tensordict_reset.set(traj_count_key, episodes)
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase

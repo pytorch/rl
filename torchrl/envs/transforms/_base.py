@@ -314,6 +314,17 @@ class Transform(nn.Module):
         """Resets a transform if it is stateful."""
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Updates transform state after an environment-side auto-reset.
+
+        Native auto-reset envs have already reset their base state during
+        ``step``. The reset mask is carried through regular reset keys in the
+        input tensordict.
+        """
+        return tensordict_reset
+
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         """Inverts the input to :meth:`TransformedEnv._reset`, if needed."""
         if self.enable_inv_on_reset and tensordict is not None:
@@ -1091,6 +1102,17 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             )
         return tensordict, tensordict_
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Run native-autoreset transform hooks in reset order."""
+        base_env = self.base_env
+        if base_env is not None:
+            tensordict_reset = base_env._reset_on_native_autoreset(
+                tensordict, tensordict_reset
+            )
+        return self.transform._reset_on_native_autoreset(tensordict, tensordict_reset)
+
     def fake_tensordict(self) -> TensorDictBase:
         """Build a fake tensordict and let the transform chain post-process it."""
         fake_td = super().fake_tensordict()
@@ -1702,7 +1724,8 @@ class Compose(Transform):
             t._check_batched_worker_compat()
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._inv_call(tensordict)
         return tensordict
 
@@ -1804,8 +1827,18 @@ class Compose(Transform):
             tensordict_reset = t._reset(tensordict, tensordict_reset)
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict_reset = t._reset_on_native_autoreset(
+                tensordict, tensordict_reset
+            )
+        return tensordict_reset
+
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._reset_env_preprocess(tensordict)
         return tensordict
 

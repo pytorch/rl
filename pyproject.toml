@@ -52,6 +52,7 @@ dev = [
     "gymnasium",
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
+    "imageio",
     "mujoco",
     "mujoco-torch",
     "pytest",
@@ -70,7 +71,7 @@ explicit = true
 
 [tool.uv.sources]
 tensordict = { git = "https://github.com/pytorch/tensordict" }
-torch = { index = "pytorch-nightly" }
+torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
 
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]
