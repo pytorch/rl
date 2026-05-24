@@ -31,7 +31,13 @@ from torchrl._utils import (
 )
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
-from torchrl.envs.common import _EnvPostInit, _maybe_unlock, EnvBase
+from torchrl.envs.common import (
+    _EnvPostInit,
+    _maybe_compile_env,
+    _maybe_unlock,
+    _pop_compile_kwargs,
+    EnvBase,
+)
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.envs.utils import _update_during_reset
 
@@ -891,10 +897,11 @@ class Transform(nn.Module):
 
 class _TEnvPostInit(_EnvPostInit):
     def __call__(self, *args, **kwargs):
+        compile_kwargs = _pop_compile_kwargs(kwargs)
         instance: EnvBase = super(_EnvPostInit, self).__call__(*args, **kwargs)
         # we skip the materialization of the specs, because this can't be done with lazy
         # transforms such as ObservationNorm.
-        return instance
+        return _maybe_compile_env(instance, compile_kwargs)
 
 
 class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
@@ -1724,7 +1731,8 @@ class Compose(Transform):
             t._check_batched_worker_compat()
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._inv_call(tensordict)
         return tensordict
 
@@ -1836,7 +1844,8 @@ class Compose(Transform):
         return tensordict_reset
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._reset_env_preprocess(tensordict)
         return tensordict
 
