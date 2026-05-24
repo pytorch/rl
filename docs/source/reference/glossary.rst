@@ -49,12 +49,18 @@ those terms with the minimum context needed to find the relevant code.
    recurrent mode
       The flag controlling whether an RNN-bearing module
       (:class:`~torchrl.modules.LSTMModule`,
-      :class:`~torchrl.modules.GRUModule`) treats the time dimension
-      sequentially or one step at a time.  Toggled per-call via
-      :meth:`~torchrl.modules.LSTMModule.set_recurrent_mode` or globally via
-      the ``recurrent_mode_state_manager`` context manager.  Collectors set
-      it to step-by-step during rollout; losses set it to sequential during
-      backprop over a trajectory chunk.
+      :class:`~torchrl.modules.GRUModule`) processes a single timestep per
+      call (*sequential*) or a full ``(B, T, ...)`` sequence in one call
+      (*recurrent*).  Toggled via the
+      :class:`~torchrl.modules.set_recurrent_mode` context manager; the
+      per-module ``LSTMModule.set_recurrent_mode`` method was removed in
+      v0.8 in favour of this context manager.  Backed by the process-wide
+      ``recurrent_mode_state_manager`` singleton, which is thread- and
+      asyncio-task-local via :class:`contextvars.ContextVar`.  Collectors
+      run in **sequential** mode (one step per call, hidden state shuttled
+      via the tensordict); losses run in **recurrent** mode so the module
+      can split-and-pad on trajectory boundaries inside a single replayed
+      batch.
 
    TensorDictPrimer
       A :class:`~torchrl.envs.Transform` that injects keys into the
