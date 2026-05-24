@@ -126,6 +126,62 @@ Limitations:
   transforms manually with
   :func:`~torchrl.modules.utils.get_env_transforms_from_module`.
 
+.. _Environment-compile-arg:
+
+Compiling envs via the ``compile=`` constructor argument
+--------------------------------------------------------
+
+Every concrete :class:`~torchrl.envs.EnvBase` subclass and
+:class:`~torchrl.envs.TransformedEnv` inherit a ``compile`` keyword argument
+on their constructors. When provided, the :class:`~torchrl.envs.EnvBase`
+metaclass post-init hook calls :meth:`~torchrl.envs.EnvBase.compile` on the
+fully-built env (after spec locking, after auto-reset wrapping if any, after
+policy-driven transform appending if any). Accepted values:
+
+* ``False`` or ``None`` (default): no compilation.
+* ``True``: ``env.compile()`` with default :func:`torch.compile` settings.
+* a ``dict``: forwarded to :meth:`~torchrl.envs.EnvBase.compile`.
+
+Using a dict avoids name collisions between :func:`torch.compile` kwargs
+(``backend``, ``mode``, ``fullgraph``, ``dynamic``, ``warmup``, ...) and
+constructor kwargs of specific envs. ``warmup`` is the number of eager calls
+to :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` before tracing kicks in;
+it stabilizes the input TensorDict layout (e.g. post-:meth:`reset` vs.
+steady-state post-``step_mdp``) so the compiled function does not recompile.
+
+The same flag works equally well with collectors:
+
+.. code-block:: python
+
+    from functools import partial
+    from torchrl.collectors import SyncDataCollector
+    from torchrl.envs import GymEnv, TransformedEnv
+    from torchrl.envs.transforms import Compose
+
+    # Plain env, compiled with a 4-call warmup.
+    collector = SyncDataCollector(
+        partial(
+            GymEnv,
+            "HalfCheetah-v4",
+            compile={"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"},
+        ),
+        ...,
+    )
+
+    # TransformedEnv: compile applies to the outermost env, which is what
+    # the collector calls step_and_maybe_reset on.
+    collector = SyncDataCollector(
+        lambda: TransformedEnv(
+            GymEnv("HalfCheetah-v4"),
+            Compose(...),
+            compile={"warmup": 4, "fullgraph": True},
+        ),
+        ...,
+    )
+
+See :meth:`~torchrl.envs.EnvBase.compile` and
+:meth:`~torchrl.envs.EnvBase.eager` for the underlying methods.
+
 Env methods
 -----------
 
