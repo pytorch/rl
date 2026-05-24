@@ -526,21 +526,29 @@ if _has_triton:
             gh_g += b_g[None, :]
             gh_o += b_o[None, :]
 
-            i = tl.sigmoid(gx_i + gh_i)
-            f = tl.sigmoid(gx_f + gh_f)
-            g = tl.extra.cuda.libdevice.tanh(gx_g + gh_g)
-            o = tl.sigmoid(gx_o + gh_o)
-            c = f * c + i * g
+            # Use explicit intermediate names and split the cell update into
+            # two adds. Triton 3.6's frontend can return ``None`` while typing
+            # ``c = f * c + i * g`` (4-term inline expression with a self-
+            # referential assignment), surfacing as
+            # ``AttributeError("'NoneType' object has no attribute 'type'")``
+            # when the kernel is compiled from inside a ``torch.compile`` graph.
+            i_gate = tl.sigmoid(gx_i + gh_i)
+            f_gate = tl.sigmoid(gx_f + gh_f)
+            g_gate = tl.extra.cuda.libdevice.tanh(gx_g + gh_g)
+            o_gate = tl.sigmoid(gx_o + gh_o)
+            c_decayed = f_gate * c
+            c_input = i_gate * g_gate
+            c = c_decayed + c_input
             tanh_c = tl.extra.cuda.libdevice.tanh(c)
-            h = o * tanh_c
+            h = o_gate * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
             tl.store(out_ptr + base_out, h, mask=mask_b[:, None])
             tl.store(c_out_ptr + base_out, c, mask=mask_b[:, None])
-            tl.store(save_i_ptr + base_out, i, mask=mask_b[:, None])
-            tl.store(save_f_ptr + base_out, f, mask=mask_b[:, None])
-            tl.store(save_g_ptr + base_out, g, mask=mask_b[:, None])
-            tl.store(save_o_ptr + base_out, o, mask=mask_b[:, None])
+            tl.store(save_i_ptr + base_out, i_gate, mask=mask_b[:, None])
+            tl.store(save_f_ptr + base_out, f_gate, mask=mask_b[:, None])
+            tl.store(save_g_ptr + base_out, g_gate, mask=mask_b[:, None])
+            tl.store(save_o_ptr + base_out, o_gate, mask=mask_b[:, None])
             tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
 
         tl.store(
