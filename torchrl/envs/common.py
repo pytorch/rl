@@ -4006,7 +4006,27 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 because the first post-:meth:`reset` tensordict and the
                 steady-state post-``step_mdp`` tensordict have different
                 layouts. Defaults to ``None`` (compile immediately).
-            **kwargs: forwarded to :func:`torch.compile`.
+            **kwargs: forwarded to :func:`torch.compile`. Common ones include
+                ``backend``, ``mode``, ``fullgraph``, and ``dynamic``.
+
+        The same behavior is reachable directly from the constructor of every
+        :class:`EnvBase` subclass (and of
+        :class:`~torchrl.envs.TransformedEnv`) via the ``compile=`` kwarg:
+
+        .. code-block:: python
+
+            env = GymEnv(
+                "HalfCheetah-v4",
+                compile={"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"},
+            )
+
+            env = TransformedEnv(
+                GymEnv("HalfCheetah-v4"),
+                Compose(...),
+                compile={"warmup": 4, "fullgraph": True},
+            )
+
+        See :meth:`eager` to undo it.
         """
         from torchrl._utils import compile_with_warmup
 

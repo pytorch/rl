@@ -14,6 +14,7 @@ import pytest
 import torch
 
 from _envs_common import _has_gym, _has_transformers, mp_ctx
+from packaging import version
 from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
@@ -60,6 +61,8 @@ from torchrl.testing.mocking_classes import (
     EnvWithTensorClass,
     Str2StrEnv,
 )
+
+TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 
 
 class TestAutoReset:
@@ -165,6 +168,11 @@ class TestAutoReset:
         assert not tensordict_["done"].any()
         assert (tensordict_["observation"] == 0).all()
 
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.5.0"),
+        reason="Dynamo cannot trace `EnvBase.device` (a class-level property "
+        "using `self.__dict__.get`) on PyTorch < 2.5.",
+    )
     def test_native_auto_reset_compile_step_and_maybe_reset(self):
         class BranchlessAutoResetCountingEnv(EnvBase):
             def __init__(self, max_steps=3, **kwargs):
@@ -231,6 +239,29 @@ class TestAutoReset:
         assert tensordict["step_count"].le(3).all()
         assert tensordict["episode_reward"].le(3).all()
         assert "_compiled_step_and_maybe_reset" not in env.__dict__
+
+    def test_env_constructor_compile_kwarg(self):
+        env = CountingEnv(3, compile=False)
+        assert "_compiled_step_and_maybe_reset" not in env.__dict__
+
+        env = CountingEnv(3, compile=True)
+        assert "_compiled_step_and_maybe_reset" in env.__dict__
+
+        env = CountingEnv(
+            3,
+            compile={"warmup": 2, "backend": "eager", "fullgraph": True},
+        )
+        assert "_compiled_step_and_maybe_reset" in env.__dict__
+
+        env_t = TransformedEnv(
+            CountingEnv(3),
+            StepCounter(),
+            compile={"warmup": 1, "backend": "eager"},
+        )
+        assert "_compiled_step_and_maybe_reset" in env_t.__dict__
+
+        with pytest.raises(TypeError, match="compile must be"):
+            CountingEnv(3, compile="please")
 
     def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
         class CountingVecNormV2(VecNormV2):
