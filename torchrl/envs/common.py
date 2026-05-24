@@ -256,12 +256,43 @@ class EnvMetaData:
         )
 
 
+_NO_COMPILE = object()
+
+
+def _pop_compile_kwargs(kwargs: dict) -> dict | None:
+    """Pop and normalize the ``compile`` kwarg.
+
+    Accepts ``True``/``False``/``None`` for "compile with defaults" /
+    "do not compile", or a ``dict`` of kwargs forwarded to
+    :meth:`EnvBase.compile`. Using a dict avoids name collisions with env
+    constructor kwargs (``backend``, ``mode``, ``fullgraph``, ``warmup``, ...).
+    """
+    compile_arg = kwargs.pop("compile", _NO_COMPILE)
+    if compile_arg is _NO_COMPILE or compile_arg is False or compile_arg is None:
+        return None
+    if compile_arg is True:
+        return {}
+    if isinstance(compile_arg, dict):
+        return dict(compile_arg)
+    raise TypeError(
+        f"compile must be a bool, None, or a dict of torch.compile kwargs; "
+        f"got {type(compile_arg).__name__}"
+    )
+
+
+def _maybe_compile_env(instance, compile_kwargs):
+    if compile_kwargs is None:
+        return instance
+    return instance.compile(**compile_kwargs)
+
+
 class _EnvPostInit(abc.ABCMeta):
     def __call__(cls, *args, **kwargs):
         spec_locked = kwargs.pop("spec_locked", True)
         auto_reset = kwargs.pop("auto_reset", False)
         auto_reset_replace = kwargs.pop("auto_reset_replace", True)
         policy = kwargs.pop("policy", None)
+        compile_kwargs = _pop_compile_kwargs(kwargs)
         instance: EnvBase = super().__call__(*args, **kwargs)
         if "_cache" not in instance.__dict__:
             instance._cache = {}
@@ -296,7 +327,7 @@ class _EnvPostInit(abc.ABCMeta):
                 )
 
                 instance = _maybe_append_env_transforms_from_module(instance, policy)
-            return instance
+            return _maybe_compile_env(instance, compile_kwargs)
 
         done_keys = set(instance.full_done_spec.keys(True, True))
         obs_keys = set(instance.full_observation_spec.keys(True, True))
@@ -325,7 +356,7 @@ class _EnvPostInit(abc.ABCMeta):
             )
 
             instance = _maybe_append_env_transforms_from_module(instance, policy)
-        return instance
+        return _maybe_compile_env(instance, compile_kwargs)
 
 
 class EnvBase(nn.Module, metaclass=_EnvPostInit):
@@ -377,6 +408,29 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
 
             .. seealso:: The :ref:`auto-resetting environments API <autoresetting_envs>` section in the API
                 documentation.
+
+        compile (bool or dict, optional): if truthy, the env is compiled right
+            after construction by calling :meth:`~torchrl.envs.EnvBase.compile`.
+
+            * ``False`` / ``None`` (default): no compilation.
+            * ``True``: compile with default :func:`torch.compile` settings.
+            * ``dict``: kwargs forwarded to :meth:`~torchrl.envs.EnvBase.compile`,
+              for example ``{"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"}``.
+
+            A dict is the recommended form: passing torch.compile kwargs through
+            the env constructor as top-level keywords would risk colliding with
+            env-specific kwargs.
+
+            .. note:: The compile step is achieved by the `EnvBase` metaclass.
+                It does not appear in the `__init__` method and is included
+                in the keyword arguments strictly for type-hinting purpose. It
+                also applies to :class:`~torchrl.envs.TransformedEnv`, so
+                wrapping with transforms and asking for compile in one shot is
+                supported, e.g.
+                ``TransformedEnv(env, transform, compile={"warmup": 4})``.
+
+            .. seealso:: :meth:`~torchrl.envs.EnvBase.compile` and
+                :meth:`~torchrl.envs.EnvBase.eager`.
 
     Attributes:
         done_spec (Composite): equivalent to ``full_done_spec`` as all
