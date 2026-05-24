@@ -58,3 +58,4 @@ Documentation Sections
    modules_distributions
    modules_inference_server
    modules_utils
+   recurrent_state_lifecycle
