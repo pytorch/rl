@@ -46,8 +46,21 @@ def _init_isaac_app(device: str | None = None) -> None:
     AppLauncher(args_cli)
 
 
-def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
-    """Build an Isaac Lab env. Imports ``isaaclab`` lazily (worker-only)."""
+def make_env(
+    task: str,
+    num_envs: int,
+    max_episode_steps: int,
+    device: str,
+    *,
+    compile_env: bool | dict | None = False,
+):
+    """Build an Isaac Lab env. Imports ``isaaclab`` lazily (worker-only).
+
+    The ``compile_env`` argument forwards to the ``compile=...`` constructor
+    kwarg on :class:`~torchrl.envs.TransformedEnv`, which compiles the env's
+    ``step_and_maybe_reset`` path with :func:`torch.compile`. Pass ``True``
+    for default options or a ``dict`` of :func:`torch.compile` kwargs.
+    """
     import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
@@ -70,9 +83,13 @@ def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
         env = gym.make(task, cfg=cfg)
     else:
         env = gym.make(task)
+    transformed_env_kwargs = {}
+    if compile_env:
+        transformed_env_kwargs["compile"] = compile_env
     return TransformedEnv(
         IsaacLabWrapper(env, device=torch.device(device)),
         RewardSum(),
+        **transformed_env_kwargs,
     )
 
 

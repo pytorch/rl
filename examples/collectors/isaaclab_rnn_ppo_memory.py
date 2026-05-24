@@ -278,6 +278,21 @@ def parse_args() -> argparse.Namespace:
         "--compile-update", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
+        "--compile-gae",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Wrap the GAE module with torch.compile.",
+    )
+    parser.add_argument(
+        "--env-compile",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Compile the worker env's step_and_maybe_reset via the "
+            "compile=True env constructor kwarg."
+        ),
+    )
+    parser.add_argument(
         "--compile-mode",
         choices=["default", "reduce-overhead", "max-autotune"],
         default="default",
@@ -310,7 +325,12 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, args.log_level))
     if args.num_envs % args.num_collectors:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
-    if args.compile_update or args.cudagraph_update:
+    if (
+        args.compile_update
+        or args.compile_gae
+        or args.env_compile
+        or args.cudagraph_update
+    ):
         torch._dynamo.config.capture_scalar_outputs = True
     gae_shifted = args.gae_shifted
 
@@ -354,6 +374,8 @@ def main() -> None:
         deactivate_vmap=args.deactivate_vmap,
         device=train_device,
     )
+    if args.compile_gae:
+        adv_module = torch.compile(adv_module, mode=args.compile_mode)
     optim = group_optimizers(
         torch.optim.Adam(
             actor.parameters(), lr=args.lr, eps=1e-5, capturable=args.cudagraph_update
@@ -393,6 +415,7 @@ def main() -> None:
         num_envs=per_collector_envs,
         max_episode_steps=args.max_episode_steps,
         device=str(collector_device),
+        compile_env=args.env_compile,
     )
     # The worker's actor uses the same backend; during collection the LSTM
     # runs with set_recurrent_mode=False and auto-dispatches to cuDNN.
