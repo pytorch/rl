@@ -564,6 +564,11 @@ class TensorDictPrimer(Transform):
             return tensordict_reset
         return self._reset_func(tensordict, tensordict_reset)
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self.call_before_env_reset:
             return tensordict
@@ -936,6 +941,11 @@ class StepCounter(Transform):
                     tensordict_reset.set(done_key, truncated)
                 tensordict_reset.set(truncated_key, truncated)
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
@@ -1346,6 +1356,11 @@ class RandomTruncationTransform(Transform):
                 # First episode is over for these envs
                 self._first_episode[mask] = False
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def transform_output_spec(self, output_spec: Composite) -> Composite:
         full_done_spec = self.parent.output_spec["full_done_spec"]
@@ -2318,6 +2333,11 @@ class TrajCounter(Transform):
             )
             tensordict_reset.set(traj_count_key, episodes)
         return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
 
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase

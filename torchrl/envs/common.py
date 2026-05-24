@@ -24,7 +24,7 @@ from tensordict import (
     unravel_key,
 )
 from tensordict.base import _is_leaf_nontensor, NO_DEFAULT
-from tensordict.utils import is_non_tensor, NestedKey
+from tensordict.utils import expand_as_right, is_non_tensor, NestedKey
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
@@ -3680,10 +3680,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         self, tensordict: TensorDictBase
     ) -> dict[NestedKey, torch.Tensor]:
         next_tensordict = tensordict.get("next")
-        done = False
+        done = None
         for done_key in self.done_keys:
-            done = done | next_tensordict.get(done_key)
-        if done is False or not done.any():
+            done_value = next_tensordict.get(done_key)
+            done = done_value if done is None else done | done_value
+        if done is None:
             return {}
         done = done.squeeze(-1)
 
@@ -3693,10 +3694,12 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             if obs is None or not isinstance(obs, torch.Tensor):
                 continue
             reset_observations[obs_key] = obs.clone()
+            done_obs = expand_as_right(done, obs)
             if obs.is_floating_point():
-                obs[done] = torch.nan
+                obs = torch.where(done_obs, torch.full_like(obs, torch.nan), obs)
             else:
-                obs[done] = 0
+                obs = torch.where(done_obs, torch.zeros_like(obs), obs)
+            next_tensordict.set(obs_key, obs)
         return reset_observations
 
     @property
@@ -3907,8 +3910,20 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             for obs_key, obs in reset_observations.items():
                 if obs_key in tensordict_.keys(True, True):
                     tensordict_.set(obs_key, obs)
+            done_by_key = {
+                done_key: tensordict_.get(done_key).clone()
+                for done_key in self.done_keys
+            }
+            for done_group in self.done_keys_groups:
+                reset = False
+                for done_key in done_group:
+                    reset = reset | done_by_key[done_key]
+                tensordict_.set(_replace_last(done_group[0], "_reset"), reset.clone())
+            tensordict_ = self._reset_on_native_autoreset(tensordict_, tensordict_)
+            for reset_key in self.reset_keys:
+                tensordict_.pop(reset_key, None)
             for done_key in self.done_keys:
-                done = tensordict_.get(done_key).clone()
+                done = done_by_key[done_key]
                 init_key = _replace_last(done_key, "is_init")
                 if init_key in tensordict_.keys(True, True):
                     tensordict_.set(init_key, done.clone())
@@ -3936,6 +3951,11 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     it are expected to expose a ``_post_step_mdp_hooks`` method themselves and
     rely on :class:`~torchrl.envs.TransformedEnv` to delegate the call.
     """
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
 
     @property
     @_cache_value
