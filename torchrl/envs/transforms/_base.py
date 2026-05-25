@@ -1355,9 +1355,8 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
             # We just select the input data and reset signal, which is all we need.
-            tensordict = tensordict.select(
-                *self.reset_keys, *self.state_spec.keys(True, True), strict=False
-            )
+            state_keys = list(self.state_spec.keys(True, True))
+            tensordict = tensordict.select(*self.reset_keys, *state_keys, strict=False)
         # We always call _reset_env_preprocess, even if tensordict is None - that way one can augment that
         # method to do any pre-reset operation.
         # By default, within _reset_env_preprocess we will skip the inv call when tensordict is None.
