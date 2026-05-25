@@ -263,6 +263,22 @@ class TestAutoReset:
         with pytest.raises(TypeError, match="compile must be"):
             CountingEnv(3, compile="please")
 
+    def test_transformed_env_getattr_no_recursion_on_module_internals(self):
+        """TransformedEnv.__getattr__ must short-circuit private/dunder names.
+
+        ``nn.Module.__dir__`` reads ``_parameters``, ``_buffers``, ``_modules``
+        via attribute access. Routing those through the
+        ``"base_env" in self.__dir__()`` branch re-enters ``__getattr__`` and
+        infinite-recurses, which previously crashed
+        ``torch.compile(step_and_maybe_reset)`` while tracing
+        ``TransformedEnv``.
+        """
+        env = TransformedEnv(CountingEnv(3), StepCounter())
+        for name in ("_parameters", "_buffers", "_modules", "__weakref__"):
+            with pytest.raises(AttributeError):
+                env.__getattr__(name)
+        assert "base_env" in dir(env)
+
     def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
         class CountingVecNormV2(VecNormV2):
             def __init__(self, *args, **kwargs):

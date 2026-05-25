@@ -1501,13 +1501,18 @@ but got an object of type {type(transform)}."""
                     f"Could not get {attr} because an internal error was raised. To find what this error "
                     f"is, call env.transform.transform_<placeholder>_spec(env.base_env.spec)."
                 )
-            if attr.startswith("__"):
+            if attr.startswith("_"):
+                # Private/dunder names must not flow through the
+                # ``"base_env" in self.__dir__()`` branch below.
+                # ``nn.Module.__dir__`` reads ``self._parameters`` /
+                # ``_buffers`` / ``_modules`` via attribute access, and
+                # under ``torch.compile`` tracing those reads can
+                # re-enter ``__getattr__`` and infinite-recurse on the
+                # ``__dir__`` call here.
                 raise AttributeError(
-                    "passing built-in private methods is "
-                    f"not permitted with type {type(self)}. "
-                    f"Got attribute {attr}."
-                )
-            elif "base_env" in self.__dir__():
+                    f"{type(self).__name__!r} object has no attribute {attr!r}"
+                ) from err
+            if "base_env" in self.__dir__():
                 base_env = self.__getattr__("base_env")
                 return getattr(base_env, attr)
             raise AttributeError(
