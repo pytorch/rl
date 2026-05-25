@@ -284,12 +284,17 @@ def parse_args() -> argparse.Namespace:
         help="Wrap the GAE module with torch.compile.",
     )
     parser.add_argument(
-        "--env-compile",
-        action=argparse.BooleanOptionalAction,
-        default=False,
+        "--env-compile-warmup",
+        type=int,
+        default=0,
         help=(
             "Compile the worker env's step_and_maybe_reset via the "
-            "compile=True env constructor kwarg."
+            "compile={'warmup': N} env constructor kwarg. The first N calls "
+            "run eagerly to populate Transform.parent / done_keys / obs_keys "
+            "caches before tracing, which avoids dynamo wrapping a "
+            "half-initialised TransformedEnv built by Compose._rebuild_up_to "
+            "during the compiled trace. 0 disables env compile entirely. Use "
+            ">=1 to enable; 2 is a safe default."
         ),
     )
     parser.add_argument(
@@ -328,7 +333,7 @@ def main() -> None:
     if (
         args.compile_update
         or args.compile_gae
-        or args.env_compile
+        or args.env_compile_warmup > 0
         or args.cudagraph_update
     ):
         torch._dynamo.config.capture_scalar_outputs = True
@@ -409,13 +414,18 @@ def main() -> None:
         )
 
     # ---- Collector (Isaac lives in workers; main process never imports it) ----
+    compile_env: bool | dict
+    if args.env_compile_warmup > 0:
+        compile_env = {"warmup": args.env_compile_warmup}
+    else:
+        compile_env = False
     make_env_fn = partial(
         make_env,
         task=args.task,
         num_envs=per_collector_envs,
         max_episode_steps=args.max_episode_steps,
         device=str(collector_device),
-        compile_env=args.env_compile,
+        compile_env=compile_env,
     )
     # The worker's actor uses the same backend; during collection the LSTM
     # runs with set_recurrent_mode=False and auto-dispatches to cuDNN.
