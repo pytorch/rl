@@ -52,6 +52,39 @@ _MAX_NOOPS_TRIALS = 10
 
 FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent environment."
 
+# ``nn.Module`` instance attributes that must never delegate to ``base_env``
+# through :meth:`TransformedEnv.__getattr__`. Otherwise ``nn.Module.__dir__``
+# (which reads ``_parameters`` / ``_buffers`` / ``_modules`` via attribute
+# access) re-enters ``__getattr__`` and infinite-recurses under
+# ``torch.compile``; and ``env._parameters`` etc. would also masquerade as
+# ``base_env._parameters`` from the outside, which is wrong (the wrapper
+# has its own params/buffers/modules storage).
+#
+# The list mirrors the attributes set in ``torch.nn.Module.__init__`` plus
+# a handful of compile/serialization helpers added in recent PyTorch
+# releases. Keep it sorted to make new pytorch additions easy to spot.
+_NN_MODULE_INTERNAL_NAMES: frozenset[str] = frozenset(
+    {
+        "_backward_hooks",
+        "_backward_pre_hooks",
+        "_buffers",
+        "_compiled_call_impl",
+        "_forward_hooks",
+        "_forward_hooks_always_called",
+        "_forward_hooks_with_kwargs",
+        "_forward_pre_hooks",
+        "_forward_pre_hooks_with_kwargs",
+        "_is_full_backward_hook",
+        "_load_state_dict_post_hooks",
+        "_load_state_dict_pre_hooks",
+        "_modules",
+        "_non_persistent_buffers_set",
+        "_parameters",
+        "_state_dict_hooks",
+        "_state_dict_pre_hooks",
+    }
+)
+
 T = TypeVar("T", bound="Transform")
 
 if TYPE_CHECKING:
@@ -1500,23 +1533,32 @@ but got an object of type {type(transform)}."""
                     f"Could not get {attr} because an internal error was raised. To find what this error "
                     f"is, call env.transform.transform_<placeholder>_spec(env.base_env.spec)."
                 )
-            if attr.startswith("_"):
-                # Private/dunder names must not flow through the
-                # ``"base_env" in self.__dir__()`` branch below.
-                # ``nn.Module.__dir__`` reads ``self._parameters`` /
-                # ``_buffers`` / ``_modules`` via attribute access, and
-                # under ``torch.compile`` tracing those reads can
-                # re-enter ``__getattr__`` and infinite-recurse on the
-                # ``__dir__`` call here.
+            # Dunders and nn.Module's own instance slots must never delegate
+            # to ``base_env``. Otherwise ``nn.Module.__dir__`` (which reads
+            # ``self._parameters`` / ``_buffers`` / ``_modules`` via
+            # attribute access) would re-enter ``__getattr__`` under
+            # ``torch.compile`` tracing and infinite-recurse, and the
+            # outside world would see ``env._parameters`` masquerading as
+            # ``base_env._parameters``. Other single-underscore names
+            # (e.g. ``_counter`` / ``_env`` / ``_is_batched`` on the
+            # wrapped env) still delegate as before.
+            if attr.startswith("__") or attr in _NN_MODULE_INTERNAL_NAMES:
                 raise AttributeError(
                     f"{type(self).__name__!r} object has no attribute {attr!r}"
                 ) from err
-            if "base_env" in self.__dir__():
-                base_env = self.__getattr__("base_env")
-                return getattr(base_env, attr)
-            raise AttributeError(
-                f"env not set in {self.__class__.__name__}, cannot access {attr}"
-            ) from err
+            # Resolve ``base_env`` via the parent class's ``__getattr__``
+            # (which is ``nn.Module``'s: it looks up
+            # ``self.__dict__['_modules']`` directly, so it cannot recurse
+            # back through this ``__getattr__``). Previously the lookup
+            # went through ``"base_env" in self.__dir__()`` which is what
+            # triggered the infinite recursion under ``torch.compile``.
+            try:
+                base_env = super().__getattr__("base_env")
+            except AttributeError:
+                raise AttributeError(
+                    f"env not set in {self.__class__.__name__}, cannot access {attr}"
+                ) from err
+            return getattr(base_env, attr)
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.base_env}", 4 * " ")

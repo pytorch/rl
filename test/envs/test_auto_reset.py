@@ -264,20 +264,53 @@ class TestAutoReset:
             CountingEnv(3, compile="please")
 
     def test_transformed_env_getattr_no_recursion_on_module_internals(self):
-        """TransformedEnv.__getattr__ must short-circuit private/dunder names.
+        """TransformedEnv.__getattr__ short-circuits nn.Module internal slots.
 
         ``nn.Module.__dir__`` reads ``_parameters``, ``_buffers``, ``_modules``
-        via attribute access. Routing those through the
-        ``"base_env" in self.__dir__()`` branch re-enters ``__getattr__`` and
-        infinite-recurses, which previously crashed
-        ``torch.compile(step_and_maybe_reset)`` while tracing
-        ``TransformedEnv``.
+        via attribute access; routing those through the base-env fallback
+        used to re-enter ``__getattr__`` and infinite-recurse under
+        ``torch.compile(step_and_maybe_reset)``. The fallback now refuses
+        the explicit set of nn.Module instance slots (and all dunders),
+        while still letting other single-underscore attributes (e.g. test
+        envs' ``_counter`` / wrapper handles' ``_env``) flow through to
+        ``base_env`` as before.
         """
         env = TransformedEnv(CountingEnv(3), StepCounter())
-        for name in ("_parameters", "_buffers", "_modules", "__weakref__"):
+        for name in (
+            "_parameters",
+            "_buffers",
+            "_modules",
+            "_backward_hooks",
+            "_forward_hooks",
+            "_non_persistent_buffers_set",
+            "__weakref__",
+        ):
             with pytest.raises(AttributeError):
                 env.__getattr__(name)
         assert "base_env" in dir(env)
+
+    def test_transformed_env_getattr_delegates_user_private_attrs(self):
+        """Non-internal single-underscore attrs still delegate to base_env.
+
+        Wrappers like ``GymEnv`` store the underlying gym handle as
+        ``_env``; ``CountingEnv``-style test fixtures store ``_counter``.
+        Both are public-by-convention private fields of the wrapped env
+        and the long-standing convention is that the
+        :class:`TransformedEnv` wrapper transparently forwards them.
+        """
+
+        class _UnderscoreAttrEnv(CountingEnv):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._sentinel = "marker"
+
+        base = _UnderscoreAttrEnv(3)
+        env = TransformedEnv(base, StepCounter())
+        # Delegation goes through __getattr__'s base_env fallback.
+        assert env._sentinel == "marker"
+        # And ``base_env`` is still accessible by name (regression for the
+        # ``"base_env" in self.__dir__()`` removal).
+        assert env.base_env is base
 
     def test_native_auto_reset_wrapped_vecnorm_step_and_maybe_reset(self):
         class CountingVecNormV2(VecNormV2):
