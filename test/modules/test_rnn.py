@@ -872,6 +872,7 @@ class TestLSTMModule:
             scan_out["next", "hidden1"], auto_scan_out["next", "hidden1"]
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
     @pytest.mark.parametrize("H", [16, 64])
@@ -933,6 +934,7 @@ class TestLSTMModule:
             rtol=atol,
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs,training",
@@ -1019,6 +1021,7 @@ class TestLSTMModule:
                 rtol=5e-3,
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_lstm_module_triton_backward(self):
         """Backward path: gradients match pad backend within tolerance."""
@@ -1078,6 +1081,7 @@ class TestLSTMModule:
                 grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
@@ -1186,6 +1190,7 @@ class TestLSTMModule:
                 recurrent_backend="triton",
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("num_layers", [1, 2])
     @pytest.mark.skipif(
@@ -1242,6 +1247,7 @@ class TestLSTMModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
     @pytest.mark.skipif(
@@ -2185,6 +2191,7 @@ class TestGRUModule:
             scan_out["next", "hidden"], auto_scan_out["next", "hidden"]
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
     @pytest.mark.parametrize("H", [16, 64])
@@ -2239,6 +2246,7 @@ class TestGRUModule:
             rtol=atol,
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs,training",
@@ -2310,6 +2318,7 @@ class TestGRUModule:
                 rtol=5e-3,
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_gru_module_triton_backward(self):
         """Backward path: gradients match pad backend within tolerance."""
@@ -2365,6 +2374,7 @@ class TestGRUModule:
                 grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
@@ -2448,6 +2458,7 @@ class TestGRUModule:
                 recurrent_backend="triton",
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("num_layers", [1, 2])
     @pytest.mark.skipif(
@@ -2503,6 +2514,7 @@ class TestGRUModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
     @pytest.mark.skipif(
@@ -2979,6 +2991,7 @@ class TestRecurrentMatmulPrecision:
         finally:
             torch.backends.cuda.matmul.allow_tf32 = prev
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("precision", ["ieee", "tf32", "tf32x3"])
     def test_lstm_triton_precision_grad_parity(self, precision):
@@ -3049,6 +3062,7 @@ class TestRecurrentMatmulPrecision:
                 grads_pad[k], grads_triton[k], atol=atol, rtol=atol
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("precision", ["ieee", "tf32", "tf32x3"])
     def test_gru_triton_precision_grad_parity(self, precision):
@@ -3113,6 +3127,7 @@ class TestRecurrentMatmulPrecision:
                 grads_pad[k], grads_triton[k], atol=atol, rtol=atol
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_lstm_module_precision_kwarg_takes_effect(self):
         """Per-module kwarg beats the process-global override.
