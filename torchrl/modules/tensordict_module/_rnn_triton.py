@@ -40,6 +40,12 @@ import torch
 import torch.nn.functional as F
 from packaging import version
 
+from torchrl.modules.tensordict_module._rnn_precision import (
+    _cublas_matmul_precision_ctx,
+    _resolve_precision,
+    RecurrentMatmulPrecision,
+)
+
 
 def _check_triton_available() -> bool:
     """True if the installed Triton exposes everything this module needs.
@@ -116,7 +122,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_FWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
@@ -139,6 +145,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -213,11 +220,11 @@ if _has_triton:
 
                 w_r_chunk = tl.load(w_r_ptr + k_off[:, None] * H + h_off[None, :])
                 h_chunk_w = h_chunk.to(w_r_chunk.dtype)
-                gh_r += tl.dot(h_chunk_w, w_r_chunk)
+                gh_r += tl.dot(h_chunk_w, w_r_chunk, input_precision=INPUT_PRECISION)
                 w_z_chunk = tl.load(w_z_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_z += tl.dot(h_chunk_w, w_z_chunk)
+                gh_z += tl.dot(h_chunk_w, w_z_chunk, input_precision=INPUT_PRECISION)
                 w_n_chunk = tl.load(w_n_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_n += tl.dot(h_chunk_w, w_n_chunk)
+                gh_n += tl.dot(h_chunk_w, w_n_chunk, input_precision=INPUT_PRECISION)
 
             gh_r += b_r[None, :]
             gh_z += b_z[None, :]
@@ -245,7 +252,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_BWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         reset_to_zero=["dhidden_ptr"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
@@ -271,6 +278,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -361,17 +369,29 @@ if _has_triton:
                 dr_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dr_chunk.to(w_r_chunk.dtype), w_r_chunk)
+                dh_prev_total += tl.dot(
+                    dr_chunk.to(w_r_chunk.dtype),
+                    w_r_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_z_chunk = tl.load(w_z_ptr + k_off[:, None] * H + h_off[None, :])
                 dz_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dz_chunk.to(w_z_chunk.dtype), w_z_chunk)
+                dh_prev_total += tl.dot(
+                    dz_chunk.to(w_z_chunk.dtype),
+                    w_z_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_n_chunk = tl.load(w_n_ptr + k_off[:, None] * H + h_off[None, :])
                 dn_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dn_chunk.to(w_n_chunk.dtype), w_n_chunk)
+                dh_prev_total += tl.dot(
+                    dn_chunk.to(w_n_chunk.dtype),
+                    w_n_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
 
             # At reset positions, dh_prev flows into dhidden[b, t] not dh_{t-1}.
             tl.atomic_add(
@@ -394,7 +414,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_FWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
@@ -422,6 +442,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -513,13 +534,13 @@ if _has_triton:
 
                 w_i_chunk = tl.load(w_i_ptr + k_off[:, None] * H + h_off[None, :])
                 h_chunk_w = h_chunk.to(w_i_chunk.dtype)
-                gh_i += tl.dot(h_chunk_w, w_i_chunk)
+                gh_i += tl.dot(h_chunk_w, w_i_chunk, input_precision=INPUT_PRECISION)
                 w_f_chunk = tl.load(w_f_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_f += tl.dot(h_chunk_w, w_f_chunk)
+                gh_f += tl.dot(h_chunk_w, w_f_chunk, input_precision=INPUT_PRECISION)
                 w_g_chunk = tl.load(w_g_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_g += tl.dot(h_chunk_w, w_g_chunk)
+                gh_g += tl.dot(h_chunk_w, w_g_chunk, input_precision=INPUT_PRECISION)
                 w_o_chunk = tl.load(w_o_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_o += tl.dot(h_chunk_w, w_o_chunk)
+                gh_o += tl.dot(h_chunk_w, w_o_chunk, input_precision=INPUT_PRECISION)
 
             gh_i += b_i[None, :]
             gh_f += b_f[None, :]
@@ -564,7 +585,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_BWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         reset_to_zero=["dhidden_ptr", "dcell_ptr"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
@@ -597,6 +618,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -707,22 +729,38 @@ if _has_triton:
                 di_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(di_chunk.to(w_i_chunk.dtype), w_i_chunk)
+                dh_prev_total += tl.dot(
+                    di_chunk.to(w_i_chunk.dtype),
+                    w_i_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_f_chunk = tl.load(w_f_ptr + k_off[:, None] * H + h_off[None, :])
                 df_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(df_chunk.to(w_f_chunk.dtype), w_f_chunk)
+                dh_prev_total += tl.dot(
+                    df_chunk.to(w_f_chunk.dtype),
+                    w_f_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_g_chunk = tl.load(w_g_ptr + k_off[:, None] * H + h_off[None, :])
                 dg_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dg_chunk.to(w_g_chunk.dtype), w_g_chunk)
+                dh_prev_total += tl.dot(
+                    dg_chunk.to(w_g_chunk.dtype),
+                    w_g_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_o_chunk = tl.load(w_o_ptr + k_off[:, None] * H + h_off[None, :])
                 do_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 3 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(do_chunk.to(w_o_chunk.dtype), w_o_chunk)
+                dh_prev_total += tl.dot(
+                    do_chunk.to(w_o_chunk.dtype),
+                    w_o_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
 
             tl.atomic_add(
                 dhidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
@@ -831,7 +869,9 @@ def _unpad_w_hh(t: torch.Tensor, n_gates: int, H: int, H_pad: int) -> torch.Tens
 
 class _GRUFn(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
+    def forward(
+        ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, input_precision
+    ):
         if not _has_triton:
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
@@ -846,11 +886,12 @@ class _GRUFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
 
-        gates_x = (
-            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
-            .view(B, T, 3 * H_pad)
-            .contiguous()
-        )
+        with _cublas_matmul_precision_ctx(input_precision):
+            gates_x = (
+                F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+                .view(B, T, 3 * H_pad)
+                .contiguous()
+            )
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
@@ -888,6 +929,7 @@ class _GRUFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         ctx.save_for_backward(
@@ -907,6 +949,7 @@ class _GRUFn(torch.autograd.Function):
             w_ih_p,
         )
         ctx.shapes = (B, T, I_in, H, H_pad)
+        ctx.input_precision = input_precision
         return _unpad_last(out, H, H_pad), _unpad_last(h_final, H, H_pad)
 
     @staticmethod
@@ -928,6 +971,7 @@ class _GRUFn(torch.autograd.Function):
             w_ih_p,
         ) = ctx.saved_tensors
         B, T, I_in, H, H_pad = ctx.shapes
+        input_precision = ctx.input_precision
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
@@ -958,6 +1002,7 @@ class _GRUFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         # h_prev[b, t] for the dW_hh computation.
@@ -969,14 +1014,14 @@ class _GRUFn(torch.autograd.Function):
 
         dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-        db_hh_p = dgates_h_flat.sum(0)
-
         dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
         x_flat = x.reshape(B * T, I_in)
-        dW_ih_p = dgates_x_flat.t() @ x_flat
+        with _cublas_matmul_precision_ctx(input_precision):
+            dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+            dW_ih_p = dgates_x_flat.t() @ x_flat
+            dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        db_hh_p = dgates_h_flat.sum(0)
         db_ih_p = dgates_x_flat.sum(0)
-        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
 
         dhidden = _unpad_last(dhidden_p, H, H_pad)
         dW_hh = _unpad_w_hh(dW_hh_p, 3, H, H_pad)
@@ -984,12 +1029,24 @@ class _GRUFn(torch.autograd.Function):
         dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=0)
         db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=0)
 
-        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None
+        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None, None
 
 
 class _LSTMFn(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
+    def forward(
+        ctx,
+        x,
+        hidden,
+        cell,
+        w_ih,
+        w_hh,
+        b_ih,
+        b_hh,
+        is_init,
+        compute_dtype,
+        input_precision,
+    ):
         if not _has_triton:
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
@@ -1005,11 +1062,12 @@ class _LSTMFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
 
-        gates_x = (
-            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
-            .view(B, T, 4 * H_pad)
-            .contiguous()
-        )
+        with _cublas_matmul_precision_ctx(input_precision):
+            gates_x = (
+                F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+                .view(B, T, 4 * H_pad)
+                .contiguous()
+            )
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
@@ -1057,6 +1115,7 @@ class _LSTMFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         ctx.save_for_backward(
@@ -1080,6 +1139,7 @@ class _LSTMFn(torch.autograd.Function):
             w_ih_p,
         )
         ctx.shapes = (B, T, I_in, H, H_pad)
+        ctx.input_precision = input_precision
         return (
             _unpad_last(out, H, H_pad),
             _unpad_last(c_out, H, H_pad),
@@ -1110,6 +1170,7 @@ class _LSTMFn(torch.autograd.Function):
             w_ih_p,
         ) = ctx.saved_tensors
         B, T, I_in, H, H_pad = ctx.shapes
+        input_precision = ctx.input_precision
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
@@ -1149,6 +1210,7 @@ class _LSTMFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         h_prev_all = torch.empty_like(out)
@@ -1159,14 +1221,14 @@ class _LSTMFn(torch.autograd.Function):
 
         dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-        db_hh_p = dgates_h_flat.sum(0)
-
         dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
         x_flat = x.reshape(B * T, I_in)
-        dW_ih_p = dgates_x_flat.t() @ x_flat
+        with _cublas_matmul_precision_ctx(input_precision):
+            dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+            dW_ih_p = dgates_x_flat.t() @ x_flat
+            dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        db_hh_p = dgates_h_flat.sum(0)
         db_ih_p = dgates_x_flat.sum(0)
-        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
 
         dhidden = _unpad_last(dhidden_p, H, H_pad)
         dcell = _unpad_last(dcell_p, H, H_pad)
@@ -1175,7 +1237,7 @@ class _LSTMFn(torch.autograd.Function):
         dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=0)
         db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=0)
 
-        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None
+        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None, None
 
 
 def gru_triton(
@@ -1187,6 +1249,7 @@ def gru_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
+    input_precision: RecurrentMatmulPrecision | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Single-layer GRU forward with reset, autograd-aware.
 
@@ -1199,13 +1262,21 @@ def gru_triton(
         b_ih: ``[3*H]`` fp32 biases.
         b_hh: ``[3*H]`` fp32 biases.
         is_init: ``[B, T]`` bool reset mask.
-        compute_dtype: matmul precision. fp32 -> TF32 on H100. bf16 -> wider SMEM
-            margin, lower precision.
+        compute_dtype: matmul operand dtype. fp32 keeps weights in fp32 (the
+            ``input_precision`` argument then dictates whether ``tl.dot`` runs
+            IEEE FP32, TF32 or TF32x3). bf16 casts weights to bf16 (wider SMEM
+            margin, ~7-bit mantissa, ``input_precision`` ignored).
+        input_precision: precision passed to ``tl.dot``. One of ``"ieee"``,
+            ``"tf32"``, ``"tf32x3"`` or ``None``/``"auto"`` to derive from
+            :func:`torchrl.modules.get_recurrent_matmul_precision`.
 
     Returns:
         ``(out, h_final)`` where ``out`` is ``[B, T, H]`` and ``h_final`` is ``[B, H]``.
     """
-    return _GRUFn.apply(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
+    resolved = _resolve_precision(input_precision)
+    return _GRUFn.apply(
+        x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, resolved
+    )
 
 
 def lstm_triton(
@@ -1218,6 +1289,7 @@ def lstm_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
+    input_precision: RecurrentMatmulPrecision | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Single-layer LSTM forward with reset, autograd-aware.
 
@@ -1227,6 +1299,7 @@ def lstm_triton(
     Returns:
         ``(h_steps, c_steps, h_final, c_final)``.
     """
+    resolved = _resolve_precision(input_precision)
     return _LSTMFn.apply(
-        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, resolved
     )
