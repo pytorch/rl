@@ -60,6 +60,48 @@ Strongly encouraged (not mandatory):
   `pytest.main(...)`, so the file can be executed directly.
 - New algorithms: also tested in the sota-implementations CI.
 
+### 7a. The `gpu` marker (load-bearing!)
+
+The unified Linux CI (`.github/workflows/test-linux.yml`) collects tests with
+**two mutually-exclusive marker filters**:
+
+- `tests-cpu*` jobs run with `-m 'not gpu'`.
+- `tests-gpu*` and `tests-stable-gpu*` jobs run with `-m gpu`.
+
+Any test gated by `@pytest.mark.skipif(not torch.cuda.is_available(), ...)`,
+`@pytest.mark.skipif(not torch.cuda.device_count(), ...)`, the project's
+`_has_triton` / `_has_cuda` flags, or any other CUDA-only requirement
+**must** also carry `@pytest.mark.gpu`. Otherwise:
+
+- On CPU runners the `skipif` skips it.
+- On GPU runners the `-m gpu` filter deselects it before collection.
+- Net result: the test never runs in CI and silently rots — the exact
+  failure mode that let the triton RNN recurrent-matmul bug ship.
+
+The convention is:
+
+```python
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+def test_something_cuda_specific():
+    ...
+```
+
+Apply the marker at whatever scope is appropriate (function, class, or
+module via `pytestmark = pytest.mark.gpu`). Order doesn't matter; both
+decorators are required.
+
+**Exceptions**: dedicated GPU-runner workflows that pin a specific test
+file or `-k` filter (e.g. `unittests-torch_geometric`,
+`unittests-isaaclab`) do not use the `-m gpu` filter and therefore do not
+strictly need the marker. Adding it anyway is harmless and recommended
+for consistency.
+
+**Do not add `@pytest.mark.gpu`** to tests that meaningfully exercise both
+CPU and GPU paths via parametrization (e.g.
+`device = "cpu" if torch.cuda.device_count() == 0 else "cuda"`); those
+must continue to run on the CPU side.
+
 ## 8. Documentation
 
 - Every new public class / function referenced in `docs/source/reference/*.rst`.
