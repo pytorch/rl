@@ -182,7 +182,13 @@ if _has_triton:
                 other=0.0,
             )
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # ``is_init`` is a ``torch.bool`` tensor; ``tl.load`` returns it as
+            # ``uint8`` (the underlying storage dtype). Recent Triton releases
+            # warn / error out on ``tl.where`` with non-i1 conditions, so
+            # convert explicitly here once and reuse the i1 value below.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -302,7 +308,11 @@ if _has_triton:
             n = tl.load(save_n_ptr + base_out, mask=mask_b[:, None], other=0.0)
             gh_n = tl.load(save_gh_n_ptr + base_out, mask=mask_b[:, None], other=0.0)
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # See forward kernel: convert uint8 -> i1 once to satisfy newer
+            # Triton's ``tl.where`` typing.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -489,7 +499,10 @@ if _has_triton:
                 other=0.0,
             )
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # See GRU forward kernel: cast uint8 storage to i1.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -649,7 +662,10 @@ if _has_triton:
             o = tl.load(save_o_ptr + base_out, mask=mask_b[:, None], other=0.0)
             tanh_c = tl.load(save_tanhc_ptr + base_out, mask=mask_b[:, None], other=0.0)
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # See GRU forward kernel: cast uint8 storage to i1.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_c = tl.load(
                 cell_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
