@@ -6,6 +6,7 @@
 from torchrl.modules.tensordict_module._rnn_precision import (
     get_recurrent_matmul_precision,
     RecurrentMatmulPrecision,
+    RecurrentMatmulPrecisionUserMode,
     set_recurrent_matmul_precision,
 )
 from torchrl.modules.tensordict_module.actors import (
@@ -90,6 +91,7 @@ __all__ = [
     "LSTMCell",
     "LSTMModule",
     "RecurrentMatmulPrecision",
+    "RecurrentMatmulPrecisionUserMode",
     "get_recurrent_matmul_precision",
     "recurrent_mode",
     "set_recurrent_matmul_precision",

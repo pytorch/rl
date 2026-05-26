@@ -562,14 +562,18 @@ class LSTMModule(ModuleBase):
             Ignored by the other backends. Default: ``torch.float32``.
         recurrent_matmul_precision: precision used by ``tl.dot`` inside the
             ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
-            calls in the autograd wrapper). One of ``"ieee"`` (full IEEE FP32,
-            off tensor cores), ``"tf32"`` (matches cuDNN's default, fastest),
-            ``"tf32x3"`` (three-product compensated TF32, ~22 bits of mantissa
-            on tensor cores) or ``"auto"`` to derive from
+            calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
+            IEEE FP32, off tensor cores), ``"tf32"`` (matches cuDNN's
+            default, fastest on Ampere+), ``"tf32x3"`` (three-product
+            compensated TF32, ~22 bits of mantissa on tensor cores).
+            GPU-aware presets: ``"fast"`` (Ampere+ → ``"tf32"``, else
+            ``"ieee"``) and ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else
+            ``"ieee"``). Or ``"auto"`` to derive from
             :func:`torch.get_float32_matmul_precision` and the
-            ``TORCHRL_RNN_PRECISION`` env var. See
-            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored by
-            the other backends. Default: ``"auto"``.
+            ``TORCHRL_RNN_PRECISION`` env var (``"highest"`` → ``"ieee"``,
+            ``"high"`` → ``"high-prec"``, ``"medium"`` → ``"fast"``). See
+            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored
+            by the other backends. Default: ``"auto"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -668,7 +672,7 @@ class LSTMModule(ModuleBase):
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
         recurrent_matmul_precision: typing.Literal[
-            "auto", "ieee", "tf32", "tf32x3"
+            "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
         ] = "auto",
         *,
         in_key=None,
@@ -1767,14 +1771,18 @@ class GRUModule(ModuleBase):
             Ignored by the other backends. Default: ``torch.float32``.
         recurrent_matmul_precision: precision used by ``tl.dot`` inside the
             ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
-            calls in the autograd wrapper). One of ``"ieee"`` (full IEEE FP32,
-            off tensor cores), ``"tf32"`` (matches cuDNN's default, fastest),
-            ``"tf32x3"`` (three-product compensated TF32, ~22 bits of mantissa
-            on tensor cores) or ``"auto"`` to derive from
+            calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
+            IEEE FP32, off tensor cores), ``"tf32"`` (matches cuDNN's
+            default, fastest on Ampere+), ``"tf32x3"`` (three-product
+            compensated TF32, ~22 bits of mantissa on tensor cores).
+            GPU-aware presets: ``"fast"`` (Ampere+ → ``"tf32"``, else
+            ``"ieee"``) and ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else
+            ``"ieee"``). Or ``"auto"`` to derive from
             :func:`torch.get_float32_matmul_precision` and the
-            ``TORCHRL_RNN_PRECISION`` env var. See
-            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored by
-            the other backends. Default: ``"auto"``.
+            ``TORCHRL_RNN_PRECISION`` env var (``"highest"`` → ``"ieee"``,
+            ``"high"`` → ``"high-prec"``, ``"medium"`` → ``"fast"``). See
+            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored
+            by the other backends. Default: ``"auto"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -1898,7 +1906,7 @@ class GRUModule(ModuleBase):
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
         recurrent_matmul_precision: typing.Literal[
-            "auto", "ieee", "tf32", "tf32x3"
+            "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
         ] = "auto",
         *,
         in_key=None,

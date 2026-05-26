@@ -41,9 +41,10 @@ import torch.nn.functional as F
 from packaging import version
 
 from torchrl.modules.tensordict_module._rnn_precision import (
-    _cublas_matmul_precision_ctx,
+    _maybe_enable_tf32,
     _resolve_precision,
-    RecurrentMatmulPrecision,
+    _restore_tf32,
+    RecurrentMatmulPrecisionUserMode,
 )
 
 
@@ -902,12 +903,16 @@ class _GRUFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
 
-        with _cublas_matmul_precision_ctx(input_precision):
-            gates_x = (
-                F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
-                .view(B, T, 3 * H_pad)
-                .contiguous()
-            )
+        # Flat ``if`` rather than a context manager: compiled_autograd sees
+        # a context manager generator as a side-effecting region and either
+        # graph-breaks or recompiles per (prev, want) flag combination.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
+        gates_x = (
+            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+            .view(B, T, 3 * H_pad)
+            .contiguous()
+        )
+        _restore_tf32(_prev_tf32)
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
@@ -1032,10 +1037,13 @@ class _GRUFn(torch.autograd.Function):
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
         dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
         x_flat = x.reshape(B * T, I_in)
-        with _cublas_matmul_precision_ctx(input_precision):
-            dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-            dW_ih_p = dgates_x_flat.t() @ x_flat
-            dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        # See forward for why this is a flat ``if`` rather than a context
+        # manager. compiled_autograd traces this backward.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
+        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+        dW_ih_p = dgates_x_flat.t() @ x_flat
+        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        _restore_tf32(_prev_tf32)
         db_hh_p = dgates_h_flat.sum(0)
         db_ih_p = dgates_x_flat.sum(0)
 
@@ -1078,12 +1086,14 @@ class _LSTMFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
 
-        with _cublas_matmul_precision_ctx(input_precision):
-            gates_x = (
-                F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
-                .view(B, T, 4 * H_pad)
-                .contiguous()
-            )
+        # See GRU forward for the flat-``if`` rationale.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
+        gates_x = (
+            F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
+            .view(B, T, 4 * H_pad)
+            .contiguous()
+        )
+        _restore_tf32(_prev_tf32)
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
@@ -1239,10 +1249,12 @@ class _LSTMFn(torch.autograd.Function):
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
         dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
         x_flat = x.reshape(B * T, I_in)
-        with _cublas_matmul_precision_ctx(input_precision):
-            dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-            dW_ih_p = dgates_x_flat.t() @ x_flat
-            dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        # See GRU forward for the flat-``if`` rationale.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
+        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
+        dW_ih_p = dgates_x_flat.t() @ x_flat
+        dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        _restore_tf32(_prev_tf32)
         db_hh_p = dgates_h_flat.sum(0)
         db_ih_p = dgates_x_flat.sum(0)
 
@@ -1265,7 +1277,7 @@ def gru_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
-    input_precision: RecurrentMatmulPrecision | str | None = None,
+    input_precision: RecurrentMatmulPrecisionUserMode | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Single-layer GRU forward with reset, autograd-aware.
 
@@ -1282,8 +1294,11 @@ def gru_triton(
             ``input_precision`` argument then dictates whether ``tl.dot`` runs
             IEEE FP32, TF32 or TF32x3). bf16 casts weights to bf16 (wider SMEM
             margin, ~7-bit mantissa, ``input_precision`` ignored).
-        input_precision: precision passed to ``tl.dot``. One of ``"ieee"``,
-            ``"tf32"``, ``"tf32x3"`` or ``None``/``"auto"`` to derive from
+        input_precision: precision passed to ``tl.dot``. Concrete modes
+            ``"ieee"``, ``"tf32"``, ``"tf32x3"``; GPU-aware presets
+            ``"fast"`` (Ampere+ → ``"tf32"``, else ``"ieee"``) and
+            ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else ``"ieee"``); or
+            ``None`` / ``"auto"`` to derive from
             :func:`torchrl.modules.get_recurrent_matmul_precision`.
 
     Returns:
@@ -1305,7 +1320,7 @@ def lstm_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
-    input_precision: RecurrentMatmulPrecision | str | None = None,
+    input_precision: RecurrentMatmulPrecisionUserMode | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Single-layer LSTM forward with reset, autograd-aware.
 

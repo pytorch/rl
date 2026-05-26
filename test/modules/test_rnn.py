@@ -2842,9 +2842,11 @@ class TestRecurrentMatmulPrecision:
     """Tests for the global precision control plumbed into the triton RNN backend.
 
     Covers (a) the global setter/getter, (b) the env var, (c) per-module
-    override, (d) the cuBLAS context manager, and (e) grad-parity for each
-    precision against the pad backend. CPU-only tests live first; GPU tests
-    are guarded with the standard ``_has_triton`` skip.
+    override, (d) the cuBLAS flip helpers, (e) the GPU-aware presets
+    (``"fast"`` / ``"high-prec"``) with monkey-patched device capability,
+    and (f) grad-parity for each precision against the pad backend. CPU-only
+    tests live first; GPU tests are guarded with the standard ``_has_triton``
+    skip.
     """
 
     def _restore_precision(self):
@@ -2852,6 +2854,27 @@ class TestRecurrentMatmulPrecision:
         from torchrl.modules.tensordict_module import _rnn_precision
 
         _rnn_precision._GLOBAL_OVERRIDE = _rnn_precision._read_env_default()
+        # Clear the lru_cache so per-test monkeypatching takes effect.
+        _rnn_precision._is_tensor_core_capable.cache_clear()
+
+    def _patch_device_capability(
+        self, monkeypatch, *, has_cuda, major, minor=0, hip=False
+    ):
+        """Pretend we're on a specific GPU for preset resolution.
+
+        Clears the ``_is_tensor_core_capable`` lru_cache so the patch takes
+        effect even after a previous resolution.
+        """
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: has_cuda)
+        if has_cuda:
+            monkeypatch.setattr(
+                torch.cuda, "get_device_capability", lambda *args, **kw: (major, minor)
+            )
+            monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+        monkeypatch.setattr(torch.version, "hip", "rocm-x.y" if hip else None)
+        _rnn_precision._is_tensor_core_capable.cache_clear()
 
     def test_set_get_global_roundtrip(self):
         try:
@@ -2861,20 +2884,27 @@ class TestRecurrentMatmulPrecision:
         finally:
             self._restore_precision()
 
-    def test_set_auto_clears_override(self):
+    def test_set_auto_clears_override(self, monkeypatch):
+        # Pin to a known GPU regime so the "auto" resolution is deterministic
+        # regardless of what the host actually has.
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=9)
         try:
             set_recurrent_matmul_precision("ieee")
             assert get_recurrent_matmul_precision() == "ieee"
             set_recurrent_matmul_precision("auto")
-            # falls back to torch.get_float32_matmul_precision mapping
-            expected = {"highest": "ieee", "high": "tf32x3", "medium": "tf32"}[
+            # falls back to torch.get_float32_matmul_precision mapping →
+            # preset → concrete value at the patched compute capability.
+            preset = {"highest": "ieee", "high": "high-prec", "medium": "fast"}[
                 torch.get_float32_matmul_precision()
             ]
-            assert get_recurrent_matmul_precision() == expected
+            preset_concrete = {"ieee": "ieee", "high-prec": "tf32x3", "fast": "tf32"}[
+                preset
+            ]
+            assert get_recurrent_matmul_precision() == preset_concrete
             set_recurrent_matmul_precision("tf32")
             assert get_recurrent_matmul_precision() == "tf32"
             set_recurrent_matmul_precision(None)
-            assert get_recurrent_matmul_precision() == expected
+            assert get_recurrent_matmul_precision() == preset_concrete
         finally:
             self._restore_precision()
 
@@ -2900,7 +2930,9 @@ class TestRecurrentMatmulPrecision:
                 recurrent_matmul_precision="fp16",
             )
 
-    def test_torch_precision_drives_auto(self):
+    def test_torch_precision_drives_auto_ampere(self, monkeypatch):
+        """``torch.set_float32_matmul_precision`` maps via presets on Ampere+."""
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=8)
         try:
             set_recurrent_matmul_precision(None)
             prev = torch.get_float32_matmul_precision()
@@ -2908,9 +2940,35 @@ class TestRecurrentMatmulPrecision:
                 torch.set_float32_matmul_precision("highest")
                 assert get_recurrent_matmul_precision() == "ieee"
                 torch.set_float32_matmul_precision("high")
+                # "high" → "high-prec" preset → tf32x3 on Ampere+
                 assert get_recurrent_matmul_precision() == "tf32x3"
                 torch.set_float32_matmul_precision("medium")
+                # "medium" → "fast" preset → tf32 on Ampere+
                 assert get_recurrent_matmul_precision() == "tf32"
+            finally:
+                torch.set_float32_matmul_precision(prev)
+        finally:
+            self._restore_precision()
+
+    def test_torch_precision_drives_auto_volta(self, monkeypatch):
+        """On pre-Ampere GPUs ``"high"`` / ``"medium"`` fall back to IEEE.
+
+        Pre-presets, ``"high"`` would have resolved to ``"tf32x3"`` even on
+        V100/T4 — a software-emulated path that doesn't help when there are
+        no tensor cores for ``tl.dot(..., input_precision="tf32")`` to use.
+        """
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=7)
+        try:
+            set_recurrent_matmul_precision(None)
+            prev = torch.get_float32_matmul_precision()
+            try:
+                torch.set_float32_matmul_precision("highest")
+                assert get_recurrent_matmul_precision() == "ieee"
+                torch.set_float32_matmul_precision("high")
+                # Volta has no TF32 tensor cores → preset falls back to IEEE.
+                assert get_recurrent_matmul_precision() == "ieee"
+                torch.set_float32_matmul_precision("medium")
+                assert get_recurrent_matmul_precision() == "ieee"
             finally:
                 torch.set_float32_matmul_precision(prev)
         finally:
@@ -2929,6 +2987,19 @@ class TestRecurrentMatmulPrecision:
         finally:
             self._restore_precision()
 
+    def test_env_var_accepts_preset(self, monkeypatch):
+        """``TORCHRL_RNN_PRECISION=fast`` resolves per-GPU at call time."""
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        monkeypatch.setenv("TORCHRL_RNN_PRECISION", "high-prec")
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=10)
+        try:
+            set_recurrent_matmul_precision(None)
+            assert _rnn_precision._GLOBAL_OVERRIDE == "high-prec"
+            assert get_recurrent_matmul_precision() == "tf32x3"
+        finally:
+            self._restore_precision()
+
     def test_env_var_invalid_raises(self, monkeypatch):
         from torchrl.modules.tensordict_module import _rnn_precision
 
@@ -2936,57 +3007,138 @@ class TestRecurrentMatmulPrecision:
         with pytest.raises(ValueError, match="TORCHRL_RNN_PRECISION"):
             _rnn_precision._read_env_default()
 
-    def test_resolve_kwarg_overrides_global(self):
+    def test_resolve_kwarg_overrides_global(self, monkeypatch):
         from torchrl.modules.tensordict_module._rnn_precision import _resolve_precision
 
+        # Force a deterministic preset resolution.
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=9)
         try:
             set_recurrent_matmul_precision("ieee")
             assert _resolve_precision("tf32") == "tf32"
             assert _resolve_precision("auto") == "ieee"
             assert _resolve_precision(None) == "ieee"
-            set_recurrent_matmul_precision("tf32x3")
+            set_recurrent_matmul_precision("high-prec")
             assert _resolve_precision("tf32") == "tf32"
+            # Per-call presets resolve via the patched GPU capability.
             assert _resolve_precision("auto") == "tf32x3"
+            assert _resolve_precision("fast") == "tf32"
+            assert _resolve_precision("high-prec") == "tf32x3"
         finally:
             self._restore_precision()
 
-    def test_cublas_ctx_flips_and_restores(self):
+    @pytest.mark.parametrize(
+        "major,fast_expected,high_prec_expected",
+        [
+            (10, "tf32", "tf32x3"),  # Blackwell
+            (9, "tf32", "tf32x3"),  # Hopper
+            (8, "tf32", "tf32x3"),  # Ampere
+            (7, "ieee", "ieee"),  # Turing
+            (6, "ieee", "ieee"),  # Pascal
+        ],
+    )
+    def test_preset_resolution_per_compute_capability(
+        self, monkeypatch, major, fast_expected, high_prec_expected
+    ):
+        """``"fast"`` / ``"high-prec"`` map per-architecture as documented."""
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_gpu_preset
+
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=major)
+        try:
+            assert _resolve_gpu_preset("fast") == fast_expected
+            assert _resolve_gpu_preset("high-prec") == high_prec_expected
+        finally:
+            self._restore_precision()
+
+    def test_preset_resolution_no_cuda(self, monkeypatch):
+        """Presets fall back to IEEE when CUDA is unavailable."""
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_gpu_preset
+
+        self._patch_device_capability(monkeypatch, has_cuda=False, major=0)
+        try:
+            assert _resolve_gpu_preset("fast") == "ieee"
+            assert _resolve_gpu_preset("high-prec") == "ieee"
+        finally:
+            self._restore_precision()
+
+    def test_preset_resolution_hip(self, monkeypatch):
+        """ROCm/HIP devices fall back to IEEE (no TF32 in triton's ``tl.dot``)."""
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_gpu_preset
+
+        # Even with major>=8 reported, the HIP flag forces the fallback.
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=9, hip=True)
+        try:
+            assert _resolve_gpu_preset("fast") == "ieee"
+            assert _resolve_gpu_preset("high-prec") == "ieee"
+        finally:
+            self._restore_precision()
+
+    def test_set_preset_globally(self, monkeypatch):
+        """``set_recurrent_matmul_precision("fast")`` is honored as preset."""
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=8)
+        try:
+            set_recurrent_matmul_precision("fast")
+            assert get_recurrent_matmul_precision() == "tf32"
+            # Switch to a pre-Ampere card and re-resolve.
+            self._patch_device_capability(monkeypatch, has_cuda=True, major=7)
+            assert get_recurrent_matmul_precision() == "ieee"
+        finally:
+            self._restore_precision()
+
+    def test_maybe_enable_tf32_flips_and_restores(self):
+        """Replacement for the old context-manager helper. Plain flip + restore.
+
+        compiled_autograd handles a couple of conditional ``allow_tf32``
+        writes much better than the ``@contextmanager`` generator that used
+        to wrap the cuBLAS calls. This test pins the contract.
+        """
         from torchrl.modules.tensordict_module._rnn_precision import (
-            _cublas_matmul_precision_ctx,
+            _maybe_enable_tf32,
+            _restore_tf32,
         )
 
-        prev = torch.backends.cuda.matmul.allow_tf32
+        prev_outer = torch.backends.cuda.matmul.allow_tf32
         try:
+            # tf32 wants True. With prev=False the helper flips and returns False.
             torch.backends.cuda.matmul.allow_tf32 = False
-            with _cublas_matmul_precision_ctx("tf32"):
-                assert torch.backends.cuda.matmul.allow_tf32 is True
+            prev = _maybe_enable_tf32("tf32")
+            assert torch.backends.cuda.matmul.allow_tf32 is True
+            assert prev is False
+            _restore_tf32(prev)
             assert torch.backends.cuda.matmul.allow_tf32 is False
-            with _cublas_matmul_precision_ctx("ieee"):
-                assert torch.backends.cuda.matmul.allow_tf32 is False
-            with _cublas_matmul_precision_ctx("tf32x3"):
-                # tf32x3 → keep cuBLAS at IEEE (no tf32x3 mode in cuBLAS)
-                assert torch.backends.cuda.matmul.allow_tf32 is False
+
+            # ieee wants False. Already False → no-op (returns None).
+            prev = _maybe_enable_tf32("ieee")
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+            assert prev is None
+            _restore_tf32(prev)
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+
+            # tf32x3 also wants cuBLAS at IEEE → no-op.
+            prev = _maybe_enable_tf32("tf32x3")
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+            assert prev is None
+
+            # When global is True and we want ieee, the helper flips.
             torch.backends.cuda.matmul.allow_tf32 = True
-            with _cublas_matmul_precision_ctx("tf32"):
-                assert torch.backends.cuda.matmul.allow_tf32 is True
-            with _cublas_matmul_precision_ctx("ieee"):
-                assert torch.backends.cuda.matmul.allow_tf32 is False
+            prev = _maybe_enable_tf32("ieee")
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+            assert prev is True
+            _restore_tf32(prev)
             assert torch.backends.cuda.matmul.allow_tf32 is True
         finally:
-            torch.backends.cuda.matmul.allow_tf32 = prev
+            torch.backends.cuda.matmul.allow_tf32 = prev_outer
 
-    def test_cublas_ctx_restores_on_exception(self):
-        from torchrl.modules.tensordict_module._rnn_precision import (
-            _cublas_matmul_precision_ctx,
-        )
+    def test_restore_tf32_with_none_is_noop(self):
+        """``_restore_tf32(None)`` must leave the flag untouched."""
+        from torchrl.modules.tensordict_module._rnn_precision import _restore_tf32
 
         prev = torch.backends.cuda.matmul.allow_tf32
         try:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            _restore_tf32(None)
+            assert torch.backends.cuda.matmul.allow_tf32 is True
             torch.backends.cuda.matmul.allow_tf32 = False
-            with pytest.raises(RuntimeError, match="boom"):
-                with _cublas_matmul_precision_ctx("tf32"):
-                    assert torch.backends.cuda.matmul.allow_tf32 is True
-                    raise RuntimeError("boom")
+            _restore_tf32(None)
             assert torch.backends.cuda.matmul.allow_tf32 is False
         finally:
             torch.backends.cuda.matmul.allow_tf32 = prev
