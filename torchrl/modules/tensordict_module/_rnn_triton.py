@@ -473,22 +473,22 @@ if _has_triton:
                 mask=mask_b[:, None],
                 other=0.0,
             )
-            if t == 0:
-                c_prev = tl.load(
-                    cell_ptr + b_off[:, None] * (T * H) + 0 * H + h_off[None, :],
-                    mask=mask_b[:, None],
-                    other=0.0,
-                )
-            else:
-                c_prev_stored = tl.load(
-                    c_out_ptr
-                    + b_off[:, None] * (T * H)
-                    + (t - 1) * H
-                    + h_off[None, :],
-                    mask=mask_b[:, None],
-                    other=0.0,
-                )
-                c_prev = tl.where(is_init[:, None], reset_c, c_prev_stored)
+            c_initial = tl.load(
+                cell_ptr + b_off[:, None] * (T * H) + 0 * H + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            prev_t = tl.maximum(t - 1, 0)
+            c_prev_stored = tl.load(
+                c_out_ptr
+                + b_off[:, None] * (T * H)
+                + prev_t * H
+                + h_off[None, :],
+                mask=mask_b[:, None],
+                other=0.0,
+            )
+            c_prev = tl.where(t == 0, c_initial, c_prev_stored)
+            c_prev = tl.where(is_init[:, None], reset_c, c_prev)
 
             gh_i = tl.zeros([BLOCK_B, H], dtype=tl.float32)
             gh_f = tl.zeros([BLOCK_B, H], dtype=tl.float32)
