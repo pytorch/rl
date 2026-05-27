@@ -536,10 +536,10 @@ if _has_triton:
 
             i = tl.sigmoid(gx_i + gh_i)
             f = tl.sigmoid(gx_f + gh_f)
-            g = tl.tanh(gx_g + gh_g)
+            g = 2.0 * tl.sigmoid(2.0 * (gx_g + gh_g)) - 1.0
             o = tl.sigmoid(gx_o + gh_o)
             c_t = f * c_prev + i * g
-            tanh_c = tl.tanh(c_t)
+            tanh_c = 2.0 * tl.sigmoid(2.0 * c_t) - 1.0
             h_t = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
