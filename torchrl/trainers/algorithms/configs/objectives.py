@@ -278,6 +278,10 @@ class GAEConfig(LossConfig):
     time_dim: int | None = None
     auto_reset_env: bool = False
     deactivate_vmap: bool = False
+    value_chunk_size: int | None = None
+    num_chunks: int | None = None
+    num_chunk: int | None = None
+    shifted_budget: int = 1
     _target_: str = "torchrl.objectives.value.GAE"
     _partial_: bool = False
 
