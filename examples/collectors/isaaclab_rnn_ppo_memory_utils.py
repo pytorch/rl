@@ -127,7 +127,11 @@ def make_env(
     if compile_env:
         transformed_env_kwargs["compile"] = compile_env
     return TransformedEnv(
-        IsaacLabWrapper(env, device=torch.device(device)),
+        IsaacLabWrapper(
+            env,
+            device=torch.device(device),
+            native_autoreset=bool(random_init_steps),
+        ),
         Compose(*transforms),
         **transformed_env_kwargs,
     )
