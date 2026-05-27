@@ -2,15 +2,17 @@
 # Assert that the installed PyTorch and TensorDict builds match the CI mode.
 #
 # Usage:
-#   bash assert_torch_tensordict_versions.sh nightly [auto|main|stable]
-#   bash assert_torch_tensordict_versions.sh stable  [auto|main|stable]
+#   bash assert_torch_tensordict_versions.sh nightly [auto|main|nightly|stable]
+#   bash assert_torch_tensordict_versions.sh stable  [auto|main|nightly|stable]
 #
 # By default (auto), nightly PyTorch expects TensorDict from main/git and stable
 # PyTorch expects a stable TensorDict release. Some jobs intentionally pin stable
 # PyTorch while testing TensorDict main; pass "main" explicitly for those jobs.
+# Nightly wheel jobs install the dated TensorDict nightly package; pass "nightly"
+# explicitly for those jobs.
 set -euo pipefail
 
-expected_torch="${1:?Usage: assert_torch_tensordict_versions.sh nightly|stable [auto|main|stable]}"
+expected_torch="${1:?Usage: assert_torch_tensordict_versions.sh nightly|stable [auto|main|nightly|stable]}"
 expected_tensordict="${2:-auto}"
 
 PYTHON="${PYTHON:-$(command -v python3 || command -v python)}"
@@ -36,9 +38,10 @@ if expected_torch not in {"nightly", "stable"}:
 
 if expected_tensordict == "auto":
     expected_tensordict = "main" if expected_torch == "nightly" else "stable"
-elif expected_tensordict not in {"main", "stable"}:
+elif expected_tensordict not in {"main", "nightly", "stable"}:
     raise RuntimeError(
-        "Expected TensorDict source must be 'auto', 'main', or 'stable', "
+        "Expected TensorDict source must be 'auto', 'main', 'nightly', or "
+        "'stable', "
         f"got {expected_tensordict!r}."
     )
 
@@ -66,6 +69,7 @@ tensordict_from_main = bool(
     re.search(r"(?:\.dev|\+g|dev)", tensordict_version)
     or "github.com/pytorch/tensordict" in tensordict_direct_url
 )
+tensordict_from_nightly = bool(re.match(r"^\d{4}\.\d{2}\.\d{2}", tensordict_version))
 
 if expected_tensordict == "main" and not tensordict_from_main:
     raise RuntimeError(
@@ -73,7 +77,15 @@ if expected_tensordict == "main" and not tensordict_from_main:
         f"tensordict {tensordict_version}."
     )
 
-if expected_tensordict == "stable" and tensordict_from_main:
+if expected_tensordict == "nightly" and not tensordict_from_nightly:
+    raise RuntimeError(
+        "TensorDict source mismatch: expected a TensorDict nightly release but "
+        f"got tensordict {tensordict_version}."
+    )
+
+if expected_tensordict == "stable" and (
+    tensordict_from_main or tensordict_from_nightly
+):
     raise RuntimeError(
         "TensorDict source mismatch: expected a stable TensorDict release but got "
         f"tensordict {tensordict_version}."

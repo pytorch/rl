@@ -24,6 +24,7 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
+    - flatten_dict
     - hydra-core
     - patchelf
     - mujoco==2.3.3

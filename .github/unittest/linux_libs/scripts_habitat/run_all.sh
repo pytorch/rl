@@ -27,8 +27,16 @@ cp $this_dir/10_nvidia.json /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 bash ${this_dir}/setup_env.sh
 bash ${this_dir}/install.sh
 
-PYTHON=./env/bin/python bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
-PYTHON=./env/bin/python bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
+# habitat-lab currently resolves a stable PyTorch build after habitat-sim is
+# installed. Keep validating TensorDict source, but accept stable PyTorch in
+# this workflow even on non-release branches.
+if [[ "$RELEASE" == 0 ]]; then
+  TENSORDICT_EXPECTATION=main
+else
+  TENSORDICT_EXPECTATION=stable
+fi
+PYTHON=./env/bin/python bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_version.sh" stable
+PYTHON=./env/bin/python bash "$(git rev-parse --show-toplevel)/.github/unittest/helpers/assert_torch_tensordict_versions.sh" stable "$TENSORDICT_EXPECTATION"
 
 bash ${this_dir}/run_test.sh
 bash ${this_dir}/post_process.sh
