@@ -102,13 +102,14 @@ fi
 echo "=== Installing build dependencies ==="
 conda install anaconda::cmake -y
 python -m pip install "pybind11[global]"
+python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
 
 # install tensordict
 echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
-  python -m pip install git+https://github.com/pytorch/tensordict
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict
 else
-  pip3 install tensordict
+  python -m pip install --no-deps tensordict
 fi
 
 # smoke test
@@ -122,7 +123,7 @@ echo "=== Setting up CUDA environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 whatsinside=$(ls -rtlh ./torchrl)
 echo $whatsinside

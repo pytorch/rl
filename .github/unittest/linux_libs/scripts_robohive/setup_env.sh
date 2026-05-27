@@ -82,7 +82,7 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 conda install conda-forge::ffmpeg -y
 
-pip install robohive
+pip install robohive --no-deps
 
 python -m robohive_init
 
