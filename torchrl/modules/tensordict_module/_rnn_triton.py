@@ -83,9 +83,6 @@ if _has_triton:
     ]
 
     _BWD_CONFIGS = [
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 16}, num_warps=2, num_stages=1),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=2, num_stages=1),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=4, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 16}, num_warps=2, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 32}, num_warps=2, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 64}, num_warps=4, num_stages=1),
