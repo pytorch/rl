@@ -434,16 +434,6 @@ if _has_triton:
         mask_b = b_off < B
         N_K: tl.constexpr = H // BLOCK_K
 
-        h = tl.load(
-            hidden_ptr + b_off[:, None] * (T * H) + 0 * H + h_off[None, :],
-            mask=mask_b[:, None],
-            other=0.0,
-        )
-        c = tl.load(
-            cell_ptr + b_off[:, None] * (T * H) + 0 * H + h_off[None, :],
-            mask=mask_b[:, None],
-            other=0.0,
-        )
         b_i = tl.load(b_hh_ptr + 0 * H + h_off)
         b_f = tl.load(b_hh_ptr + 1 * H + h_off)
         b_g = tl.load(b_hh_ptr + 2 * H + h_off)
@@ -483,8 +473,22 @@ if _has_triton:
                 mask=mask_b[:, None],
                 other=0.0,
             )
-            h = tl.where(is_init[:, None], reset_h, h)
-            c = tl.where(is_init[:, None], reset_c, c)
+            if t == 0:
+                c_prev = tl.load(
+                    cell_ptr + b_off[:, None] * (T * H) + 0 * H + h_off[None, :],
+                    mask=mask_b[:, None],
+                    other=0.0,
+                )
+            else:
+                c_prev_stored = tl.load(
+                    c_out_ptr
+                    + b_off[:, None] * (T * H)
+                    + (t - 1) * H
+                    + h_off[None, :],
+                    mask=mask_b[:, None],
+                    other=0.0,
+                )
+                c_prev = tl.where(is_init[:, None], reset_c, c_prev_stored)
 
             gh_i = tl.zeros([BLOCK_B, H], dtype=tl.float32)
             gh_f = tl.zeros([BLOCK_B, H], dtype=tl.float32)
@@ -534,19 +538,29 @@ if _has_triton:
             f = tl.sigmoid(gx_f + gh_f)
             g = tl.extra.libdevice.tanh(gx_g + gh_g)
             o = tl.sigmoid(gx_o + gh_o)
-            c = f * c + i * g
-            tanh_c = tl.extra.libdevice.tanh(c)
-            h = o * tanh_c
+            c_t = f * c_prev + i * g
+            tanh_c = tl.extra.libdevice.tanh(c_t)
+            h_t = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
-            tl.store(out_ptr + base_out, h, mask=mask_b[:, None])
-            tl.store(c_out_ptr + base_out, c, mask=mask_b[:, None])
+            tl.store(out_ptr + base_out, h_t, mask=mask_b[:, None])
+            tl.store(c_out_ptr + base_out, c_t, mask=mask_b[:, None])
             tl.store(save_i_ptr + base_out, i, mask=mask_b[:, None])
             tl.store(save_f_ptr + base_out, f, mask=mask_b[:, None])
             tl.store(save_g_ptr + base_out, g, mask=mask_b[:, None])
             tl.store(save_o_ptr + base_out, o, mask=mask_b[:, None])
             tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
 
+        h = tl.load(
+            out_ptr + b_off[:, None] * (T * H) + (T - 1) * H + h_off[None, :],
+            mask=mask_b[:, None],
+            other=0.0,
+        )
+        c = tl.load(
+            c_out_ptr + b_off[:, None] * (T * H) + (T - 1) * H + h_off[None, :],
+            mask=mask_b[:, None],
+            other=0.0,
+        )
         tl.store(
             h_final_ptr + b_off[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
         )
