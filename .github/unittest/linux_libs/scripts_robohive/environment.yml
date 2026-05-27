@@ -25,6 +25,7 @@ dependencies:
     - pyyaml
     - scipy
     - flatten_dict
+    - termcolor
     - hydra-core
     - patchelf
     - mujoco==2.3.3
