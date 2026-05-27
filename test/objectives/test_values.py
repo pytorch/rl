@@ -197,14 +197,10 @@ class TestValues:
             **chunk_kwargs,
         )
         if method == "forward":
-            expected = unchunked(
-                td.clone(), params=params, target_params=target_params
-            )
+            expected = unchunked(td.clone(), params=params, target_params=target_params)
             actual = chunked(td.clone(), params=params, target_params=target_params)
             torch.testing.assert_close(actual["advantage"], expected["advantage"])
-            torch.testing.assert_close(
-                actual["value_target"], expected["value_target"]
-            )
+            torch.testing.assert_close(actual["value_target"], expected["value_target"])
         else:
             expected = unchunked.value_estimate(
                 td.clone(), params=params, target_params=target_params
