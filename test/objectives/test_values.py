@@ -81,6 +81,8 @@ class TestValues:
     def test_chunked_value_calls_match_unchunked(
         self, estimator_cls, kwargs, shifted, deactivate_vmap, chunk_kwargs
     ):
+        if deactivate_vmap and _TORCH_VERSION < version.parse("2.7"):
+            pytest.skip("_pseudo_vmap is not supported for torch<2.7")
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1),
@@ -158,6 +160,8 @@ class TestValues:
     def test_gae_chunked_functional_calls_match_unchunked(
         self, vectorized, deactivate_vmap, method, chunk_kwargs
     ):
+        if deactivate_vmap and _TORCH_VERSION < version.parse("2.7"):
+            pytest.skip("_pseudo_vmap is not supported for torch<2.7")
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1),
