@@ -320,6 +320,7 @@ class TestEvaluatorAsync:
         assert elapsed < 10.0, f"Shutdown took {elapsed:.1f}s, expected < 10s"
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(
     not torch.cuda.is_available() or torch.cuda.device_count() < 2,
     reason="Requires 2+ CUDA devices",

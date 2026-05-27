@@ -385,6 +385,12 @@ class TestWandbLogger:
                 value = list(value)  # wandb converts tuples to lists
             assert wandb_logger.experiment.config[key] == value
 
+    def test_logs_env_packages(self, wandb_logger):
+        env = wandb_logger.experiment.config["env"]
+        assert "python" in env
+        assert "packages" in env
+        assert "tensordict" in {key.lower() for key in env["packages"]}
+
     def test_log_histogram(self, wandb_logger):
         torch.manual_seed(0)
         # test with torch

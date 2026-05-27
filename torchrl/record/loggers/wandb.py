@@ -4,9 +4,13 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.metadata as metadata
 import importlib.util
+import json
 
 import os
+import platform
+import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -18,6 +22,33 @@ from .common import _make_metrics_safe, Logger
 _has_wandb = importlib.util.find_spec("wandb") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 _has_moviepy = importlib.util.find_spec("moviepy") is not None
+
+
+def _collect_env_metadata() -> dict[str, Any]:
+    packages = {}
+    editable_sources = {}
+    for distribution in metadata.distributions():
+        name = distribution.metadata.get("Name")
+        if name is None:
+            continue
+        packages[name] = distribution.version
+        direct_url = distribution.read_text("direct_url.json")
+        if direct_url is not None:
+            direct_url = json.loads(direct_url)
+            dir_info = direct_url.get("dir_info")
+            if dir_info is not None and dir_info.get("editable"):
+                editable_sources[name] = direct_url.get("url")
+    return {
+        "python": {
+            "version": sys.version,
+            "executable": sys.executable,
+            "prefix": sys.prefix,
+            "base_prefix": sys.base_prefix,
+            "platform": platform.platform(),
+        },
+        "packages": dict(sorted(packages.items())),
+        "editable_sources": dict(sorted(editable_sources.items())),
+    }
 
 
 class WandbLogger(Logger):
@@ -39,6 +70,9 @@ class WandbLogger(Logger):
         project (str, optional): The name of the project where you're sending
             the new run. If the project is not specified, the run is put in
             an ``"Uncategorized"`` project.
+        log_env_packages (bool, optional): if ``True``, logs the Python runtime,
+            installed package versions, and editable source locations under
+            ``wandb.config["env"]``. Defaults to ``True``.
 
     Keyword Args:
         fps (int, optional): Number of frames per second when recording videos. Defaults to ``30``.
@@ -60,6 +94,7 @@ class WandbLogger(Logger):
         project: str | None = None,
         *,
         video_fps: int = 32,
+        log_env_packages: bool = True,
         **kwargs,
     ) -> None:
         if not _has_wandb:
@@ -77,6 +112,7 @@ class WandbLogger(Logger):
         self.id = id
         self.project = project
         self.video_fps = video_fps
+        self.log_env_packages = log_env_packages
         self._step_registry: dict[str, int] = {}
         self._defined_step_metrics: set[str] = set()
         self._defined_metrics: set[str] = set()
@@ -90,6 +126,13 @@ class WandbLogger(Logger):
         }
 
         super().__init__(exp_name=exp_name, log_dir=save_dir)
+        if self.log_env_packages:
+            try:
+                self.experiment.config.update(
+                    {"env": _collect_env_metadata()}, allow_val_change=True
+                )
+            except TypeError:
+                self.experiment.config.update({"env": _collect_env_metadata()})
         if self.offline:
             os.environ["WANDB_MODE"] = "dryrun"
 

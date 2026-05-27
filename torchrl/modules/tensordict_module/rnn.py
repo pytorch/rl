@@ -26,6 +26,7 @@ from torchrl._utils import (
     is_compiling,
 )
 from torchrl.data.tensor_specs import Unbounded
+from torchrl.modules.tensordict_module._rnn_precision import _validate_user_precision
 
 # ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. Gate the
 # import on the runtime torch version: probing via ``importlib.util.find_spec``
@@ -559,6 +560,20 @@ class LSTMModule(ModuleBase):
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
             Ignored by the other backends. Default: ``torch.float32``.
+        recurrent_matmul_precision: precision used by ``tl.dot`` inside the
+            ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
+            calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
+            IEEE FP32, off tensor cores), ``"tf32"`` (matches cuDNN's
+            default, fastest on Ampere+), ``"tf32x3"`` (three-product
+            compensated TF32, ~22 bits of mantissa on tensor cores).
+            GPU-aware presets: ``"fast"`` (Ampere+ → ``"tf32"``, else
+            ``"ieee"``) and ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else
+            ``"ieee"``). Or ``"auto"`` to derive from
+            :func:`torch.get_float32_matmul_precision` and the
+            ``TORCHRL_RNN_PRECISION`` env var (``"highest"`` → ``"ieee"``,
+            ``"high"`` → ``"high-prec"``, ``"medium"`` → ``"fast"``). See
+            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored
+            by the other backends. Default: ``"auto"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -656,6 +671,9 @@ class LSTMModule(ModuleBase):
         python_based=False,
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
+        recurrent_matmul_precision: typing.Literal[
+            "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
+        ] = "auto",
         *,
         in_key=None,
         in_keys=None,
@@ -676,6 +694,7 @@ class LSTMModule(ModuleBase):
                 "recurrent_backend='triton' requires the triton package. "
                 "Install it with `pip install triton`."
             )
+        _validate_user_precision(recurrent_matmul_precision)
         if lstm is not None:
             if not lstm.batch_first:
                 raise ValueError("The input lstm must have batch_first=True.")
@@ -750,6 +769,7 @@ class LSTMModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
+        self.recurrent_matmul_precision = recurrent_matmul_precision
 
     def make_python_based(self) -> LSTMModule:
         """Transforms the LSTM layer in its python-based version.
@@ -1157,6 +1177,7 @@ class LSTMModule(ModuleBase):
                 b_hh,
                 is_init,
                 compute_dtype=self.recurrent_compute_dtype,
+                input_precision=self.recurrent_matmul_precision,
             )
             hidden0_layers.append(h_steps)
             hidden1_layers.append(c_steps)
@@ -1748,6 +1769,20 @@ class GRUModule(ModuleBase):
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
             Ignored by the other backends. Default: ``torch.float32``.
+        recurrent_matmul_precision: precision used by ``tl.dot`` inside the
+            ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
+            calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
+            IEEE FP32, off tensor cores), ``"tf32"`` (matches cuDNN's
+            default, fastest on Ampere+), ``"tf32x3"`` (three-product
+            compensated TF32, ~22 bits of mantissa on tensor cores).
+            GPU-aware presets: ``"fast"`` (Ampere+ → ``"tf32"``, else
+            ``"ieee"``) and ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else
+            ``"ieee"``). Or ``"auto"`` to derive from
+            :func:`torch.get_float32_matmul_precision` and the
+            ``TORCHRL_RNN_PRECISION`` env var (``"highest"`` → ``"ieee"``,
+            ``"high"`` → ``"high-prec"``, ``"medium"`` → ``"fast"``). See
+            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored
+            by the other backends. Default: ``"auto"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -1870,6 +1905,9 @@ class GRUModule(ModuleBase):
         python_based=False,
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
+        recurrent_matmul_precision: typing.Literal[
+            "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
+        ] = "auto",
         *,
         in_key=None,
         in_keys=None,
@@ -1890,6 +1928,7 @@ class GRUModule(ModuleBase):
                 "recurrent_backend='triton' requires the triton package. "
                 "Install it with `pip install triton`."
             )
+        _validate_user_precision(recurrent_matmul_precision)
         if gru is not None:
             if not gru.batch_first:
                 raise ValueError("The input gru must have batch_first=True.")
@@ -1961,6 +2000,7 @@ class GRUModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
+        self.recurrent_matmul_precision = recurrent_matmul_precision
 
     def make_python_based(self) -> GRUModule:
         """Transforms the GRU layer in its python-based version.
@@ -2304,6 +2344,7 @@ class GRUModule(ModuleBase):
                 b_hh,
                 is_init,
                 compute_dtype=self.recurrent_compute_dtype,
+                input_precision=self.recurrent_matmul_precision,
             )
             hidden_layers.append(h_steps)
             if layer < self.gru.num_layers - 1 and self.gru.dropout:

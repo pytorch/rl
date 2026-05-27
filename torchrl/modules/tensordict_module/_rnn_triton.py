@@ -40,17 +40,23 @@ import torch
 import torch.nn.functional as F
 from packaging import version
 
+from torchrl.modules.tensordict_module._rnn_precision import (
+    _maybe_enable_tf32,
+    _resolve_precision,
+    _restore_tf32,
+    RecurrentMatmulPrecisionUserMode,
+)
+
 
 def _check_triton_available() -> bool:
     """True if the installed Triton exposes everything this module needs.
 
-    The backend's kernels rely on ``triton.language.extra.libdevice.tanh``
-    (Triton >= 2.2) and on a backward path that uses ``tl.atomic_add`` with
-    a 2-D mask, which older Triton compilers reject. The version is read
-    from package metadata rather than probing
-    ``triton.language.extra.libdevice`` via ``find_spec`` because older
-    Triton builds lack the ``triton.language.extra`` parent and that probe
-    would raise ``ModuleNotFoundError`` at torchrl import time. Older
+    The backend's kernels rely on Triton's libdevice ``tanh`` and on a backward
+    path that uses ``tl.atomic_add`` with a 2-D mask, which older Triton
+    compilers reject. The version is read from package metadata rather than
+    probing libdevice via ``find_spec`` because older Triton builds lack the
+    ``triton.language.extra`` parent and that probe would raise
+    ``ModuleNotFoundError`` at torchrl import time. Older
     installations fall back transparently to the ``scan`` / ``pad`` backends.
     """
     try:
@@ -83,9 +89,6 @@ if _has_triton:
     ]
 
     _BWD_CONFIGS = [
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 16}, num_warps=2, num_stages=1),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 32}, num_warps=2, num_stages=1),
-        triton.Config({"BLOCK_B": 8, "BLOCK_K": 64}, num_warps=4, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 16}, num_warps=2, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 32}, num_warps=2, num_stages=1),
         triton.Config({"BLOCK_B": 16, "BLOCK_K": 64}, num_warps=4, num_stages=1),
@@ -120,7 +123,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_FWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
@@ -143,6 +146,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -179,7 +183,13 @@ if _has_triton:
                 other=0.0,
             )
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # ``is_init`` is a ``torch.bool`` tensor; ``tl.load`` returns it as
+            # ``uint8`` (the underlying storage dtype). Recent Triton releases
+            # warn / error out on ``tl.where`` with non-i1 conditions, so
+            # convert explicitly here once and reuse the i1 value below.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -217,11 +227,11 @@ if _has_triton:
 
                 w_r_chunk = tl.load(w_r_ptr + k_off[:, None] * H + h_off[None, :])
                 h_chunk_w = h_chunk.to(w_r_chunk.dtype)
-                gh_r += tl.dot(h_chunk_w, w_r_chunk)
+                gh_r += tl.dot(h_chunk_w, w_r_chunk, input_precision=INPUT_PRECISION)
                 w_z_chunk = tl.load(w_z_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_z += tl.dot(h_chunk_w, w_z_chunk)
+                gh_z += tl.dot(h_chunk_w, w_z_chunk, input_precision=INPUT_PRECISION)
                 w_n_chunk = tl.load(w_n_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_n += tl.dot(h_chunk_w, w_n_chunk)
+                gh_n += tl.dot(h_chunk_w, w_n_chunk, input_precision=INPUT_PRECISION)
 
             gh_r += b_r[None, :]
             gh_z += b_z[None, :]
@@ -229,7 +239,7 @@ if _has_triton:
 
             r = tl.sigmoid(gx_r + gh_r)
             z = tl.sigmoid(gx_z + gh_z)
-            n = tl.extra.libdevice.tanh(gx_n + r * gh_n)
+            n = tl.extra.cuda.libdevice.tanh(gx_n + r * gh_n)
             h = n + z * (h - n)
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
@@ -249,7 +259,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_BWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         reset_to_zero=["dhidden_ptr"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
@@ -275,6 +285,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -298,7 +309,11 @@ if _has_triton:
             n = tl.load(save_n_ptr + base_out, mask=mask_b[:, None], other=0.0)
             gh_n = tl.load(save_gh_n_ptr + base_out, mask=mask_b[:, None], other=0.0)
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # See forward kernel: convert uint8 -> i1 once to satisfy newer
+            # Triton's ``tl.where`` typing.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -365,17 +380,29 @@ if _has_triton:
                 dr_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dr_chunk.to(w_r_chunk.dtype), w_r_chunk)
+                dh_prev_total += tl.dot(
+                    dr_chunk.to(w_r_chunk.dtype),
+                    w_r_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_z_chunk = tl.load(w_z_ptr + k_off[:, None] * H + h_off[None, :])
                 dz_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dz_chunk.to(w_z_chunk.dtype), w_z_chunk)
+                dh_prev_total += tl.dot(
+                    dz_chunk.to(w_z_chunk.dtype),
+                    w_z_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_n_chunk = tl.load(w_n_ptr + k_off[:, None] * H + h_off[None, :])
                 dn_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dn_chunk.to(w_n_chunk.dtype), w_n_chunk)
+                dh_prev_total += tl.dot(
+                    dn_chunk.to(w_n_chunk.dtype),
+                    w_n_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
 
             # At reset positions, dh_prev flows into dhidden[b, t] not dh_{t-1}.
             tl.atomic_add(
@@ -398,7 +425,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_FWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
     @triton.jit
@@ -426,6 +453,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -472,7 +500,10 @@ if _has_triton:
                 other=0.0,
             )
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # See GRU forward kernel: cast uint8 storage to i1.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -517,34 +548,42 @@ if _has_triton:
 
                 w_i_chunk = tl.load(w_i_ptr + k_off[:, None] * H + h_off[None, :])
                 h_chunk_w = h_chunk.to(w_i_chunk.dtype)
-                gh_i += tl.dot(h_chunk_w, w_i_chunk)
+                gh_i += tl.dot(h_chunk_w, w_i_chunk, input_precision=INPUT_PRECISION)
                 w_f_chunk = tl.load(w_f_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_f += tl.dot(h_chunk_w, w_f_chunk)
+                gh_f += tl.dot(h_chunk_w, w_f_chunk, input_precision=INPUT_PRECISION)
                 w_g_chunk = tl.load(w_g_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_g += tl.dot(h_chunk_w, w_g_chunk)
+                gh_g += tl.dot(h_chunk_w, w_g_chunk, input_precision=INPUT_PRECISION)
                 w_o_chunk = tl.load(w_o_ptr + k_off[:, None] * H + h_off[None, :])
-                gh_o += tl.dot(h_chunk_w, w_o_chunk)
+                gh_o += tl.dot(h_chunk_w, w_o_chunk, input_precision=INPUT_PRECISION)
 
             gh_i += b_i[None, :]
             gh_f += b_f[None, :]
             gh_g += b_g[None, :]
             gh_o += b_o[None, :]
 
-            i = tl.sigmoid(gx_i + gh_i)
-            f = tl.sigmoid(gx_f + gh_f)
-            g = tl.extra.libdevice.tanh(gx_g + gh_g)
-            o = tl.sigmoid(gx_o + gh_o)
-            c = f * c + i * g
-            tanh_c = tl.extra.libdevice.tanh(c)
-            h = o * tanh_c
+            # Use explicit intermediate names and split the cell update into
+            # two adds. Triton 3.6's frontend can return ``None`` while typing
+            # ``c = f * c + i * g`` (4-term inline expression with a self-
+            # referential assignment), surfacing as
+            # ``AttributeError("'NoneType' object has no attribute 'type'")``
+            # when the kernel is compiled from inside a ``torch.compile`` graph.
+            i_gate = tl.sigmoid(gx_i + gh_i)
+            f_gate = tl.sigmoid(gx_f + gh_f)
+            g_gate = tl.extra.cuda.libdevice.tanh(gx_g + gh_g)
+            o_gate = tl.sigmoid(gx_o + gh_o)
+            c_decayed = f_gate * c
+            c_input = i_gate * g_gate
+            c = c_decayed + c_input
+            tanh_c = tl.extra.cuda.libdevice.tanh(c)
+            h = o_gate * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
             tl.store(out_ptr + base_out, h, mask=mask_b[:, None])
             tl.store(c_out_ptr + base_out, c, mask=mask_b[:, None])
-            tl.store(save_i_ptr + base_out, i, mask=mask_b[:, None])
-            tl.store(save_f_ptr + base_out, f, mask=mask_b[:, None])
-            tl.store(save_g_ptr + base_out, g, mask=mask_b[:, None])
-            tl.store(save_o_ptr + base_out, o, mask=mask_b[:, None])
+            tl.store(save_i_ptr + base_out, i_gate, mask=mask_b[:, None])
+            tl.store(save_f_ptr + base_out, f_gate, mask=mask_b[:, None])
+            tl.store(save_g_ptr + base_out, g_gate, mask=mask_b[:, None])
+            tl.store(save_o_ptr + base_out, o_gate, mask=mask_b[:, None])
             tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
 
         tl.store(
@@ -560,7 +599,7 @@ if _has_triton:
 
     @triton.autotune(
         configs=_BWD_CONFIGS,
-        key=["B", "T", "H"],
+        key=["B", "T", "H", "INPUT_PRECISION"],
         reset_to_zero=["dhidden_ptr", "dcell_ptr"],
         prune_configs_by={**_PRUNE_BY_TEMPLATE, "early_config_prune": _prune_block_k},
     )
@@ -593,6 +632,7 @@ if _has_triton:
         H: tl.constexpr,
         BLOCK_B: tl.constexpr,
         BLOCK_K: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
     ):
         pid = tl.program_id(0)
         b_off = pid * BLOCK_B + tl.arange(0, BLOCK_B)
@@ -623,7 +663,10 @@ if _has_triton:
             o = tl.load(save_o_ptr + base_out, mask=mask_b[:, None], other=0.0)
             tanh_c = tl.load(save_tanhc_ptr + base_out, mask=mask_b[:, None], other=0.0)
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            # See GRU forward kernel: cast uint8 storage to i1.
+            is_init = (
+                tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
+            )
             reset_c = tl.load(
                 cell_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -703,22 +746,38 @@ if _has_triton:
                 di_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(di_chunk.to(w_i_chunk.dtype), w_i_chunk)
+                dh_prev_total += tl.dot(
+                    di_chunk.to(w_i_chunk.dtype),
+                    w_i_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_f_chunk = tl.load(w_f_ptr + k_off[:, None] * H + h_off[None, :])
                 df_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(df_chunk.to(w_f_chunk.dtype), w_f_chunk)
+                dh_prev_total += tl.dot(
+                    df_chunk.to(w_f_chunk.dtype),
+                    w_f_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_g_chunk = tl.load(w_g_ptr + k_off[:, None] * H + h_off[None, :])
                 dg_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dg_chunk.to(w_g_chunk.dtype), w_g_chunk)
+                dh_prev_total += tl.dot(
+                    dg_chunk.to(w_g_chunk.dtype),
+                    w_g_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
                 w_o_chunk = tl.load(w_o_ptr + k_off[:, None] * H + h_off[None, :])
                 do_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 3 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(do_chunk.to(w_o_chunk.dtype), w_o_chunk)
+                dh_prev_total += tl.dot(
+                    do_chunk.to(w_o_chunk.dtype),
+                    w_o_chunk,
+                    input_precision=INPUT_PRECISION,
+                )
 
             tl.atomic_add(
                 dhidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
@@ -827,7 +886,9 @@ def _unpad_w_hh(t: torch.Tensor, n_gates: int, H: int, H_pad: int) -> torch.Tens
 
 class _GRUFn(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
+    def forward(
+        ctx, x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, input_precision
+    ):
         if not _has_triton:
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
@@ -842,11 +903,16 @@ class _GRUFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 3, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 3, H, H_pad)
 
+        # Flat ``if`` rather than a context manager: compiled_autograd sees
+        # a context manager generator as a side-effecting region and either
+        # graph-breaks or recompiles per (prev, want) flag combination.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
         gates_x = (
             F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
             .view(B, T, 3 * H_pad)
             .contiguous()
         )
+        _restore_tf32(_prev_tf32)
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c3 = w_hh_c.view(3, H_pad, H_pad)
@@ -884,6 +950,7 @@ class _GRUFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         ctx.save_for_backward(
@@ -903,6 +970,7 @@ class _GRUFn(torch.autograd.Function):
             w_ih_p,
         )
         ctx.shapes = (B, T, I_in, H, H_pad)
+        ctx.input_precision = input_precision
         return _unpad_last(out, H, H_pad), _unpad_last(h_final, H, H_pad)
 
     @staticmethod
@@ -924,6 +992,7 @@ class _GRUFn(torch.autograd.Function):
             w_ih_p,
         ) = ctx.saved_tensors
         B, T, I_in, H, H_pad = ctx.shapes
+        input_precision = ctx.input_precision
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dh_final_p = _pad_last(dh_final.contiguous(), H, H_pad).contiguous()
@@ -954,6 +1023,7 @@ class _GRUFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         # h_prev[b, t] for the dW_hh computation.
@@ -965,14 +1035,17 @@ class _GRUFn(torch.autograd.Function):
 
         dgates_h_flat = dgates_h.reshape(B * T, 3 * H_pad)
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-        db_hh_p = dgates_h_flat.sum(0)
-
         dgates_x_flat = dgates_x.reshape(B * T, 3 * H_pad)
         x_flat = x.reshape(B * T, I_in)
+        # See forward for why this is a flat ``if`` rather than a context
+        # manager. compiled_autograd traces this backward.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
+        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
         dW_ih_p = dgates_x_flat.t() @ x_flat
-        db_ih_p = dgates_x_flat.sum(0)
         dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        _restore_tf32(_prev_tf32)
+        db_hh_p = dgates_h_flat.sum(0)
+        db_ih_p = dgates_x_flat.sum(0)
 
         dhidden = _unpad_last(dhidden_p, H, H_pad)
         dW_hh = _unpad_w_hh(dW_hh_p, 3, H, H_pad)
@@ -980,12 +1053,24 @@ class _GRUFn(torch.autograd.Function):
         dW_ih = _unpad_gate_dim(dW_ih_p, 3, H, H_pad, dim=0)
         db_ih = _unpad_gate_dim(db_ih_p, 3, H, H_pad, dim=0)
 
-        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None
+        return dx, dhidden, dW_ih, dW_hh, db_ih, db_hh, None, None, None
 
 
 class _LSTMFn(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype):
+    def forward(
+        ctx,
+        x,
+        hidden,
+        cell,
+        w_ih,
+        w_hh,
+        b_ih,
+        b_hh,
+        is_init,
+        compute_dtype,
+        input_precision,
+    ):
         if not _has_triton:
             raise RuntimeError(
                 "Triton is not available. Install triton or use recurrent_backend='pad'/'scan'."
@@ -1001,11 +1086,14 @@ class _LSTMFn(torch.autograd.Function):
         w_ih_p = _pad_gate_dim(w_ih, 4, H, H_pad, dim=0)
         w_hh_p = _pad_w_hh(w_hh, 4, H, H_pad)
 
+        # See GRU forward for the flat-``if`` rationale.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
         gates_x = (
             F.linear(x.reshape(-1, I_in), w_ih_p, b_ih_p)
             .view(B, T, 4 * H_pad)
             .contiguous()
         )
+        _restore_tf32(_prev_tf32)
 
         w_hh_c = w_hh_p.to(compute_dtype)
         w_hh_c4 = w_hh_c.view(4, H_pad, H_pad)
@@ -1053,6 +1141,7 @@ class _LSTMFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         ctx.save_for_backward(
@@ -1076,6 +1165,7 @@ class _LSTMFn(torch.autograd.Function):
             w_ih_p,
         )
         ctx.shapes = (B, T, I_in, H, H_pad)
+        ctx.input_precision = input_precision
         return (
             _unpad_last(out, H, H_pad),
             _unpad_last(c_out, H, H_pad),
@@ -1106,6 +1196,7 @@ class _LSTMFn(torch.autograd.Function):
             w_ih_p,
         ) = ctx.saved_tensors
         B, T, I_in, H, H_pad = ctx.shapes
+        input_precision = ctx.input_precision
 
         dout_p = _pad_last(dout.contiguous(), H, H_pad).contiguous()
         dc_out_p = _pad_last(dc_out.contiguous(), H, H_pad).contiguous()
@@ -1145,6 +1236,7 @@ class _LSTMFn(torch.autograd.Function):
             B,
             T,
             H=H_pad,
+            INPUT_PRECISION=input_precision,
         )
 
         h_prev_all = torch.empty_like(out)
@@ -1155,14 +1247,16 @@ class _LSTMFn(torch.autograd.Function):
 
         dgates_h_flat = dgates_h.reshape(B * T, 4 * H_pad)
         h_prev_flat = h_prev_all.reshape(B * T, H_pad)
-        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
-        db_hh_p = dgates_h_flat.sum(0)
-
         dgates_x_flat = dgates_x.reshape(B * T, 4 * H_pad)
         x_flat = x.reshape(B * T, I_in)
+        # See GRU forward for the flat-``if`` rationale.
+        _prev_tf32 = _maybe_enable_tf32(input_precision)
+        dW_hh_p = dgates_h_flat.t() @ h_prev_flat
         dW_ih_p = dgates_x_flat.t() @ x_flat
-        db_ih_p = dgates_x_flat.sum(0)
         dx = (dgates_x_flat @ w_ih_p).view(B, T, I_in)
+        _restore_tf32(_prev_tf32)
+        db_hh_p = dgates_h_flat.sum(0)
+        db_ih_p = dgates_x_flat.sum(0)
 
         dhidden = _unpad_last(dhidden_p, H, H_pad)
         dcell = _unpad_last(dcell_p, H, H_pad)
@@ -1171,7 +1265,7 @@ class _LSTMFn(torch.autograd.Function):
         dW_ih = _unpad_gate_dim(dW_ih_p, 4, H, H_pad, dim=0)
         db_ih = _unpad_gate_dim(db_ih_p, 4, H, H_pad, dim=0)
 
-        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None
+        return dx, dhidden, dcell, dW_ih, dW_hh, db_ih, db_hh, None, None, None
 
 
 def gru_triton(
@@ -1183,6 +1277,7 @@ def gru_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
+    input_precision: RecurrentMatmulPrecisionUserMode | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Single-layer GRU forward with reset, autograd-aware.
 
@@ -1195,13 +1290,24 @@ def gru_triton(
         b_ih: ``[3*H]`` fp32 biases.
         b_hh: ``[3*H]`` fp32 biases.
         is_init: ``[B, T]`` bool reset mask.
-        compute_dtype: matmul precision. fp32 -> TF32 on H100. bf16 -> wider SMEM
-            margin, lower precision.
+        compute_dtype: matmul operand dtype. fp32 keeps weights in fp32 (the
+            ``input_precision`` argument then dictates whether ``tl.dot`` runs
+            IEEE FP32, TF32 or TF32x3). bf16 casts weights to bf16 (wider SMEM
+            margin, ~7-bit mantissa, ``input_precision`` ignored).
+        input_precision: precision passed to ``tl.dot``. Concrete modes
+            ``"ieee"``, ``"tf32"``, ``"tf32x3"``; GPU-aware presets
+            ``"fast"`` (Ampere+ → ``"tf32"``, else ``"ieee"``) and
+            ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else ``"ieee"``); or
+            ``None`` / ``"auto"`` to derive from
+            :func:`torchrl.modules.get_recurrent_matmul_precision`.
 
     Returns:
         ``(out, h_final)`` where ``out`` is ``[B, T, H]`` and ``h_final`` is ``[B, H]``.
     """
-    return _GRUFn.apply(x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype)
+    resolved = _resolve_precision(input_precision)
+    return _GRUFn.apply(
+        x, hidden, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, resolved
+    )
 
 
 def lstm_triton(
@@ -1214,6 +1320,7 @@ def lstm_triton(
     b_hh: torch.Tensor,
     is_init: torch.Tensor,
     compute_dtype: torch.dtype = torch.float32,
+    input_precision: RecurrentMatmulPrecisionUserMode | str | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """Single-layer LSTM forward with reset, autograd-aware.
 
@@ -1223,6 +1330,7 @@ def lstm_triton(
     Returns:
         ``(h_steps, c_steps, h_final, c_final)``.
     """
+    resolved = _resolve_precision(input_precision)
     return _LSTMFn.apply(
-        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype
+        x, hidden, cell, w_ih, w_hh, b_ih, b_hh, is_init, compute_dtype, resolved
     )
