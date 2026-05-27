@@ -391,6 +391,15 @@ def parse_args() -> argparse.Namespace:
             "eval CUDA context isolated from training."
         ),
     )
+    parser.add_argument(
+        "--eval-render-backend",
+        choices=["isaac_rtx", "newton_warp", "ovrtx"],
+        default=None,
+        help=(
+            "Renderer backend for the eval tiled camera. Defaults to Isaac "
+            "Lab's TiledCamera default."
+        ),
+    )
     parser.add_argument("--eval-shutdown-timeout", type=float, default=30.0)
     # Logging
     parser.add_argument("--seed", type=int, default=0)
@@ -550,6 +559,7 @@ def main() -> None:
             random_init_steps=eval_random_init_steps,
             random_init_random=args.random_init_random,
             render=True,
+            render_backend=args.eval_render_backend,
         )
         evaluator = Evaluator(
             make_eval_env_fn,
@@ -569,6 +579,7 @@ def main() -> None:
                 _init_isaac_app,
                 device=str(eval_device),
                 enable_cameras=True,
+                rendering_mode="performance",
             ),
             device=eval_device,
             metrics_fn=_rendered_eval_metrics,

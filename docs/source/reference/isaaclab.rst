@@ -48,6 +48,60 @@ Key defaults:
     Reward shape: IsaacLab rewards are ``(num_envs,)``.  The wrapper
     unsqueezes to ``(num_envs, 1)`` for TorchRL compatibility.
 
+Headless camera rendering
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For headless RGB capture, prefer IsaacLab tiled cameras over viewport
+rendering. Add a tiled camera to the IsaacLab config before instantiating the
+environment, launch IsaacLab with cameras enabled, then ask
+``IsaacLabWrapper`` to read the camera sensor into the TensorDict:
+
+.. code-block:: python
+
+    import argparse
+    import gymnasium as gym
+    import torch
+    from isaaclab.app import AppLauncher
+    from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+    from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+    parser = argparse.ArgumentParser()
+    AppLauncher.add_app_launcher_args(parser)
+    args, _ = parser.parse_known_args([
+        "--headless",
+        "--enable_cameras",
+        "--rendering_mode",
+        "performance",
+        "--device",
+        "cuda:0",
+    ])
+    app = AppLauncher(args).app
+
+    cfg = IsaacLabWrapper.add_tiled_camera_config(
+        AntEnvCfg(),
+        width=320,
+        height=240,
+        pos=(-7.0, 0.0, 3.0),
+        rot=(0.9945, 0.0, 0.1045, 0.0),
+    )
+    env = gym.make("Isaac-Ant-v0", cfg=cfg)
+    env = IsaacLabWrapper(env, from_tiled_camera=True, device=torch.device("cuda:0"))
+
+    td = env.reset()
+    pixels = td["pixels"]  # shape: (num_envs, height, width, 3)
+
+The helper also exposes Isaac Lab's renderer selection directly. For example,
+on Isaac Lab versions with the pluggable renderer stack installed, use the
+Newton Warp renderer when RTX rendering is not available:
+
+.. code-block:: python
+
+    cfg = IsaacLabWrapper.add_tiled_camera_config(
+        AntEnvCfg(),
+        renderer_backend="newton_warp",
+        data_type="rgb",
+    )
+
 Collector
 ---------
 

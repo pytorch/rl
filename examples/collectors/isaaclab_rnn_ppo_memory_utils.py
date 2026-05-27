@@ -12,7 +12,6 @@ import cost.
 from __future__ import annotations
 
 import argparse
-from functools import partial
 from typing import Literal
 
 import torch
@@ -41,17 +40,11 @@ from torchrl.modules import (
 RnnBackend = Literal["cudnn", "pad", "scan", "triton"]
 
 
-def _broadcast_rendered_frame(frame, num_envs: int) -> torch.Tensor:
-    frame = torch.as_tensor(frame)
-    if frame.ndim == 3:
-        frame = frame.expand(num_envs, *frame.shape)
-    return frame
-
-
 def _init_isaac_app(
     device: str | None = None,
     *,
     enable_cameras: bool = False,
+    rendering_mode: Literal["performance", "balanced", "quality"] | None = None,
 ) -> None:
     """Start Isaac Lab's AppLauncher in headless mode inside a worker."""
     from isaaclab.app import AppLauncher
@@ -61,6 +54,8 @@ def _init_isaac_app(
     launch_args = ["--headless"]
     if enable_cameras:
         launch_args.append("--enable_cameras")
+        if rendering_mode is not None:
+            launch_args.extend(["--rendering_mode", rendering_mode])
     if device is not None:
         launch_args.extend(["--device", device])
     args_cli, _ = parser.parse_known_args(launch_args)
@@ -76,13 +71,13 @@ def make_env(
     random_init_steps: int = 0,
     random_init_random: bool = True,
     render: bool = False,
+    render_backend: Literal["isaac_rtx", "newton_warp", "ovrtx"] | None = None,
     compile_env: bool | dict | None = False,
 ):
     """Build an Isaac Lab env. Imports ``isaaclab`` lazily (worker-only)."""
     import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
-    from torchrl.record import PixelRenderTransform
     from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
     if task == "Isaac-Ant-v0":
@@ -100,14 +95,18 @@ def make_env(
         ):
             cfg.episode_length_s = max_episode_steps * cfg.sim.dt
         if render:
-            env = gym.make(task, cfg=cfg, render_mode="rgb_array")
-        else:
-            env = gym.make(task, cfg=cfg)
+            IsaacLabWrapper.add_tiled_camera_config(
+                cfg,
+                renderer_backend=render_backend,
+                width=320,
+                height=240,
+                pos=(-7.0, 0.0, 3.0),
+                rot=(0.9945, 0.0, 0.1045, 0.0),
+                render_interval=cfg.sim.render_interval,
+            )
+        env = gym.make(task, cfg=cfg)
     else:
-        if render:
-            env = gym.make(task, render_mode="rgb_array")
-        else:
-            env = gym.make(task)
+        env = gym.make(task)
     transforms = [RewardSum()]
     if random_init_steps:
         transforms.extend(
@@ -121,14 +120,6 @@ def make_env(
                 ),
             ]
         )
-    if render:
-        transforms.append(
-            PixelRenderTransform(
-                out_keys=["pixels"],
-                preproc=partial(_broadcast_rendered_frame, num_envs=num_envs),
-                as_non_tensor=False,
-            )
-        )
     transformed_env_kwargs = {}
     if compile_env:
         transformed_env_kwargs["compile"] = compile_env
@@ -137,6 +128,7 @@ def make_env(
             env,
             device=torch.device(device),
             native_autoreset=bool(random_init_steps),
+            from_tiled_camera=render,
         ),
         Compose(*transforms),
         **transformed_env_kwargs,
