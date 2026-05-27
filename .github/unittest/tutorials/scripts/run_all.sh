@@ -144,8 +144,8 @@ uv pip install --no-progress \
   psutil \
   hydra-core \
   "imageio==2.26.0" \
-  dm_control \
-  mujoco \
+  "dm_control>=1.0.41" \
+  "mujoco>=3.8.1,<3.9.0" \
   av \
   coverage \
   vmas \

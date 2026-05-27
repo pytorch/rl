@@ -140,7 +140,7 @@ uv_pip_install \
 # labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
 if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing dm_control"
-  uv_pip_install dm_control
+  uv_pip_install "dm_control>=1.0.41" "mujoco>=3.8.1,<3.9.0"
 fi
 
 # Install ray for Python < 3.14 (ray doesn't support Python 3.14 yet)
@@ -158,7 +158,7 @@ fi
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
-  uv_pip_install "mujoco>=3.3.7"
+  uv_pip_install "mujoco>=3.8.1,<3.9.0"
 fi
 
 # Install gymnasium
@@ -168,9 +168,9 @@ if [[ "$PYTHON_VERSION" == "3.14" ]]; then
   uv_pip_install "gymnasium>=1.1"
 elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
   uv_pip_install ale-py sympy
-  uv_pip_install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]"
+  uv_pip_install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]" "mujoco>=3.8.1,<3.9.0"
 else
-  uv_pip_install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]"
+  uv_pip_install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]" "mujoco>=3.8.1,<3.9.0"
 fi
 
 # sanity check
