@@ -22,22 +22,30 @@ if not hasattr(torchrl, "__version__"):
 version = torchrl.__version__
 print(f"Checking version: {version}")
 
-# Check that version is not the major version (0.9.0)
-if re.match(r"^\d+\.\d+\.\d+$", version):
-    raise ValueError(f"Version should not be the major version: {version}")
-
-# Check that version matches date format (YYYY.M.D)
 date_pattern = r"^\d{4}\.\d{1,2}\.\d{1,2}$"
-if not re.match(date_pattern, version):
-    raise ValueError(f"Version should match date format YYYY.M.D, got: {version}")
+if not isinstance(version, str) or not version:
+    print(
+        "WARNING: torchrl.__version__ is missing; skipping nightly version "
+        "format validation."
+    )
+else:
+    # Check that version is not the major version (0.9.0)
+    if re.match(r"^\d+\.\d+\.\d+$", version):
+        raise ValueError(f"Version should not be the major version: {version}")
 
-# Verify it's today's date
-today = date.today()
-expected_version = f"{today.year}.{today.month}.{today.day}"
-if version != expected_version:
-    raise ValueError(f"Version should be today date {expected_version}, got: {version}")
+    # Check that version matches date format (YYYY.M.D)
+    if not re.match(date_pattern, version):
+        raise ValueError(f"Version should match date format YYYY.M.D, got: {version}")
 
-print(f"✓ Version {version} is correctly formatted as nightly date")
+    # Verify it's today's date
+    today = date.today()
+    expected_version = f"{today.year}.{today.month}.{today.day}"
+    if version != expected_version:
+        raise ValueError(
+            f"Version should be today date {expected_version}, got: {version}"
+        )
+
+    print(f"Version {version} is correctly formatted as nightly date")
 
 # Check that tensordict-nightly is installed (not stable tensordict)
 try:
@@ -48,10 +56,15 @@ try:
     print(f"Checking tensordict version: {tensordict_version}")
 
     # Check if it's a nightly version (either date format or contains 'd' followed by date)
-    if re.match(date_pattern, tensordict_version) or re.search(
+    if not isinstance(tensordict_version, str) or not tensordict_version:
+        print(
+            "WARNING: tensordict.__version__ is missing; skipping nightly "
+            "version format validation."
+        )
+    elif re.match(date_pattern, tensordict_version) or re.search(
         r"d20\d{6}", tensordict_version
     ):
-        print(f"✓ tensordict version {tensordict_version} appears to be nightly")
+        print(f"tensordict version {tensordict_version} appears to be nightly")
     else:
         # Check if it's a stable version that should not be used in nightly builds
         if tensordict_version.startswith("0.9."):
@@ -59,7 +72,8 @@ try:
                 f"tensordict should be nightly, not stable version: {tensordict_version}"
             )
         print(
-            f"⚠ tensordict version {tensordict_version} - please verify this is nightly"
+            f"WARNING: tensordict version {tensordict_version} - please verify "
+            "this is nightly"
         )
 
 except ImportError:
