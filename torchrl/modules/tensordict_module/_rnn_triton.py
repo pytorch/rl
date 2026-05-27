@@ -44,8 +44,8 @@ from packaging import version
 def _check_triton_available() -> bool:
     """True if the installed Triton exposes everything this module needs.
 
-    The backend's kernels rely on ``triton.language.extra.libdevice.tanh``
-    (Triton >= 2.2) and on a backward path that uses ``tl.atomic_add`` with
+    The backend's kernels rely on Triton >= 2.2 and on a backward path that uses
+    ``tl.atomic_add`` with
     a 2-D mask, which older Triton compilers reject. The version is read
     from package metadata rather than probing
     ``triton.language.extra.libdevice`` via ``find_spec`` because older
@@ -536,10 +536,10 @@ if _has_triton:
 
             i = tl.sigmoid(gx_i + gh_i)
             f = tl.sigmoid(gx_f + gh_f)
-            g = tl.extra.libdevice.tanh(gx_g + gh_g)
+            g = tl.tanh(gx_g + gh_g)
             o = tl.sigmoid(gx_o + gh_o)
             c_t = f * c_prev + i * g
-            tanh_c = tl.extra.libdevice.tanh(c_t)
+            tanh_c = tl.tanh(c_t)
             h_t = o * tanh_c
 
             base_out = b_off[:, None] * (T * H) + t * H + h_off[None, :]
