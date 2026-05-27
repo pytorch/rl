@@ -325,6 +325,7 @@ export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 Xvfb :99 -screen 0 1024x768x24 &
 

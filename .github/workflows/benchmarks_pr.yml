@@ -93,6 +93,7 @@ jobs:
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib
 
           bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
       - name: Run baseline benchmarks
         run: |
           set -euxo pipefail

@@ -150,6 +150,7 @@ echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 echo "=== Starting pytest execution ==="
 echo "Current working directory: $(pwd)"

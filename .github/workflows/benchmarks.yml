@@ -93,6 +93,7 @@ jobs:
           python3.10 -m pip install -e . --no-build-isolation --no-deps
 
           bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
             # test import and fail early if the GPU runner did not expose CUDA

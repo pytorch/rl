@@ -81,6 +81,7 @@ git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 env_dir="${root_dir}/env"
 lib_dir="${env_dir}/lib"
 
