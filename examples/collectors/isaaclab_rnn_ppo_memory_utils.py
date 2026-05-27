@@ -48,13 +48,19 @@ def _broadcast_rendered_frame(frame, num_envs: int) -> torch.Tensor:
     return frame
 
 
-def _init_isaac_app(device: str | None = None) -> None:
+def _init_isaac_app(
+    device: str | None = None,
+    *,
+    enable_cameras: bool = False,
+) -> None:
     """Start Isaac Lab's AppLauncher in headless mode inside a worker."""
     from isaaclab.app import AppLauncher
 
     parser = argparse.ArgumentParser(description="TorchRL Isaac Lab env launcher.")
     AppLauncher.add_app_launcher_args(parser)
     launch_args = ["--headless"]
+    if enable_cameras:
+        launch_args.append("--enable_cameras")
     if device is not None:
         launch_args.extend(["--device", device])
     args_cli, _ = parser.parse_known_args(launch_args)

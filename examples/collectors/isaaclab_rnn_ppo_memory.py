@@ -565,7 +565,11 @@ def main() -> None:
             max_steps=None if eval_random_init_steps else eval_max_steps,
             frames_per_batch=args.eval_num_envs * eval_max_steps,
             backend=args.eval_backend,
-            init_fn=partial(_init_isaac_app, device=str(eval_device)),
+            init_fn=partial(
+                _init_isaac_app,
+                device=str(eval_device),
+                enable_cameras=True,
+            ),
             device=eval_device,
             metrics_fn=_rendered_eval_metrics,
             dump_video=False,
