@@ -179,7 +179,7 @@ if _has_triton:
                 other=0.0,
             )
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -298,7 +298,7 @@ if _has_triton:
             n = tl.load(save_n_ptr + base_out, mask=mask_b[:, None], other=0.0)
             gh_n = tl.load(save_gh_n_ptr + base_out, mask=mask_b[:, None], other=0.0)
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -462,7 +462,7 @@ if _has_triton:
                 other=0.0,
             )
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
             reset_h = tl.load(
                 hidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
@@ -637,7 +637,7 @@ if _has_triton:
             o = tl.load(save_o_ptr + base_out, mask=mask_b[:, None], other=0.0)
             tanh_c = tl.load(save_tanhc_ptr + base_out, mask=mask_b[:, None], other=0.0)
 
-            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False)
+            is_init = tl.load(is_init_ptr + b_off * T + t, mask=mask_b, other=False) != 0
             reset_c = tl.load(
                 cell_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
                 mask=mask_b[:, None],
