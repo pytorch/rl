@@ -61,6 +61,7 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
+      python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
       # macOS only supports CPU builds
       with-cpu: ${{ inputs.with-cpu || (github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable')) || 'enable' }}
   build:

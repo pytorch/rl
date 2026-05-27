@@ -87,9 +87,10 @@ jobs:
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
           python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers accelerate
           python -m pip install "pybind11[global]"
-          python3.10 -m pip install git+https://github.com/pytorch/tensordict 
+          python3.10 -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+          python3.10 -m pip install --no-deps git+https://github.com/pytorch/tensordict
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
-          python3.10 setup.py develop
+          python3.10 -m pip install -e . --no-build-isolation --no-deps
 
           bash .github/unittest/helpers/assert_torch_version.sh nightly
 

@@ -68,9 +68,6 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -mpip install build wheel
           ./build_nightly.sh
-          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-      # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
-      # pretend that they're manylinux1 compliant so we do the same.
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
@@ -186,6 +183,10 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "${PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not set; skipping PyPI upload."
+            exit 0
+          fi
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -mpip install twine
           python -m twine upload \
@@ -335,6 +336,10 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "${PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not set; skipping PyPI upload."
+            exit 0
+          fi
           python -mpip install twine
           python -m twine upload \
               --username __token__ \

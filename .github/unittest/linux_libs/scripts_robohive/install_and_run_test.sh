@@ -57,17 +57,18 @@ fi
 conda install -y cmake
 
 # install tensordict
+pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  pip3 install --no-deps tensordict
 fi
 
 # smoke test
 python -c "import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 python -c "import torchrl"
 
 # Extracted from run_test.sh to run once.

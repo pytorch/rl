@@ -48,7 +48,9 @@ try:
     print(f"Checking tensordict version: {tensordict_version}")
 
     # Check if it's a nightly version (either date format or contains 'd' followed by date)
-    if re.match(date_pattern, tensordict_version) or "d2025" in tensordict_version:
+    if re.match(date_pattern, tensordict_version) or re.search(
+        r"d20\d{6}", tensordict_version
+    ):
         print(f"✓ tensordict version {tensordict_version} appears to be nightly")
     else:
         # Check if it's a stable version that should not be used in nightly builds
