@@ -12,6 +12,7 @@ import cost.
 from __future__ import annotations
 
 import argparse
+from functools import partial
 from typing import Literal
 
 import torch
@@ -21,7 +22,14 @@ from tensordict.nn import (
     TensorDictModule,
     TensorDictSequential,
 )
-from torchrl.envs import ExplorationType, RewardSum, TransformedEnv
+from torchrl.envs import (
+    ExplorationType,
+    RandomTruncationTransform,
+    RewardSum,
+    StepCounter,
+    TransformedEnv,
+)
+from torchrl.envs.transforms import Compose
 from torchrl.modules import (
     LSTMModule,
     MLP,
@@ -31,6 +39,13 @@ from torchrl.modules import (
 )
 
 RnnBackend = Literal["cudnn", "pad", "scan", "triton"]
+
+
+def _broadcast_rendered_frame(frame, num_envs: int) -> torch.Tensor:
+    frame = torch.as_tensor(frame)
+    if frame.ndim == 3:
+        frame = frame.expand(num_envs, *frame.shape)
+    return frame
 
 
 def _init_isaac_app(device: str | None = None) -> None:
@@ -46,11 +61,22 @@ def _init_isaac_app(device: str | None = None) -> None:
     AppLauncher(args_cli)
 
 
-def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
+def make_env(
+    task: str,
+    num_envs: int,
+    max_episode_steps: int,
+    device: str,
+    *,
+    random_init_steps: int = 0,
+    random_init_random: bool = True,
+    render: bool = False,
+    compile_env: bool | dict | None = False,
+):
     """Build an Isaac Lab env. Imports ``isaaclab`` lazily (worker-only)."""
     import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+    from torchrl.record import PixelRenderTransform
     from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
     if task == "Isaac-Ant-v0":
@@ -67,12 +93,43 @@ def make_env(task: str, num_envs: int, max_episode_steps: int, device: str):
             and hasattr(cfg.sim, "dt")
         ):
             cfg.episode_length_s = max_episode_steps * cfg.sim.dt
-        env = gym.make(task, cfg=cfg)
+        if render:
+            env = gym.make(task, cfg=cfg, render_mode="rgb_array")
+        else:
+            env = gym.make(task, cfg=cfg)
     else:
-        env = gym.make(task)
+        if render:
+            env = gym.make(task, render_mode="rgb_array")
+        else:
+            env = gym.make(task)
+    transforms = [RewardSum()]
+    if random_init_steps:
+        transforms.extend(
+            [
+                StepCounter(max_steps=max_episode_steps),
+                RandomTruncationTransform(
+                    min_horizon=max(1, max_episode_steps - random_init_steps),
+                    max_horizon=max_episode_steps,
+                    prob=float(random_init_random),
+                    first_episode_prob=float(random_init_random),
+                ),
+            ]
+        )
+    if render:
+        transforms.append(
+            PixelRenderTransform(
+                out_keys=["pixels"],
+                preproc=partial(_broadcast_rendered_frame, num_envs=num_envs),
+                as_non_tensor=False,
+            )
+        )
+    transformed_env_kwargs = {}
+    if compile_env:
+        transformed_env_kwargs["compile"] = compile_env
     return TransformedEnv(
         IsaacLabWrapper(env, device=torch.device(device)),
-        RewardSum(),
+        Compose(*transforms),
+        **transformed_env_kwargs,
     )
 
 
