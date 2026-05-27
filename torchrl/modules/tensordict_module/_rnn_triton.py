@@ -717,22 +717,26 @@ if _has_triton:
                 di_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(di_chunk.to(w_i_chunk.dtype), w_i_chunk)
+                di_chunk_w = di_chunk.to(w_i_chunk.dtype)
+                dh_prev_total = dh_prev_total + tl.dot(di_chunk_w, w_i_chunk)
                 w_f_chunk = tl.load(w_f_ptr + k_off[:, None] * H + h_off[None, :])
                 df_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 1 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(df_chunk.to(w_f_chunk.dtype), w_f_chunk)
+                df_chunk_w = df_chunk.to(w_f_chunk.dtype)
+                dh_prev_total = dh_prev_total + tl.dot(df_chunk_w, w_f_chunk)
                 w_g_chunk = tl.load(w_g_ptr + k_off[:, None] * H + h_off[None, :])
                 dg_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 2 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(dg_chunk.to(w_g_chunk.dtype), w_g_chunk)
+                dg_chunk_w = dg_chunk.to(w_g_chunk.dtype)
+                dh_prev_total = dh_prev_total + tl.dot(dg_chunk_w, w_g_chunk)
                 w_o_chunk = tl.load(w_o_ptr + k_off[:, None] * H + h_off[None, :])
                 do_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 3 * H, mask=mask_b[:, None], other=0.0
                 )
-                dh_prev_total += tl.dot(do_chunk.to(w_o_chunk.dtype), w_o_chunk)
+                do_chunk_w = do_chunk.to(w_o_chunk.dtype)
+                dh_prev_total = dh_prev_total + tl.dot(do_chunk_w, w_o_chunk)
 
             tl.atomic_add(
                 dhidden_ptr + b_off[:, None] * (T * H) + t * H + h_off[None, :],
