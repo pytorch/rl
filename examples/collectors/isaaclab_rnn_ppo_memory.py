@@ -566,7 +566,7 @@ def main() -> None:
             args.eval_worker_device
             or ("cuda:0" if args.eval_cuda_visible_devices is not None else eval_device)
         )
-        eval_max_steps = args.eval_max_steps or args.max_episode_steps
+        eval_env_max_steps = args.eval_max_steps or args.max_episode_steps
         eval_random_init_steps = (
             args.random_init_steps
             if args.eval_random_init_steps is None
@@ -576,7 +576,7 @@ def main() -> None:
             make_env,
             task=args.task,
             num_envs=args.eval_num_envs,
-            max_episode_steps=eval_max_steps,
+            max_episode_steps=eval_env_max_steps,
             device=str(eval_worker_device),
             random_init_steps=eval_random_init_steps,
             random_init_random=args.random_init_random,
@@ -594,8 +594,8 @@ def main() -> None:
                 device=str(eval_worker_device),
             ),
             num_trajectories=args.eval_num_trajectories,
-            max_steps=None if eval_random_init_steps else eval_max_steps,
-            frames_per_batch=args.eval_num_envs * eval_max_steps,
+            max_steps=args.eval_max_steps,
+            frames_per_batch=args.eval_num_envs * eval_env_max_steps,
             backend=args.eval_backend,
             init_fn=partial(
                 _init_isaac_app,
@@ -731,7 +731,7 @@ def main() -> None:
                 and iteration % args.eval_every == 0
             ):
                 accepted = evaluator.trigger_eval(
-                    actor,
+                    weights_dict={"policy": actor},
                     step=(iteration + 1) * frames_per_batch,
                 )
                 if not accepted:
