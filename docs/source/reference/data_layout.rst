@@ -425,3 +425,5 @@ See also
   :class:`~torchrl.modules.GRUModule`,
   :func:`~torchrl.modules.set_recurrent_mode` — the recurrent modules
   that consume the contiguous-trajectory layout natively.
+* :doc:`modules_rnn` — recurrent execution modes, backend selection, and
+  Triton precision controls.

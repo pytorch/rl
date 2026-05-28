@@ -93,6 +93,7 @@ class TestParallel:
                 4, make_env, create_env_kwargs=[{"seed": 0}, {"seed": 1}]
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(
         not torch.cuda.device_count(), reason="No cuda device detected."
     )

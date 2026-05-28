@@ -339,8 +339,13 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help=(
-            "Compile worker env step_and_maybe_reset after this many eager "
-            "warmup calls. 0 disables env compile."
+            "Compile the worker env's step_and_maybe_reset via the "
+            "compile={'warmup': N} env constructor kwarg. The first N calls "
+            "run eagerly to populate Transform.parent / done_keys / obs_keys "
+            "caches before tracing, which avoids dynamo wrapping a "
+            "half-initialised TransformedEnv built by Compose._rebuild_up_to "
+            "during the compiled trace. 0 disables env compile entirely. Use "
+            ">=1 to enable; 2 is a safe default."
         ),
     )
     parser.add_argument(
@@ -514,7 +519,7 @@ def main() -> None:
         )
 
     # ---- Collector (Isaac lives in workers; main process never imports it) ----
-    compile_env: bool | dict[str, int]
+    compile_env: bool | dict
     if args.env_compile_warmup > 0:
         compile_env = {"warmup": args.env_compile_warmup}
     else:

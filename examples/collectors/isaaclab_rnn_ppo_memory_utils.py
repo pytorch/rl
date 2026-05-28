@@ -92,7 +92,13 @@ def make_env(
     render_backend: Literal["isaac_rtx", "newton_warp", "ovrtx"] | None = None,
     compile_env: bool | dict | None = False,
 ):
-    """Build an Isaac Lab env. Imports ``isaaclab`` lazily (worker-only)."""
+    """Build an Isaac Lab env. Imports ``isaaclab`` lazily (worker-only).
+
+    The ``compile_env`` argument forwards to the ``compile=...`` constructor
+    kwarg on :class:`~torchrl.envs.TransformedEnv`, which compiles the env's
+    ``step_and_maybe_reset`` path with :func:`torch.compile`. Pass ``True``
+    for default options or a ``dict`` of :func:`torch.compile` kwargs.
+    """
     import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
     from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
