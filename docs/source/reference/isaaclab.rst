@@ -102,6 +102,47 @@ Newton Warp renderer when RTX rendering is not available:
         data_type="rgb",
     )
 
+Cluster rendering dependencies
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Headless camera rendering still needs a working NVIDIA graphics stack inside
+the container. If IsaacLab reports ``ERROR_INCOMPATIBLE_DRIVER``, cannot create
+a Vulkan instance, or ``GPU Foundation is not initialized``, verify the NVIDIA
+Vulkan ICD and GL/EGL userspace before debugging TorchRL:
+
+.. code-block:: bash
+
+    nvidia-smi --query-gpu=driver_version,name --format=csv,noheader | head
+    ldconfig -p | grep -E 'libEGL_nvidia|libnvidia-eglcore|libGLX_nvidia'
+    ls /usr/share/glvnd/egl_vendor.d/
+    ls /usr/share/vulkan/icd.d/
+    VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary
+
+The NVIDIA userspace libraries must match the host driver. Some package
+repositories provide a newer patch release than the host driver; in that case,
+use a matching driver userspace bundle and point the process at it:
+
+.. code-block:: bash
+
+    export LD_LIBRARY_PATH=/path/to/nvidia/lib:${LD_LIBRARY_PATH}
+    export VK_ICD_FILENAMES=/path/to/nvidia_icd.json
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    export XDG_RUNTIME_DIR=/tmp/xdg-runtime-${USER}
+    mkdir -p "${XDG_RUNTIME_DIR}" && chmod 700 "${XDG_RUNTIME_DIR}"
+
+For evaluator workers that should render on a dedicated physical GPU, expose
+only that GPU to the worker and use ``cuda:0`` inside the worker:
+
+.. code-block:: bash
+
+    python examples/collectors/isaaclab_rnn_ppo_memory.py \
+        --eval \
+        --eval-cuda-visible-devices 2 \
+        --eval-worker-device cuda:0 \
+        --eval-nvidia-lib-dir /path/to/nvidia/lib \
+        --eval-vulkan-icd /path/to/nvidia_icd.json \
+        --eval-xdg-runtime-dir /tmp/xdg-runtime-eval
+
 Collector
 ---------
 

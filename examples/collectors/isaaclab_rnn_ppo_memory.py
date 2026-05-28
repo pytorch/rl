@@ -357,6 +357,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-device", default="cuda:1")
     parser.add_argument("--eval-device", default="cuda:2")
     parser.add_argument(
+        "--eval-worker-device",
+        default=None,
+        help=(
+            "Device used inside the evaluator worker. If "
+            "--eval-cuda-visible-devices is set, defaults to cuda:0 so the "
+            "rendering worker can use a remapped single visible GPU."
+        ),
+    )
+    parser.add_argument(
         "--sync-collector",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -400,6 +409,10 @@ def parse_args() -> argparse.Namespace:
             "Lab's TiledCamera default."
         ),
     )
+    parser.add_argument("--eval-cuda-visible-devices", default=None)
+    parser.add_argument("--eval-nvidia-lib-dir", default=None)
+    parser.add_argument("--eval-vulkan-icd", default=None)
+    parser.add_argument("--eval-xdg-runtime-dir", default=None)
     parser.add_argument("--eval-shutdown-timeout", type=float, default=30.0)
     # Logging
     parser.add_argument("--seed", type=int, default=0)
@@ -544,6 +557,10 @@ def main() -> None:
 
     evaluator = None
     if args.eval:
+        eval_worker_device = torch.device(
+            args.eval_worker_device
+            or ("cuda:0" if args.eval_cuda_visible_devices is not None else eval_device)
+        )
         eval_max_steps = args.eval_max_steps or args.max_episode_steps
         eval_random_init_steps = (
             args.random_init_steps
@@ -555,7 +572,7 @@ def main() -> None:
             task=args.task,
             num_envs=args.eval_num_envs,
             max_episode_steps=eval_max_steps,
-            device=str(eval_device),
+            device=str(eval_worker_device),
             random_init_steps=eval_random_init_steps,
             random_init_random=args.random_init_random,
             render=True,
@@ -569,7 +586,7 @@ def main() -> None:
                 action_dim=args.action_dim,
                 hidden_size=args.hidden_size,
                 rnn_backend=args.rnn_backend,
-                device=str(eval_device),
+                device=str(eval_worker_device),
             ),
             num_trajectories=args.eval_num_trajectories,
             max_steps=None if eval_random_init_steps else eval_max_steps,
@@ -577,17 +594,21 @@ def main() -> None:
             backend=args.eval_backend,
             init_fn=partial(
                 _init_isaac_app,
-                device=str(eval_device),
+                device=str(eval_worker_device),
                 enable_cameras=True,
                 rendering_mode="performance",
+                cuda_visible_devices=args.eval_cuda_visible_devices,
+                nvidia_lib_dir=args.eval_nvidia_lib_dir,
+                vulkan_icd=args.eval_vulkan_icd,
+                xdg_runtime_dir=args.eval_xdg_runtime_dir,
             ),
-            device=eval_device,
+            device=eval_worker_device,
             metrics_fn=_rendered_eval_metrics,
             dump_video=False,
             busy_policy="skip",
             collector_kwargs={
-                "policy_device": eval_device,
-                "env_device": eval_device,
+                "policy_device": eval_worker_device,
+                "env_device": eval_worker_device,
                 "storing_device": "cpu",
                 "no_cuda_sync": True,
                 "trust_policy": True,

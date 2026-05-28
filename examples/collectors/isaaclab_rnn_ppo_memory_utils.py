@@ -12,6 +12,7 @@ import cost.
 from __future__ import annotations
 
 import argparse
+import os
 from typing import Literal
 
 import torch
@@ -45,8 +46,25 @@ def _init_isaac_app(
     *,
     enable_cameras: bool = False,
     rendering_mode: Literal["performance", "balanced", "quality"] | None = None,
+    cuda_visible_devices: str | None = None,
+    nvidia_lib_dir: str | None = None,
+    vulkan_icd: str | None = None,
+    xdg_runtime_dir: str | None = None,
 ) -> None:
     """Start Isaac Lab's AppLauncher in headless mode inside a worker."""
+    if cuda_visible_devices is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
+    if nvidia_lib_dir is not None:
+        os.environ["LD_LIBRARY_PATH"] = (
+            f"{nvidia_lib_dir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+        )
+    if vulkan_icd is not None:
+        os.environ["VK_ICD_FILENAMES"] = vulkan_icd
+    if xdg_runtime_dir is not None:
+        os.environ["XDG_RUNTIME_DIR"] = xdg_runtime_dir
+        os.makedirs(xdg_runtime_dir, mode=0o700, exist_ok=True)
+        os.chmod(xdg_runtime_dir, 0o700)
+
     from isaaclab.app import AppLauncher
 
     parser = argparse.ArgumentParser(description="TorchRL Isaac Lab env launcher.")

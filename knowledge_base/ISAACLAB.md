@@ -102,6 +102,53 @@ IsaacLab's default ManagerBased environments only provide state vectors. For pix
 
 5. **Increase env_spacing**: Set `env_cfg.scene.env_spacing = 8.0` or higher to prevent the camera from seeing neighbouring environments.
 
+### Headless RGB rendering on clusters
+
+Headless tiled-camera RGB rendering needs the NVIDIA graphics userspace stack,
+not just CUDA. If CUDA works but IsaacLab camera rendering fails with Vulkan,
+GL/EGL, or GPU Foundation errors, check the graphics stack before changing the
+training code:
+
+```bash
+nvidia-smi --query-gpu=driver_version,name --format=csv,noheader | head
+ldconfig -p | grep -E 'libEGL_nvidia|libnvidia-eglcore|libGLX_nvidia'
+ls /usr/share/glvnd/egl_vendor.d/
+ls /usr/share/vulkan/icd.d/
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary
+```
+
+The NVIDIA userspace libraries must match the host driver. If the package
+manager installs a different patch release, Vulkan may still report
+`ERROR_INCOMPATIBLE_DRIVER`. Use a matching userspace bundle and launch with:
+
+```bash
+export LD_LIBRARY_PATH=/path/to/nvidia/lib:${LD_LIBRARY_PATH}
+export VK_ICD_FILENAMES=/path/to/nvidia_icd.json
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export XDG_RUNTIME_DIR=/tmp/xdg-runtime-${USER}
+mkdir -p "${XDG_RUNTIME_DIR}" && chmod 700 "${XDG_RUNTIME_DIR}"
+```
+
+Some Isaac/Kit rendering paths expect the rendering device to be `cuda:0`.
+For a dedicated render/eval GPU, expose a single physical GPU to the evaluator
+process and use `cuda:0` inside that process:
+
+```bash
+CUDA_VISIBLE_DEVICES=<physical-render-gpu> python render_or_eval.py --device cuda:0
+```
+
+For the TorchRL recurrent PPO IsaacLab example, use:
+
+```bash
+python examples/collectors/isaaclab_rnn_ppo_memory.py \
+  --eval \
+  --eval-cuda-visible-devices <physical-render-gpu> \
+  --eval-worker-device cuda:0 \
+  --eval-nvidia-lib-dir /path/to/nvidia/lib \
+  --eval-vulkan-icd /path/to/nvidia_icd.json \
+  --eval-xdg-runtime-dir /tmp/xdg-runtime-eval
+```
+
 ### Camera Position for ANYmal-C
 
 The `offset.pos` is in world coordinates relative to the environment origin. For the ANYmal-C quadruped (base at ~0.5m height):
