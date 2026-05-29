@@ -17,11 +17,13 @@ from typing import Literal
 
 import torch
 import torch.nn as nn
+from tensordict import TensorDictBase
 from tensordict.nn import (
     AddStateIndependentNormalScale,
     TensorDictModule,
     TensorDictSequential,
 )
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import (
     ExplorationType,
     RandomTruncationTransform,
@@ -37,8 +39,180 @@ from torchrl.modules import (
     TanhNormal,
     ValueOperator,
 )
+from torchrl.record import WandbLogger
 
 RnnBackend = Literal["cudnn", "pad", "scan", "triton"]
+
+
+_RECURRENT_STATE_KEYS = {
+    "recurrent_state_h",
+    "recurrent_state_c",
+    "('next', 'recurrent_state_h')",
+    "('next', 'recurrent_state_c')",
+}
+
+
+def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]:
+    return {
+        str(key): {
+            "shape": str(tuple(value.shape)),
+            "dtype": str(value.dtype),
+            "device": str(value.device),
+        }
+        for key, value in tensordict.items(include_nested=True, leaves_only=True)
+        if hasattr(value, "shape")
+    }
+
+
+def _metric_float(value) -> float:
+    if isinstance(value, torch.Tensor):
+        value = value.detach()
+        if value.numel() != 1:
+            value = value.float().mean()
+        return float(value.cpu())
+    return float(value)
+
+
+def _tensor_stats(prefix: str, value: torch.Tensor) -> dict[str, float]:
+    value = value.detach().float()
+    return {
+        f"{prefix}/mean": _metric_float(value.mean()),
+        f"{prefix}/std": _metric_float(value.std(unbiased=False)),
+        f"{prefix}/min": _metric_float(value.min()),
+        f"{prefix}/max": _metric_float(value.max()),
+    }
+
+
+def _loss_metrics(loss_acc: TensorDictBase, loss_count: int) -> dict[str, float]:
+    metrics = {}
+    for key, value in loss_acc.items():
+        value = value / loss_count
+        key = str(key)
+        if key.startswith("loss_"):
+            key = f"loss/{key.removeprefix('loss_')}"
+        elif key.startswith("grad_norm"):
+            key = key.replace("grad_norm", "grad_norm/")
+        metrics[f"training/{key}"] = _metric_float(value)
+    return metrics
+
+
+def _inference_metrics(
+    data: TensorDictBase,
+    *,
+    frames: int,
+) -> dict[str, float | int]:
+    metrics: dict[str, float | int] = {
+        "inference/frames": frames,
+        "inference/batch_numel": data.numel(),
+        "inference/batch_ndim": data.ndim,
+    }
+    reward = data.get(("next", "reward"), default=None)
+    if reward is not None:
+        metrics.update(_tensor_stats("inference/reward", reward))
+    episode_reward = data.get(("next", "episode_reward"), default=None)
+    done = data.get(("next", "done"), default=None)
+    if episode_reward is not None and done is not None:
+        episode_reward = episode_reward.squeeze(-1)
+        done = done.squeeze(-1).to(torch.bool)
+        end_of_traj_reward = episode_reward[done]
+        if end_of_traj_reward.numel():
+            metrics.update(
+                _tensor_stats(
+                    "inference/end_of_traj_episode_reward", end_of_traj_reward
+                )
+            )
+    return metrics
+
+
+def _rendered_eval_metrics(data: TensorDictBase) -> dict[str, torch.Tensor]:
+    mask = data.get(("collector", "mask"))[0]
+    if mask.ndim > 1:
+        mask = mask.squeeze(-1)
+    pixels = data[0].get(("next", "pixels"))[mask.to(torch.bool)]
+    pixels = pixels[..., :3].permute(0, 3, 1, 2)
+    return {"video": pixels.to(torch.uint8).unsqueeze(0).cpu()}
+
+
+def _log_eval_result(
+    result: dict[str, object],
+    *,
+    experiment_logger: WandbLogger | None,
+) -> None:
+    if not result:
+        return
+    result = dict(result)
+    step = result.pop("eval/step", None)
+    video = result.pop("eval/video", None)
+    if experiment_logger is None:
+        torchrl_logger.info({"phase": "eval_done", **result})
+        return
+    if result:
+        experiment_logger.log_metrics(result, step=step)
+    if video is not None:
+        experiment_logger.log_video("eval/video", video, step=step)
+
+
+def _cuda_metrics(prefix: str, device: torch.device) -> dict[str, float]:
+    if device.type != "cuda":
+        return {}
+    return {
+        f"telemetry/{prefix}/allocated_gb": torch.cuda.memory_allocated(device) / 1e9,
+        f"telemetry/{prefix}/reserved_gb": torch.cuda.memory_reserved(device) / 1e9,
+        f"telemetry/{prefix}/max_allocated_gb": torch.cuda.max_memory_allocated(device)
+        / 1e9,
+        f"telemetry/{prefix}/max_reserved_gb": torch.cuda.max_memory_reserved(device)
+        / 1e9,
+    }
+
+
+def _assert_rollout_shapes(
+    tensordict: TensorDictBase,
+    *,
+    expected_shape: torch.Size,
+    hidden_size: int,
+    phase: str,
+) -> None:
+    if tensordict.shape != expected_shape:
+        raise RuntimeError(
+            f"{phase}: expected TensorDict shape {expected_shape}, "
+            f"got {tensordict.shape}."
+        )
+    expected_state_shape = (*expected_shape, 1, hidden_size)
+    for key, value in tensordict.items(include_nested=True, leaves_only=True):
+        if not hasattr(value, "shape"):
+            continue
+        if value.shape[: len(expected_shape)] != expected_shape:
+            raise RuntimeError(
+                f"{phase}: key {key} has shape {tuple(value.shape)}, "
+                f"which does not start with {tuple(expected_shape)}."
+            )
+        if str(key) in _RECURRENT_STATE_KEYS and tuple(value.shape) != tuple(
+            expected_state_shape
+        ):
+            raise RuntimeError(
+                f"{phase}: key {key} has recurrent-state shape "
+                f"{tuple(value.shape)}, expected {tuple(expected_state_shape)}."
+            )
+
+
+def _normalize_rollout_batch(
+    tensordict: TensorDictBase, expected_shape: torch.Size
+) -> TensorDictBase:
+    if tensordict.shape == expected_shape:
+        return tensordict
+    if tensordict.shape == torch.Size((1, *expected_shape)):
+        return tensordict.squeeze(0)
+    if tensordict.ndim < 2 or tensordict.shape[-1] != expected_shape[-1]:
+        raise RuntimeError(
+            f"Expected collected batch ending in time shape {tuple(expected_shape)}, "
+            f"got {tuple(tensordict.shape)}."
+        )
+    if tensordict.shape[:-1].numel() != expected_shape[0]:
+        raise RuntimeError(
+            f"Expected collected batch with {expected_shape[0]} env elements before "
+            f"time, got shape {tuple(tensordict.shape)}."
+        )
+    return tensordict.reshape(expected_shape)
 
 
 def _init_isaac_app(
