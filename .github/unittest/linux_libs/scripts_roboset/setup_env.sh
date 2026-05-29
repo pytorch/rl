@@ -66,4 +66,12 @@ cat "${this_dir}/environment.yml"
 
 pip3 install pip --upgrade
 
-conda env update --file "${this_dir}/environment.yml" --prune
+for attempt in 1 2 3; do
+    if conda env update --file "${this_dir}/environment.yml" --prune; then
+        break
+    fi
+    if [ "${attempt}" = "3" ]; then
+        exit 1
+    fi
+    sleep $((attempt * 30))
+done

@@ -81,6 +81,8 @@ class TestValues:
     def test_chunked_value_calls_match_unchunked(
         self, estimator_cls, kwargs, shifted, deactivate_vmap, chunk_kwargs
     ):
+        if deactivate_vmap and _TORCH_VERSION < version.parse("2.7"):
+            pytest.skip("_pseudo_vmap is not supported for torch<2.7")
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1),
@@ -144,6 +146,23 @@ class TestValues:
                 num_chunk=3,
             )
 
+    def test_num_chunks_splits_into_requested_number_of_chunks(self):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        estimator = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            num_chunks=3,
+        )
+        td = TensorDict({"obs": torch.randn(4, 3)}, [4])
+        assert len(estimator._split_value_net_input(td)) == 3
+        empty_td = TensorDict({"obs": torch.randn(0, 3)}, [0])
+        assert estimator._split_value_net_input(empty_td) == (empty_td,)
+
     @pytest.mark.parametrize("vectorized", [False, True])
     @pytest.mark.parametrize("deactivate_vmap", [False, True])
     @pytest.mark.parametrize("method", ["forward", "value_estimate"])
@@ -158,6 +177,8 @@ class TestValues:
     def test_gae_chunked_functional_calls_match_unchunked(
         self, vectorized, deactivate_vmap, method, chunk_kwargs
     ):
+        if deactivate_vmap and _TORCH_VERSION < version.parse("2.7"):
+            pytest.skip("_pseudo_vmap is not supported for torch<2.7")
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1),

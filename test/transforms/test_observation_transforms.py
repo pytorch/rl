@@ -2851,11 +2851,9 @@ class TestNextObservationDelta(TransformBase):
         )
         self._smoke_one_step(env)
 
-    def test_trans_parallel_env_check(self):
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
-            ParallelEnv(
-                2, lambda: ContinuousActionVecMockEnv(), mp_start_method="fork"
-            ),
+            maybe_fork_ParallelEnv(2, lambda: ContinuousActionVecMockEnv()),
             NextObservationDelta(in_keys=["observation"]),
         )
         try:

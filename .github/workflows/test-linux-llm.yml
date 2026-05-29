@@ -55,6 +55,12 @@ jobs:
         bash .github/unittest/llm/scripts_llm/setup_env.sh
         bash .github/unittest/llm/scripts_llm/install.sh
         PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        if [[ "$RELEASE" == 0 ]]; then
+          TENSORDICT_EXPECTATION=main
+        else
+          TENSORDICT_EXPECTATION=stable
+        fi
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_tensordict_versions.sh "$TORCH_VERSION" "$TENSORDICT_EXPECTATION"
         bash .github/unittest/llm/scripts_llm/run_test.sh
         bash .github/unittest/llm/scripts_llm/post_process.sh
 
@@ -94,5 +100,11 @@ jobs:
         bash .github/unittest/llm/scripts_sglang/setup_env.sh
         bash .github/unittest/llm/scripts_sglang/install.sh
         PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        if [[ "$RELEASE" == 0 ]]; then
+          TENSORDICT_EXPECTATION=main
+        else
+          TENSORDICT_EXPECTATION=stable
+        fi
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_tensordict_versions.sh "$TORCH_VERSION" "$TENSORDICT_EXPECTATION"
         bash .github/unittest/llm/scripts_sglang/run_test.sh
         bash .github/unittest/llm/scripts_sglang/post_process.sh

@@ -135,14 +135,15 @@ python -c "import functorch"
 #fi
 
 # install tensordict
+pip3 install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
 if [[ "$RELEASE" == 0 ]]; then
-  pip3 install git+https://github.com/pytorch/tensordict.git
+  pip3 install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  pip3 install tensordict
+  pip3 install --no-deps tensordict
 fi
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"
@@ -159,6 +160,7 @@ export LAZY_LEGACY_OP=False
 python -m torch.utils.collect_env
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
 root_dir="$(git rev-parse --show-toplevel)"

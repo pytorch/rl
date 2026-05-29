@@ -6,6 +6,7 @@
 ${CONDA_RUN} pip install --upgrade setuptools packaging
 
 ${CONDA_RUN} pip install "pybind11[global]"
+${CONDA_RUN} pip install cloudpickle importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
 ${CONDA_RUN} conda install anaconda::cmake -y
 
 # Determine tensordict installation source based on branch/tag
@@ -16,19 +17,19 @@ install_tensordict() {
     
     if [[ "$source" == "stable" ]]; then
         echo "Installing tensordict from PyPI (stable) - explicit override"
-        ${CONDA_RUN} pip install tensordict -U
+        ${CONDA_RUN} pip install tensordict -U --no-deps
     elif [[ "$source" == "git" ]]; then
         echo "Installing tensordict from git - explicit override"
-        ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U
+        ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
     elif [[ "$GITHUB_REF_TYPE" == "branch" && "$GITHUB_REF_NAME" == release/* ]]; then
         echo "Installing tensordict from PyPI (stable) - detected release branch: $GITHUB_REF_NAME"
-        ${CONDA_RUN} pip install tensordict -U
+        ${CONDA_RUN} pip install tensordict -U --no-deps
     elif [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "Installing tensordict from PyPI (stable) - detected release tag: $GITHUB_REF_NAME"
-        ${CONDA_RUN} pip install tensordict -U
+        ${CONDA_RUN} pip install tensordict -U --no-deps
     else
         echo "Installing tensordict from git - branch: ${GITHUB_REF_NAME:-unknown}, type: ${GITHUB_REF_TYPE:-unknown}"
-        ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U
+        ${CONDA_RUN} pip install git+https://github.com/pytorch/tensordict.git -U --no-deps
     fi
 }
 

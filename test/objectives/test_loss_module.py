@@ -337,7 +337,17 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         )
     )
     + [
-        ["cuda", torch.float, "cuda:0"],
+        pytest.param(
+            "cuda",
+            torch.float,
+            "cuda:0",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ],
+        ),
         ["double", torch.double, "cpu"],
         [torch.double, torch.double, "cpu"],
         [torch.half, torch.half, "cpu"],
