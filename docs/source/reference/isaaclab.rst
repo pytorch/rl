@@ -106,9 +106,18 @@ Cluster rendering dependencies
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Headless camera rendering still needs a working NVIDIA graphics stack inside
-the container. If IsaacLab reports ``ERROR_INCOMPATIBLE_DRIVER``, cannot create
-a Vulkan instance, or ``GPU Foundation is not initialized``, verify the NVIDIA
-Vulkan ICD and GL/EGL userspace before debugging TorchRL:
+the container. Minimal CUDA images often omit the EGL/GLVND and Vulkan runtime
+packages that Isaac Sim uses for headless cameras. On Debian/Ubuntu images,
+install the generic loader/runtime packages before launching Isaac Lab:
+
+.. code-block:: bash
+
+    sudo apt-get update
+    sudo apt-get install -y libegl-dev libglvnd0 libglx0 libvulkan1 vulkan-tools
+
+If IsaacLab reports ``ERROR_INCOMPATIBLE_DRIVER``, cannot create a Vulkan
+instance, or ``GPU Foundation is not initialized``, verify the NVIDIA Vulkan
+ICD and GL/EGL userspace before debugging TorchRL:
 
 .. code-block:: bash
 
@@ -118,9 +127,11 @@ Vulkan ICD and GL/EGL userspace before debugging TorchRL:
     ls /usr/share/vulkan/icd.d/
     VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary
 
-The NVIDIA userspace libraries must match the host driver. Some package
-repositories provide a newer patch release than the host driver; in that case,
-use a matching driver userspace bundle and point the process at it:
+The NVIDIA userspace libraries must match the host driver. If using distro
+NVIDIA packages, install a ``libnvidia-gl-<driver-version>`` package matching
+the host driver when available. Some package repositories provide a newer patch
+release than the host driver; in that case, use a matching driver userspace
+bundle and point the process at it:
 
 .. code-block:: bash
 

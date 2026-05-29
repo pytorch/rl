@@ -105,9 +105,17 @@ IsaacLab's default ManagerBased environments only provide state vectors. For pix
 ### Headless RGB rendering on clusters
 
 Headless tiled-camera RGB rendering needs the NVIDIA graphics userspace stack,
-not just CUDA. If CUDA works but IsaacLab camera rendering fails with Vulkan,
-GL/EGL, or GPU Foundation errors, check the graphics stack before changing the
-training code:
+not just CUDA. Minimal CUDA images often omit the EGL/GLVND and Vulkan runtime
+packages that Isaac Sim uses for headless cameras. On Debian/Ubuntu images,
+install the generic loader/runtime packages before launching Isaac Lab:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libegl-dev libglvnd0 libglx0 libvulkan1 vulkan-tools
+```
+
+If CUDA works but IsaacLab camera rendering fails with Vulkan, GL/EGL, or GPU
+Foundation errors, check the graphics stack before changing the training code:
 
 ```bash
 nvidia-smi --query-gpu=driver_version,name --format=csv,noheader | head
@@ -117,9 +125,11 @@ ls /usr/share/vulkan/icd.d/
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary
 ```
 
-The NVIDIA userspace libraries must match the host driver. If the package
-manager installs a different patch release, Vulkan may still report
-`ERROR_INCOMPATIBLE_DRIVER`. Use a matching userspace bundle and launch with:
+The NVIDIA userspace libraries must match the host driver. If using distro
+NVIDIA packages, install a `libnvidia-gl-<driver-version>` package matching the
+host driver when available. If the package manager installs a different patch
+release, Vulkan may still report `ERROR_INCOMPATIBLE_DRIVER`. Use a matching
+userspace bundle and launch with:
 
 ```bash
 export LD_LIBRARY_PATH=/path/to/nvidia/lib:${LD_LIBRARY_PATH}
