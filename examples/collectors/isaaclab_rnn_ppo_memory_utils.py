@@ -229,9 +229,9 @@ def _init_isaac_app(
     if cuda_visible_devices is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = cuda_visible_devices
     if nvidia_lib_dir is not None:
-        os.environ["LD_LIBRARY_PATH"] = (
-            f"{nvidia_lib_dir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
-        )
+        os.environ[
+            "LD_LIBRARY_PATH"
+        ] = f"{nvidia_lib_dir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
     if vulkan_icd is not None:
         os.environ["VK_ICD_FILENAMES"] = vulkan_icd
     if xdg_runtime_dir is not None:
