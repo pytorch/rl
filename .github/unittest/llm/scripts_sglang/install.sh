@@ -68,7 +68,7 @@ fi
 
 printf "* Installing tensordict\n"
 # Install tensordict dependencies first (pyvers is required but --no-deps skips it)
-uv pip install cloudpickle packaging importlib_metadata orjson "pyvers>=0.1.0,<0.2.0"
+uv pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
 uv pip install "pybind11[global]" ninja
 if [[ "$RELEASE" == 0 ]]; then
     uv pip install --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
@@ -119,6 +119,17 @@ export PATH="$HOME/.deno/bin:$PATH"
 
 # Install mcp
 uv pip install mcp langdetect
+
+# SGLang may resolve a backend-specific torch/triton stack. Reinstall
+# TensorDict and TorchRL after that resolution so native extensions are built
+# against the final torch wheel present in the environment.
+printf "* Reinstalling TensorDict and TorchRL against final backend stack\n"
+if [[ "$RELEASE" == 0 ]]; then
+    uv pip install --reinstall --no-build-isolation --no-deps git+https://github.com/pytorch/tensordict.git
+else
+    uv pip install --reinstall --no-deps tensordict
+fi
+uv pip install --reinstall -e . --no-build-isolation --no-deps
 
 # Verify installations
 deno --version || echo "Warning: Deno not installed"

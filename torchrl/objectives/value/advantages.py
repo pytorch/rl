@@ -103,6 +103,21 @@ class ValueEstimatorBase(TensorDictModuleBase):
     If only the value estimate is needed, the :meth:`ValueFunctionBase.value_estimate`
     should be used instead.
 
+    Keyword Args:
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` uses a ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
+
     """
 
     @dataclass
@@ -310,10 +325,12 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self, data: TensorDictBase
     ) -> tuple[TensorDictBase, ...]:
         if self.num_chunks is not None:
+            if data.shape[0] == 0:
+                return (data,)
             num_chunks = min(self.num_chunks, data.shape[0])
             if num_chunks == 1:
                 return (data,)
-            return tuple(data.chunk(num_chunks, dim=0))
+            return tuple(data.tensor_split(num_chunks, dim=0))
         chunk_size = self.value_chunk_size
         if chunk_size is None or data.numel() <= chunk_size:
             return (data,)
@@ -940,6 +957,8 @@ class TD0Estimator(ValueEstimatorBase):
             this many chunks along the leading dimension. Mutually exclusive
             with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
             Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -1217,6 +1236,8 @@ class TD1Estimator(ValueEstimatorBase):
             this many chunks along the leading dimension. Mutually exclusive
             with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
             Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -1506,6 +1527,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             this many chunks along the leading dimension. Mutually exclusive
             with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
             Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -1835,6 +1858,8 @@ class GAE(ValueEstimatorBase):
             this many chunks along the leading dimension. Mutually exclusive
             with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
             Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -2428,6 +2453,8 @@ class VTrace(ValueEstimatorBase):
             this many chunks along the leading dimension. Mutually exclusive
             with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
             Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout

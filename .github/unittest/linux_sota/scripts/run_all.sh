@@ -148,6 +148,7 @@ uv pip install -e . --no-build-isolation --no-deps
 # ================================ Run tests ========================================= #
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 bash ${this_dir}/run_test.sh
 

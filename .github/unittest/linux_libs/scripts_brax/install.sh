@@ -50,7 +50,7 @@ pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
 python -c "import functorch;import tensordict"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 # smoke test
 python -c "import torchrl"
