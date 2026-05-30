@@ -12,6 +12,7 @@ dependencies:
     - cloudpickle
     - pygame
     - moviepy<2.0.0
+    - scikit-video
     - tqdm
     - pytest
     - pytest-cov
