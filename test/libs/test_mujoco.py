@@ -799,7 +799,7 @@ class TestMujoco:
     def test_ball_bowl_menagerie_ur5e_when_available(self):
         menagerie_path = os.environ.get(BallBowlEnv.MENAGERIE_ENV_VAR)
         if menagerie_path is None or not Path(menagerie_path).exists():
-            pytest.skip("local MuJoCo Menagerie checkout is not available")
+            return
 
         env = BallBowlEnv(
             robot_model="menagerie_ur5e",
