@@ -72,10 +72,13 @@ at an explicit :meth:`~torchrl.envs.EnvBase.reset` or right after a
 ``done`` from the previous step.
 
 If you do not append :class:`~torchrl.envs.InitTracker` to your env,
-``is_init`` will be absent (or always ``False``) and the LSTM has no way
-to know when a new trajectory has started. The hidden state will silently
-carry forward across episode boundaries — usually the most painful class
-of recurrent bug to diagnose because rewards still look plausible.
+``is_init`` will be absent and :class:`~torchrl.modules.LSTMModule` will
+raise a ``KeyError``. If the key is present but always ``False`` (or if a
+custom replay buffer / transform drops or rewrites the true boundary
+signal), the LSTM has no way to know when a new trajectory has started.
+In that case the hidden state will silently carry forward across episode
+boundaries — usually the most painful class of recurrent bug to diagnose
+because rewards still look plausible.
 
 When hidden state resets vs. is carried forward
 -----------------------------------------------
@@ -138,12 +141,14 @@ sequence, while tensordict expects a hidden value at every step. The
 intermediate steps are zero-padded; the *last* step contains the
 real final hidden.
 
-In recurrent mode with multi-trajectory splitting, this "final" hidden
-is the final hidden *of the padded chunk*, which may correspond to a
-zero-padded slot rather than a real environment step. The class
-docstring on :class:`~torchrl.modules.LSTMModule` already warns about
-this — the practical consequence is that you should not consume the
-last-step hidden as the starting point for a follow-on rollout.
+In recurrent mode with multi-trajectory splitting, the current split path
+packs or masks padded steps and writes the final hidden state back at the
+real trajectory end. Hidden entries at non-terminal steps are still
+zero-padding placeholders rather than per-step recurrent states. The
+practical consequence is that you should only consume hidden outputs from
+trajectory-end positions (or carry state step-by-step during collection),
+not treat every time step's hidden slot as a valid starting point for a
+follow-on rollout.
 
 Common debugging symptoms
 -------------------------
@@ -173,9 +178,10 @@ Common debugging symptoms
     state across rollouts (see the previous section).
 
 **Symptom: identical results regardless of** ``set_recurrent_mode`` **value.**
-    The module's ``default_recurrent_mode`` may be forcing one path. The
-    context manager only overrides when set; a module constructed with
-    ``default_recurrent_mode=True`` will always run the recurrent path.
+    Check whether the call actually runs inside the context manager you
+    expect, and whether another nested ``set_recurrent_mode`` context is
+    overriding it. The module's ``default_recurrent_mode`` is only used
+    when no context manager is active.
 
 What to check, in order
 -----------------------
