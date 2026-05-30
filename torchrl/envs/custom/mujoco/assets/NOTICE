@@ -1,0 +1,26 @@
+torchrl/envs/custom/mujoco/assets
+=================================
+
+The XML model files in this directory are bundled here for convenience:
+
+  ant.xml          walker2d.xml      satellite_large.xml
+  hopper.xml       humanoid.xml      satellite_small.xml
+
+They are derivative works of MuJoCo MJX (https://github.com/google-deepmind/mujoco/tree/main/mjx),
+distributed by Vincent Moens via the `mujoco-torch` package
+(https://github.com/vmoens/mujoco-torch), and are made available under the
+Apache License, Version 2.0:
+
+    Copyright 2023 DeepMind Technologies Limited
+    Copyright 2025 Vincent Moens
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use these files except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+To avoid vendoring assets you'd rather not redistribute, every
+:class:`~torchrl.envs.custom.mujoco.MujocoEnv` subclass accepts an
+``xml_path=`` constructor kwarg that may be a local path *or* an
+``http(s)://`` URL. Override :attr:`MujocoEnv.XML_PATH` /
+:attr:`MujocoEnv.XML_URL` on a custom subclass to point elsewhere.

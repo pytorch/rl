@@ -1631,7 +1631,7 @@ class TestTrainerConfigs:
             optimizer=optimizer_config,
             logger=None,  # Optional field
             save_trainer_file="/tmp/test.pt",
-            replay_buffer=replay_buffer_config
+            replay_buffer=replay_buffer_config,
             # All optional fields are omitted to test defaults
         )
 
