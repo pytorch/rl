@@ -348,7 +348,6 @@ class TestMujoco:
         expected_qerr = quat_log(quat_mul(quat_conj(init_q_norm), target_q_norm))
         torch.testing.assert_close(td["quat_err"], expected_qerr, rtol=1e-4, atol=1e-4)
 
-
     @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
     def test_satellite_quat_err_is_zero_at_target(self, backend):
         """Setting ``init_bus_quat == target_quat`` makes the
