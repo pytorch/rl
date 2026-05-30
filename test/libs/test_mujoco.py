@@ -348,6 +348,43 @@ class TestMujoco:
         expected_qerr = quat_log(quat_mul(quat_conj(init_q_norm), target_q_norm))
         torch.testing.assert_close(td["quat_err"], expected_qerr, rtol=1e-4, atol=1e-4)
 
+    @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
+    def test_satellite_eval_primer_runs_before_env_reset(self, tmp_path):
+        """The eval test-set primer must feed fixed starts into reset."""
+        from examples.satellite._utils import make_eval_env
+
+        csv = tmp_path / "satellite_eval.csv"
+        csv.write_text(
+            "\n".join(
+                [
+                    "init_w,init_x,init_y,init_z,target_w,target_x,target_y,target_z,category",
+                    "1.0,0.0,0.0,0.0,0.0,1.0,0.0,0.0,identity_to_x",
+                    "0.0,0.0,1.0,0.0,1.0,0.0,0.0,0.0,y_to_identity",
+                ]
+            )
+            + "\n"
+        )
+        env = make_eval_env(
+            device=torch.device("cpu"),
+            test_set_csv=csv,
+            max_steps=5,
+            obs_norm_stats=None,
+            use_obs_norm=False,
+        )
+        env.reset()
+        base = env.base_env
+        expected = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+            dtype=base.dtype,
+            device=base.device,
+        )
+        torch.testing.assert_close(
+            base._backend.qpos[..., 3:7].to(base.dtype),
+            expected,
+            rtol=1e-4,
+            atol=1e-4,
+        )
+
     @pytest.mark.parametrize("backend", _VMAP_BACKENDS)
     def test_satellite_quat_err_is_zero_at_target(self, backend):
         """Setting ``init_bus_quat == target_quat`` makes the
