@@ -1106,7 +1106,7 @@ class TestCollectorsConfig:
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.collectors import (
-            AsyncDataCollectorConfig,
+            AsyncCollectorConfig,
             MultiAsyncCollectorConfig,
             MultiSyncCollectorConfig,
         )
@@ -1130,7 +1130,7 @@ class TestCollectorsConfig:
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
 
-            cfg_cls = AsyncDataCollectorConfig
+            cfg_cls = AsyncCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
             cfg_cls = MultiSyncCollectorConfig
@@ -1189,7 +1189,7 @@ class TestCollectorsConfig:
         """
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.collectors import (
-            AsyncDataCollectorConfig,
+            AsyncCollectorConfig,
             MultiAsyncCollectorConfig,
             MultiSyncCollectorConfig,
         )
@@ -1225,7 +1225,7 @@ class TestCollectorsConfig:
         )
 
         if collector == "async":
-            cfg_cls = AsyncDataCollectorConfig
+            cfg_cls = AsyncCollectorConfig
             expected_cls = AsyncCollector
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":

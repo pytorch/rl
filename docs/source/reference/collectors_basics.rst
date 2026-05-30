@@ -105,7 +105,7 @@ Collectors and policy copies
 When passing a policy to a collector, we can choose the device on which this policy will be run. This can be used to
 keep the training version of the policy on a device and the inference version on another. For example, if you have two
 CUDA devices, it may be wise to train on one device and execute the policy for inference on the other. If that is the
-case, a :meth:`~torchrl.collectors.DataCollector.update_policy_weights_` can be used to copy the parameters from one
+case, a :meth:`~torchrl.collectors.Collector.update_policy_weights_` can be used to copy the parameters from one
 device to the other (if no copy is required, this method is a no-op).
 
 Since the goal is to avoid calling `policy.to(policy_device)` explicitly, the collector will do a deepcopy of the

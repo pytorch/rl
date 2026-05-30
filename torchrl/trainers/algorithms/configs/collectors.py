@@ -73,9 +73,6 @@ class CollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-SyncDataCollectorConfig = CollectorConfig
-
 
 @dataclass
 class AsyncCollectorConfig(BaseCollectorConfig):
@@ -131,9 +128,6 @@ class AsyncCollectorConfig(BaseCollectorConfig):
         if self.weight_updater is not None:
             self.weight_updater._partial_ = True
 
-
-# Legacy alias
-AsyncDataCollectorConfig = AsyncCollectorConfig
 
 
 @dataclass
@@ -196,9 +190,6 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-MultiSyncCollectorConfig = MultiSyncCollectorConfig
-
 
 @dataclass
 class MultiAsyncCollectorConfig(BaseCollectorConfig):
@@ -260,7 +251,3 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:
             self.weight_updater._partial_ = True
-
-
-# Legacy alias
-MultiAsyncCollectorConfig = MultiAsyncCollectorConfig

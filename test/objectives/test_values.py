@@ -245,7 +245,7 @@ class TestValues:
         """``("next", obs)`` may be ``NaN`` at trajectory ends.
 
         That happens by design when the buffer is fed by
-        :class:`~torchrl.collectors.SyncDataCollector` configured with
+        :class:`~torchrl.collectors.Collector` configured with
         ``compact_obs=True`` and rehydrated via
         :class:`~torchrl.envs.transforms.NextStateReconstructor`. Without the
         sanitizer in

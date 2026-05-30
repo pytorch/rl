@@ -3004,7 +3004,7 @@ class TestNextObservationDelta(TransformBase):
 
     @pytest.mark.parametrize("use_buffers", [True, False])
     def test_collector_compressed(self, use_buffers):
-        from torchrl.collectors import SyncDataCollector
+        from torchrl.collectors import Collector
 
         torch.manual_seed(4)
 
@@ -3014,7 +3014,7 @@ class TestNextObservationDelta(TransformBase):
                 NextObservationDelta(in_keys=["observation"]),
             )
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=make_env,
             policy=None,
             frames_per_batch=16,
@@ -3139,7 +3139,7 @@ class TestNextObservationDeltaForward:
     def test_end_to_end_env_to_rb(self):
         # env compresses → collector stacks → RB stores → RB sample
         # reconstructs. Same transform class on both sides.
-        from torchrl.collectors import SyncDataCollector
+        from torchrl.collectors import Collector
         from torchrl.data import LazyTensorStorage, ReplayBuffer
 
         torch.manual_seed(7)
@@ -3150,7 +3150,7 @@ class TestNextObservationDeltaForward:
                 NextObservationDelta(in_keys=["observation"]),
             )
 
-        collector = SyncDataCollector(
+        collector = Collector(
             create_env_fn=make_env,
             policy=None,
             frames_per_batch=16,
