@@ -1118,7 +1118,6 @@ class TestOpenX:
 )
 @pytest.mark.slow
 class TestOpenML:
-    @retry(Exception, tries=3, delay=1)
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
     def test_env(self, dataset, batch_size):
         env = OpenMLEnv(dataset, batch_size=batch_size)
@@ -1129,7 +1128,6 @@ class TestOpenML:
         assert "index" not in td.keys()
         check_env_specs(env)
 
-    @retry(Exception, tries=3, delay=1)
     def test_data(self, dataset):
         data = OpenMLExperienceReplay(
             dataset,

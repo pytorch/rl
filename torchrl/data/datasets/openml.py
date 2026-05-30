@@ -77,7 +77,9 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
         self.dataset_id = name
 
         if not self._is_downloaded():
-            dataset = self._get_data(name, data_home=self.root / "sklearn_data")
+            dataset = self._get_data(
+                name,
+            )
             storage = TensorStorage(dataset.memmap(self._dataset_path))
         else:
             dataset = TensorDict.load_memmap(self._dataset_path)
@@ -103,7 +105,7 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
         return os.path.exists(self._dataset_path)
 
     @classmethod
-    def _get_data(cls, dataset_name, data_home: Path | None = None):
+    def _get_data(cls, dataset_name):
         try:
             import pandas  # noqa: F401
             from sklearn.datasets import fetch_openml
@@ -117,11 +119,8 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
                 "Make sure scikit-learn and pandas are installed before "
                 f"creating a {cls.__name__} instance."
             )
-        data_home_str = None if data_home is None else str(data_home)
         if dataset_name in ["adult_num", "adult_onehot"]:
-            X, y = fetch_openml(
-                "adult", version=1, data_home=data_home_str, return_X_y=True
-            )
+            X, y = fetch_openml("adult", version=1, return_X_y=True)
             is_NaN = X.isna()
             row_has_NaN = is_NaN.any(axis=1)
             X = X[~row_has_NaN]
@@ -144,9 +143,7 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
             else:
                 X = StandardScaler().fit_transform(X)
         elif dataset_name in ["mushroom_num", "mushroom_onehot"]:
-            X, y = fetch_openml(
-                "mushroom", version=1, data_home=data_home_str, return_X_y=True
-            )
+            X, y = fetch_openml("mushroom", version=1, return_X_y=True)
             encoder = LabelEncoder()
             # now apply the transformation to all the columns:
             for col in X.columns:
@@ -160,25 +157,19 @@ class OpenMLExperienceReplay(BaseDatasetExperienceReplay):
         elif dataset_name == "covertype":
             # https://www.openml.org/d/150
             # there are some 0/1 features -> consider just numeric
-            X, y = fetch_openml(
-                "covertype", version=3, data_home=data_home_str, return_X_y=True
-            )
+            X, y = fetch_openml("covertype", version=3, return_X_y=True)
             X = StandardScaler().fit_transform(X)
             y = LabelEncoder().fit_transform(y)
         elif dataset_name == "shuttle":
             # https://www.openml.org/d/40685
             # all numeric, no missing values
-            X, y = fetch_openml(
-                "shuttle", version=1, data_home=data_home_str, return_X_y=True
-            )
+            X, y = fetch_openml("shuttle", version=1, return_X_y=True)
             X = StandardScaler().fit_transform(X)
             y = LabelEncoder().fit_transform(y)
         elif dataset_name == "magic":
             # https://www.openml.org/d/1120
             # all numeric, no missing values
-            X, y = fetch_openml(
-                "MagicTelescope", version=1, data_home=data_home_str, return_X_y=True
-            )
+            X, y = fetch_openml("MagicTelescope", version=1, return_X_y=True)
             X = StandardScaler().fit_transform(X)
             y = LabelEncoder().fit_transform(y)
         else:
