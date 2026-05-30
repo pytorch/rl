@@ -276,6 +276,7 @@ Available Transforms
     Hash
     InitTracker
     LineariseRewards
+    MacroPrimitiveTransform
     MeanActionSelector
     ModuleTransform
     MultiAction
@@ -308,6 +309,7 @@ Available Transforms
     Tokenizer
     ToTensorImage
     TrajCounter
+    URScriptPrimitiveTransform
     UnaryTransform
     UnsqueezeTransform
     VC1Transform

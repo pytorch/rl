@@ -8,6 +8,7 @@ from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
+from ._primitive import MacroPrimitiveTransform, URScriptPrimitiveTransform
 from .rb_transforms import MultiStepTransform, NextStateReconstructor
 from .transforms import (
     ActionDiscretizer,
@@ -113,6 +114,7 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
+    "MacroPrimitiveTransform",
     "MeanActionSelector",
     "ModuleTransform",
     "MultiAction",
@@ -149,6 +151,7 @@ __all__ = [
     "TrajCounter",
     "Transform",
     "TransformedEnv",
+    "URScriptPrimitiveTransform",
     "UnaryTransform",
     "UnsqueezeTransform",
     "VC1Transform",

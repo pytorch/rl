@@ -49,11 +49,13 @@ from torchrl.envs import (
     EnvBase,
     FlattenAction,
     GymWrapper,
+    MacroPrimitiveTransform,
     MultiAction,
     ParallelEnv,
     SerialEnv,
     StepCounter,
     TransformedEnv,
+    URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms.transforms import (
@@ -876,6 +878,133 @@ class TestActionScaling(TransformBase):
         env.step(td)
         # normalized -1 -> env-scale -2 (low)
         assert torch.allclose(base_env.last_action, torch.full((7,), -2.0))
+
+
+class TestURScriptPrimitiveTransform:
+    def test_movej_expands_to_fixed_length_action_sequence(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        target = torch.arange(7, dtype=torch.float32).view(1, 7)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[1]]),
+                "target_qpos": target,
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+
+        out = transform.inv(td)
+        action = out["action"]
+        assert action.shape == torch.Size([1, 4, 7])
+        torch.testing.assert_close(action[:, -1], target)
+        torch.testing.assert_close(action[:, 0], target / 4)
+
+    def test_nested_action_key(self):
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"), macro_steps=3
+        )
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[3], [4]]),
+                "robot_qpos": torch.zeros(2, 6),
+                "gripper_qpos": torch.zeros(2, 2),
+            },
+            batch_size=[2],
+        )
+
+        out = transform.inv(td)
+        action = out[("agent", "action")]
+        assert action.shape == torch.Size([2, 3, 7])
+        assert (action[0, :, -1] == 0).all()
+        assert action[1, -1, -1] == 255
+        assert (action[1, :, -1].diff() > 0).all()
+
+    def test_current_action_and_gripper_override(self):
+        transform = URScriptPrimitiveTransform(macro_steps=2)
+        current = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 255.0]])
+        target = torch.zeros(1, 7)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[1]]),
+                "target_qpos": target,
+                "gripper": torch.tensor([[255.0]]),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+                "action": current,
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        expected_target = target.clone()
+        expected_target[..., -1] = 255.0
+        torch.testing.assert_close(action[:, -1], expected_target)
+        torch.testing.assert_close(
+            action[:, 0], current + 0.5 * (expected_target - current)
+        )
+
+    def test_movel_uses_cartesian_solver(self):
+        def solver(target_pose, start_action):
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        transform = URScriptPrimitiveTransform(macro_steps=1, cartesian_solver=solver)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[2]]),
+                "target_pose": torch.tensor([[1.0, 2.0, 3.0, 1.0, 0.0, 0.0, 0.0]]),
+                "action": torch.zeros(1, 7),
+                "target_qpos": torch.zeros(1, 7),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :3], torch.tensor([[1.0, 2.0, 3.0]]))
+
+    def test_macro_transform_string_proxies(self):
+        transform = MacroPrimitiveTransform(
+            primitive_library="urscript",
+            adapter="joint_position_gripper",
+            solver="joint_interpolation",
+            macro_steps=2,
+        )
+        target = torch.arange(7, dtype=torch.float32).view(1, 7)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[2]]),
+                "target_qpos": target,
+                "target_pose": torch.zeros(1, 7),
+                "action": torch.zeros(1, 7),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1], target)
+
+    def test_macro_transform_custom_solver_object(self):
+        class Solver:
+            def movel(self, target_pose, start, fallback, *, transform, tensordict):
+                del fallback, transform, tensordict
+                out = start.clone()
+                out[..., :3] = target_pose[..., :3]
+                return out
+
+        transform = MacroPrimitiveTransform(solver=Solver(), macro_steps=1)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[2]]),
+                "target_pose": torch.tensor([[4.0, 5.0, 6.0, 1.0, 0.0, 0.0, 0.0]]),
+                "action": torch.zeros(1, 7),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :3], torch.tensor([[4.0, 5.0, 6.0]]))
 
 
 class TestMultiAction(TransformBase):
@@ -1769,3 +1898,7 @@ class TestFlattenAction(TransformBase):
         )
         r = env.rollout(4)
         assert r["action"].shape == (4, 15)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

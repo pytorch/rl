@@ -17,10 +17,12 @@ observation map. The locomotion subclasses (:class:`HumanoidEnv`,
 :class:`AntEnv`, :class:`Walker2dEnv`, :class:`HopperEnv`) mirror the
 Gymnasium ``-v4`` reward / termination spec. :class:`SatelliteEnv`
 implements an attitude-control task with 4- or 6-CMG clusters and a
-manipulability-based singularity penalty.
+manipulability-based singularity penalty. :class:`BallBowlEnv` is a
+compact primitive-geometry manipulation task for macro-control examples.
 """
 
 from torchrl.envs.custom.mujoco.ant import AntEnv
+from torchrl.envs.custom.mujoco.ball_bowl import BallBowlEnv
 from torchrl.envs.custom.mujoco.base import MujocoEnv
 from torchrl.envs.custom.mujoco.hopper import HopperEnv
 from torchrl.envs.custom.mujoco.humanoid import HumanoidEnv
@@ -29,6 +31,7 @@ from torchrl.envs.custom.mujoco.walker import Walker2dEnv
 
 __all__ = [
     "AntEnv",
+    "BallBowlEnv",
     "HopperEnv",
     "HumanoidEnv",
     "MujocoEnv",

@@ -204,7 +204,12 @@ exclude = [
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
-"torchrl" = ["csrc/*.h", "csrc/*.cu"]
+"torchrl" = [
+    "csrc/*.h",
+    "csrc/*.cu",
+    "envs/custom/mujoco/assets/*.xml",
+    "envs/custom/mujoco/assets/NOTICE",
+]
 
 [tool.codespell]
 skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/reference/generated,torchrl/_version.py,.worktrees,0.9"

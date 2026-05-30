@@ -7,18 +7,26 @@ satellite) across the three physics backends."""
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 import torch
 
 from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
+    BallBowlEnv,
+    Compose,
     HopperEnv,
     HumanoidEnv,
     MujocoEnv,
+    MultiAction,
     ParallelEnv,
     SatelliteEnv,
     SerialEnv,
+    TransformedEnv,
+    URScriptPrimitiveTransform,
     Walker2dEnv,
 )
 from torchrl.envs.custom.mujoco._backends import (
@@ -751,6 +759,94 @@ class TestMujoco:
         assert rgb.shape == torch.Size([n, 24, 24, 3])
         assert rgb.dtype == torch.uint8
 
+    @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
+    def test_ball_bowl_specs_and_rollout(self):
+        env = BallBowlEnv(seed=0, max_episode_steps=3)
+        check_env_specs(env)
+        assert env.action_spec.shape == torch.Size([1, 7])
+        assert env.observation_spec["robot_qpos"].shape == torch.Size([1, 6])
+        assert env.observation_spec["gripper_qpos"].shape == torch.Size([1, 2])
+        assert env.observation_spec["ball_pos"].shape == torch.Size([1, 3])
+        assert env.observation_spec["bowl_pos"].shape == torch.Size([1, 3])
+
+        td = env.rollout(2)
+        assert torch.isfinite(td.get(("next", "reward"))).all()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
+    def test_ball_bowl_construction_time_positions(self):
+        ball_position = (0.31, -0.11, 0.035)
+        bowl_position = (0.24, 0.17, 0.01)
+        env = BallBowlEnv(
+            ball_position=ball_position,
+            bowl_position=bowl_position,
+            seed=0,
+        )
+        td = env.reset()
+        torch.testing.assert_close(
+            td["ball_pos"],
+            torch.tensor([ball_position], dtype=td["ball_pos"].dtype),
+            atol=1e-6,
+            rtol=0.0,
+        )
+        torch.testing.assert_close(
+            td["bowl_pos"],
+            torch.tensor([[0.24, 0.17, 0.05]], dtype=td["bowl_pos"].dtype),
+            atol=1e-6,
+            rtol=0.0,
+        )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
+    def test_ball_bowl_menagerie_ur5e_when_available(self):
+        menagerie_path = os.environ.get(BallBowlEnv.MENAGERIE_ENV_VAR)
+        if menagerie_path is None or not Path(menagerie_path).exists():
+            pytest.skip("local MuJoCo Menagerie checkout is not available")
+
+        env = BallBowlEnv(
+            robot_model="menagerie_ur5e",
+            menagerie_path=menagerie_path,
+            seed=0,
+            max_episode_steps=3,
+        )
+        check_env_specs(env)
+        assert env.action_spec.shape == torch.Size([1, 7])
+        assert env.observation_spec["robot_qpos"].shape == torch.Size([1, 6])
+        assert env.observation_spec["gripper_qpos"].shape == torch.Size([1, 8])
+        assert env._backend.nq == 21
+        assert env._backend.nv == 20
+        assert env._backend.nu == 7
+
+    @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
+    def test_ball_bowl_urscript_macro_smoke(self):
+        base = BallBowlEnv(seed=0, max_episode_steps=20)
+        env = TransformedEnv(
+            base,
+            Compose(
+                MultiAction(stack_rewards=True),
+                URScriptPrimitiveTransform(
+                    macro_steps=2,
+                    open_gripper_ctrl=0.0,
+                    close_gripper_ctrl=0.038,
+                ),
+            ),
+        )
+        td = env.reset()
+        target_pose = torch.cat(
+            [
+                td["ball_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
+                torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+            ],
+            dim=-1,
+        )
+        td["primitive_id"] = torch.full(
+            (1, 1), URScriptPrimitiveTransform.MOVEL, dtype=torch.long
+        )
+        td["target_pose"] = target_pose
+        td["target_qpos"] = torch.zeros(1, 7)
+        td["gripper"] = torch.zeros(1, 1)
+
+        out = env.step(td)
+        assert torch.isfinite(out.get(("next", "reward"))).all()
+
     def test_xml_path_kwarg_overrides_class_attr(self, tmp_path):
         """Custom ``xml_path=`` overrides the class-level :attr:`XML_PATH`."""
         backend = _AVAILABLE_BACKENDS[0]
@@ -782,3 +878,7 @@ class TestMujoco:
         check_env_specs(env)
         td = env.rollout(3)
         assert td.shape == torch.Size([1, 3])
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

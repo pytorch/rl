@@ -74,6 +74,10 @@ from torchrl.envs.transforms._normalization import (
     RewardScaling,
     VecNorm,
 )
+from torchrl.envs.transforms._primitive import (
+    MacroPrimitiveTransform,
+    URScriptPrimitiveTransform,
+)
 from torchrl.envs.transforms._observation import (
     CatFrames,
     CenterCrop,
@@ -137,6 +141,7 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
+    "MacroPrimitiveTransform",
     "MultiAction",
     "NextObservationDelta",
     "NoopResetEnv",
@@ -167,6 +172,7 @@ __all__ = [
     "TrajCounter",
     "Transform",
     "TransformedEnv",
+    "URScriptPrimitiveTransform",
     "UnaryTransform",
     "UnsqueezeTransform",
     "VecGymEnvTransform",

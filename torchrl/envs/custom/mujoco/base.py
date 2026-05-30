@@ -52,7 +52,9 @@ class _MujocoMeta(_EnvPostInit):
         parallel: bool | None = None,
         **kwargs,
     ):
-        backend = kwargs.get("backend", "mujoco-torch")
+        backend = kwargs.get(
+            "backend", getattr(cls, "DEFAULT_BACKEND", "mujoco-torch")
+        )
         num_envs = int(kwargs.get("num_envs", 1))
         num_workers = int(num_workers)
 
@@ -142,6 +144,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         :class:`~torchrl.envs.custom.mujoco._backends._PhysicsBackend`.
     """
 
+    DEFAULT_BACKEND: ClassVar[BackendName] = "mujoco-torch"
     XML_PATH: ClassVar[str | Path | None] = None
     XML_URL: ClassVar[str | None] = None
     FRAME_SKIP: ClassVar[int] = 5
