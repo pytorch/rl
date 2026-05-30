@@ -5,7 +5,7 @@
 """Integration coverage for the recurrent-state lifecycle.
 
 Verifies that an LSTM policy run through
-``SyncDataCollector -> ReplayBuffer`` with a mid-batch trajectory boundary
+``Collector -> ReplayBuffer`` with a mid-batch trajectory boundary
 does **not** leak hidden state from one episode into the next. Unit-level
 coverage for ``LSTMModule`` lives in ``test/modules/test_rnn.py``;
 value-function-side coverage for ``set_recurrent_mode`` lives in
@@ -20,7 +20,7 @@ import argparse
 import pytest
 import torch
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import InitTracker, TransformedEnv
@@ -77,7 +77,7 @@ class TestLSTMRecurrentStateLifecycle:
     One test, structured in three phases:
 
     1. **Pipeline smoke**: build the policy, run it through
-       :class:`SyncDataCollector`, push the rollout through a
+       :class:`Collector`, push the rollout through a
        :class:`ReplayBuffer` with a :class:`SliceSampler` that respects
        trajectory boundaries. Assert ``is_init`` survives, mid-batch
        boundaries exist, and the recurrent-state keys propagate.
@@ -96,8 +96,8 @@ class TestLSTMRecurrentStateLifecycle:
         torch.manual_seed(0)
         env, policy, lstm_module = _build_env_and_policy()
 
-        # --- Phase 1: collect a batch through SyncDataCollector ---------
-        collector = SyncDataCollector(
+        # --- Phase 1: collect a batch through Collector -----------------
+        collector = Collector(
             env,
             policy=policy,
             frames_per_batch=FRAMES_PER_BATCH,
