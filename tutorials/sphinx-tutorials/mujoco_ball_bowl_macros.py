@@ -282,6 +282,24 @@ random_env.close()
 # Primitive actions: the 10000-foot view
 # --------------------------------------
 #
+# The names ``movej`` and ``movel`` come from Universal Robots' URScript
+# convention:
+#
+# - ``movej`` means "move in joint space". The command specifies target joint
+#   positions, and the controller interpolates from the current joint
+#   configuration to those targets. It is useful for returning to a home pose or
+#   moving through a posture that is known to be collision-free.
+# - ``movel`` means "move linearly in Cartesian space". The command specifies a
+#   target end-effector pose, and the controller follows a straight-line path for
+#   the tool center point. It is useful for approach, descend, lift and place
+#   motions where the gripper should move along a predictable line.
+#
+# In this TorchRL tutorial both commands are implemented as macro primitives
+# that expand into fixed-length low-level actuator targets. ``movej`` linearly
+# interpolates joint targets. ``movel`` interpolates Cartesian targets and calls
+# an inverse-kinematics solver to convert each waypoint into joint targets for
+# the MuJoCo environment.
+#
 # A primitive action is still a TensorDict. The policy-facing keys are:
 #
 # - ``primitive_id``: an integer id represented by
