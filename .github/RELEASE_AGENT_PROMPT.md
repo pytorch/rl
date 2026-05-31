@@ -230,13 +230,14 @@ Thanks to all contributors:
 
 ## Step 3: Update Version Files
 
-Update version in **all 3 required locations**:
+Update version in all required locations:
 
 | File | Variable/Content | Example |
 |------|------------------|---------|
-| `version.txt` | Version string | `0.11.0` |
-| `.github/scripts/td_script.sh` | `export TORCHRL_BUILD_VERSION=` | `export TORCHRL_BUILD_VERSION=0.11.0` |
-| `.github/scripts/version_script.bat` | `set TORCHRL_BUILD_VERSION=` | `set TORCHRL_BUILD_VERSION=0.11.0` |
+| `version.txt` | Version string | `0.13.0` |
+| `pyproject.toml` | `fallback_version =` | `fallback_version = "0.13.0"` |
+| `.github/scripts/td_script.sh` | `export TORCHRL_BUILD_VERSION=` | `export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.13.0}"` |
+| `.github/scripts/version_script.bat` | `set TORCHRL_BUILD_VERSION=` | `set TORCHRL_BUILD_VERSION=0.13.0` |
 
 ### Commands to update all files:
 
@@ -244,21 +245,24 @@ Update version in **all 3 required locations**:
 # 1. Root version.txt
 echo "{version_without_v}" > version.txt
 
-# 2. td_script.sh (Linux/macOS builds)
-sed -i 's/^export TORCHRL_BUILD_VERSION=.*/export TORCHRL_BUILD_VERSION={version_without_v}/' .github/scripts/td_script.sh
+# 2. pyproject fallback version
+sed -i 's/^fallback_version = .*/fallback_version = "{version_without_v}"/' pyproject.toml
 
-# 3. version_script.bat (Windows builds) - IMPORTANT: Don't forget this one!
-sed -i 's/^set TORCHRL_BUILD_VERSION=.*/set TORCHRL_BUILD_VERSION={version_without_v}/' .github/scripts/version_script.bat
+# 3. td_script.sh (Linux/macOS builds)
+sed -i 's/^export TORCHRL_BUILD_VERSION=.*/export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-{version_without_v}}"/' .github/scripts/td_script.sh
+
+# 4. version_script.bat (Windows builds) - IMPORTANT: Don't forget this one!
+sed -i 's/^    set TORCHRL_BUILD_VERSION=.*/    set TORCHRL_BUILD_VERSION={version_without_v}/' .github/scripts/version_script.bat
 ```
 
-**Note:** The release workflow includes sanity checks that verify all 3 files have matching versions. If any file is missed, the release will fail at the sanity check step.
+**Note:** The release workflow includes sanity checks that verify the release version files have matching versions. If any file is missed, the release will fail at the sanity check step.
 
 ### For Major Releases Only: Update pyproject.toml
 
 Update tensordict version constraint if major version changed:
 ```toml
-# For 0.11.x release, update to:
-"tensordict>=0.11.0,<0.12.0",
+# For 0.13.x release, update to:
+"tensordict>=0.13.0,<0.14.0",
 ```
 
 ---
@@ -269,7 +273,7 @@ Check that the version hasn't been bumped yet!
 If not:
 ```bash
 git checkout -b bump-v{version} origin/main
-git add version.txt .github/scripts/td_script.sh .github/scripts/version_script.bat pyproject.toml
+git add version.txt pyproject.toml .github/scripts/td_script.sh .github/scripts/version_script.bat
 git commit -m "Bump version to {version_without_v}"
 gh pr create -t "Bump version to {version_without_v}" -b ""
 ```
@@ -536,17 +540,16 @@ After completing all steps, provide this summary to the user:
 
 ## Version Naming Convention
 
-- **Major releases**: `v0.11.0`, `v0.12.0` - New features, may have breaking changes
-- **Minor/Patch releases**: `v0.11.1`, `v0.11.2` - Bug fixes only, no new features or user-facing changes
-- **Release candidates**: `v0.11.0-rc1` - Pre-release testing
+- **Major releases**: `v0.13.0`, `v0.14.0` - New features, may have breaking changes
+- **Minor/Patch releases**: `v0.13.1`, `v0.13.2` - Bug fixes only, no new features or user-facing changes
+- **Release candidates**: `v0.13.0-rc1` - Pre-release testing
 
 **Note:** PRs labeled `user-facing` must only be included in major releases, never in minor/patch releases.
 
 ## TensorDict Version Compatibility
 
 TorchRL and TensorDict versions must match in major version:
-- TorchRL `0.11.x` requires TensorDict `>=0.11.0,<0.12.0`
-- TorchRL `0.12.x` requires TensorDict `>=0.12.0,<0.13.0`
+- TorchRL `0.13.x` requires TensorDict `>=0.13.0,<0.14.0`
 
 Ensure TensorDict is released first, or coordinate releases.
 
