@@ -26,7 +26,7 @@ What you will learn
   into fixed-length low-level actions;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
   of poses and gripper commands;
-- how to reset and reuse one environment throughout a tutorial.
+- how to reset and reuse one environment across scripted scenes.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ if not _has_mujoco:
 # Environment
 # -----------
 #
-# This tutorial intentionally assumes that MuJoCo Menagerie assets are
-# available. Set ``TORCHRL_MUJOCO_MENAGERIE_PATH`` to a checkout containing the
+# The scene uses the MuJoCo Menagerie UR5e and Robotiq 2F-85 models. Set
+# ``TORCHRL_MUJOCO_MENAGERIE_PATH`` to a checkout containing the
 # ``universal_robots_ur5e`` and ``robotiq_2f85`` assets:
 #
 #   .. code-block:: bash
@@ -87,9 +87,9 @@ IK_KWARGS = {
 # A human-readable RobotAction
 # ----------------------------
 #
-# The public action we want in a tutorial is not a magic flat tensor and not a
-# loose collection of root TensorDict keys. It is one object under ``"action"``.
-# The factories below are the API a human writes:
+# A readable manipulation policy should not have to emit magic flat tensors or
+# loose collections of root TensorDict keys. It can emit one structured object
+# under ``"action"``. The factories below are the API a human writes:
 #
 # - ``RobotAction.reach_pose(position=..., quaternion=...)``;
 # - ``RobotAction.close_gripper()``;
@@ -317,12 +317,12 @@ def _gripper_code(gripper: GripperCommand) -> int:
 
 
 # %%
-# Create one environment
-# ----------------------
+# Create the MuJoCo scene
+# -----------------------
 #
-# The tutorial uses one environment and resets it between examples. There is no
-# fallback robot and no tutorial-side rendering path: all examples below use the
-# same Menagerie-backed :class:`~torchrl.envs.CubeBowlEnv` instance.
+# We start by constructing the cube-and-bowl task once. The environment owns the
+# MuJoCo model, action spec, reset logic and helper methods that translate
+# robot-arm commands into low-level actuator targets.
 
 env = CubeBowlEnv(
     seed=0,
@@ -342,9 +342,8 @@ assert env.low_level_action(observation["robot_qpos"]).shape[-1] == 7
 #
 # ``URScriptPrimitiveTransform`` expands a structured ``RobotAction`` into a
 # low-level action sequence. The transform also supports ``execute=True`` for
-# direct use in :class:`~torchrl.envs.TransformedEnv`; here we keep the expansion
-# visible so the tutorial can collect per-low-level-step diagnostics for the
-# final assertions.
+# direct use in :class:`~torchrl.envs.TransformedEnv`. Keeping the expansion
+# visible is useful when we want diagnostics for each low-level simulator step.
 
 primitive_transform = env.make_urscript_transform(
     macro_steps=16,
