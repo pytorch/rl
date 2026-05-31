@@ -52,7 +52,6 @@ from torchrl.collectors import (
     MultiAsyncCollector,
     MultiSyncCollector,
     ProfileConfig,
-    Collector,
     WeightUpdaterBase,
 )
 from torchrl.collectors._base import _ProfilerHook
