@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
 import sys
 
 import pytest
@@ -29,6 +30,8 @@ from torchrl.testing import (  # noqa
     retry,
 )
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
+
+_has_matplotlib = importlib.util.find_spec("matplotlib", None) is not None
 
 
 class TestTimer(TransformBase):
@@ -144,6 +147,19 @@ class TestVideoRecorder:
         assert len(recorder.obs) == 1
         stored = recorder.obs[0]
         assert stored.shape == (3, 64, 64)
+
+    @pytest.mark.skipif(not _has_matplotlib, reason="matplotlib not installed")
+    def test_video_recorder_to_animation(self):
+        from matplotlib.animation import ArtistAnimation
+
+        recorder = VideoRecorder(None, None, fps=30)
+        obs = torch.randint(0, 255, (3, 16, 16), dtype=torch.uint8)
+        recorder._apply_transform(obs)
+
+        anim = recorder.to_animation(title="test", clear=True)
+
+        assert isinstance(anim, ArtistAnimation)
+        assert recorder.obs == []
 
     def test_video_recorder_grayscale_batched(self):
         """Test that VideoRecorder handles batched grayscale observations."""

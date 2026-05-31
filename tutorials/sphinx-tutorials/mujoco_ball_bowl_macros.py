@@ -34,11 +34,8 @@ from __future__ import annotations
 import importlib.util
 import os
 
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import (
     BallBowlEnv,
     Compose,
@@ -48,6 +45,7 @@ from torchrl.envs import (
     URScriptPrimitiveTransform,
     step_mdp,
 )
+from torchrl.record import PixelRenderTransform, VideoRecorder
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -98,54 +96,77 @@ RENDER_WIDTH = 480
 RENDER_HEIGHT = 360
 VIDEO_INTERVAL_MS = 55
 
-# ``env_kwargs`` is the only branch that distinguishes the lightweight tutorial
-# scene from the optional Menagerie scene. The rest of the tutorial only depends
-# on the shared observation and action interface.
+# %%
+# The following dictionary is the only branch that distinguishes the lightweight
+# tutorial scene from the optional Menagerie scene. The rest of the tutorial only
+# depends on the shared observation and action interface.
+
 env_kwargs = {
     "robot_model": ROBOT_MODEL,
     "menagerie_path": MENAGERIE_PATH,
 }
 
+# %%
+# TorchRL records videos through two reusable transforms:
+# :class:`~torchrl.record.PixelRenderTransform` calls the environment's
+# ``render`` method and stores the result under ``"pixels"``;
+# :class:`~torchrl.record.VideoRecorder` accumulates these pixels and can either
+# dump them through a logger or expose them as a notebook/Sphinx animation.
+#
+# The small helpers used to avoid repeating the same boilerplate are hidden in
+# the rendered tutorial. They are ordinary TorchRL plumbing: create an env with a
+# pixel-rendering transform, pack primitive TensorDicts, and execute an expanded
+# primitive while the recorder collects frames.
 
-def render_frame(
-    env: BallBowlEnv | TransformedEnv,
+# sphinx_gallery_start_ignore
+
+def make_video_env(
     *,
-    width: int = RENDER_WIDTH,
-    height: int = RENDER_HEIGHT,
-) -> torch.Tensor:
-    """Render one RGB frame with MuJoCo's off-screen renderer."""
-    try:
-        return env.render(width=width, height=height)[0].cpu()
-    except Exception as err:
-        torchrl_logger.warning("MuJoCo rendering failed: %s", err)
-        return torch.zeros(height, width, 3, dtype=torch.uint8)
-
-
-def make_animation(
-    frames: list[torch.Tensor],
-    title: str,
-    *,
-    interval: int = VIDEO_INTERVAL_MS,
-) -> animation.ArtistAnimation:
-    """Turn MuJoCo RGB frames into a Sphinx-Gallery animation."""
-    fig, axis = plt.subplots(figsize=(6.0, 4.5))
-    axis.set_axis_off()
-    axis.set_title(title)
-    artists = [
-        [axis.imshow(frame.numpy(), animated=True)]
-        for frame in frames
-    ]
-    return animation.ArtistAnimation(
-        fig,
-        artists,
-        interval=interval,
-        blit=True,
-        repeat_delay=1000,
+    seed: int,
+    max_episode_steps: int,
+    macro_steps: int,
+) -> tuple[
+    TransformedEnv,
+    BallBowlEnv,
+    URScriptPrimitiveTransform,
+    VideoRecorder,
+    TensorDictBase,
+]:
+    base_env = BallBowlEnv(
+        seed=seed,
+        max_episode_steps=max_episode_steps,
+        **env_kwargs,
     )
+    recorder = VideoRecorder(
+        logger=None,
+        tag="pixels",
+        in_keys=["pixels"],
+        skip=1,
+        make_grid=False,
+    )
+    env = TransformedEnv(
+        base_env,
+        Compose(
+            PixelRenderTransform(width=RENDER_WIDTH, height=RENDER_HEIGHT),
+            recorder,
+        ),
+    )
+    primitive_transform = URScriptPrimitiveTransform(
+        macro_steps=macro_steps,
+        cartesian_solver=base_env._cartesian_pose_to_joint_target,
+        open_gripper_ctrl=GRIPPER_OPEN,
+        close_gripper_ctrl=GRIPPER_CLOSE,
+    )
+    observation = env.reset()
+    return env, base_env, primitive_transform, recorder, observation
+
+
+def repeat_last_frame(recorder: VideoRecorder, count: int) -> None:
+    if recorder.obs:
+        recorder.obs.extend(recorder.obs[-1].clone() for _ in range(count - 1))
 
 
 def action_from_robot_qpos(robot_qpos: torch.Tensor, gripper: float) -> torch.Tensor:
-    """Pack six arm joint targets and one gripper command as a 7D action."""
     action = torch.zeros(*robot_qpos.shape[:-1], 7, dtype=robot_qpos.dtype)
     action[..., :6] = robot_qpos
     action[..., -1] = float(gripper)
@@ -160,7 +181,6 @@ def make_primitive_td(
     target_qpos: torch.Tensor | None = None,
     gripper: float = 0.0,
 ) -> TensorDictBase:
-    """Create one batched primitive TensorDict from the latest observation."""
     batch_size = observation.batch_size
     if target_pose is None:
         target_pose = torch.zeros(*batch_size, 7)
@@ -177,7 +197,6 @@ def make_primitive_td(
 
 
 def pose_at(xyz: torch.Tensor) -> torch.Tensor:
-    """Pack an xyz target with an identity quaternion in wxyz order."""
     quat = torch.zeros(*xyz.shape[:-1], 4, dtype=xyz.dtype, device=xyz.device)
     quat[..., 0] = 1.0
     return torch.cat([xyz, quat], dim=-1)
@@ -188,56 +207,53 @@ def step_primitive(
     observation: TensorDictBase,
     primitive: TensorDictBase,
 ) -> TensorDictBase:
-    """Run one primitive through ``MultiAction`` and return the next observation."""
     primitive.update(observation.select(*env.observation_keys))
     transition = env.step(primitive)
     return step_mdp(transition)
 
 
 def record_primitive(
-    env: BallBowlEnv,
+    env: TransformedEnv,
     transform: URScriptPrimitiveTransform,
     observation: TensorDictBase,
     primitive: TensorDictBase,
-    frames: list[torch.Tensor],
 ) -> TensorDictBase:
-    """Expand one primitive and record every low-level MuJoCo step."""
+    primitive.update(observation.select(*env.observation_keys))
     expanded = transform.inv(primitive)
     for action in expanded["action"][0]:
         transition = env.step(observation.clone().set("action", action.view(1, 7)))
         observation = step_mdp(transition)
-        frames.append(render_frame(env))
     return observation
 
+# sphinx_gallery_end_ignore
 
-def make_recording_env(
-    *,
-    seed: int,
-    max_episode_steps: int,
-    macro_steps: int,
-) -> tuple[BallBowlEnv, URScriptPrimitiveTransform, TensorDictBase, list[torch.Tensor]]:
-    """Create an env, macro transform and initial frame buffer for videos."""
-    env = BallBowlEnv(seed=seed, max_episode_steps=max_episode_steps, **env_kwargs)
-    transform = URScriptPrimitiveTransform(
-        macro_steps=macro_steps,
-        cartesian_solver=env._cartesian_pose_to_joint_target,
-        open_gripper_ctrl=GRIPPER_OPEN,
-        close_gripper_ctrl=GRIPPER_CLOSE,
-    )
-    observation = env.reset()
-    frames = [render_frame(env)]
-    return env, transform, observation, frames
-
+# %%
+# We can now instantiate the base environment exactly like any other TorchRL
+# environment and inspect the shape of its observations and actions.
 
 env = BallBowlEnv(seed=0, max_episode_steps=200, **env_kwargs)
 obs = env.reset()
 assert obs["robot_qpos"].shape[-1] == 6
 assert env.action_spec.shape[-1] == 7
+env.close()
 
-initial_scene_animation = make_animation(
-    [render_frame(env)] * 12,
-    "Initial BallBowl scene",
+# %%
+# This first video is a reset frame recorded with
+# :class:`~torchrl.record.VideoRecorder`. Keeping it as a video rather than a
+# static image lets the rendered tutorial use the same path for every visual.
+
+initial_env, _, _, initial_recorder, _ = make_video_env(
+    seed=0,
+    max_episode_steps=20,
+    macro_steps=8,
 )
+repeat_last_frame(initial_recorder, 12)
+initial_scene_animation = initial_recorder.to_animation(
+    title="Initial BallBowl scene",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
+)
+initial_env.close()
 
 # %%
 # A plain rollout with random low-level actions already works because
@@ -245,15 +261,21 @@ initial_scene_animation = make_animation(
 # robot policy: the random action is a raw seven-dimensional actuator command,
 # so it has no notion of "move above the ball" or "open the gripper".
 
-random_frames = [render_frame(env)]
-for _ in range(24):
-    random_action = env.action_spec.rand()
-    obs = step_mdp(env.step(obs.clone().set("action", random_action)))
-    random_frames.append(render_frame(env))
-random_rollout_animation = make_animation(
-    random_frames,
-    "Random low-level actuator commands",
+random_env, _, _, random_recorder, observation = make_video_env(
+    seed=1,
+    max_episode_steps=80,
+    macro_steps=8,
 )
+for _ in range(24):
+    random_action = random_env.action_spec.rand()
+    transition = random_env.step(observation.clone().set("action", random_action))
+    observation = step_mdp(transition)
+random_rollout_animation = random_recorder.to_animation(
+    title="Random low-level actuator commands",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
+)
+random_env.close()
 
 
 # %%
@@ -295,7 +317,7 @@ primitive_transform = URScriptPrimitiveTransform(
 
 movej_td = TensorDict(
     {
-        "primitive_id": torch.tensor([[URScriptPrimitive.MOVEJ]]),
+        "primitive_id": torch.tensor([[int(URScriptPrimitive.MOVEJ)]]),
         "target_qpos": torch.zeros(1, 7),
         "target_pose": torch.zeros(1, 7),
         "robot_qpos": obs["robot_qpos"],
@@ -324,7 +346,7 @@ assert expanded["action"].shape == torch.Size([1, 8, 7])
 #    then let ``MultiAction`` execute that sequence.
 
 macro_env = TransformedEnv(
-    BallBowlEnv(seed=1, max_episode_steps=400, **env_kwargs),
+    BallBowlEnv(seed=2, max_episode_steps=400, **env_kwargs),
     Compose(
         MultiAction(stack_rewards=False),
         URScriptPrimitiveTransform(
@@ -358,18 +380,22 @@ observation = step_primitive(
     ),
 )
 assert "success" in observation.keys()
+macro_env.close()
 
-# The video below records the same style of primitives at the *low-level* MuJoCo
-# step rate. For documentation, this is more informative than one frame per
-# high-level primitive.
-primitive_env, primitive_video_transform, observation, primitive_frames = (
-    make_recording_env(seed=3, max_episode_steps=120, macro_steps=18)
+# %%
+# The next video records the same pair of primitives at the low-level MuJoCo step
+# rate. The rendered clip is produced by :meth:`~torchrl.record.VideoRecorder.to_animation`.
+
+primitive_env, _, primitive_transform, primitive_recorder, observation = make_video_env(
+    seed=3,
+    max_episode_steps=120,
+    macro_steps=18,
 )
 movej_target = action_from_robot_qpos(observation["robot_qpos"], GRIPPER_OPEN)
 movej_target[..., 0] = movej_target[..., 0] + 0.35
 observation = record_primitive(
     primitive_env,
-    primitive_video_transform,
+    primitive_transform,
     observation,
     make_primitive_td(
         observation,
@@ -377,23 +403,23 @@ observation = record_primitive(
         target_qpos=movej_target,
         gripper=GRIPPER_OPEN,
     ),
-    primitive_frames,
 )
 observation = record_primitive(
     primitive_env,
-    primitive_video_transform,
+    primitive_transform,
     observation,
     make_primitive_td(
         observation,
         URScriptPrimitive.CLOSE_GRIPPER,
         gripper=GRIPPER_CLOSE,
     ),
-    primitive_frames,
 )
-primitive_animation = make_animation(
-    primitive_frames,
-    "One movej primitive followed by one close-gripper primitive",
+primitive_animation = primitive_recorder.to_animation(
+    title="One movej primitive followed by one close-gripper primitive",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
 )
+primitive_env.close()
 
 
 # %%
@@ -411,7 +437,7 @@ primitive_animation = make_animation(
 # ``movel`` to place the gripper pinch site at a Cartesian target, except the
 # final ``movej`` that returns to the initial joint configuration.
 
-task_env, task_video_transform, observation, task_frames = make_recording_env(
+task_env, _, task_transform, task_recorder, observation = make_video_env(
     seed=4,
     max_episode_steps=500,
     macro_steps=20,
@@ -425,7 +451,7 @@ bowl = observation["bowl_pos"]
 above_ball = pose_at(ball + torch.tensor([[0.0, 0.0, 0.14]]))
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
@@ -433,7 +459,6 @@ observation = record_primitive(
         target_pose=above_ball,
         gripper=GRIPPER_OPEN,
     ),
-    task_frames,
 )
 
 # 2. Descend to the ball. This offset is close to the ball center height; in a
@@ -441,7 +466,7 @@ observation = record_primitive(
 grip_ball = pose_at(ball + torch.tensor([[0.0, 0.0, 0.045]]))
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
@@ -449,20 +474,18 @@ observation = record_primitive(
         target_pose=grip_ball,
         gripper=GRIPPER_OPEN,
     ),
-    task_frames,
 )
 
 # 3. Close the gripper around the ball.
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
         URScriptPrimitive.CLOSE_GRIPPER,
         gripper=GRIPPER_CLOSE,
     ),
-    task_frames,
 )
 
 # 4. Lift the ball before moving sideways. This avoids scraping the ball across
@@ -470,7 +493,7 @@ observation = record_primitive(
 lift_ball = pose_at(ball + torch.tensor([[0.0, 0.0, 0.18]]))
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
@@ -478,14 +501,13 @@ observation = record_primitive(
         target_pose=lift_ball,
         gripper=GRIPPER_CLOSE,
     ),
-    task_frames,
 )
 
 # 5. Move above the bowl, still holding the gripper command closed.
 above_bowl = pose_at(bowl + torch.tensor([[0.0, 0.0, 0.16]]))
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
@@ -493,14 +515,13 @@ observation = record_primitive(
         target_pose=above_bowl,
         gripper=GRIPPER_CLOSE,
     ),
-    task_frames,
 )
 
 # 6. Lower to the bowl target and open the gripper.
 place_in_bowl = pose_at(bowl + torch.tensor([[0.0, 0.0, 0.075]]))
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
@@ -508,18 +529,16 @@ observation = record_primitive(
         target_pose=place_in_bowl,
         gripper=GRIPPER_CLOSE,
     ),
-    task_frames,
 )
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
         URScriptPrimitive.OPEN_GRIPPER,
         gripper=GRIPPER_OPEN,
     ),
-    task_frames,
 )
 
 # 7. Return to the initial joint configuration. This illustrates that a macro
@@ -527,7 +546,7 @@ observation = record_primitive(
 home_target = action_from_robot_qpos(initial_robot_qpos, GRIPPER_OPEN)
 observation = record_primitive(
     task_env,
-    task_video_transform,
+    task_transform,
     observation,
     make_primitive_td(
         observation,
@@ -535,14 +554,15 @@ observation = record_primitive(
         target_qpos=home_target,
         gripper=GRIPPER_OPEN,
     ),
-    task_frames,
 )
-scripted_macro_animation = make_animation(
-    task_frames,
-    "Scripted macro: pick the ball, place it at the bowl, return home",
+scripted_macro_animation = task_recorder.to_animation(
+    title="Scripted macro: pick the ball, place it at the bowl, return home",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
 )
 
 assert "success" in observation.keys()
+task_env.close()
 
 
 # %%
@@ -563,6 +583,7 @@ assert "success" in observation.keys()
 # those bodies as movable joints or mocap targets and checking that new poses are
 # collision-free.
 
+# sphinx_gallery_start_ignore
 
 def make_randomized_env(index: int) -> BallBowlEnv:
     offset = 0.025 * float(index)
@@ -587,6 +608,7 @@ def make_randomized_env(index: int) -> BallBowlEnv:
         **env_kwargs,
     )
 
+# sphinx_gallery_end_ignore
 
 randomized_envs = [make_randomized_env(index) for index in range(4)]
 randomized_observations = [randomized_env.reset() for randomized_env in randomized_envs]
@@ -595,20 +617,25 @@ assert not torch.equal(
     randomized_observations[1]["ball_pos"][..., 1],
 )
 
-randomized_frames = []
+randomization_recorder = VideoRecorder(
+    logger=None,
+    tag="randomized",
+    in_keys=["pixels"],
+    skip=1,
+    make_grid=False,
+)
 for randomized_env in randomized_envs:
-    randomized_frames.extend([render_frame(randomized_env)] * 12)
-randomization_animation = make_animation(
-    randomized_frames,
-    "Construction-time randomization of ball and bowl placement",
+    pixels = randomized_env.render(width=RENDER_WIDTH, height=RENDER_HEIGHT)
+    randomization_recorder._apply_transform(pixels)
+    repeat_last_frame(randomization_recorder, 12)
+randomization_animation = randomization_recorder.to_animation(
+    title="Construction-time randomization of ball and bowl placement",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
 )
 
 for randomized_env in randomized_envs:
     randomized_env.close()
-task_env.close()
-primitive_env.close()
-macro_env.close()
-env.close()
 
 
 # %%
@@ -634,3 +661,6 @@ env.close()
 #      preset used in this tutorial.
 #    - :class:`~torchrl.envs.MultiAction` for executing batched low-level action
 #      sequences.
+#    - :class:`~torchrl.record.PixelRenderTransform` and
+#      :class:`~torchrl.record.VideoRecorder` for rendering and recording
+#      simulator videos.
