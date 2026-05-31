@@ -318,7 +318,7 @@ termination semantics. :class:`~torchrl.envs.SatelliteEnv` is an
 attitude-control task with a 4- or 6-CMG cluster and a
 manipulability-based singularity penalty driving the policy away from
 internal singular configurations of the gimbal Jacobian.
-:class:`~torchrl.envs.BallBowlEnv` is a compact primitive-geometry
+:class:`~torchrl.envs.CubeBowlEnv` is a compact primitive-geometry
 manipulation task for scripted MuJoCo macro-control examples, with an
 optional local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
 
@@ -328,7 +328,7 @@ optional local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
 
     MujocoEnv
     AntEnv
-    BallBowlEnv
+    CubeBowlEnv
     HopperEnv
     HumanoidEnv
     SatelliteEnv

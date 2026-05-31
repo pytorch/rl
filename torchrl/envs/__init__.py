@@ -8,7 +8,7 @@ from .batched_envs import ParallelEnv, SerialEnv
 from .common import EnvBase, EnvMetaData, make_tensordict
 from .custom import (
     AntEnv,
-    BallBowlEnv,
+    CubeBowlEnv,
     ChessEnv,
     FinancialRegimeEnv,
     HopperEnv,
@@ -158,7 +158,7 @@ __all__ = [
     "ActionMask",
     "ActionScaling",
     "AntEnv",
-    "BallBowlEnv",
+    "CubeBowlEnv",
     "VecNormV2",
     "IsaacLabWrapper",
     "AutoResetEnv",

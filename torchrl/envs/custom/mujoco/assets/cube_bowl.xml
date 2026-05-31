@@ -1,4 +1,4 @@
-<mujoco model="ball_bowl">
+<mujoco model="cube_bowl">
   <compiler angle="radian" autolimits="true"/>
   <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" cone="elliptic"/>
 
@@ -28,16 +28,16 @@
 
     <body name="bowl" pos="0.28 0.19 0.01">
       <geom name="bowl_bottom" type="cylinder" size="0.07 0.008" material="bowl_mat"/>
-      <geom name="bowl_front" type="box" pos="0 -0.067 0.014" size="0.072 0.006 0.014" material="bowl_mat"/>
+      <geom name="bowl_front" type="box" pos="0 -0.067 0.035" size="0.072 0.006 0.035" material="bowl_mat"/>
       <geom name="bowl_back" type="box" pos="0 0.067 0.035" size="0.072 0.006 0.035" material="bowl_mat"/>
       <geom name="bowl_left" type="box" pos="-0.067 0 0.035" size="0.006 0.072 0.035" material="bowl_mat"/>
       <geom name="bowl_right" type="box" pos="0.067 0 0.035" size="0.006 0.072 0.035" material="bowl_mat"/>
       <site name="bowl_target" pos="0 0 0.04" size="0.01" rgba="0.1 0.9 0.1 0.7"/>
     </body>
 
-    <body name="ball" pos="0.34 -0.14 0.035">
-      <freejoint name="ball_freejoint"/>
-      <geom name="ball_geom" type="box" size="0.022 0.022 0.022" mass="0.02" friction="3 0.05 0.001" condim="4" solimp="0.95 0.99 0.001" solref="0.004 1" material="cube_mat"/>
+    <body name="cube" pos="0.34 -0.14 0.035">
+      <freejoint name="cube_freejoint"/>
+      <geom name="cube_geom" type="box" size="0.022 0.022 0.022" mass="0.02" friction="3 0.05 0.001" condim="4" solimp="0.95 0.99 0.001" solref="0.004 1" material="cube_mat"/>
     </body>
 
     <body name="robot/base" pos="0 0 0.02">

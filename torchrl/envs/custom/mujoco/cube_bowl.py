@@ -23,10 +23,10 @@ from torchrl.envs.custom.mujoco.base import MujocoEnv
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
 
-class BallBowlEnv(MujocoEnv):
+class CubeBowlEnv(MujocoEnv):
     r"""UR-style cube-to-bowl manipulation scene.
 
-    ``BallBowlEnv`` is a compact MuJoCo task meant for tutorials on custom
+    ``CubeBowlEnv`` is a compact MuJoCo task meant for tutorials on custom
     MuJoCo environments, action sequences, and scripted robot primitives. The
     default bundled MJCF uses only primitive geoms: a six-joint arm, a simple
     two-finger gripper, a free cube, and a static bowl. For demos, the
@@ -46,9 +46,7 @@ class BallBowlEnv(MujocoEnv):
         menagerie_path: optional path to a local ``mujoco_menagerie`` checkout.
             When ``robot_model="menagerie_ur5e"`` and this is omitted, the
             ``TORCHRL_MUJOCO_MENAGERIE_PATH`` environment variable is used.
-        ball_position: initial xyz position of the cube center. The historical
-            key name is kept for compatibility with early versions of this
-            tutorial.
+        cube_position: initial xyz position of the cube center.
         bowl_position: xyz position of the bowl body. The task target is the
             ``bowl_target`` site inside that body.
         placement_tolerance: success radius, in meters, around the bowl target.
@@ -59,28 +57,28 @@ class BallBowlEnv(MujocoEnv):
         \*\*kwargs: forwarded to :class:`~torchrl.envs.MujocoEnv`.
 
     Examples:
-        >>> from torchrl.envs import BallBowlEnv  # doctest: +SKIP
-        >>> env = BallBowlEnv(max_episode_steps=50)  # doctest: +SKIP
+        >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
+        >>> env = CubeBowlEnv(max_episode_steps=50)  # doctest: +SKIP
         >>> td = env.rollout(3)  # doctest: +SKIP
     """
 
     DEFAULT_BACKEND = "mujoco"
-    XML_PATH = "ball_bowl.xml"
+    XML_PATH = "cube_bowl.xml"
     FRAME_SKIP = 5
     RESET_NOISE_SCALE = 0.0
     OBJECT_HALF_SIZE = 0.022
-    BALL_RADIUS = OBJECT_HALF_SIZE
+    CUBE_HALF_SIZE = OBJECT_HALF_SIZE
     ROBOT_QPOS_DIM = 6
     GRIPPER_QPOS_DIM = 2
-    BALL_QPOS_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
-    BALL_QVEL_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
+    CUBE_QPOS_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
+    CUBE_QVEL_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
     PINCH_SITE_NAME = "pinch"
     BOWL_TARGET_SITE_NAME = "bowl_target"
-    DEFAULT_BALL_POSITION = (0.34, -0.14, 0.035)
+    DEFAULT_CUBE_POSITION = (0.34, -0.14, 0.035)
     DEFAULT_BOWL_POSITION = (0.28, 0.19, 0.01)
     BOWL_TARGET_OFFSET = (0.0, 0.0, 0.04)
     MENAGERIE_ENV_VAR = "TORCHRL_MUJOCO_MENAGERIE_PATH"
-    MENAGERIE_BALL_POSITION = (0.45, -0.18, 0.035)
+    MENAGERIE_CUBE_POSITION = (0.45, -0.18, 0.035)
     MENAGERIE_BOWL_POSITION = (0.45, 0.08, 0.01)
     MENAGERIE_BOWL_TARGET_OFFSET = (0.0, 0.0, 0.015)
     MENAGERIE_GRIPPER_QPOS_DIM = 8
@@ -110,7 +108,7 @@ class BallBowlEnv(MujocoEnv):
         *,
         robot_model: Literal["primitive", "menagerie_ur5e"] = "primitive",
         menagerie_path: str | Path | None = None,
-        ball_position: tuple[float, float, float] | None = None,
+        cube_position: tuple[float, float, float] | None = None,
         bowl_position: tuple[float, float, float] | None = None,
         placement_tolerance: float = 0.06,
         terminate_on_success: bool = False,
@@ -119,7 +117,7 @@ class BallBowlEnv(MujocoEnv):
     ) -> None:
         self.robot_model = robot_model
         if robot_model == "primitive":
-            default_ball_position = self.DEFAULT_BALL_POSITION
+            default_cube_position = self.DEFAULT_CUBE_POSITION
             default_bowl_position = self.DEFAULT_BOWL_POSITION
             self._gripper_qpos_dim = self.GRIPPER_QPOS_DIM
             self._pinch_site_name = self.PINCH_SITE_NAME
@@ -127,7 +125,7 @@ class BallBowlEnv(MujocoEnv):
             self._robot_home_qpos = None
             self._menagerie_path = None
         elif robot_model == "menagerie_ur5e":
-            default_ball_position = self.MENAGERIE_BALL_POSITION
+            default_cube_position = self.MENAGERIE_CUBE_POSITION
             default_bowl_position = self.MENAGERIE_BOWL_POSITION
             self._gripper_qpos_dim = self.MENAGERIE_GRIPPER_QPOS_DIM
             self._pinch_site_name = self.MENAGERIE_PINCH_SITE_NAME
@@ -139,16 +137,16 @@ class BallBowlEnv(MujocoEnv):
                 "robot_model must be one of 'primitive' or 'menagerie_ur5e', "
                 f"got {robot_model!r}."
             )
-        if ball_position is None:
-            ball_position = default_ball_position
+        if cube_position is None:
+            cube_position = default_cube_position
         if bowl_position is None:
             bowl_position = default_bowl_position
-        self.ball_position = tuple(float(v) for v in ball_position)
+        self.cube_position = tuple(float(v) for v in cube_position)
         self.bowl_position = tuple(float(v) for v in bowl_position)
         self.placement_tolerance = float(placement_tolerance)
         self.terminate_on_success = bool(terminate_on_success)
-        self._ball_qpos_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
-        self._ball_qvel_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
+        self._cube_qpos_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
+        self._cube_qvel_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
         self._pinch_site_id: int | None = None
         self._bowl_target_site_id: int | None = None
         self._left_pad_geom_ids: tuple[int, ...] = ()
@@ -178,10 +176,10 @@ class BallBowlEnv(MujocoEnv):
             self._robot_qpos_indices = tuple(range(self.ROBOT_QPOS_DIM))
             self._robot_qvel_indices = tuple(range(self.ROBOT_QPOS_DIM))
             self._gripper_qpos_indices = tuple(
-                range(self.ROBOT_QPOS_DIM, self._ball_qpos_start)
+                range(self.ROBOT_QPOS_DIM, self._cube_qpos_start)
             )
             self._gripper_qvel_indices = tuple(
-                range(self.ROBOT_QPOS_DIM, self._ball_qvel_start)
+                range(self.ROBOT_QPOS_DIM, self._cube_qvel_start)
             )
             return
 
@@ -197,24 +195,24 @@ class BallBowlEnv(MujocoEnv):
         for name in robot_joint_names:
             joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
             if joint_id < 0:
-                raise ValueError(f"BallBowlEnv XML is missing joint {name!r}.")
+                raise ValueError(f"CubeBowlEnv XML is missing joint {name!r}.")
             robot_qpos_indices.append(int(model.jnt_qposadr[joint_id]))
             robot_qvel_indices.append(int(model.jnt_dofadr[joint_id]))
 
-        ball_joint_id = mujoco.mj_name2id(
-            model, mujoco.mjtObj.mjOBJ_JOINT, "ball_freejoint"
+        cube_joint_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_JOINT, "cube_freejoint"
         )
-        if ball_joint_id < 0:
-            raise ValueError("BallBowlEnv XML is missing joint 'ball_freejoint'.")
-        self._ball_qpos_start = int(model.jnt_qposadr[ball_joint_id])
-        self._ball_qvel_start = int(model.jnt_dofadr[ball_joint_id])
+        if cube_joint_id < 0:
+            raise ValueError("CubeBowlEnv XML is missing joint 'cube_freejoint'.")
+        self._cube_qpos_start = int(model.jnt_qposadr[cube_joint_id])
+        self._cube_qvel_start = int(model.jnt_dofadr[cube_joint_id])
 
         robot_joint_set = set(robot_qpos_indices)
         gripper_qpos_indices: list[int] = []
         gripper_qvel_indices: list[int] = []
         for joint_id in range(model.njnt):
             qpos_adr = int(model.jnt_qposadr[joint_id])
-            if qpos_adr in robot_joint_set or qpos_adr == self._ball_qpos_start:
+            if qpos_adr in robot_joint_set or qpos_adr == self._cube_qpos_start:
                 continue
             name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, joint_id)
             if name is not None and name.startswith("gripper/"):
@@ -253,13 +251,13 @@ class BallBowlEnv(MujocoEnv):
 
     def _patch_scene_xml(self, xml: str) -> str:
         root = ET.fromstring(xml)
-        ball = root.find(".//body[@name='ball']")
-        if ball is None:
-            raise ValueError("BallBowlEnv XML is missing body name='ball'.")
-        ball.set("pos", self._format_vec(self.ball_position))
+        cube = root.find(".//body[@name='cube']")
+        if cube is None:
+            raise ValueError("CubeBowlEnv XML is missing body name='cube'.")
+        cube.set("pos", self._format_vec(self.cube_position))
         bowl = root.find(".//body[@name='bowl']")
         if bowl is None:
-            raise ValueError("BallBowlEnv XML is missing body name='bowl'.")
+            raise ValueError("CubeBowlEnv XML is missing body name='bowl'.")
         bowl.set("pos", self._format_vec(self.bowl_position))
         return ET.tostring(root, encoding="unicode")
 
@@ -477,16 +475,12 @@ class BallBowlEnv(MujocoEnv):
             wall_half_height=0.04,
             target_height=self._bowl_target_offset[2],
         )
-        bowl_front = bowl.find("geom[@name='bowl_front']")
-        if bowl_front is not None:
-            bowl_front.set("pos", "0 -0.075 0.014")
-            bowl_front.set("size", "0.08 0.006 0.014")
         bowl_bottom = bowl.find("geom[@name='bowl_bottom']")
         if bowl_bottom is not None:
             bowl_bottom.set("friction", "1 0.02 0.001")
-        ball = self._make_ball_body()
+        cube = self._make_cube_body()
         worldbody.append(bowl)
-        worldbody.append(ball)
+        worldbody.append(cube)
         for geom in root.iter("geom"):
             if geom.attrib.get("name") in (
                 "gripper/left_pad1",
@@ -571,16 +565,16 @@ class BallBowlEnv(MujocoEnv):
         )
         return bowl
 
-    def _make_ball_body(self) -> ET.Element:
-        ball = ET.Element(
-            "body", {"name": "ball", "pos": self._format_vec(self.ball_position)}
+    def _make_cube_body(self) -> ET.Element:
+        cube = ET.Element(
+            "body", {"name": "cube", "pos": self._format_vec(self.cube_position)}
         )
-        ET.SubElement(ball, "freejoint", {"name": "ball_freejoint"})
+        ET.SubElement(cube, "freejoint", {"name": "cube_freejoint"})
         ET.SubElement(
-            ball,
+            cube,
             "geom",
             {
-                "name": "ball_geom",
+                "name": "cube_geom",
                 "type": "box",
                 "size": (
                     f"{self.OBJECT_HALF_SIZE:.8g} "
@@ -595,7 +589,7 @@ class BallBowlEnv(MujocoEnv):
                 "rgba": "0.95 0.35 0.15 1",
             },
         )
-        return ball
+        return cube
 
     # ------------------------------------------------------------------
     # Specs and reset state.
@@ -635,10 +629,10 @@ class BallBowlEnv(MujocoEnv):
             gripper_right_pad_pos=Unbounded(
                 shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
             ),
-            ball_pos=Unbounded(
+            cube_pos=Unbounded(
                 shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
             ),
-            ball_quat=Unbounded(
+            cube_quat=Unbounded(
                 shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
             ),
             bowl_pos=Unbounded(
@@ -664,19 +658,19 @@ class BallBowlEnv(MujocoEnv):
             qpos[..., self._robot_qpos_indices] = torch.tensor(
                 self._robot_home_qpos, dtype=qpos.dtype, device=qpos.device
             )
-        ball_pos = torch.tensor(
-            self.ball_position, dtype=qpos.dtype, device=qpos.device
+        cube_pos = torch.tensor(
+            self.cube_position, dtype=qpos.dtype, device=qpos.device
         ).expand(n, 3)
-        if tensordict is not None and "ball_pos" in tensordict.keys(True, True):
-            ball_pos = tensordict.get("ball_pos").to(
+        if tensordict is not None and "cube_pos" in tensordict.keys(True, True):
+            cube_pos = tensordict.get("cube_pos").to(
                 device=qpos.device, dtype=qpos.dtype
             )
-            ball_pos = ball_pos.reshape(n, 3)
-        qpos[..., self._ball_qpos_start : self._ball_qpos_start + 3] = ball_pos
-        qpos[..., self._ball_qpos_start + 3 : self._ball_qpos_start + 7] = torch.tensor(
+            cube_pos = cube_pos.reshape(n, 3)
+        qpos[..., self._cube_qpos_start : self._cube_qpos_start + 3] = cube_pos
+        qpos[..., self._cube_qpos_start + 3 : self._cube_qpos_start + 7] = torch.tensor(
             (1.0, 0.0, 0.0, 0.0), dtype=qpos.dtype, device=qpos.device
         )
-        qvel[..., self._ball_qvel_start : self._ball_qvel_start + 6] = 0.0
+        qvel[..., self._cube_qvel_start : self._cube_qvel_start + 6] = 0.0
         return qpos, qvel
 
     # ------------------------------------------------------------------
@@ -697,7 +691,7 @@ class BallBowlEnv(MujocoEnv):
     def _make_obs_split(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         qpos = state["qpos"].to(self.dtype)
         qvel = state["qvel"].to(self.dtype)
-        ball_pos = qpos[..., self._ball_qpos_start : self._ball_qpos_start + 3]
+        cube_pos = qpos[..., self._cube_qpos_start : self._cube_qpos_start + 3]
         bowl_pos = self._target_pos().expand(self.num_envs, 3)
         pinch_pos = self._pinch_pos().to(self.dtype)
         return {
@@ -713,12 +707,12 @@ class BallBowlEnv(MujocoEnv):
             "gripper_right_pad_pos": self._pad_pos(
                 self._right_pad_geom_ids, fallback=pinch_pos
             ).to(self.dtype),
-            "ball_pos": ball_pos.clone(),
-            "ball_quat": qpos[
-                ..., self._ball_qpos_start + 3 : self._ball_qpos_start + 7
+            "cube_pos": cube_pos.clone(),
+            "cube_quat": qpos[
+                ..., self._cube_qpos_start + 3 : self._cube_qpos_start + 7
             ].clone(),
             "bowl_pos": bowl_pos.clone(),
-            "success": self._success(ball_pos, bowl_pos),
+            "success": self._success(cube_pos, bowl_pos),
         }
 
     def _compute_reward(
@@ -728,11 +722,11 @@ class BallBowlEnv(MujocoEnv):
         next_state: TensorDictBase,
     ) -> torch.Tensor:
         del state, action
-        ball_pos = next_state["qpos"].to(self.dtype)[
-            ..., self._ball_qpos_start : self._ball_qpos_start + 3
+        cube_pos = next_state["qpos"].to(self.dtype)[
+            ..., self._cube_qpos_start : self._cube_qpos_start + 3
         ]
         target = self._target_pos().expand(self.num_envs, 3)
-        return self._success(ball_pos, target).to(self.dtype)
+        return self._success(cube_pos, target).to(self.dtype)
 
     def _compute_done(
         self,
@@ -742,13 +736,13 @@ class BallBowlEnv(MujocoEnv):
         del state
         if not self.terminate_on_success:
             return torch.zeros(self.num_envs, 1, dtype=torch.bool, device=self.device)
-        ball_pos = next_state["qpos"].to(self.dtype)[
-            ..., self._ball_qpos_start : self._ball_qpos_start + 3
+        cube_pos = next_state["qpos"].to(self.dtype)[
+            ..., self._cube_qpos_start : self._cube_qpos_start + 3
         ]
-        return self._success(ball_pos, self._target_pos().expand(self.num_envs, 3))
+        return self._success(cube_pos, self._target_pos().expand(self.num_envs, 3))
 
-    def _success(self, ball_pos: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        dist = (ball_pos - target).norm(dim=-1, keepdim=True)
+    def _success(self, cube_pos: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        dist = (cube_pos - target).norm(dim=-1, keepdim=True)
         return dist <= self.placement_tolerance
 
     # ------------------------------------------------------------------

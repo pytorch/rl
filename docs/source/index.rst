@@ -116,7 +116,7 @@ Intermediate
    tutorials/torchrl_envs
    tutorials/pretrained_models
    tutorials/dqn_with_rnn
-   tutorials/mujoco_ball_bowl_macros
+   tutorials/mujoco_cube_bowl_macros
    tutorials/collector_trajectory_assembly
    tutorials/evaluator
    tutorials/rb_tutorial

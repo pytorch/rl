@@ -7,7 +7,7 @@ from .chess import ChessEnv
 from .llm import LLMHashingEnv
 from .mujoco import (
     AntEnv,
-    BallBowlEnv,
+    CubeBowlEnv,
     HopperEnv,
     HumanoidEnv,
     MujocoEnv,
@@ -20,7 +20,7 @@ from .trading import FinancialRegimeEnv
 
 __all__ = [
     "AntEnv",
-    "BallBowlEnv",
+    "CubeBowlEnv",
     "ChessEnv",
     "FinancialRegimeEnv",
     "HopperEnv",
