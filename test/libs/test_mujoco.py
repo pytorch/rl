@@ -44,7 +44,7 @@ from torchrl.envs.custom.mujoco._math import (
     quat_mul,
     random_unit_quat,
 )
-from torchrl.envs.utils import check_env_specs
+from torchrl.envs.utils import check_env_specs, step_mdp
 
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
@@ -766,6 +766,8 @@ class TestMujoco:
         assert env.action_spec.shape == torch.Size([1, 7])
         assert env.observation_spec["robot_qpos"].shape == torch.Size([1, 6])
         assert env.observation_spec["gripper_qpos"].shape == torch.Size([1, 2])
+        assert env.observation_spec["pinch_quat"].shape == torch.Size([1, 4])
+        assert env.observation_spec["gripper_left_pad_pos"].shape == torch.Size([1, 3])
         assert env.observation_spec["ball_pos"].shape == torch.Size([1, 3])
         assert env.observation_spec["bowl_pos"].shape == torch.Size([1, 3])
 
@@ -848,6 +850,9 @@ class TestMujoco:
         assert env.action_spec.shape == torch.Size([1, 7])
         assert env.observation_spec["robot_qpos"].shape == torch.Size([1, 6])
         assert env.observation_spec["gripper_qpos"].shape == torch.Size([1, 8])
+        assert env.observation_spec["pinch_quat"].shape == torch.Size([1, 4])
+        assert env.observation_spec["gripper_left_pad_pos"].shape == torch.Size([1, 3])
+        assert env.observation_spec["gripper_right_pad_pos"].shape == torch.Size([1, 3])
         assert env._backend.nq == 21
         assert env._backend.nv == 20
         assert env._backend.nu == 7
@@ -862,6 +867,179 @@ class TestMujoco:
             transition["next", "reward"],
             torch.ones(1, 1, dtype=env.dtype),
         )
+        env.close()
+
+        env = BallBowlEnv(
+            robot_model="menagerie_ur5e",
+            menagerie_path=menagerie_path,
+            seed=0,
+            max_episode_steps=1200,
+        )
+        observation = env.reset()
+
+        def pose_with_quat(xyz, quat):
+            return torch.cat([xyz, quat.expand(*xyz.shape[:-1], 4)], dim=-1)
+
+        def action_from_robot_qpos(robot_qpos, gripper):
+            action = torch.zeros(*robot_qpos.shape[:-1], 7, dtype=robot_qpos.dtype)
+            action[..., :6] = robot_qpos
+            action[..., -1] = float(gripper)
+            return action
+
+        def primitive_td(observation, primitive_id, target_pose=None, gripper=0.0):
+            if target_pose is None:
+                target_pose = torch.zeros(*observation.batch_size, 7)
+            td = observation.clone()
+            td["primitive_id"] = torch.full((1, 1), primitive_id, dtype=torch.long)
+            td["target_pose"] = target_pose
+            td["target_qpos"] = action_from_robot_qpos(
+                observation["robot_qpos"], gripper
+            )
+            td["gripper"] = torch.full((1, 1), float(gripper))
+            return td
+
+        def gripper_ball_distance(observation):
+            left_distance = (
+                observation["gripper_left_pad_pos"] - observation["ball_pos"]
+            ).norm(dim=-1, keepdim=True)
+            right_distance = (
+                observation["gripper_right_pad_pos"] - observation["ball_pos"]
+            ).norm(dim=-1, keepdim=True)
+            pad_distance = torch.minimum(left_distance, right_distance)
+            return (pad_distance - BallBowlEnv.BALL_RADIUS).clamp_min(0.0)
+
+        def run_primitive(observation, primitive):
+            primitive.update(observation.select(*env.observation_keys))
+            expanded = transform.inv(primitive)
+            start_ball = observation["ball_pos"].clone()
+            min_gripper_distance = torch.full_like(start_ball[..., :1], float("inf"))
+            max_ball_displacement = torch.zeros_like(start_ball[..., :1])
+            max_reward = torch.zeros_like(start_ball[..., :1])
+            last_reward = torch.zeros_like(start_ball[..., :1])
+            for action in expanded["action"][0]:
+                transition = env.step(
+                    observation.clone().set("action", action.view(1, 7))
+                )
+                observation = step_mdp(transition)
+                min_gripper_distance = torch.minimum(
+                    min_gripper_distance, gripper_ball_distance(observation)
+                )
+                displacement = (observation["ball_pos"] - start_ball).norm(
+                    dim=-1, keepdim=True
+                )
+                max_ball_displacement = torch.maximum(
+                    max_ball_displacement, displacement
+                )
+                last_reward = transition["next", "reward"]
+                max_reward = torch.maximum(max_reward, last_reward)
+            return (
+                observation,
+                min_gripper_distance,
+                max_ball_displacement,
+                max_reward,
+                last_reward,
+            )
+
+        def solver(target_pose, start_action):
+            return env._cartesian_pose_to_joint_target(
+                target_pose,
+                start_action,
+                iterations=160,
+                orientation_weight=1.0,
+            )
+
+        transform = URScriptPrimitiveTransform(
+            macro_steps=160,
+            settle_steps=40,
+            cartesian_solver=solver,
+            open_gripper_ctrl=0.0,
+            close_gripper_ctrl=255.0,
+        )
+        ball = observation["ball_pos"].clone()
+        bowl = observation["bowl_pos"].clone()
+        gripper_quat = observation["pinch_quat"].clone()
+        above_ball = pose_with_quat(
+            ball + torch.tensor([[0.02, -0.04, 0.16]], dtype=ball.dtype),
+            gripper_quat,
+        )
+        contact_ball = pose_with_quat(
+            ball + torch.tensor([[0.02, -0.04, 0.02]], dtype=ball.dtype),
+            gripper_quat,
+        )
+        push_mid_xyz = torch.cat(
+            [
+                bowl[..., :1],
+                torch.full_like(bowl[..., 1:2], -0.02),
+                ball[..., 2:3] + 0.06,
+            ],
+            dim=-1,
+        )
+        push_bowl_xyz = torch.cat(
+            [
+                bowl[..., :1],
+                bowl[..., 1:2] + 0.03,
+                ball[..., 2:3] + 0.06,
+            ],
+            dim=-1,
+        )
+
+        observation, _, _, _, _ = run_primitive(
+            observation,
+            primitive_td(
+                observation, URScriptPrimitiveTransform.MOVEL, target_pose=above_ball
+            ),
+        )
+        observation, _, _, _, _ = run_primitive(
+            observation,
+            primitive_td(
+                observation, URScriptPrimitiveTransform.MOVEL, target_pose=contact_ball
+            ),
+        )
+        observation, grasp_distance, _, _, _ = run_primitive(
+            observation,
+            primitive_td(
+                observation,
+                URScriptPrimitiveTransform.CLOSE_GRIPPER,
+                gripper=255.0,
+            ),
+        )
+        observation, _, first_push_displacement, _, _ = run_primitive(
+            observation,
+            primitive_td(
+                observation,
+                URScriptPrimitiveTransform.MOVEL,
+                target_pose=pose_with_quat(push_mid_xyz, gripper_quat),
+                gripper=255.0,
+            ),
+        )
+        observation, _, second_push_displacement, max_reward, _ = run_primitive(
+            observation,
+            primitive_td(
+                observation,
+                URScriptPrimitiveTransform.MOVEL,
+                target_pose=pose_with_quat(push_bowl_xyz, gripper_quat),
+                gripper=255.0,
+            ),
+        )
+        observation, _, _, open_reward, last_reward = run_primitive(
+            observation,
+            primitive_td(
+                observation,
+                URScriptPrimitiveTransform.OPEN_GRIPPER,
+                gripper=0.0,
+            ),
+        )
+        max_reward = torch.maximum(max_reward, open_reward)
+        ball_displacement = torch.maximum(
+            first_push_displacement, second_push_displacement
+        )
+
+        assert grasp_distance.item() <= 0.025
+        assert ball_displacement.item() >= 0.05
+        torch.testing.assert_close(last_reward, torch.ones_like(last_reward))
+        torch.testing.assert_close(max_reward, torch.ones_like(max_reward))
+        assert observation["success"].all()
+        env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
     def test_ball_bowl_urscript_macro_smoke(self):

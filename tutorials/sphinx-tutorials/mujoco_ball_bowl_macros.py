@@ -24,7 +24,7 @@ What you will learn
   as ``movej`` and ``movel`` into fixed-length action sequences;
 - how :class:`~torchrl.envs.MultiAction` executes those sequences in a base
   environment;
-- how to write and render a scripted pick-and-place macro;
+- how to write and render a scripted contact-rich ball-to-bowl macro;
 - why construction-time scene randomization is a useful first step before
   imitation learning or RL.
 """
@@ -92,6 +92,8 @@ if not _has_mujoco:
 # arm joint-position targets and the last entry is the gripper command. The
 # primitive scene uses a gripper command in meters, whereas the Menagerie
 # Robotiq actuator uses the native ``0`` to ``255`` range.
+# The Menagerie scene uses a three-sided receiving bowl so the tutorial can
+# demonstrate a deterministic contact policy with the real Robotiq contacts.
 
 MENAGERIE_PATH = os.environ.get(BallBowlEnv.MENAGERIE_ENV_VAR)
 ROBOT_MODEL = "menagerie_ur5e" if MENAGERIE_PATH else "primitive"
@@ -130,6 +132,10 @@ def make_video_env(
     seed: int,
     max_episode_steps: int,
     macro_steps: int,
+    settle_steps: int = 0,
+    recorder_skip: int = 1,
+    orientation_weight: float = 0.0,
+    local_env_kwargs: dict | None = None,
 ) -> tuple[
     TransformedEnv,
     BallBowlEnv,
@@ -137,16 +143,18 @@ def make_video_env(
     VideoRecorder,
     TensorDictBase,
 ]:
+    if local_env_kwargs is None:
+        local_env_kwargs = env_kwargs
     base_env = BallBowlEnv(
         seed=seed,
         max_episode_steps=max_episode_steps,
-        **env_kwargs,
+        **local_env_kwargs,
     )
     recorder = VideoRecorder(
         logger=None,
         tag="pixels",
         in_keys=["pixels"],
-        skip=1,
+        skip=recorder_skip,
         make_grid=False,
     )
     env = TransformedEnv(
@@ -156,9 +164,21 @@ def make_video_env(
             recorder,
         ),
     )
+
+    def cartesian_solver(
+        target_pose: torch.Tensor, start_action: torch.Tensor
+    ) -> torch.Tensor:
+        return base_env._cartesian_pose_to_joint_target(
+            target_pose,
+            start_action,
+            iterations=160,
+            orientation_weight=orientation_weight,
+        )
+
     primitive_transform = URScriptPrimitiveTransform(
         macro_steps=macro_steps,
-        cartesian_solver=base_env._cartesian_pose_to_joint_target,
+        settle_steps=settle_steps,
+        cartesian_solver=cartesian_solver,
         open_gripper_ctrl=GRIPPER_OPEN,
         close_gripper_ctrl=GRIPPER_CLOSE,
     )
@@ -207,6 +227,28 @@ def pose_at(xyz: torch.Tensor) -> torch.Tensor:
     return torch.cat([xyz, quat], dim=-1)
 
 
+def pose_with_quat(xyz: torch.Tensor, quat: torch.Tensor) -> torch.Tensor:
+    quat = quat.expand(*xyz.shape[:-1], 4)
+    return torch.cat([xyz, quat], dim=-1)
+
+
+def xyz_like(
+    reference: torch.Tensor, values: tuple[float, float, float]
+) -> torch.Tensor:
+    return torch.tensor([values], dtype=reference.dtype, device=reference.device)
+
+
+def gripper_ball_distance(observation: TensorDictBase) -> torch.Tensor:
+    left_distance = (
+        observation["gripper_left_pad_pos"] - observation["ball_pos"]
+    ).norm(dim=-1, keepdim=True)
+    right_distance = (
+        observation["gripper_right_pad_pos"] - observation["ball_pos"]
+    ).norm(dim=-1, keepdim=True)
+    pad_distance = torch.minimum(left_distance, right_distance)
+    return (pad_distance - BallBowlEnv.BALL_RADIUS).clamp_min(0.0)
+
+
 def step_primitive(
     env: TransformedEnv,
     observation: TensorDictBase,
@@ -225,9 +267,31 @@ def record_primitive(
 ) -> TensorDictBase:
     primitive.update(observation.select(*env.observation_keys))
     expanded = transform.inv(primitive)
+    start_ball = observation["ball_pos"].clone()
+    min_pinch_distance = torch.full_like(start_ball[..., :1], float("inf"))
+    min_gripper_distance = torch.full_like(start_ball[..., :1], float("inf"))
+    max_ball_displacement = torch.zeros_like(start_ball[..., :1])
+    max_reward = torch.zeros_like(start_ball[..., :1])
     for action in expanded["action"][0]:
         transition = env.step(observation.clone().set("action", action.view(1, 7)))
         observation = step_mdp(transition)
+        observation["last_reward"] = transition["next", "reward"]
+        pinch_distance = (
+            observation["pinch_pos"] - observation["ball_pos"]
+        ).norm(dim=-1, keepdim=True)
+        min_pinch_distance = torch.minimum(min_pinch_distance, pinch_distance)
+        min_gripper_distance = torch.minimum(
+            min_gripper_distance, gripper_ball_distance(observation)
+        )
+        ball_displacement = (observation["ball_pos"] - start_ball).norm(
+            dim=-1, keepdim=True
+        )
+        max_ball_displacement = torch.maximum(max_ball_displacement, ball_displacement)
+        max_reward = torch.maximum(max_reward, transition["next", "reward"])
+    observation["primitive_min_pinch_ball_distance"] = min_pinch_distance
+    observation["primitive_min_gripper_ball_distance"] = min_gripper_distance
+    observation["primitive_ball_displacement"] = max_ball_displacement
+    observation["primitive_max_reward"] = max_reward
     return observation
 
 # sphinx_gallery_end_ignore
@@ -483,8 +547,8 @@ reward_env.close()
 
 
 # %%
-# A scripted pick-and-place macro
-# -------------------------------
+# A scripted ball-to-bowl macro
+# -----------------------------
 #
 # We can now write the ball-to-bowl controller as a sequence of small decisions.
 # The controller uses current observations for the ball and bowl positions. This
@@ -493,135 +557,265 @@ reward_env.close()
 # calibration change too much, the macro will need retuning or a learned residual
 # controller.
 #
-# The waypoints below are deliberately introduced one by one. Each waypoint uses
-# ``movel`` to place the gripper pinch site at a Cartesian target, except the
-# final ``movej`` that returns to the initial joint configuration.
+# The Menagerie policy below uses the real UR5e + Robotiq model when the assets
+# are available. It approaches the ball, closes the gripper near the ball, then
+# uses the closed gripper as a controlled pusher to guide the ball into the
+# three-sided receiving bowl. The assertions are intentionally strict: the
+# gripper must reach the ball, the ball must move while the gripper is closed,
+# and the final sparse reward must be exactly ``1``.
+#
+# When Menagerie assets are not available, the same macro API is demonstrated on
+# the lightweight primitive scene with a simple pick-and-place sequence.
 
-task_env, _, task_transform, task_recorder, observation = make_video_env(
-    seed=4,
-    max_episode_steps=500,
-    macro_steps=20,
-)
-initial_robot_qpos = observation["robot_qpos"].clone()
-ball = observation["ball_pos"]
-bowl = observation["bowl_pos"]
+# sphinx_gallery_start_ignore
 
-# 1. Move above the ball with an open gripper. The positive z offset gives the
-# arm clearance before descending.
-above_ball = pose_at(ball + torch.tensor([[0.0, 0.0, 0.14]]))
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
-        observation,
-        URScriptPrimitive.MOVEL,
-        target_pose=above_ball,
-        gripper=GRIPPER_OPEN,
-    ),
-)
+if ROBOT_MODEL == "menagerie_ur5e":
+    task_env, _, task_transform, task_recorder, observation = make_video_env(
+        seed=4,
+        max_episode_steps=1200,
+        macro_steps=160,
+        settle_steps=40,
+        recorder_skip=8,
+        orientation_weight=1.0,
+    )
+    task_gripper_open = GRIPPER_OPEN
+    task_gripper_close = GRIPPER_CLOSE
+    ball = observation["ball_pos"].clone()
+    bowl = observation["bowl_pos"].clone()
+    gripper_quat = observation["pinch_quat"].clone()
 
-# 2. Descend to the ball. This offset is close to the ball center height; in a
-# real setup it would be calibrated from gripper geometry and contact behavior.
-grip_ball = pose_at(ball + torch.tensor([[0.0, 0.0, 0.045]]))
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
+    # 1. Move above and slightly behind the ball. The small xy offset places the
+    # Robotiq pads where closing the gripper makes stable contact with the ball.
+    above_ball = pose_with_quat(
+        ball + xyz_like(ball, (0.02, -0.04, 0.16)), gripper_quat
+    )
+    observation = record_primitive(
+        task_env,
+        task_transform,
         observation,
-        URScriptPrimitive.MOVEL,
-        target_pose=grip_ball,
-        gripper=GRIPPER_OPEN,
-    ),
-)
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=above_ball,
+            gripper=task_gripper_open,
+        ),
+    )
 
-# 3. Close the gripper around the ball.
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
+    # 2. Descend until the gripper pads are close to the ball surface, then close
+    # the gripper. We record the closest pad-to-ball surface distance during the
+    # close primitive and assert it below.
+    contact_ball = pose_with_quat(
+        ball + xyz_like(ball, (0.02, -0.04, 0.02)), gripper_quat
+    )
+    observation = record_primitive(
+        task_env,
+        task_transform,
         observation,
-        URScriptPrimitive.CLOSE_GRIPPER,
-        gripper=GRIPPER_CLOSE,
-    ),
-)
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=contact_ball,
+            gripper=task_gripper_open,
+        ),
+    )
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.CLOSE_GRIPPER,
+            gripper=task_gripper_close,
+        ),
+    )
+    grasp_distance = observation["primitive_min_gripper_ball_distance"].clone()
 
-# 4. Lift the ball before moving sideways. This avoids scraping the ball across
-# the table and separates manipulation errors from transport errors.
-lift_ball = pose_at(ball + torch.tensor([[0.0, 0.0, 0.18]]))
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
+    # 3. Keep the gripper closed while pushing the ball into the bowl. The two
+    # waypoints make the motion easy to debug: first move to the bowl entrance,
+    # then move through the center of the receiving area.
+    push_mid_xyz = torch.cat(
+        [
+            bowl[..., :1],
+            torch.full_like(bowl[..., 1:2], -0.02),
+            ball[..., 2:3] + 0.06,
+        ],
+        dim=-1,
+    )
+    push_mid = pose_with_quat(push_mid_xyz, gripper_quat)
+    observation = record_primitive(
+        task_env,
+        task_transform,
         observation,
-        URScriptPrimitive.MOVEL,
-        target_pose=lift_ball,
-        gripper=GRIPPER_CLOSE,
-    ),
-)
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=push_mid,
+            gripper=task_gripper_close,
+        ),
+    )
+    ball_motion_while_closed = observation["primitive_ball_displacement"].clone()
 
-# 5. Move above the bowl, still holding the gripper command closed.
-above_bowl = pose_at(bowl + torch.tensor([[0.0, 0.0, 0.16]]))
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
+    push_bowl_xyz = torch.cat(
+        [
+            bowl[..., :1],
+            bowl[..., 1:2] + 0.03,
+            ball[..., 2:3] + 0.06,
+        ],
+        dim=-1,
+    )
+    push_bowl = pose_with_quat(push_bowl_xyz, gripper_quat)
+    observation = record_primitive(
+        task_env,
+        task_transform,
         observation,
-        URScriptPrimitive.MOVEL,
-        target_pose=above_bowl,
-        gripper=GRIPPER_CLOSE,
-    ),
-)
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=push_bowl,
+            gripper=task_gripper_close,
+        ),
+    )
+    ball_motion_while_closed = torch.maximum(
+        ball_motion_while_closed, observation["primitive_ball_displacement"]
+    )
 
-# 6. Lower to the bowl target and open the gripper.
-place_in_bowl = pose_at(bowl + torch.tensor([[0.0, 0.0, 0.075]]))
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
+    # 4. Open the gripper once the ball is in the bowl.
+    observation = record_primitive(
+        task_env,
+        task_transform,
         observation,
-        URScriptPrimitive.MOVEL,
-        target_pose=place_in_bowl,
-        gripper=GRIPPER_CLOSE,
-    ),
-)
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
-        observation,
-        URScriptPrimitive.OPEN_GRIPPER,
-        gripper=GRIPPER_OPEN,
-    ),
-)
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.OPEN_GRIPPER,
+            gripper=task_gripper_open,
+        ),
+    )
+else:
+    task_env, _, task_transform, task_recorder, observation = make_video_env(
+        seed=4,
+        max_episode_steps=500,
+        macro_steps=20,
+    )
+    task_gripper_open = GRIPPER_OPEN
+    task_gripper_close = GRIPPER_CLOSE
+    initial_robot_qpos = observation["robot_qpos"].clone()
+    ball = observation["ball_pos"].clone()
+    bowl = observation["bowl_pos"].clone()
 
-# 7. Return to the initial joint configuration. This illustrates that a macro
-# policy can mix Cartesian primitives and joint-space primitives.
-home_target = action_from_robot_qpos(initial_robot_qpos, GRIPPER_OPEN)
-observation = record_primitive(
-    task_env,
-    task_transform,
-    observation,
-    make_primitive_td(
+    above_ball = pose_at(ball + xyz_like(ball, (0.0, 0.0, 0.14)))
+    observation = record_primitive(
+        task_env,
+        task_transform,
         observation,
-        URScriptPrimitive.MOVEJ,
-        target_qpos=home_target,
-        gripper=GRIPPER_OPEN,
-    ),
-)
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=above_ball,
+            gripper=task_gripper_open,
+        ),
+    )
+    grip_ball = pose_at(ball + xyz_like(ball, (0.0, 0.0, 0.02)))
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=grip_ball,
+            gripper=task_gripper_open,
+        ),
+    )
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.CLOSE_GRIPPER,
+            gripper=task_gripper_close,
+        ),
+    )
+    grasp_distance = observation["primitive_min_gripper_ball_distance"].clone()
+
+    lift_ball = pose_at(ball + xyz_like(ball, (0.0, 0.0, 0.18)))
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=lift_ball,
+            gripper=task_gripper_close,
+        ),
+    )
+    ball_motion_while_closed = observation["primitive_ball_displacement"].clone()
+
+    above_bowl = pose_at(bowl + xyz_like(bowl, (0.0, 0.0, 0.16)))
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=above_bowl,
+            gripper=task_gripper_close,
+        ),
+    )
+    ball_motion_while_closed = torch.maximum(
+        ball_motion_while_closed, observation["primitive_ball_displacement"]
+    )
+
+    place_in_bowl = pose_at(bowl + xyz_like(bowl, (0.0, 0.0, 0.075)))
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEL,
+            target_pose=place_in_bowl,
+            gripper=task_gripper_close,
+        ),
+    )
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.OPEN_GRIPPER,
+            gripper=task_gripper_open,
+        ),
+    )
+
+    home_target = action_from_robot_qpos(initial_robot_qpos, task_gripper_open)
+    observation = record_primitive(
+        task_env,
+        task_transform,
+        observation,
+        make_primitive_td(
+            observation,
+            URScriptPrimitive.MOVEJ,
+            target_qpos=home_target,
+            gripper=task_gripper_open,
+        ),
+    )
+
+# sphinx_gallery_end_ignore
+
 scripted_macro_animation = task_recorder.to_animation(
-    title="Scripted macro: pick the ball, place it at the bowl, return home",
+    title="Scripted macro: guide the ball into the bowl",
     interval=VIDEO_INTERVAL_MS,
     clear=True,
 )
 
-assert "success" in observation.keys()
+assert grasp_distance.item() <= 0.025
+assert ball_motion_while_closed.item() >= 0.05
+assert observation["last_reward"].item() == 1.0
+assert observation["success"].all()
 task_env.close()
 
 

@@ -940,6 +940,27 @@ class TestURScriptPrimitiveTransform:
         assert action[1, -1, -1] == 255
         assert (action[1, :, -1].diff() > 0).all()
 
+    def test_settle_steps_repeat_final_action_with_nested_key(self):
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"), macro_steps=3, settle_steps=2
+        )
+        target = torch.arange(7, dtype=torch.float32).view(1, 7)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[int(URScriptPrimitive.MOVEJ)]]),
+                "target_qpos": target,
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)[("agent", "action")]
+        assert action.shape == torch.Size([1, 5, 7])
+        torch.testing.assert_close(action[:, 2], target)
+        torch.testing.assert_close(action[:, 3], target)
+        torch.testing.assert_close(action[:, 4], target)
+
     def test_current_action_and_gripper_override(self):
         transform = URScriptPrimitiveTransform(macro_steps=2)
         current = torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 255.0]])

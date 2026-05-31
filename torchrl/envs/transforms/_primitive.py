@@ -464,6 +464,10 @@ class MacroPrimitiveTransform(Transform):
         gripper_qpos_key: observation key used as the current gripper start by
             the default adapter.
         macro_steps: fixed number of low-level actions emitted per primitive.
+        settle_steps: optional number of extra low-level actions that repeat the
+            final target after the interpolation. This is useful for position
+            actuators that need a few simulator steps to settle at the macro
+            target.
         action_dim: low-level action dimension for the default adapter.
         cartesian_solver: optional callable passed to the default
             ``"mujoco_dls_ik"`` solver. It maps ``(target_pose, start_action)``
@@ -508,6 +512,7 @@ class MacroPrimitiveTransform(Transform):
         robot_qpos_key: NestedKey = "robot_qpos",
         gripper_qpos_key: NestedKey = "gripper_qpos",
         macro_steps: int = 16,
+        settle_steps: int = 0,
         action_dim: int = 7,
         cartesian_solver: CartesianSolver | None = None,
         open_gripper_ctrl: float = 0.0,
@@ -516,6 +521,8 @@ class MacroPrimitiveTransform(Transform):
         super().__init__(in_keys_inv=[], out_keys_inv=[])
         if macro_steps <= 0:
             raise ValueError("macro_steps must be strictly positive.")
+        if settle_steps < 0:
+            raise ValueError("settle_steps must be non-negative.")
         self.primitive_library = _resolve_primitive_library(primitive_library)
         self.adapter = _resolve_adapter(
             adapter,
@@ -539,6 +546,7 @@ class MacroPrimitiveTransform(Transform):
         self.robot_qpos_key = self.adapter.robot_qpos_key
         self.gripper_qpos_key = self.adapter.gripper_qpos_key
         self.macro_steps = int(macro_steps)
+        self.settle_steps = int(settle_steps)
         self.action_dim = int(self.adapter.action_dim)
         self.open_gripper_ctrl = float(self.adapter.open_gripper_ctrl)
         self.close_gripper_ctrl = float(self.adapter.close_gripper_ctrl)
@@ -585,6 +593,11 @@ class MacroPrimitiveTransform(Transform):
             device=device,
         ).reshape((1,) * len(batch_shape) + (self.macro_steps, 1))
         sequence = start.unsqueeze(-2) + alpha * (target - start).unsqueeze(-2)
+        if self.settle_steps:
+            settle = target.unsqueeze(-2).expand(
+                batch_shape + (self.settle_steps, self.action_dim)
+            )
+            sequence = torch.cat([sequence, settle], dim=-2)
         return tensordict.set(self.action_key, sequence)
 
     def transform_input_spec(self, input_spec: Composite) -> Composite:
@@ -631,6 +644,7 @@ class MacroPrimitiveTransform(Transform):
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}(macro_steps={self.macro_steps}, "
+            f"settle_steps={self.settle_steps}, "
             f"action_dim={self.action_dim}, action_key={self.action_key!r}, "
             f"solver={type(self.solver).__name__})"
         )
@@ -656,6 +670,8 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         robot_qpos_key: observation key for the current robot joint state.
         gripper_qpos_key: observation key for the current gripper state.
         macro_steps: fixed number of low-level actions emitted per primitive.
+        settle_steps: optional number of extra repeated final actions emitted
+            after the interpolation.
         action_dim: low-level action dimension.
         cartesian_solver: optional Cartesian solver callable.
         open_gripper_ctrl: command used by ``open_gripper``.
@@ -691,6 +707,7 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         robot_qpos_key: NestedKey = "robot_qpos",
         gripper_qpos_key: NestedKey = "gripper_qpos",
         macro_steps: int = 16,
+        settle_steps: int = 0,
         action_dim: int = 7,
         cartesian_solver: CartesianSolver | None = None,
         open_gripper_ctrl: float = 0.0,
@@ -708,6 +725,7 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
             robot_qpos_key=robot_qpos_key,
             gripper_qpos_key=gripper_qpos_key,
             macro_steps=macro_steps,
+            settle_steps=settle_steps,
             action_dim=action_dim,
             cartesian_solver=cartesian_solver,
             open_gripper_ctrl=open_gripper_ctrl,

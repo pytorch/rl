@@ -33,9 +33,11 @@ class BallBowlEnv(MujocoEnv):
     environment can also compose the MuJoCo Menagerie UR5e arm and Robotiq
     2F-85 gripper from a local Menagerie checkout, without vendoring their mesh
     assets in TorchRL. The low-level action is a 7D position command: six arm
-    joint targets followed by one gripper command. The task reward is sparse:
-    it is ``1`` when the ball center is within ``placement_tolerance`` of the
-    bowl target coordinate and ``0`` otherwise.
+    joint targets followed by one gripper command. Observations include
+    privileged manipulation diagnostics such as the pinch pose and gripper pad
+    positions. The task reward is sparse: it is ``1`` when the ball center is
+    within ``placement_tolerance`` of the bowl target coordinate and ``0``
+    otherwise.
 
     Args:
         robot_model: ``"primitive"`` for the bundled low-footprint model or
@@ -64,6 +66,7 @@ class BallBowlEnv(MujocoEnv):
     XML_PATH = "ball_bowl.xml"
     FRAME_SKIP = 5
     RESET_NOISE_SCALE = 0.0
+    BALL_RADIUS = 0.025
     ROBOT_QPOS_DIM = 6
     GRIPPER_QPOS_DIM = 2
     BALL_QPOS_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
@@ -75,10 +78,12 @@ class BallBowlEnv(MujocoEnv):
     BOWL_TARGET_OFFSET = (0.0, 0.0, 0.04)
     MENAGERIE_ENV_VAR = "TORCHRL_MUJOCO_MENAGERIE_PATH"
     MENAGERIE_BALL_POSITION = (0.45, -0.18, 0.035)
-    MENAGERIE_BOWL_POSITION = (0.45, 0.2, 0.01)
-    MENAGERIE_BOWL_TARGET_OFFSET = (0.0, 0.0, 0.05)
+    MENAGERIE_BOWL_POSITION = (0.45, 0.08, 0.01)
+    MENAGERIE_BOWL_TARGET_OFFSET = (0.0, 0.0, 0.015)
     MENAGERIE_GRIPPER_QPOS_DIM = 8
     MENAGERIE_PINCH_SITE_NAME = "gripper/pinch"
+    MENAGERIE_LEFT_PAD_GEOM_NAMES = ("gripper/left_pad1", "gripper/left_pad2")
+    MENAGERIE_RIGHT_PAD_GEOM_NAMES = ("gripper/right_pad1", "gripper/right_pad2")
     MENAGERIE_HOME_QPOS = (-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0)
     PRIMITIVE_ROBOT_JOINT_NAMES = (
         "robot/shoulder_pan_joint",
@@ -143,6 +148,8 @@ class BallBowlEnv(MujocoEnv):
         self._ball_qvel_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
         self._pinch_site_id: int | None = None
         self._bowl_target_site_id: int | None = None
+        self._left_pad_geom_ids: tuple[int, ...] = ()
+        self._right_pad_geom_ids: tuple[int, ...] = ()
         super().__init__(backend=backend, **kwargs)
         self._configure_qpos_layout()
         self._bowl_target_pos = torch.tensor(
@@ -155,6 +162,12 @@ class BallBowlEnv(MujocoEnv):
         ).view(1, 3)
         self._pinch_site_id = self._find_site_id(self._pinch_site_name)
         self._bowl_target_site_id = self._find_site_id(self.BOWL_TARGET_SITE_NAME)
+        self._left_pad_geom_ids = self._find_geom_ids(
+            self.MENAGERIE_LEFT_PAD_GEOM_NAMES
+        )
+        self._right_pad_geom_ids = self._find_geom_ids(
+            self.MENAGERIE_RIGHT_PAD_GEOM_NAMES
+        )
 
     def _configure_qpos_layout(self) -> None:
         model = getattr(self._backend, "_m", getattr(self._backend, "_m_mj", None))
@@ -461,6 +474,13 @@ class BallBowlEnv(MujocoEnv):
             wall_half_height=0.04,
             target_height=self._bowl_target_offset[2],
         )
+        bowl_front = bowl.find("geom[@name='bowl_front']")
+        if bowl_front is not None:
+            bowl.remove(bowl_front)
+        bowl_bottom = bowl.find("geom[@name='bowl_bottom']")
+        if bowl_bottom is not None:
+            bowl_bottom.set("contype", "0")
+            bowl_bottom.set("conaffinity", "0")
         ball = self._make_ball_body()
         worldbody.append(bowl)
         worldbody.append(ball)
@@ -543,7 +563,7 @@ class BallBowlEnv(MujocoEnv):
             {
                 "name": "ball_geom",
                 "type": "sphere",
-                "size": "0.025",
+                "size": f"{self.BALL_RADIUS:.8g}",
                 "mass": "0.045",
                 "rgba": "0.95 0.35 0.15 1",
             },
@@ -577,6 +597,15 @@ class BallBowlEnv(MujocoEnv):
                 device=self.device,
             ),
             pinch_pos=Unbounded(
+                shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
+            ),
+            pinch_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
+            gripper_left_pad_pos=Unbounded(
+                shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
+            ),
+            gripper_right_pad_pos=Unbounded(
                 shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
             ),
             ball_pos=Unbounded(
@@ -643,12 +672,20 @@ class BallBowlEnv(MujocoEnv):
         qvel = state["qvel"].to(self.dtype)
         ball_pos = qpos[..., self._ball_qpos_start : self._ball_qpos_start + 3]
         bowl_pos = self._target_pos().expand(self.num_envs, 3)
+        pinch_pos = self._pinch_pos().to(self.dtype)
         return {
             "robot_qpos": qpos[..., self._robot_qpos_indices].clone(),
             "robot_qvel": qvel[..., self._robot_qvel_indices].clone(),
             "gripper_qpos": qpos[..., self._gripper_qpos_indices].clone(),
             "gripper_qvel": qvel[..., self._gripper_qvel_indices].clone(),
-            "pinch_pos": self._pinch_pos().to(self.dtype),
+            "pinch_pos": pinch_pos,
+            "pinch_quat": self._pinch_quat().to(self.dtype),
+            "gripper_left_pad_pos": self._pad_pos(
+                self._left_pad_geom_ids, fallback=pinch_pos
+            ).to(self.dtype),
+            "gripper_right_pad_pos": self._pad_pos(
+                self._right_pad_geom_ids, fallback=pinch_pos
+            ).to(self.dtype),
             "ball_pos": ball_pos.clone(),
             "ball_quat": qpos[
                 ..., self._ball_qpos_start + 3 : self._ball_qpos_start + 7
@@ -711,6 +748,36 @@ class BallBowlEnv(MujocoEnv):
         )
         return pos.unsqueeze(0).expand(self.num_envs, 3).clone()
 
+    def _pinch_quat(self) -> torch.Tensor:
+        quat = torch.zeros(self.num_envs, 4, dtype=self.dtype, device=self.device)
+        quat[..., 0] = 1.0
+        if (
+            not _has_mujoco
+            or self._pinch_site_id is None
+            or not hasattr(self._backend, "_d")
+        ):
+            return quat
+        import mujoco
+
+        quat_np = np.zeros(4)
+        mujoco.mju_mat2Quat(
+            quat_np, self._backend._d.site_xmat[self._pinch_site_id].copy()
+        )
+        quat_single = torch.as_tensor(quat_np, dtype=self.dtype, device=self.device)
+        return quat_single.unsqueeze(0).expand(self.num_envs, 4).clone()
+
+    def _pad_pos(
+        self, geom_ids: tuple[int, ...], *, fallback: torch.Tensor
+    ) -> torch.Tensor:
+        if not geom_ids or not hasattr(self._backend, "_d"):
+            return fallback.clone()
+        pos = torch.as_tensor(
+            self._backend._d.geom_xpos[list(geom_ids)].copy(),
+            dtype=self.dtype,
+            device=self.device,
+        ).mean(0)
+        return pos.unsqueeze(0).expand(self.num_envs, 3).clone()
+
     def _find_site_id(self, name: str) -> int | None:
         if not _has_mujoco or not hasattr(self._backend, "_m"):
             return None
@@ -718,6 +785,20 @@ class BallBowlEnv(MujocoEnv):
 
         site_id = mujoco.mj_name2id(self._backend._m, mujoco.mjtObj.mjOBJ_SITE, name)
         return None if site_id < 0 else int(site_id)
+
+    def _find_geom_ids(self, names: tuple[str, ...]) -> tuple[int, ...]:
+        if not _has_mujoco or not hasattr(self._backend, "_m"):
+            return ()
+        import mujoco
+
+        ids = []
+        for name in names:
+            geom_id = mujoco.mj_name2id(
+                self._backend._m, mujoco.mjtObj.mjOBJ_GEOM, name
+            )
+            if geom_id >= 0:
+                ids.append(int(geom_id))
+        return tuple(ids)
 
     def _cartesian_pose_to_joint_target(
         self,
