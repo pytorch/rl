@@ -33,7 +33,9 @@ class BallBowlEnv(MujocoEnv):
     environment can also compose the MuJoCo Menagerie UR5e arm and Robotiq
     2F-85 gripper from a local Menagerie checkout, without vendoring their mesh
     assets in TorchRL. The low-level action is a 7D position command: six arm
-    joint targets followed by one gripper command.
+    joint targets followed by one gripper command. The task reward is sparse:
+    it is ``1`` when the ball center is within ``placement_tolerance`` of the
+    bowl target coordinate and ``0`` otherwise.
 
     Args:
         robot_model: ``"primitive"`` for the bundled low-footprint model or
@@ -78,6 +80,22 @@ class BallBowlEnv(MujocoEnv):
     MENAGERIE_GRIPPER_QPOS_DIM = 8
     MENAGERIE_PINCH_SITE_NAME = "gripper/pinch"
     MENAGERIE_HOME_QPOS = (-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0)
+    PRIMITIVE_ROBOT_JOINT_NAMES = (
+        "robot/shoulder_pan_joint",
+        "robot/shoulder_lift_joint",
+        "robot/elbow_joint",
+        "robot/wrist_1_joint",
+        "robot/wrist_2_joint",
+        "robot/wrist_3_joint",
+    )
+    MENAGERIE_ROBOT_JOINT_NAMES = (
+        "shoulder_pan_joint",
+        "shoulder_lift_joint",
+        "elbow_joint",
+        "wrist_1_joint",
+        "wrist_2_joint",
+        "wrist_3_joint",
+    )
 
     def __init__(
         self,
@@ -126,6 +144,7 @@ class BallBowlEnv(MujocoEnv):
         self._pinch_site_id: int | None = None
         self._bowl_target_site_id: int | None = None
         super().__init__(backend=backend, **kwargs)
+        self._configure_qpos_layout()
         self._bowl_target_pos = torch.tensor(
             tuple(
                 self.bowl_position[index] + self._bowl_target_offset[index]
@@ -136,6 +155,60 @@ class BallBowlEnv(MujocoEnv):
         ).view(1, 3)
         self._pinch_site_id = self._find_site_id(self._pinch_site_name)
         self._bowl_target_site_id = self._find_site_id(self.BOWL_TARGET_SITE_NAME)
+
+    def _configure_qpos_layout(self) -> None:
+        model = getattr(self._backend, "_m", getattr(self._backend, "_m_mj", None))
+        if not _has_mujoco or model is None:
+            self._robot_qpos_indices = tuple(range(self.ROBOT_QPOS_DIM))
+            self._robot_qvel_indices = tuple(range(self.ROBOT_QPOS_DIM))
+            self._gripper_qpos_indices = tuple(
+                range(self.ROBOT_QPOS_DIM, self._ball_qpos_start)
+            )
+            self._gripper_qvel_indices = tuple(
+                range(self.ROBOT_QPOS_DIM, self._ball_qvel_start)
+            )
+            return
+
+        import mujoco
+
+        robot_joint_names = (
+            self.PRIMITIVE_ROBOT_JOINT_NAMES
+            if self.robot_model == "primitive"
+            else self.MENAGERIE_ROBOT_JOINT_NAMES
+        )
+        robot_qpos_indices: list[int] = []
+        robot_qvel_indices: list[int] = []
+        for name in robot_joint_names:
+            joint_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+            if joint_id < 0:
+                raise ValueError(f"BallBowlEnv XML is missing joint {name!r}.")
+            robot_qpos_indices.append(int(model.jnt_qposadr[joint_id]))
+            robot_qvel_indices.append(int(model.jnt_dofadr[joint_id]))
+
+        ball_joint_id = mujoco.mj_name2id(
+            model, mujoco.mjtObj.mjOBJ_JOINT, "ball_freejoint"
+        )
+        if ball_joint_id < 0:
+            raise ValueError("BallBowlEnv XML is missing joint 'ball_freejoint'.")
+        self._ball_qpos_start = int(model.jnt_qposadr[ball_joint_id])
+        self._ball_qvel_start = int(model.jnt_dofadr[ball_joint_id])
+
+        robot_joint_set = set(robot_qpos_indices)
+        gripper_qpos_indices: list[int] = []
+        gripper_qvel_indices: list[int] = []
+        for joint_id in range(model.njnt):
+            qpos_adr = int(model.jnt_qposadr[joint_id])
+            if qpos_adr in robot_joint_set or qpos_adr == self._ball_qpos_start:
+                continue
+            name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, joint_id)
+            if name is not None and name.startswith("gripper/"):
+                gripper_qpos_indices.append(qpos_adr)
+                gripper_qvel_indices.append(int(model.jnt_dofadr[joint_id]))
+
+        self._robot_qpos_indices = tuple(robot_qpos_indices)
+        self._robot_qvel_indices = tuple(robot_qvel_indices)
+        self._gripper_qpos_indices = tuple(gripper_qpos_indices)
+        self._gripper_qvel_indices = tuple(gripper_qvel_indices)
 
     # ------------------------------------------------------------------
     # XML loading and construction-time scene randomization.
@@ -532,7 +605,7 @@ class BallBowlEnv(MujocoEnv):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         qpos, qvel = super()._sample_initial_state(n, tensordict)
         if self._robot_home_qpos is not None:
-            qpos[..., : self.ROBOT_QPOS_DIM] = torch.tensor(
+            qpos[..., self._robot_qpos_indices] = torch.tensor(
                 self._robot_home_qpos, dtype=qpos.dtype, device=qpos.device
             )
         ball_pos = torch.tensor(
@@ -571,14 +644,10 @@ class BallBowlEnv(MujocoEnv):
         ball_pos = qpos[..., self._ball_qpos_start : self._ball_qpos_start + 3]
         bowl_pos = self._target_pos().expand(self.num_envs, 3)
         return {
-            "robot_qpos": qpos[..., : self.ROBOT_QPOS_DIM].clone(),
-            "robot_qvel": qvel[..., : self.ROBOT_QPOS_DIM].clone(),
-            "gripper_qpos": qpos[
-                ..., self.ROBOT_QPOS_DIM : self._ball_qpos_start
-            ].clone(),
-            "gripper_qvel": qvel[
-                ..., self.ROBOT_QPOS_DIM : self._ball_qvel_start
-            ].clone(),
+            "robot_qpos": qpos[..., self._robot_qpos_indices].clone(),
+            "robot_qvel": qvel[..., self._robot_qvel_indices].clone(),
+            "gripper_qpos": qpos[..., self._gripper_qpos_indices].clone(),
+            "gripper_qvel": qvel[..., self._gripper_qvel_indices].clone(),
             "pinch_pos": self._pinch_pos().to(self.dtype),
             "ball_pos": ball_pos.clone(),
             "ball_quat": qpos[
@@ -599,9 +668,7 @@ class BallBowlEnv(MujocoEnv):
             ..., self._ball_qpos_start : self._ball_qpos_start + 3
         ]
         target = self._target_pos().expand(self.num_envs, 3)
-        dist = (ball_pos - target).norm(dim=-1, keepdim=True)
-        success = self._success(ball_pos, target).to(self.dtype)
-        return -dist + success
+        return self._success(ball_pos, target).to(self.dtype)
 
     def _compute_done(
         self,
@@ -690,7 +757,7 @@ class BallBowlEnv(MujocoEnv):
         data.qvel[:] = 0.0
         q = data.qpos.copy()
         if start_action.shape[-1] >= self.ROBOT_QPOS_DIM:
-            q[: self.ROBOT_QPOS_DIM] = (
+            q[list(self._robot_qpos_indices)] = (
                 start_action[0, : self.ROBOT_QPOS_DIM].detach().cpu().double().numpy()
             )
         ctrl_low = model.actuator_ctrlrange[: self.ROBOT_QPOS_DIM, 0]
@@ -717,7 +784,7 @@ class BallBowlEnv(MujocoEnv):
             mujoco.mj_jacSite(model, data, jacp, jacr, self._pinch_site_id)
             if target_quat is None:
                 err = pos_err
-                jac = jacp[:, : self.ROBOT_QPOS_DIM]
+                jac = jacp[:, list(self._robot_qvel_indices)]
             else:
                 rot_err = self._rotation_error(
                     target_mat, data.site_xmat[self._pinch_site_id].reshape(3, 3)
@@ -725,8 +792,8 @@ class BallBowlEnv(MujocoEnv):
                 err = np.concatenate([pos_err, orientation_weight * rot_err])
                 jac = np.concatenate(
                     [
-                        jacp[:, : self.ROBOT_QPOS_DIM],
-                        orientation_weight * jacr[:, : self.ROBOT_QPOS_DIM],
+                        jacp[:, list(self._robot_qvel_indices)],
+                        orientation_weight * jacr[:, list(self._robot_qvel_indices)],
                     ],
                     axis=0,
                 )
@@ -734,13 +801,13 @@ class BallBowlEnv(MujocoEnv):
                 break
             lhs = jac @ jac.T + damping * eye
             dq = jac.T @ np.linalg.solve(lhs, err)
-            q[: self.ROBOT_QPOS_DIM] += step_size * dq
-            q[: self.ROBOT_QPOS_DIM] = self._wrap_ctrl_range(
-                q[: self.ROBOT_QPOS_DIM], ctrl_low, ctrl_high
+            q[list(self._robot_qpos_indices)] += step_size * dq
+            q[list(self._robot_qpos_indices)] = self._wrap_ctrl_range(
+                q[list(self._robot_qpos_indices)], ctrl_low, ctrl_high
             )
         out = start_action.clone()
         out[0, : self.ROBOT_QPOS_DIM] = torch.as_tensor(
-            q[: self.ROBOT_QPOS_DIM], dtype=out.dtype, device=out.device
+            q[list(self._robot_qpos_indices)], dtype=out.dtype, device=out.device
         )
         return out
 

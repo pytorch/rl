@@ -178,6 +178,7 @@ class _TorchBackend(_PhysicsBackend):
         m_mj = mujoco.MjModel.from_xml_string(xml_string)
         d_mj = mujoco.MjData(m_mj)
         mujoco.mj_forward(m_mj, d_mj)
+        self._m_mj = m_mj
 
         mx = mujoco_torch.device_put(m_mj)
         dx0 = mujoco_torch.device_put(d_mj)

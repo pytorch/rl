@@ -62,6 +62,11 @@ if not _has_mujoco:
 # manipulation: robot joints, gripper joints, the pinch site, the ball pose, the
 # bowl target and a success flag.
 #
+# The task reward is intentionally sparse. It is ``1`` only when the ball center
+# is within the environment's placement tolerance of the bowl target coordinate,
+# and ``0`` otherwise. This makes reward checks easy to interpret: any non-zero
+# reward means the ball is actually at the target, not merely closer to it.
+#
 # When a MuJoCo Menagerie checkout is present and detectable through
 # ``TORCHRL_MUJOCO_MENAGERIE_PATH``, the tutorial uses a proper UR5e arm with a
 # Robotiq 2F-85 gripper. If those assets are absent, it falls back to a
@@ -438,6 +443,43 @@ primitive_animation = primitive_recorder.to_animation(
     clear=True,
 )
 primitive_env.close()
+
+
+# %%
+# Sparse reward sanity check
+# --------------------------
+#
+# Before tuning contact-rich grasping, it is useful to isolate the reward
+# condition itself. The shortest possible check is: initialize the ball at the
+# bowl target, emit one ``wait`` primitive so the environment takes one step, and
+# assert that the next reward is exactly ``1``.
+#
+# This is a diagnostic sequence, not a manipulation policy. It verifies that the
+# coordinate-based success predicate and the primitive-to-action expansion agree
+# on what a solved state looks like.
+
+reward_env = BallBowlEnv(seed=5, max_episode_steps=3, **env_kwargs)
+reward_observation = reward_env.reset(
+    TensorDict({"ball_pos": reward_env._target_pos().clone()}, batch_size=[1])
+)
+reward_transform = URScriptPrimitiveTransform(
+    macro_steps=1,
+    open_gripper_ctrl=GRIPPER_OPEN,
+    close_gripper_ctrl=GRIPPER_CLOSE,
+)
+reward_primitive = make_primitive_td(
+    reward_observation,
+    URScriptPrimitive.WAIT,
+    gripper=GRIPPER_OPEN,
+)
+reward_primitive.update(reward_observation.select(*reward_env.observation_keys))
+reward_action = reward_transform.inv(reward_primitive)["action"][:, 0]
+reward_transition = reward_env.step(
+    reward_observation.clone().set("action", reward_action)
+)
+assert reward_transition["next", "reward"].item() == 1.0
+assert reward_transition["next", "success"].all()
+reward_env.close()
 
 
 # %%

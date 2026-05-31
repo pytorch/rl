@@ -773,6 +773,43 @@ class TestMujoco:
         assert torch.isfinite(td.get(("next", "reward"))).all()
 
     @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
+    def test_ball_bowl_sparse_coordinate_reward(self):
+        env = BallBowlEnv(seed=0, max_episode_steps=3)
+        observation = env.reset()
+        hold_action = torch.zeros_like(env.action_spec.rand())
+        hold_action[..., :6] = observation["robot_qpos"]
+
+        default_transition = env.step(observation.clone().set("action", hold_action))
+        torch.testing.assert_close(
+            default_transition["next", "reward"],
+            torch.zeros(1, 1, dtype=env.dtype),
+        )
+
+        observation = env.reset(
+            TensorDict({"ball_pos": env._target_pos().clone()}, batch_size=[1])
+        )
+        primitive = observation.clone()
+        primitive["primitive_id"] = torch.full(
+            (1, 1), URScriptPrimitiveTransform.WAIT, dtype=torch.long
+        )
+        primitive["target_qpos"] = torch.zeros(1, 7)
+        primitive["target_pose"] = torch.zeros(1, 7)
+        primitive["gripper"] = torch.zeros(1, 1)
+        expanded = URScriptPrimitiveTransform(
+            macro_steps=1,
+            open_gripper_ctrl=0.0,
+            close_gripper_ctrl=0.038,
+        ).inv(primitive)
+        target_transition = env.step(
+            observation.clone().set("action", expanded["action"][:, 0])
+        )
+        torch.testing.assert_close(
+            target_transition["next", "reward"],
+            torch.ones(1, 1, dtype=env.dtype),
+        )
+        assert target_transition["next", "success"].all()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
     def test_ball_bowl_construction_time_positions(self):
         ball_position = (0.31, -0.11, 0.035)
         bowl_position = (0.24, 0.17, 0.01)
@@ -814,6 +851,17 @@ class TestMujoco:
         assert env._backend.nq == 21
         assert env._backend.nv == 20
         assert env._backend.nu == 7
+
+        observation = env.reset(
+            TensorDict({"ball_pos": env._target_pos().clone()}, batch_size=[1])
+        )
+        hold_action = torch.zeros_like(env.action_spec.rand())
+        hold_action[..., :6] = observation["robot_qpos"]
+        transition = env.step(observation.clone().set("action", hold_action))
+        torch.testing.assert_close(
+            transition["next", "reward"],
+            torch.ones(1, 1, dtype=env.dtype),
+        )
 
     @pytest.mark.skipif(not _has_mujoco, reason="BallBowlEnv uses MuJoCo C bindings.")
     def test_ball_bowl_urscript_macro_smoke(self):
