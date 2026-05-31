@@ -145,6 +145,7 @@ sphinx_gallery_conf = {
     "abort_on_example_error": True,
     # "show_memory": True,
     "plot_gallery": True,
+    "matplotlib_animations": (True, "mp4"),
     "capture_repr": ("_repr_html_", "__repr__"),  # capture representations
     "write_computation_times": True,
     # "compress_images": ("images", "thumbnails"),

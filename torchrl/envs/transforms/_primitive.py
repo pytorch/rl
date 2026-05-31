@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from enum import IntEnum
 from typing import Any, Callable, Literal
 
 import torch
@@ -14,7 +15,11 @@ from tensordict.utils import NestedKey, unravel_key
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.transforms._base import Transform
 
-__all__ = ["MacroPrimitiveTransform", "URScriptPrimitiveTransform"]
+__all__ = [
+    "MacroPrimitiveTransform",
+    "URScriptPrimitive",
+    "URScriptPrimitiveTransform",
+]
 
 PrimitiveLibraryName = Literal["urscript"]
 MacroAdapterName = Literal["joint_position_gripper"]
@@ -22,13 +27,42 @@ MacroSolverName = Literal["mujoco_dls_ik", "joint_interpolation"]
 CartesianSolver = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 
-class _URScriptPrimitiveLibrary:
+class URScriptPrimitive(IntEnum):
+    r"""Integer ids for URScript-style robot primitives.
+
+    ``URScriptPrimitive`` gives readable names to the integer ids consumed by
+    :class:`~torchrl.envs.transforms.URScriptPrimitiveTransform`. It derives
+    from :class:`enum.IntEnum`, so enum values can be written directly into
+    integer tensors with ``int(primitive)`` while keeping descriptive names in
+    policies and tutorials.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.envs.transforms import URScriptPrimitive
+        >>> primitive = URScriptPrimitive.MOVEL
+        >>> primitive.name
+        'MOVEL'
+        >>> torch.tensor([[int(primitive)]], dtype=torch.long)
+        tensor([[2]])
+    """
+
     WAIT = 0
     MOVEJ = 1
     MOVEL = 2
     OPEN_GRIPPER = 3
     CLOSE_GRIPPER = 4
-    NUM_PRIMITIVES = 5
+
+    def __str__(self) -> str:
+        return self.name.lower()
+
+
+class _URScriptPrimitiveLibrary:
+    WAIT = URScriptPrimitive.WAIT
+    MOVEJ = URScriptPrimitive.MOVEJ
+    MOVEL = URScriptPrimitive.MOVEL
+    OPEN_GRIPPER = URScriptPrimitive.OPEN_GRIPPER
+    CLOSE_GRIPPER = URScriptPrimitive.CLOSE_GRIPPER
+    NUM_PRIMITIVES = len(URScriptPrimitive)
 
 
 class _JointPositionGripperAdapter:
@@ -398,7 +432,9 @@ class MacroPrimitiveTransform(Transform):
         primitive_library: primitive id library. ``None`` and ``"urscript"`` use
             the default wait/movej/movel/open/close library. A custom object may
             expose ``WAIT``, ``MOVEJ``, ``MOVEL``, ``OPEN_GRIPPER``,
-            ``CLOSE_GRIPPER`` and optionally ``NUM_PRIMITIVES``.
+            ``CLOSE_GRIPPER`` and optionally ``NUM_PRIMITIVES``. The default
+            ids are exposed as
+            :class:`~torchrl.envs.transforms.URScriptPrimitive`.
         adapter: env-specific action adapter. ``None`` and
             ``"joint_position_gripper"`` use the default adapter where the first
             six action entries are robot joint-position targets and the last

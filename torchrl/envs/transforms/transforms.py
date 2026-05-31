@@ -76,6 +76,7 @@ from torchrl.envs.transforms._normalization import (
 )
 from torchrl.envs.transforms._primitive import (
     MacroPrimitiveTransform,
+    URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.transforms._observation import (
@@ -172,6 +173,7 @@ __all__ = [
     "TrajCounter",
     "Transform",
     "TransformedEnv",
+    "URScriptPrimitive",
     "URScriptPrimitiveTransform",
     "UnaryTransform",
     "UnsqueezeTransform",

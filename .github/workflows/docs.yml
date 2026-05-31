@@ -114,8 +114,19 @@ jobs:
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
+
+        # 11. Fetch the MuJoCo Menagerie assets used by the macro-control tutorial.
+        # MuJoCo Menagerie is a model repository, not an installable Python package,
+        # so we keep the docs dependency as a sparse checkout instead of adding it
+        # to docs/requirements.txt.
+        MENAGERIE_DIR="$(pwd)/.docs_mujoco_menagerie"
+        git clone --depth=1 --filter=blob:none --sparse \
+          https://github.com/google-deepmind/mujoco_menagerie.git "$MENAGERIE_DIR"
+        git -C "$MENAGERIE_DIR" sparse-checkout set \
+          universal_robots_ur5e robotiq_2f85
+        export TORCHRL_MUJOCO_MENAGERIE_PATH="$MENAGERIE_DIR"
         
-        # 11. Build doc
+        # 12. Build doc
         export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
         export BATCHED_PIPE_TIMEOUT=180
         cd ./docs

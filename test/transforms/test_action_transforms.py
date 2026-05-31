@@ -55,6 +55,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TransformedEnv,
+    URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
@@ -899,6 +900,25 @@ class TestURScriptPrimitiveTransform:
         assert action.shape == torch.Size([1, 4, 7])
         torch.testing.assert_close(action[:, -1], target)
         torch.testing.assert_close(action[:, 0], target / 4)
+
+    def test_urscript_primitive_enum(self):
+        assert int(URScriptPrimitive.MOVEL) == 2
+        assert str(URScriptPrimitive.OPEN_GRIPPER) == "open_gripper"
+
+        transform = URScriptPrimitiveTransform(macro_steps=1)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[int(URScriptPrimitive.MOVEJ)]]),
+                "target_qpos": torch.ones(1, 7),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1], torch.ones(1, 7))
+
 
     def test_nested_action_key(self):
         transform = URScriptPrimitiveTransform(
