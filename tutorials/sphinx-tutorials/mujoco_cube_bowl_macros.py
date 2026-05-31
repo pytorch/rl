@@ -5,10 +5,10 @@ MuJoCo scripted manipulation with human-readable robot actions
 The first step in controlling a complex robot is rarely an end-to-end RL
 policy. Closed-loop controllers, scripted motion primitives, and imitation data
 are often used first to make the task reliable enough for later reward-driven
-fine tuning. This tutorial uses a compact MuJoCo manipulation scene to show how
-we can ask a robot to do human-readable things such as "reach this pose",
-"close the gripper", or "go home" while TorchRL handles the low-level action
-plumbing.
+fine tuning. This tutorial uses a MuJoCo Menagerie UR5e arm with a Robotiq
+2F-85 gripper and shows how to ask the robot to do human-readable things such
+as "reach this pose", "close the gripper", or "go home" while TorchRL handles
+the low-level action plumbing.
 
 We will control a cube-to-bowl task without learning. A policy emits a single
 ``RobotAction`` object under the normal ``"action"`` key, and a TorchRL
@@ -19,8 +19,9 @@ curricula, or a safe initialization for residual RL.
 What you will learn
 -------------------
 
-- how to instantiate and render a custom MuJoCo environment;
-- how to write a small TensorClass-like ``RobotAction`` with readable factories;
+- how to instantiate a Menagerie-backed custom MuJoCo environment;
+- how to write a small TensorDict-backed ``RobotAction`` with readable
+  factories;
 - how :class:`~torchrl.envs.URScriptPrimitiveTransform` turns those commands
   into fixed-length low-level actions;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
@@ -36,14 +37,7 @@ from typing import ClassVar, Iterator, Literal
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.envs import (
-    Compose,
-    CubeBowlEnv,
-    TransformedEnv,
-    URScriptPrimitive,
-    step_mdp,
-)
-from torchrl.record import PixelRenderTransform, VideoRecorder
+from torchrl.envs import CubeBowlEnv, URScriptPrimitive, step_mdp
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -55,54 +49,38 @@ if not _has_mujoco:
 # Environment
 # -----------
 #
-# For this tutorial, we introduce a custom MuJoCo-based
-# :class:`~torchrl.envs.CubeBowlEnv` that exposes the state needed for scripted
+# This tutorial intentionally assumes that MuJoCo Menagerie assets are
+# available. Set ``TORCHRL_MUJOCO_MENAGERIE_PATH`` to a checkout containing the
+# ``universal_robots_ur5e`` and ``robotiq_2f85`` assets:
+#
+#   .. code-block:: bash
+#
+#      git clone --depth=1 --filter=blob:none --sparse \
+#          https://github.com/google-deepmind/mujoco_menagerie.git /tmp/menagerie
+#      git -C /tmp/menagerie sparse-checkout set \
+#          universal_robots_ur5e robotiq_2f85
+#      export TORCHRL_MUJOCO_MENAGERIE_PATH=/tmp/menagerie
+#
+# :class:`~torchrl.envs.CubeBowlEnv` exposes the state needed for scripted
 # manipulation: robot joints, gripper joints, the pinch site, the cube pose, the
-# bowl target and a success flag.
-#
-# The task reward is intentionally sparse. It is ``1`` only when the cube center
-# is within the environment's placement tolerance of the bowl target coordinate,
-# and ``0`` otherwise. This makes reward checks easy to interpret: any non-zero
-# reward means the cube is actually at the target, not merely closer to it.
-#
-# When a MuJoCo Menagerie checkout is present through
-# ``TORCHRL_MUJOCO_MENAGERIE_PATH``, the tutorial uses a proper UR5e arm with a
-# Robotiq 2F-85 gripper. If those assets are absent, it falls back to a
-# lightweight scene built only from MuJoCo primitive geoms: a six-revolute-joint
-# arm with a Universal-Robots-like kinematic layout, a simple two-finger gripper,
-# a free cube, and a bowl.
-#
-# The low-level action is always seven-dimensional: the first six entries are
-# arm joint-position targets and the last entry is the gripper command. The
-# primitive scene uses a gripper command in meters, whereas the Menagerie
-# Robotiq actuator uses the native ``0`` to ``255`` range. The ``RobotAction``
-# class below hides that environment-specific detail.
+# bowl target and a success flag. The task reward is intentionally sparse. It is
+# ``1`` only when the cube center is within the environment's placement
+# tolerance of the bowl target coordinate, and ``0`` otherwise.
 
 MENAGERIE_PATH = os.environ.get(CubeBowlEnv.MENAGERIE_ENV_VAR)
-ROBOT_MODEL = "menagerie_ur5e" if MENAGERIE_PATH else "primitive"
-ENV_KWARGS = {
-    "robot_model": ROBOT_MODEL,
-    "menagerie_path": MENAGERIE_PATH,
-}
-RENDER_WIDTH = 480
-RENDER_HEIGHT = 360
-VIDEO_INTERVAL_MS = 55
-MAX_EPISODE_STEPS = 12000 if ROBOT_MODEL == "menagerie_ur5e" else 1200
-RECORDER_SKIP = 8 if ROBOT_MODEL == "menagerie_ur5e" else 1
+if MENAGERIE_PATH is None:
+    raise RuntimeError(
+        f"Set {CubeBowlEnv.MENAGERIE_ENV_VAR} to a MuJoCo Menagerie checkout "
+        "before running this tutorial."
+    )
 
-# ``movel`` uses MuJoCo damped-least-squares IK. The primitive robot is simple
-# enough for the defaults; the Menagerie scene benefits from more IK iterations
-# and an orientation term so the Robotiq pads remain aligned with the cube.
-IK_KWARGS = (
-    {
-        "iterations": 220,
-        "orientation_weight": 1.0,
-        "step_size": 0.7,
-        "damping": 1e-4,
-    }
-    if ROBOT_MODEL == "menagerie_ur5e"
-    else {}
-)
+MAX_EPISODE_STEPS = 12000
+IK_KWARGS = {
+    "iterations": 220,
+    "orientation_weight": 1.0,
+    "step_size": 0.7,
+    "damping": 1e-4,
+}
 
 
 # %%
@@ -121,8 +99,8 @@ IK_KWARGS = (
 # Each factory returns a structured TensorDict. ``mode`` says what primitive
 # should run, ``position`` and ``quaternion`` define Cartesian targets,
 # ``joints`` defines joint-space targets, and ``gripper`` is a symbolic code:
-# ``"keep"``, ``"open"`` or ``"closed"``. The environment-specific numeric
-# gripper command is applied by the transform, not by the user code.
+# ``"keep"``, ``"open"`` or ``"closed"``. The Menagerie-specific numeric
+# gripper command is applied by the transform helper, not by user code.
 
 GripperCommand = Literal["keep", "open", "closed"]
 
@@ -286,7 +264,9 @@ class RobotAction:
 
         return TensorDict(
             {
-                "mode": torch.full(batch_size + (1,), mode, dtype=torch.long, device=device),
+                "mode": torch.full(
+                    batch_size + (1,), mode, dtype=torch.long, device=device
+                ),
                 "position": position,
                 "quaternion": quaternion,
                 "joints": joints,
@@ -296,9 +276,14 @@ class RobotAction:
                     dtype=torch.long,
                     device=device,
                 ),
-                "steps": torch.full(batch_size + (1,), steps, dtype=torch.long, device=device),
+                "steps": torch.full(
+                    batch_size + (1,), steps, dtype=torch.long, device=device
+                ),
                 "settle_steps": torch.full(
-                    batch_size + (1,), settle_steps, dtype=torch.long, device=device
+                    batch_size + (1,),
+                    settle_steps,
+                    dtype=torch.long,
+                    device=device,
                 ),
             },
             batch_size=batch_size,
@@ -335,47 +320,39 @@ def _gripper_code(gripper: GripperCommand) -> int:
 # Create one environment
 # ----------------------
 #
-# The tutorial uses one base environment and resets it between examples. The
-# recorder is also reused: ``to_animation(clear=True)`` returns the clip and
-# clears the frame buffer for the next reset.
+# The tutorial uses one environment and resets it between examples. There is no
+# fallback robot and no tutorial-side rendering path: all examples below use the
+# same Menagerie-backed :class:`~torchrl.envs.CubeBowlEnv` instance.
 
-base_env = CubeBowlEnv(seed=0, max_episode_steps=MAX_EPISODE_STEPS, **ENV_KWARGS)
-recorder = VideoRecorder(
-    logger=None,
-    tag="pixels",
-    in_keys=["pixels"],
-    skip=RECORDER_SKIP,
-    make_grid=False,
+env = CubeBowlEnv(
+    seed=0,
+    max_episode_steps=MAX_EPISODE_STEPS,
+    robot_model="menagerie_ur5e",
+    menagerie_path=MENAGERIE_PATH,
 )
-env = TransformedEnv(
-    base_env,
-    Compose(
-        PixelRenderTransform(width=RENDER_WIDTH, height=RENDER_HEIGHT),
-        recorder,
-    ),
-)
+observation = env.reset()
+assert observation["robot_qpos"].shape[-1] == 6
+assert env.action_spec.shape[-1] == 7
+assert env.low_level_action(observation["robot_qpos"]).shape[-1] == 7
+
 
 # %%
-# Install macro execution
-# -----------------------
+# Primitive expansion
+# -------------------
 #
 # ``URScriptPrimitiveTransform`` expands a structured ``RobotAction`` into a
 # low-level action sequence. The transform also supports ``execute=True`` for
-# direct use in a :class:`~torchrl.envs.TransformedEnv`; here we keep the
-# expansion object visible so the tutorial can collect per-low-level-step
-# diagnostics for the final assertions.
+# direct use in :class:`~torchrl.envs.TransformedEnv`; here we keep the expansion
+# visible so the tutorial can collect per-low-level-step diagnostics for the
+# final assertions.
 
-primitive_transform = base_env.make_urscript_transform(
+primitive_transform = env.make_urscript_transform(
     macro_steps=16,
     ik_kwargs=IK_KWARGS,
 )
-
-observation = env.reset()
-assert observation["robot_qpos"].shape[-1] == 6
-assert base_env.action_spec.shape[-1] == 7
-assert base_env.low_level_action(observation["robot_qpos"]).shape[-1] == 7
 example_action = RobotAction.reach_pose(
-    position=observation["cube_pos"] + observation["cube_pos"].new_tensor([[0.0, 0.0, 0.12]]),
+    position=observation["cube_pos"]
+    + observation["cube_pos"].new_tensor([[0.0, 0.0, 0.12]]),
     quaternion=observation["pinch_quat"],
     gripper="open",
     steps=20,
@@ -396,6 +373,7 @@ assert primitive_transform.action_sequence(
 # action key. ``TensorDict.set`` is the single-entry form of replacing
 # ``td["action"]``.
 
+
 def gen_small_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     joints = td["robot_qpos"].clone()
     joints[..., 0] = joints[..., 0] + 0.35
@@ -403,9 +381,22 @@ def gen_small_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     yield RobotAction.close_gripper(steps=18)
 
 
+small_actions = gen_small_actions(observation)
+
+
 def small_policy(td: TensorDictBase) -> TensorDictBase:
-    small_actions = gen_small_actions(td)
     return td.set("action", next(small_actions))
+
+
+# %%
+# Action execution helper
+# -----------------------
+#
+# The helper below is deliberately small: it reads ``td["action"]``, expands the
+# command with the primitive transform, executes the resulting low-level action
+# sequence, and returns diagnostics used by the assertions. Applications that do
+# not need per-low-level-step diagnostics can instead construct
+# ``URScriptPrimitiveTransform(..., execute=True)`` inside a transformed env.
 
 
 def step_low_level_action(
@@ -428,13 +419,13 @@ def run_robot_policy(
     settle_steps = int(robot_action["settle_steps"].reshape(-1)[0].item())
     gripper_code = int(robot_action["gripper"].reshape(-1)[0].item())
     if gripper_code == RobotAction.GRIPPER_OPEN:
-        gripper = base_env.gripper_open_ctrl
+        gripper = env.gripper_open_ctrl
     elif gripper_code == RobotAction.GRIPPER_CLOSED:
-        gripper = base_env.gripper_close_ctrl
+        gripper = env.gripper_close_ctrl
     else:
         gripper = None
 
-    transform = base_env.make_urscript_transform(
+    transform = env.make_urscript_transform(
         macro_steps=steps,
         settle_steps=settle_steps,
         ik_kwargs=IK_KWARGS,
@@ -449,7 +440,7 @@ def run_robot_policy(
             gripper=gripper,
         )
     elif mode == RobotAction.REACH_JOINTS:
-        target_qpos = base_env.low_level_action(robot_action["joints"], gripper)
+        target_qpos = env.low_level_action(robot_action["joints"], gripper)
         sequence = transform.action_sequence(
             td,
             URScriptPrimitive.MOVEJ,
@@ -466,6 +457,7 @@ def run_robot_policy(
         )
     else:
         sequence = transform.action_sequence(td, URScriptPrimitive.WAIT, gripper=gripper)
+
     start_cube = td["cube_pos"].clone()
     start_cube_z = start_cube[..., 2:3].clone()
     min_gripper_distance = torch.full_like(start_cube[..., :1], float("inf"))
@@ -477,7 +469,7 @@ def run_robot_policy(
     for low_level_action in sequence[0]:
         td, transition = step_low_level_action(td, low_level_action.view(1, 7))
         min_gripper_distance = torch.minimum(
-            min_gripper_distance, base_env.gripper_cube_distance(td)
+            min_gripper_distance, env.gripper_cube_distance(td)
         )
         cube_displacement = (td["cube_pos"] - start_cube).norm(dim=-1, keepdim=True)
         cube_lift = td["cube_pos"][..., 2:3] - start_cube_z
@@ -506,27 +498,27 @@ def run_robot_policy(
 # We can now write the cube-to-bowl controller as a readable sequence of manual
 # robot commands. The generator below is deliberately explicit: it names the
 # poses we want the pinch site to reach and interleaves them with gripper
-# commands. The Menagerie branch uses longer durations because the UR5e +
-# Robotiq model has slower contacts and a tighter home-position assertion. The
-# fallback branch uses the same action API with shorter motions.
+# commands.
 
 initial_robot_qpos = observation["robot_qpos"].clone()
-gripper_quat = observation["pinch_quat"].clone()
 grasp_distance = torch.full_like(observation["cube_pos"][..., :1], float("inf"))
 cube_motion_while_closed = torch.zeros_like(grasp_distance)
 cube_lift_while_closed = torch.zeros_like(grasp_distance)
 max_reward = torch.zeros_like(grasp_distance)
 last_reward = torch.zeros_like(grasp_distance)
 closed_reference_cube: torch.Tensor | None = None
-robot_home_tolerance = 0.03 if ROBOT_MODEL == "menagerie_ur5e" else 1.0
 policy_state: dict[str, TensorDictBase] = {"td": observation}
 
 
-def pose_at(xyz: torch.Tensor, quat: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+def pose_at(
+    xyz: torch.Tensor, quat: torch.Tensor | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
     if quat is None:
         quat = _identity_quaternion_like(xyz)
     else:
-        quat = quat.to(dtype=xyz.dtype, device=xyz.device).expand(xyz.shape[:-1] + (4,))
+        quat = quat.to(dtype=xyz.dtype, device=xyz.device).expand(
+            xyz.shape[:-1] + (4,)
+        )
     return xyz, quat
 
 
@@ -534,162 +526,127 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     cube = td["cube_pos"].clone()
     bowl = td["bowl_pos"].clone()
     quat = td["pinch_quat"].clone()
+    grasp_offset = cube.new_tensor([[0.0, 0.0, -0.016]])
 
-    if ROBOT_MODEL == "menagerie_ur5e":
-        grasp_offset = cube.new_tensor([[0.0, 0.0, -0.016]])
+    yield RobotAction.reach_joints(
+        joints=td["robot_qpos"].clone(),
+        gripper="open",
+        steps=1,
+        settle_steps=19,
+    )
+    yield RobotAction.open_gripper(steps=100, settle_steps=20)
 
-        yield RobotAction.reach_joints(
-            joints=td["robot_qpos"].clone(),
-            gripper="open",
-            steps=1,
-            settle_steps=19,
-        )
-        yield RobotAction.open_gripper(steps=100, settle_steps=20)
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    bowl = current_td["bowl_pos"].clone()
+    quat = current_td["pinch_quat"].clone()
+    position, quaternion = pose_at(cube + cube.new_tensor([[0.0, 0.0, 0.18]]), quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="open",
+        steps=180,
+        settle_steps=60,
+    )
 
-        current_td = policy_state["td"]
-        cube = current_td["cube_pos"].clone()
-        bowl = current_td["bowl_pos"].clone()
-        quat = current_td["pinch_quat"].clone()
-        position, quaternion = pose_at(cube + cube.new_tensor([[0.0, 0.0, 0.18]]), quat)
-        yield RobotAction.reach_pose(
-            position=position,
-            quaternion=quaternion,
-            gripper="open",
-            steps=180,
-            settle_steps=60,
-        )
+    position, quaternion = pose_at(cube + grasp_offset, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="open",
+        steps=180,
+        settle_steps=60,
+    )
 
-        position, quaternion = pose_at(cube + grasp_offset, quat)
-        yield RobotAction.reach_pose(
-            position=position,
-            quaternion=quaternion,
-            gripper="open",
-            steps=180,
-            settle_steps=60,
-        )
+    yield RobotAction.close_gripper(steps=160, settle_steps=80)
 
-        yield RobotAction.close_gripper(steps=160, settle_steps=80)
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    pinch_to_cube = current_td["pinch_pos"].clone() - cube
+    position, quaternion = pose_at(
+        cube + pinch_to_cube + cube.new_tensor([[0.0, 0.0, 0.20]]),
+        quat,
+    )
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="closed",
+        steps=120,
+        settle_steps=60,
+    )
 
-        current_td = policy_state["td"]
-        cube = current_td["cube_pos"].clone()
-        pinch_to_cube = current_td["pinch_pos"].clone() - cube
-        position, quaternion = pose_at(
-            cube + pinch_to_cube + cube.new_tensor([[0.0, 0.0, 0.20]]),
-            quat,
-        )
-        yield RobotAction.reach_pose(
-            position=position,
-            quaternion=quaternion,
-            gripper="closed",
-            steps=120,
-            settle_steps=60,
-        )
-
-        current_td = policy_state["td"]
-        start_y = current_td["cube_pos"][..., 1:2].clone()
-        target_y = bowl[..., 1:2]
-        for waypoint in range(1, 5):
-            alpha = float(waypoint) / 4.0
-            desired_cube = torch.cat(
-                [
-                    bowl[..., :1],
-                    start_y + alpha * (target_y - start_y),
-                    torch.full_like(bowl[..., 2:3], 0.24),
-                ],
-                dim=-1,
-            )
-            current_td = policy_state["td"]
-            cube = current_td["cube_pos"].clone()
-            pinch_to_cube = current_td["pinch_pos"].clone() - cube
-            position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
-            yield RobotAction.reach_pose(
-                position=position,
-                quaternion=quaternion,
-                gripper="closed",
-                steps=80,
-                settle_steps=20,
-            )
-
-        drop_cube = torch.cat(
+    current_td = policy_state["td"]
+    start_y = current_td["cube_pos"][..., 1:2].clone()
+    target_y = bowl[..., 1:2]
+    for waypoint in range(1, 5):
+        alpha = float(waypoint) / 4.0
+        desired_cube = torch.cat(
             [
                 bowl[..., :1],
-                bowl[..., 1:2],
-                torch.full_like(bowl[..., 2:3], 0.13),
+                start_y + alpha * (target_y - start_y),
+                torch.full_like(bowl[..., 2:3], 0.24),
             ],
             dim=-1,
         )
         current_td = policy_state["td"]
         cube = current_td["cube_pos"].clone()
         pinch_to_cube = current_td["pinch_pos"].clone() - cube
-        position, quaternion = pose_at(drop_cube + pinch_to_cube, quat)
+        position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
         yield RobotAction.reach_pose(
             position=position,
             quaternion=quaternion,
             gripper="closed",
-            steps=100,
-            settle_steps=40,
+            steps=80,
+            settle_steps=20,
         )
 
-        yield RobotAction.open_gripper(steps=100, settle_steps=20)
-        yield RobotAction.wait(gripper="open", steps=240)
+    drop_cube = torch.cat(
+        [
+            bowl[..., :1],
+            bowl[..., 1:2],
+            torch.full_like(bowl[..., 2:3], 0.13),
+        ],
+        dim=-1,
+    )
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    pinch_to_cube = current_td["pinch_pos"].clone() - cube
+    position, quaternion = pose_at(drop_cube + pinch_to_cube, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="closed",
+        steps=100,
+        settle_steps=40,
+    )
 
-        current_td = policy_state["td"]
-        retreat_xyz = torch.cat(
-            [
-                current_td["pinch_pos"][..., :2],
-                torch.full_like(current_td["pinch_pos"][..., 2:3], 0.26),
-            ],
-            dim=-1,
-        )
-        position, quaternion = pose_at(retreat_xyz, quat)
-        yield RobotAction.reach_pose(
-            position=position,
-            quaternion=quaternion,
-            gripper="open",
-            steps=120,
-            settle_steps=60,
-        )
+    yield RobotAction.open_gripper(steps=100, settle_steps=20)
+    yield RobotAction.wait(gripper="open", steps=240)
 
-        yield RobotAction.home(
-            joints=initial_robot_qpos,
-            gripper="open",
-            steps=250,
-            settle_steps=1600,
-        )
-    else:
-        yield RobotAction.reach_pose(
-            position=cube + cube.new_tensor([[0.0, 0.0, 0.14]]),
-            gripper="open",
-            steps=20,
-        )
-        yield RobotAction.reach_pose(
-            position=cube + cube.new_tensor([[0.0, 0.0, 0.02]]),
-            gripper="open",
-            steps=20,
-        )
-        yield RobotAction.close_gripper(steps=20)
-        yield RobotAction.reach_pose(
-            position=cube + cube.new_tensor([[0.0, 0.0, 0.18]]),
-            gripper="closed",
-            steps=20,
-        )
-        yield RobotAction.reach_pose(
-            position=bowl + bowl.new_tensor([[0.0, 0.0, 0.18]]),
-            gripper="closed",
-            steps=20,
-        )
-        yield RobotAction.reach_pose(
-            position=bowl + bowl.new_tensor([[0.0, 0.0, 0.08]]),
-            gripper="closed",
-            steps=20,
-        )
-        yield RobotAction.open_gripper(steps=20)
-        yield RobotAction.home(
-            joints=initial_robot_qpos,
-            gripper="open",
-            steps=20,
-            settle_steps=80,
-        )
+    current_td = policy_state["td"]
+    retreat_xyz = torch.cat(
+        [
+            current_td["pinch_pos"][..., :2],
+            torch.full_like(current_td["pinch_pos"][..., 2:3], 0.26),
+        ],
+        dim=-1,
+    )
+    position, quaternion = pose_at(retreat_xyz, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="open",
+        steps=120,
+        settle_steps=60,
+    )
+
+    yield RobotAction.home(
+        joints=initial_robot_qpos,
+        gripper="open",
+        steps=250,
+        settle_steps=1600,
+    )
+    yield RobotAction.wait(gripper="open", steps=800)
 
 
 def update_closed_motion(reference_cube: torch.Tensor, td: TensorDictBase) -> None:
@@ -736,16 +693,11 @@ while True:
 robot_home_error = (observation["robot_qpos"] - initial_robot_qpos).norm(
     dim=-1, keepdim=True
 )
-scripted_macro_animation = recorder.to_animation(
-    title="Scripted macro: pick the cube into the bowl",
-    interval=VIDEO_INTERVAL_MS,
-    clear=True,
-)
 
 assert grasp_distance.item() <= 0.025, grasp_distance.item()
 assert cube_motion_while_closed.item() >= 0.05, cube_motion_while_closed.item()
 assert cube_lift_while_closed.item() >= 0.08, cube_lift_while_closed.item()
-assert robot_home_error.item() <= robot_home_tolerance, robot_home_error.item()
+assert robot_home_error.item() <= 0.04, robot_home_error.item()
 assert max_reward.item() == 1.0, (
     max_reward.item(),
     observation["cube_pos"],
@@ -767,13 +719,13 @@ randomized_observations = []
 for index in range(4):
     offset = 0.025 * float(index)
     cube_pos = torch.as_tensor(
-        base_env.cube_position,
+        env.cube_position,
         dtype=observation["cube_pos"].dtype,
         device=observation["cube_pos"].device,
     ).view(1, 3)
     cube_pos[..., 1] = cube_pos[..., 1] + offset
     randomized_observations.append(
-        base_env.reset(TensorDict({"cube_pos": cube_pos}, batch_size=[1]))
+        env.reset(TensorDict({"cube_pos": cube_pos}, batch_size=[1]))
     )
 assert not torch.equal(
     randomized_observations[0]["cube_pos"][..., 1],
@@ -804,8 +756,5 @@ assert not torch.equal(
 #      preset used in this tutorial.
 #    - :class:`~torchrl.envs.MultiAction` for executing batched low-level action
 #      sequences.
-#    - :class:`~torchrl.record.PixelRenderTransform` and
-#      :class:`~torchrl.record.VideoRecorder` for rendering and recording
-#      simulator videos.
 
 env.close()
