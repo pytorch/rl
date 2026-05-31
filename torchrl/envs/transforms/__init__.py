@@ -10,6 +10,8 @@ from .r3m import R3MTransform
 from .ray_service import RayTransform
 from ._primitive import (
     MacroPrimitiveTransform,
+    RobotAction,
+    RobotActionMode,
     URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
@@ -119,6 +121,8 @@ __all__ = [
     "InitTracker",
     "LineariseRewards",
     "MacroPrimitiveTransform",
+    "RobotAction",
+    "RobotActionMode",
     "MeanActionSelector",
     "ModuleTransform",
     "MultiAction",

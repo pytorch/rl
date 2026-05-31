@@ -7,10 +7,10 @@
 from __future__ import annotations
 
 from enum import IntEnum
-from typing import Any, Callable, Literal
+from typing import Any, Callable, ClassVar, Literal
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import TensorDictBase, tensorclass
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.transforms._action import MultiAction
@@ -19,6 +19,8 @@ from torchrl.envs.transforms._base import Transform
 
 __all__ = [
     "MacroPrimitiveTransform",
+    "RobotAction",
+    "RobotActionMode",
     "URScriptPrimitive",
     "URScriptPrimitiveTransform",
 ]
@@ -56,6 +58,348 @@ class URScriptPrimitive(IntEnum):
 
     def __str__(self) -> str:
         return self.name.lower()
+
+
+class RobotActionMode(IntEnum):
+    r"""Readable modes for :class:`RobotAction`.
+
+    ``RobotActionMode`` mirrors the URScript primitive set and adds ``RESET``,
+    which asks the transform to resolve the environment's configured home
+    posture.
+
+    Examples:
+        >>> from torchrl.envs.transforms import RobotActionMode
+        >>> RobotActionMode.REACH_POSE.name
+        'REACH_POSE'
+    """
+
+    WAIT = int(URScriptPrimitive.WAIT)
+    REACH_JOINTS = int(URScriptPrimitive.MOVEJ)
+    REACH_POSE = int(URScriptPrimitive.MOVEL)
+    OPEN_GRIPPER = int(URScriptPrimitive.OPEN_GRIPPER)
+    CLOSE_GRIPPER = int(URScriptPrimitive.CLOSE_GRIPPER)
+    RESET = len(URScriptPrimitive)
+
+
+GripperCommand = Literal["keep", "open", "closed"]
+
+
+class _RobotActionReset:
+    def __repr__(self) -> str:
+        return "RobotAction.RESET"
+
+
+def _unwrap_robot_action(action: Any) -> Any:
+    data = getattr(action, "data", None)
+    if isinstance(data, _RobotActionReset):
+        return data
+    return action
+
+
+def _as_batch(value: torch.Tensor, last_dim: int) -> torch.Tensor:
+    if value.shape[-1] != last_dim:
+        raise ValueError(
+            f"Expected a tensor with trailing dimension {last_dim}, got {value.shape}."
+        )
+    if value.ndim == 1:
+        return value.unsqueeze(0)
+    return value
+
+
+def _identity_quaternion_like(position: torch.Tensor) -> torch.Tensor:
+    quaternion = torch.zeros(
+        position.shape[:-1] + (4,), dtype=position.dtype, device=position.device
+    )
+    quaternion[..., 0] = 1.0
+    return quaternion
+
+
+def _gripper_code(gripper: GripperCommand) -> int:
+    if gripper == "keep":
+        return RobotAction.GRIPPER_KEEP
+    if gripper == "open":
+        return RobotAction.GRIPPER_OPEN
+    if gripper == "closed":
+        return RobotAction.GRIPPER_CLOSED
+    raise ValueError(
+        "gripper must be one of 'keep', 'open' or 'closed', "
+        f"got {gripper!r}."
+    )
+
+
+def _batch_size(batch_size: torch.Size | tuple[int, ...] | None) -> torch.Size:
+    if batch_size is None:
+        return torch.Size([1])
+    return torch.Size(batch_size)
+
+
+@tensorclass
+class RobotAction:
+    r"""A human-writable robot macro action.
+
+    ``RobotAction`` instances are structured TensorClass values meant to be
+    written directly under ``td["action"]`` before calling ``env.step(td)`` with
+    :class:`URScriptPrimitiveTransform`.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import RobotAction
+        >>> td = TensorDict({"robot_qpos": torch.zeros(1, 6)}, batch_size=[1])
+        >>> td["action"] = RobotAction.reach_pose(
+        ...     position=torch.tensor([[0.4, 0.0, 0.2]])
+        ... )
+        >>> td["action"].position.shape
+        torch.Size([1, 3])
+    """
+
+    mode: torch.Tensor
+    position: torch.Tensor
+    quaternion: torch.Tensor
+    joints: torch.Tensor
+    gripper: torch.Tensor
+    steps: torch.Tensor
+    settle_steps: torch.Tensor
+
+    GRIPPER_KEEP: ClassVar[int] = -1
+    GRIPPER_OPEN: ClassVar[int] = 0
+    GRIPPER_CLOSED: ClassVar[int] = 1
+    RESET: ClassVar[_RobotActionReset]
+
+    @classmethod
+    def reach_pose(
+        cls,
+        *,
+        position: torch.Tensor,
+        quaternion: torch.Tensor | None = None,
+        gripper: GripperCommand = "keep",
+        steps: int = 16,
+        settle_steps: int = 0,
+    ) -> RobotAction:
+        """Ask the end effector to reach a Cartesian pose."""
+        position = _as_batch(position, 3)
+        if quaternion is None:
+            quaternion = _identity_quaternion_like(position)
+        else:
+            quaternion = _as_batch(quaternion, 4).to(
+                dtype=position.dtype, device=position.device
+            )
+        return cls._make(
+            RobotActionMode.REACH_POSE,
+            position=position,
+            quaternion=quaternion,
+            gripper=gripper,
+            steps=steps,
+            settle_steps=settle_steps,
+        )
+
+    @classmethod
+    def reach_joints(
+        cls,
+        *,
+        joints: torch.Tensor,
+        gripper: GripperCommand = "keep",
+        steps: int = 16,
+        settle_steps: int = 0,
+    ) -> RobotAction:
+        """Ask the arm to reach a joint configuration."""
+        return cls._make(
+            RobotActionMode.REACH_JOINTS,
+            joints=_as_batch(joints, 6),
+            gripper=gripper,
+            steps=steps,
+            settle_steps=settle_steps,
+        )
+
+    @classmethod
+    def home(
+        cls,
+        *,
+        joints: torch.Tensor,
+        gripper: GripperCommand = "open",
+        steps: int = 16,
+        settle_steps: int = 0,
+    ) -> RobotAction:
+        """Ask the arm to return to an explicit home joint configuration."""
+        return cls.reach_joints(
+            joints=joints,
+            gripper=gripper,
+            steps=steps,
+            settle_steps=settle_steps,
+        )
+
+    @classmethod
+    def reset(
+        cls,
+        *,
+        gripper: GripperCommand = "open",
+        steps: int = 16,
+        settle_steps: int = 0,
+        batch_size: torch.Size | tuple[int, ...] | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+    ) -> RobotAction:
+        """Ask the transform to resolve the environment's reset/home posture."""
+        dtype = torch.get_default_dtype() if dtype is None else dtype
+        device = torch.device("cpu") if device is None else device
+        batch_size = _batch_size(batch_size)
+        position = torch.zeros(batch_size + (3,), dtype=dtype, device=device)
+        return cls._make(
+            RobotActionMode.RESET,
+            position=position,
+            gripper=gripper,
+            steps=steps,
+            settle_steps=settle_steps,
+        )
+
+    @classmethod
+    def open_gripper(
+        cls,
+        *,
+        steps: int = 16,
+        settle_steps: int = 0,
+        batch_size: torch.Size | tuple[int, ...] | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+    ) -> RobotAction:
+        """Open the gripper while keeping the current arm state."""
+        return cls._empty(
+            RobotActionMode.OPEN_GRIPPER,
+            gripper="open",
+            steps=steps,
+            settle_steps=settle_steps,
+            batch_size=batch_size,
+            dtype=dtype,
+            device=device,
+        )
+
+    @classmethod
+    def close_gripper(
+        cls,
+        *,
+        steps: int = 16,
+        settle_steps: int = 0,
+        batch_size: torch.Size | tuple[int, ...] | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+    ) -> RobotAction:
+        """Close the gripper while keeping the current arm state."""
+        return cls._empty(
+            RobotActionMode.CLOSE_GRIPPER,
+            gripper="closed",
+            steps=steps,
+            settle_steps=settle_steps,
+            batch_size=batch_size,
+            dtype=dtype,
+            device=device,
+        )
+
+    @classmethod
+    def wait(
+        cls,
+        *,
+        gripper: GripperCommand = "keep",
+        steps: int = 1,
+        settle_steps: int = 0,
+        batch_size: torch.Size | tuple[int, ...] | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+    ) -> RobotAction:
+        """Hold the current arm target for a number of low-level steps."""
+        return cls._empty(
+            RobotActionMode.WAIT,
+            gripper=gripper,
+            steps=steps,
+            settle_steps=settle_steps,
+            batch_size=batch_size,
+            dtype=dtype,
+            device=device,
+        )
+
+    @classmethod
+    def _empty(
+        cls,
+        mode: RobotActionMode,
+        *,
+        gripper: GripperCommand,
+        steps: int,
+        settle_steps: int,
+        batch_size: torch.Size | tuple[int, ...] | None,
+        dtype: torch.dtype | None,
+        device: torch.device | None,
+    ) -> RobotAction:
+        dtype = torch.get_default_dtype() if dtype is None else dtype
+        device = torch.device("cpu") if device is None else device
+        batch_size = _batch_size(batch_size)
+        return cls._make(
+            mode,
+            position=torch.zeros(batch_size + (3,), dtype=dtype, device=device),
+            gripper=gripper,
+            steps=steps,
+            settle_steps=settle_steps,
+        )
+
+    @classmethod
+    def _make(
+        cls,
+        mode: RobotActionMode,
+        *,
+        position: torch.Tensor | None = None,
+        quaternion: torch.Tensor | None = None,
+        joints: torch.Tensor | None = None,
+        gripper: GripperCommand = "keep",
+        steps: int = 16,
+        settle_steps: int = 0,
+    ) -> RobotAction:
+        if position is not None:
+            position = _as_batch(position, 3)
+            batch_size = position.shape[:-1]
+            dtype = position.dtype
+            device = position.device
+        elif joints is not None:
+            joints = _as_batch(joints, 6)
+            batch_size = joints.shape[:-1]
+            dtype = joints.dtype
+            device = joints.device
+        else:
+            batch_size = torch.Size([1])
+            dtype = torch.get_default_dtype()
+            device = torch.device("cpu")
+            position = torch.zeros(batch_size + (3,), dtype=dtype, device=device)
+
+        if position is None:
+            position = torch.zeros(batch_size + (3,), dtype=dtype, device=device)
+        if quaternion is None:
+            quaternion = _identity_quaternion_like(position)
+        else:
+            quaternion = _as_batch(quaternion, 4).to(dtype=dtype, device=device)
+        if joints is None:
+            joints = torch.zeros(batch_size + (6,), dtype=dtype, device=device)
+
+        return cls(
+            mode=torch.full(
+                batch_size + (1,), int(mode), dtype=torch.long, device=device
+            ),
+            position=position,
+            quaternion=quaternion,
+            joints=joints,
+            gripper=torch.full(
+                batch_size + (1,),
+                _gripper_code(gripper),
+                dtype=torch.long,
+                device=device,
+            ),
+            steps=torch.full(
+                batch_size + (1,), steps, dtype=torch.long, device=device
+            ),
+            settle_steps=torch.full(
+                batch_size + (1,), settle_steps, dtype=torch.long, device=device
+            ),
+            batch_size=batch_size,
+        )
+
+
+RobotAction.RESET = _RobotActionReset()
 
 
 class _URScriptPrimitiveLibrary:
@@ -106,8 +450,9 @@ class _JointPositionGripperAdapter:
         dtype: torch.dtype,
     ) -> torch.Tensor:
         if self.action_key in tensordict.keys(True, True):
-            action = tensordict.get(self.action_key).to(dtype=dtype, device=device)
+            action = tensordict.get(self.action_key)
             if isinstance(action, torch.Tensor):
+                action = action.to(dtype=dtype, device=device)
                 return action.reshape(batch_shape + (self.action_dim,))
         start = torch.zeros(
             batch_shape + (self.action_dim,), dtype=dtype, device=device
@@ -857,7 +1202,9 @@ class MacroPrimitiveTransform(Transform):
     def _has_structured_action(self, tensordict: TensorDictBase) -> bool:
         if self.action_key not in tensordict.keys(True, True):
             return False
-        action = tensordict.get(self.action_key)
+        action = _unwrap_robot_action(tensordict.get(self.action_key))
+        if isinstance(action, _RobotActionReset):
+            return True
         if isinstance(action, torch.Tensor):
             return False
         if not hasattr(action, "keys") or not hasattr(action, "get"):
@@ -867,14 +1214,28 @@ class MacroPrimitiveTransform(Transform):
     def _unpack_structured_action(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, int, int]:
-        action = tensordict.get(self.action_key)
+        action = _unwrap_robot_action(tensordict.get(self.action_key))
+        dtype = self.adapter.action_dtype(tensordict)
+        if isinstance(action, _RobotActionReset):
+            action = RobotAction.reset(
+                batch_size=tensordict.batch_size,
+                dtype=dtype,
+                device=self._primitive_device(tensordict),
+                steps=self.macro_steps,
+                settle_steps=self.settle_steps,
+            )
         mode = action.get("mode").to(torch.long)
         if mode.shape[-1:] != torch.Size([1]):
             mode = mode.unsqueeze(-1)
         batch_shape = mode.shape[:-1]
         device = mode.device
-        dtype = self.adapter.action_dtype(tensordict)
         start = self.adapter.current_action(tensordict, batch_shape, device, dtype)
+        reset_mask = mode == int(RobotActionMode.RESET)
+        primitive_id = torch.where(
+            reset_mask,
+            torch.full_like(mode, int(self.primitive_library.MOVEJ)),
+            mode,
+        )
 
         position = self._structured_action_field(
             action,
@@ -905,15 +1266,21 @@ class MacroPrimitiveTransform(Transform):
             device,
             self.action_dim - 1,
         )
+        if reset_mask.any():
+            joints = torch.where(
+                reset_mask,
+                self._env_home_qpos(batch_shape, dtype, device),
+                joints,
+            )
         joints = torch.where(
-            mode == self.primitive_library.MOVEJ,
+            primitive_id == self.primitive_library.MOVEJ,
             joints,
             start[..., : self.action_dim - 1],
         )
         gripper = self._structured_gripper(action, start, batch_shape, dtype, device)
 
         out = tensordict.clone()
-        out.set(self.primitive_id_key, mode)
+        out.set(self.primitive_id_key, primitive_id)
         out.set(self.target_pose_key, torch.cat([position, quaternion], dim=-1))
         out.set(self.target_qpos_key, self.adapter.low_level_action(joints, gripper))
         out.set(self.gripper_key, gripper)
@@ -937,6 +1304,38 @@ class MacroPrimitiveTransform(Transform):
             return default
         value = action.get(key).to(dtype=dtype, device=device)
         return value.reshape(batch_shape + (last_dim,))
+
+    def _env_home_qpos(
+        self,
+        batch_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        env = self._find_parent_env_with("robot_home_qpos")
+        if env is None:
+            raise RuntimeError(
+                "RobotAction.RESET requires the parent environment to expose "
+                "`robot_home_qpos`. Use RobotAction.home(joints=...) when the "
+                "home joint target is not environment-defined."
+            )
+        home_qpos = getattr(env, "robot_home_qpos")
+        if callable(home_qpos):
+            home_qpos = home_qpos()
+        if home_qpos is None:
+            raise RuntimeError(
+                "RobotAction.RESET could not resolve an environment home joint "
+                "target. Use RobotAction.home(joints=...) instead."
+            )
+        home_qpos = torch.as_tensor(home_qpos, dtype=dtype, device=device)
+        joint_dim = self.action_dim - 1
+        if home_qpos.shape[-1:] != torch.Size([joint_dim]):
+            raise RuntimeError(
+                "`robot_home_qpos` must have trailing dimension "
+                f"{joint_dim}, got {home_qpos.shape}."
+            )
+        if home_qpos.ndim == 1:
+            return home_qpos.expand(batch_shape + (joint_dim,)).clone()
+        return home_qpos.reshape(batch_shape + (joint_dim,))
 
     def _structured_gripper(
         self,
@@ -1060,10 +1459,14 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.envs.transforms import URScriptPrimitiveTransform
+        >>> from torchrl.envs.transforms import RobotAction, URScriptPrimitiveTransform
+        >>> robot_action = RobotAction.reach_joints(
+        ...     joints=torch.ones(1, 6), steps=2
+        ... )
+        >>> robot_action.mode.shape
+        torch.Size([1, 1])
         >>> td = TensorDict({
-        ...     "primitive_id": torch.tensor([[1]]),
-        ...     "target_qpos": torch.ones(1, 7),
+        ...     "action": robot_action,
         ...     "robot_qpos": torch.zeros(1, 6),
         ...     "gripper_qpos": torch.zeros(1, 8),
         ... }, batch_size=[1])

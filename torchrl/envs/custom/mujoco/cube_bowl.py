@@ -763,6 +763,11 @@ class CubeBowlEnv(MujocoEnv):
             return 255.0
         return 0.038
 
+    @property
+    def robot_home_qpos(self) -> tuple[float, ...] | None:
+        """Environment-defined home joint configuration for scripted control."""
+        return self._robot_home_qpos
+
     def low_level_action(
         self,
         robot_qpos: torch.Tensor,

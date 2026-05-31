@@ -23,6 +23,7 @@ from torchrl.envs import (
     MujocoEnv,
     MultiAction,
     ParallelEnv,
+    RobotAction,
     SatelliteEnv,
     SerialEnv,
     TransformedEnv,
@@ -1200,17 +1201,11 @@ class TestMujoco:
             ),
         )
         td = env.reset()
-        td["action"] = TensorDict(
-            {
-                "mode": torch.full(
-                    (1, 1), URScriptPrimitiveTransform.MOVEL, dtype=torch.long
-                ),
-                "position": td["cube_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
-                "quaternion": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
-                "joints": torch.zeros(1, 6),
-                "gripper": torch.zeros(1, 1, dtype=torch.long),
-            },
-            batch_size=[1],
+        td["action"] = RobotAction.reach_pose(
+            position=td["cube_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
+            quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+            gripper="open",
+            steps=2,
         )
 
         out = env.step(td)

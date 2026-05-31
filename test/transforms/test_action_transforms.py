@@ -52,6 +52,8 @@ from torchrl.envs import (
     MacroPrimitiveTransform,
     MultiAction,
     ParallelEnv,
+    RobotAction,
+    RobotActionMode,
     SerialEnv,
     StepCounter,
     TransformedEnv,
@@ -1057,17 +1059,12 @@ class TestURScriptPrimitiveTransform:
             return out
 
         transform = URScriptPrimitiveTransform(macro_steps=1, cartesian_solver=solver)
-        robot_action = TensorDict(
-            {
-                "mode": torch.tensor([[int(URScriptPrimitive.MOVEL)]]),
-                "position": torch.tensor([[1.0, 2.0, 3.0]]),
-                "quaternion": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
-                "joints": torch.zeros(1, 6),
-                "gripper": torch.tensor([[1]]),
-                "steps": torch.tensor([[3]]),
-                "settle_steps": torch.tensor([[2]]),
-            },
-            batch_size=[1],
+        robot_action = RobotAction.reach_pose(
+            position=torch.tensor([[1.0, 2.0, 3.0]]),
+            quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+            gripper="closed",
+            steps=3,
+            settle_steps=2,
         )
         td = TensorDict(
             {
@@ -1083,18 +1080,25 @@ class TestURScriptPrimitiveTransform:
         torch.testing.assert_close(action[:, 2, :3], torch.tensor([[1.0, 2.0, 3.0]]))
         torch.testing.assert_close(action[:, -1, -1:], torch.tensor([[255.0]]))
 
-    def test_structured_robot_action_reach_joints_keep_gripper(self):
+    def test_robot_action_close_gripper_keeps_arm(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)
-        robot_action = TensorDict(
+        robot_qpos = torch.arange(6, dtype=torch.float32).view(1, 6)
+        td = TensorDict(
             {
-                "mode": torch.tensor([[int(URScriptPrimitive.MOVEJ)]]),
-                "position": torch.zeros(1, 3),
-                "quaternion": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
-                "joints": torch.ones(1, 6),
-                "gripper": torch.tensor([[-1]]),
+                "action": RobotAction.close_gripper(steps=4),
+                "robot_qpos": robot_qpos,
+                "gripper_qpos": torch.zeros(1, 2),
             },
             batch_size=[1],
         )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :6], robot_qpos)
+        torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 255.0))
+
+    def test_structured_robot_action_reach_joints_keep_gripper(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        robot_action = RobotAction.reach_joints(joints=torch.ones(1, 6))
         td = TensorDict(
             {
                 "action": robot_action,
@@ -1107,6 +1111,31 @@ class TestURScriptPrimitiveTransform:
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[:, -1, :6], torch.ones(1, 6))
         torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 7.0))
+
+    def test_robot_action_reset_uses_parent_home_qpos(self):
+        class FakeParent:
+            robot_home_qpos = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+
+        class FakeTransform(URScriptPrimitiveTransform):
+            @property
+            def parent(self):
+                return FakeParent()
+
+        transform = FakeTransform(macro_steps=2)
+        td = TensorDict(
+            {
+                "action": RobotAction.RESET,
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(
+            action[:, -1, :6], torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]])
+        )
+        torch.testing.assert_close(action[:, -1, -1:], torch.zeros(1, 1))
 
     def test_urscript_execute_returns_multi_action_compose(self):
         transform = URScriptPrimitiveTransform(macro_steps=2, execute=True)

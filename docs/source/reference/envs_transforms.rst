@@ -277,6 +277,8 @@ Available Transforms
     InitTracker
     LineariseRewards
     MacroPrimitiveTransform
+    RobotAction
+    RobotActionMode
     URScriptPrimitive
     MeanActionSelector
     ModuleTransform
