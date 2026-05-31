@@ -16,7 +16,7 @@
   <asset>
     <texture name="checker" type="2d" builtin="checker" width="256" height="256" rgb1="0.92 0.92 0.88" rgb2="0.72 0.76 0.78"/>
     <material name="floor_mat" texture="checker" texrepeat="4 4" texuniform="true" reflectance="0.15"/>
-    <material name="ball_mat" rgba="0.95 0.35 0.15 1"/>
+    <material name="cube_mat" rgba="0.95 0.35 0.15 1"/>
     <material name="bowl_mat" rgba="0.25 0.65 0.55 0.7"/>
   </asset>
 
@@ -28,7 +28,7 @@
 
     <body name="bowl" pos="0.28 0.19 0.01">
       <geom name="bowl_bottom" type="cylinder" size="0.07 0.008" material="bowl_mat"/>
-      <geom name="bowl_front" type="box" pos="0 -0.067 0.035" size="0.072 0.006 0.035" material="bowl_mat"/>
+      <geom name="bowl_front" type="box" pos="0 -0.067 0.014" size="0.072 0.006 0.014" material="bowl_mat"/>
       <geom name="bowl_back" type="box" pos="0 0.067 0.035" size="0.072 0.006 0.035" material="bowl_mat"/>
       <geom name="bowl_left" type="box" pos="-0.067 0 0.035" size="0.006 0.072 0.035" material="bowl_mat"/>
       <geom name="bowl_right" type="box" pos="0.067 0 0.035" size="0.006 0.072 0.035" material="bowl_mat"/>
@@ -37,7 +37,7 @@
 
     <body name="ball" pos="0.34 -0.14 0.035">
       <freejoint name="ball_freejoint"/>
-      <geom name="ball_geom" type="sphere" size="0.025" mass="0.045" material="ball_mat"/>
+      <geom name="ball_geom" type="box" size="0.022 0.022 0.022" mass="0.02" friction="3 0.05 0.001" condim="4" solimp="0.95 0.99 0.001" solref="0.004 1" material="cube_mat"/>
     </body>
 
     <body name="robot/base" pos="0 0 0.02">

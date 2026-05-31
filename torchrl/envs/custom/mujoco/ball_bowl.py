@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Ball-to-bowl manipulation task for MuJoCo macro-control examples."""
+"""Cube-to-bowl manipulation task for MuJoCo macro-control examples."""
 
 from __future__ import annotations
 
@@ -24,18 +24,18 @@ _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
 
 class BallBowlEnv(MujocoEnv):
-    r"""UR-style ball-to-bowl manipulation scene.
+    r"""UR-style cube-to-bowl manipulation scene.
 
     ``BallBowlEnv`` is a compact MuJoCo task meant for tutorials on custom
     MuJoCo environments, action sequences, and scripted robot primitives. The
     default bundled MJCF uses only primitive geoms: a six-joint arm, a simple
-    two-finger gripper, a free ball, and a static bowl. For demos, the
+    two-finger gripper, a free cube, and a static bowl. For demos, the
     environment can also compose the MuJoCo Menagerie UR5e arm and Robotiq
     2F-85 gripper from a local Menagerie checkout, without vendoring their mesh
     assets in TorchRL. The low-level action is a 7D position command: six arm
     joint targets followed by one gripper command. Observations include
     privileged manipulation diagnostics such as the pinch pose and gripper pad
-    positions. The task reward is sparse: it is ``1`` when the ball center is
+    positions. The task reward is sparse: it is ``1`` when the cube center is
     within ``placement_tolerance`` of the bowl target coordinate and ``0``
     otherwise.
 
@@ -46,11 +46,13 @@ class BallBowlEnv(MujocoEnv):
         menagerie_path: optional path to a local ``mujoco_menagerie`` checkout.
             When ``robot_model="menagerie_ur5e"`` and this is omitted, the
             ``TORCHRL_MUJOCO_MENAGERIE_PATH`` environment variable is used.
-        ball_position: initial xyz position of the ball center.
+        ball_position: initial xyz position of the cube center. The historical
+            key name is kept for compatibility with early versions of this
+            tutorial.
         bowl_position: xyz position of the bowl body. The task target is the
             ``bowl_target`` site inside that body.
         placement_tolerance: success radius, in meters, around the bowl target.
-        terminate_on_success: if ``True``, terminate when the ball reaches the
+        terminate_on_success: if ``True``, terminate when the cube reaches the
             bowl target.
         backend: physics backend. Defaults to ``"mujoco"`` because the tutorial
             task uses contacts and MuJoCo's site Jacobians for scripted IK.
@@ -66,7 +68,8 @@ class BallBowlEnv(MujocoEnv):
     XML_PATH = "ball_bowl.xml"
     FRAME_SKIP = 5
     RESET_NOISE_SCALE = 0.0
-    BALL_RADIUS = 0.025
+    OBJECT_HALF_SIZE = 0.022
+    BALL_RADIUS = OBJECT_HALF_SIZE
     ROBOT_QPOS_DIM = 6
     GRIPPER_QPOS_DIM = 2
     BALL_QPOS_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
@@ -476,14 +479,30 @@ class BallBowlEnv(MujocoEnv):
         )
         bowl_front = bowl.find("geom[@name='bowl_front']")
         if bowl_front is not None:
-            bowl.remove(bowl_front)
+            bowl_front.set("pos", "0 -0.075 0.014")
+            bowl_front.set("size", "0.08 0.006 0.014")
         bowl_bottom = bowl.find("geom[@name='bowl_bottom']")
         if bowl_bottom is not None:
-            bowl_bottom.set("contype", "0")
-            bowl_bottom.set("conaffinity", "0")
+            bowl_bottom.set("friction", "1 0.02 0.001")
         ball = self._make_ball_body()
         worldbody.append(bowl)
         worldbody.append(ball)
+        for geom in root.iter("geom"):
+            if geom.attrib.get("name") in (
+                "gripper/left_pad1",
+                "gripper/left_pad2",
+                "gripper/right_pad1",
+                "gripper/right_pad2",
+            ):
+                geom.set("type", "box")
+                geom.set("size", "0.016 0.010 0.025")
+                geom.set("friction", "5 0.1 0.001")
+                geom.set("condim", "4")
+                geom.set("solimp", "0.95 0.99 0.001")
+                geom.set("solref", "0.004 1")
+        actuator = root.find(".//general[@name='gripper/fingers_actuator']")
+        if actuator is not None:
+            actuator.set("forcerange", "-80 80")
 
     def _make_bowl_body(
         self,
@@ -562,9 +581,17 @@ class BallBowlEnv(MujocoEnv):
             "geom",
             {
                 "name": "ball_geom",
-                "type": "sphere",
-                "size": f"{self.BALL_RADIUS:.8g}",
-                "mass": "0.045",
+                "type": "box",
+                "size": (
+                    f"{self.OBJECT_HALF_SIZE:.8g} "
+                    f"{self.OBJECT_HALF_SIZE:.8g} "
+                    f"{self.OBJECT_HALF_SIZE:.8g}"
+                ),
+                "mass": "0.02",
+                "friction": "3 0.05 0.001",
+                "condim": "4",
+                "solimp": "0.95 0.99 0.001",
+                "solref": "0.004 1",
                 "rgba": "0.95 0.35 0.15 1",
             },
         )
