@@ -6,22 +6,23 @@ Collector Internals
 ===================
 
 This page describes how :class:`~torchrl.collectors.SyncDataCollector` (aliased
-as :class:`Collector`) actually steps through an environment.  It is meant for
-contributors and for users debugging unexpected rollout behaviour — the device
-casts, the per-step bookkeeping, and the trajectory-tracking machinery are not
-visible from the public API and have, until now, only been documented in
-inline comments inside ``torchrl/collectors/_single.py``.
+as :class:`Collector`) steps through an environment.  It is meant for
+contributors and for users debugging unexpected rollout behaviour: device
+casts, per-step bookkeeping, and trajectory tracking are implementation details
+that are not visible from the public API.
 
-The multi-process collectors (:class:`MultiSyncCollector`,
+The multi-process collectors (:class:`MultiSyncCollector` and
 :class:`MultiAsyncCollector`) delegate their per-worker rollouts to
-:class:`SyncDataCollector`, so everything on this page applies to them too.
+:class:`SyncDataCollector`, so the per-worker flow on this page applies to
+them too.
 
 Per-timestep flow
 -----------------
 
 A single iteration of :meth:`SyncDataCollector.rollout` corresponds to one
 environment step.  ``frames_per_batch`` such iterations are stacked into the
-batch yielded to the user (or written to the replay buffer).
+batch yielded to the user, extended into a replay buffer, or written directly
+with ``replay_buffer.add(...)`` when direct replay-buffer writes are enabled.
 
 .. code-block:: text
 
@@ -29,8 +30,8 @@ batch yielded to the user (or written to the replay buffer).
     │  for t in range(frames_per_batch):                                  │
     │                                                                     │
     │    ┌─ carrier ──────────────────────────────────────────────────┐   │
-    │    │  TensorDict — observation + collector metadata,            │   │
-    │    │  device-cleared if policy_device != env_device             │   │
+    │    │  TensorDict — observation + collector metadata;            │   │
+    │    │  device-cleared when needed for cross-device stepping      │   │
     │    └────────────┬───────────────────────────────────────────────┘   │
     │                 │                                                   │
     │                 │  (1) cast to policy_device if needed              │
@@ -59,10 +60,13 @@ batch yielded to the user (or written to the replay buffer).
     │    ┌─ carrier_for_out (snapshot for this step) ──────────────┐    │
     │    └────────────┬────────────────────────────────────────────┘    │
     │                 │                                                 │
-    │                 │  (3) cast to storing_device if needed           │
-    │                 │      → _sync_storage()                          │
+    │                 │  (3a) replay_buffer.add(carrier_for_out)        │
+    │                 │       for direct writes                         │
+    │                 │                                                 │
+    │                 │  (3b) otherwise cast to storing_device          │
+    │                 │       if needed → _sync_storage(), then append  │
     │                 ▼                                                 │
-    │           append to tensordicts list  OR  replay_buffer.add(...)  │
+    │           direct replay-buffer write OR append to tensordicts     │
     │                 │                                                 │
     │                 │  carrier = env_next_output  (post-reset state)  │
     │                 │  update traj_ids if any env finished            │
@@ -75,61 +79,59 @@ Implementation: :meth:`SyncDataCollector.rollout` in
 The carrier
 -----------
 
-The **carrier** (formerly called the *shuttle*) is the single
-:class:`~tensordict.TensorDictBase` instance that survives across timesteps and
-carries data between the environment and the policy.  It is allocated once by
-:meth:`SyncDataCollector._make_shuttle` and stored as ``self._carrier``.
+The **carrier** is the :class:`~tensordict.TensorDictBase` instance stored as
+``self._carrier``. It persists across calls to ``next(iter(collector))`` and
+holds the post-reset result of the previous environment step, which is the
+state that the next policy call must consume. It is initialized by
+:meth:`SyncDataCollector._make_carrier` and then advanced at the end of every
+timestep by assigning ``env_next_output`` back to ``self._carrier``.
 
 Why it exists
 ~~~~~~~~~~~~~
 
-- **Allocation amortization.**  Reallocating a tensordict every timestep would
-  dominate the wall-clock cost of fast environments.  Reusing one tensordict
-  keeps the per-step overhead at the cost of a few in-place updates.
-- **Deviceless semantics.**  When the policy and environment live on
-  *different* devices (e.g. policy on ``cuda:0``, env on ``cpu``), the carrier
-  is cleared of any device pin via ``clear_device_()`` so that subsequent
-  ``.to(device, non_blocking=True)`` calls do the right thing regardless of
-  which side wrote to it last.  The boolean flag
-  ``self._shuttle_has_no_device`` records whether this clearing happened —
-  see :meth:`_make_shuttle`.
-- **Single source of truth for collector metadata.**  Trajectory IDs and
-  any other ``("collector", ...)`` keys live on the carrier and persist
-  across steps without round-tripping through the env.
+- **State persistence across batches.**  Collection may stop at a batch
+  boundary while the environment trajectory continues. The carrier preserves
+  the latest reset-aware environment output so the next rollout resumes from
+  the correct observation and recurrent state.
+- **Allocation amortization.**  Reusing the same tensordict-shaped state avoids
+  allocating a fresh container for every policy/env exchange.
+- **Device-neutral handoff.**  When the policy and environment cannot share a
+  single device-owned tensordict, the carrier is cleared of its device with
+  ``clear_device_()``. The boolean flag ``self._carrier_has_no_device`` records
+  whether this invariant must be preserved when new ``"next"`` data is merged.
+- **Collector metadata.**  Trajectory IDs and other ``("collector", ...)`` keys
+  live on the carrier and persist across steps without round-tripping through
+  the env.
 
 Reading the carrier
 ~~~~~~~~~~~~~~~~~~~
 
-You should not normally touch ``self._carrier`` directly — it is an
-implementation detail.  If you need to instrument what the policy sees on
-step ``t``, use :attr:`SyncDataCollector.pre_collect_hook` or read the data
-yielded by iteration (which is a copy).  Mutating the carrier from a hook is
-undefined behaviour.
+You should not normally touch ``self._carrier`` directly; it is an
+implementation detail.  If you need to instrument collected data, use
+:attr:`SyncDataCollector.post_collect_hook` or read the data yielded by
+iteration. Mutating the carrier from a hook is undefined behaviour.
 
 Sync points
 -----------
 
-Three explicit synchronisation functions are installed at construction time
-in :meth:`SyncDataCollector._setup_devices` and called inside the rollout
-loop:
+Three explicit synchronisation functions are installed at construction time in
+:meth:`SyncDataCollector._setup_devices` and called inside the rollout loop
+when the corresponding explicit sync is not disabled by ``no_cuda_sync=True``:
 
 ``_sync_policy``
-    Called after copying the carrier to ``policy_device`` (rollout loop,
-    after the ``self._carrier.to(self.policy_device, ...)`` call).  Ensures
-    the host has seen the GPU→CPU transfer of whatever was on the carrier
-    before the policy reads it.
+    Called after copying the carrier to ``policy_device`` and before the
+    policy reads it.
 
 ``_sync_env``
-    Called after copying the carrier to ``env_device`` (rollout loop, after
-    the ``self._carrier.to(self.env_device, ...)`` call).  Same role on the
-    env side.
+    Called after copying the carrier to ``env_device`` and before the
+    environment reads it.
 
 ``_sync_storage``
-    Called after copying ``carrier_for_out`` to ``storing_device`` (rollout
-    loop, when appending to the per-step ``tensordicts`` list).  Ensures the
-    stored batch is consistent before it is returned or stacked.
+    Called after copying ``carrier_for_out`` to ``storing_device`` on the
+    append-to-list path. The direct ``replay_buffer.add(...)`` path does not
+    perform this cast or sync.
 
-What ``_sync_*`` actually is depends on the destination device — see
+What ``_sync_*`` actually is depends on the destination device; see
 :meth:`SyncDataCollector._get_sync_fn`:
 
 +-------------------+------------------------------------------------------+
@@ -138,10 +140,13 @@ What ``_sync_*`` actually is depends on the destination device — see
 | ``cuda`` device   | ``_do_nothing`` (CUDA handles ordering itself)       |
 +-------------------+------------------------------------------------------+
 | Non-CUDA, CUDA    | ``_cuda_sync_if_initialized`` (safe to call after a  |
-| available         | GPU→CPU transfer; no-op in fork subprocesses where   |
-|                   | CUDA was not initialised)                            |
+| available         | GPU-to-host transfer; no-op in fork subprocesses     |
+|                   | where CUDA was not initialised)                      |
 +-------------------+------------------------------------------------------+
 | Non-CUDA, MPS     | ``torch.mps.synchronize``                            |
+| available         |                                                      |
++-------------------+------------------------------------------------------+
+| Non-CUDA, NPU     | ``torch.npu.synchronize``                            |
 | available         |                                                      |
 +-------------------+------------------------------------------------------+
 | ``cpu`` (no GPU)  | ``_do_nothing``                                      |
@@ -150,8 +155,8 @@ What ``_sync_*`` actually is depends on the destination device — see
 +-------------------+------------------------------------------------------+
 
 Setting ``no_cuda_sync=True`` on the collector skips the explicit ``_sync_*``
-calls — only do this if you know all your transfers are CUDA-stream-ordered
-or if you are running pure-CPU.
+calls. Only do this if you know the transfers are already correctly ordered or
+if you are running pure CPU.
 
 Device casting flags
 --------------------
@@ -159,26 +164,25 @@ Device casting flags
 Two cached booleans short-circuit the per-step device logic:
 
 ``_cast_to_policy_device``
-    Set once in :meth:`_setup_devices`.  ``True`` iff
-    ``policy_device != env_device``.  When ``True``, the carrier is copied
-    to ``policy_device`` before the policy is invoked.
+    Set in :meth:`SyncDataCollector._setup_devices`.  ``True`` iff
+    ``policy_device != env_device``.  When ``True``, the carrier is copied to
+    ``policy_device`` before the policy is invoked.
 
 ``_cast_to_env_device``
-    Set once in :meth:`_setup_devices` (with an extra refinement at
-    :meth:`_make_final_rollout`-time).  ``True`` iff a cast is required on
-    the env side — either because the policy device differs from the env
-    device, or because the policy lives on a device the env cannot consume
-    directly.
+    Set in :meth:`SyncDataCollector._apply_env_device`, after the environment
+    device has been applied or inferred.  It is ``True`` when
+    ``_cast_to_policy_device`` is already ``True`` or when
+    ``env.device != storing_device``.  When ``True``, the carrier is copied to
+    ``env_device`` before ``env.step_and_maybe_reset``.
 
-These are computed once so that the per-step branches degenerate into a
-single bool check when everything lives on the same device — the common
-single-GPU case pays essentially no device-management overhead.
+These are computed once so that the per-step branches degenerate into a single
+bool check when everything lives on the same device.
 
-The companion flag ``_shuttle_has_no_device`` (set in :meth:`_make_shuttle`)
-records whether the carrier was stripped of its device.  When ``True``, any
-new ``"next"`` data merged into the carrier after an env step is also
-device-stripped (see the ``if self._shuttle_has_no_device`` block in the
-rollout loop) so the deviceless invariant is preserved.
+The companion flag ``_carrier_has_no_device`` (set in
+:meth:`SyncDataCollector._make_carrier`) records whether the carrier was
+stripped of its device.  When ``True``, any new ``"next"`` data merged into the
+carrier after an env step is also device-stripped so the deviceless invariant
+is preserved.
 
 Trajectory IDs
 --------------
@@ -188,44 +192,45 @@ When ``track_traj_ids=True`` (the default), every frame carries a
 it belongs to.  Two pieces of machinery cooperate:
 
 - :meth:`SyncDataCollector._traj_pool` returns a process-local
-  :class:`_TrajectoryPool` that hands out fresh IDs and guarantees they do
-  not collide across resets.
-- :meth:`SyncDataCollector._update_traj_ids` runs after each env step.  It
-  reads the aggregated end-of-trajectory signal from ``("next", "done")``
-  via :func:`_aggregate_end_of_traj`, draws as many fresh IDs from the pool
-  as there are envs that finished, and ``masked_scatter``-s them into the
-  per-env ``traj_ids`` tensor on the carrier.
+  :class:`torchrl.collectors.utils._TrajectoryPool` that hands out fresh IDs.
+  In multi-process collectors, workers share a locked pool created by the
+  parent collector so IDs do not collide across worker resets.
+- :meth:`SyncDataCollector._update_traj_ids` runs after each env step. It reads
+  the aggregated end-of-trajectory signal from ``("next", "done")`` via
+  :func:`_aggregate_end_of_traj`, draws as many fresh IDs from the pool as
+  there are envs that finished, and ``masked_scatter``-s them into the per-env
+  ``traj_ids`` tensor on the carrier.
 
 Setting ``track_traj_ids=False`` skips both the per-step bookkeeping and the
-allocation of the ``traj_ids`` tensor — worth it in throughput-sensitive
-setups that do not need trajectory-aware sampling.  Note that
+allocation of the ``traj_ids`` tensor. This is useful in throughput-sensitive
+setups that do not need trajectory-aware sampling. Note that
 ``split_trajs=True`` requires ``track_traj_ids=True``; the constructor will
 raise if you ask for the former without the latter.
 
 Collection hooks
 ----------------
 
-Two opt-in callbacks let you instrument the rollout without subclassing:
+Two opt-in callbacks let you instrument collection without subclassing:
 
 ``pre_collect_hook``
     Called once at the top of :meth:`rollout`, before the per-timestep loop
-    starts (and before any ``reset_at_each_iter`` reset).  Receives no
-    arguments.  Use it to step a profiler, mark a section in NVTX, or update
-    a worker-local counter.
+    starts and before any ``reset_at_each_iter`` reset. Receives no arguments.
+    Use it to step a profiler, mark a section in NVTX, or update a
+    worker-local counter.
 
 ``post_collect_hook``
-    Called with the batch tensordict immediately before it is yielded to
-    the consumer.  Receives the :class:`~tensordict.TensorDictBase` that
-    will be yielded.  Return value is ignored.  Use it to log metrics
-    derived from the batch.
+    Called with the batch tensordict immediately before it is yielded to the
+    consumer. Receives the :class:`~tensordict.TensorDictBase` that will be
+    yielded. Return value is ignored. Use it to log metrics derived from the
+    batch.
 
 Hooks are worker-local: in :class:`MultiSyncCollector` /
-:class:`MultiAsyncCollector` they run inside each worker process, not on
-the training worker.  Exceptions raised by a hook propagate up and stop
-collection — they are not swallowed.
+:class:`MultiAsyncCollector` they run inside each worker process, not on the
+training worker. Exceptions raised by a hook propagate up and stop collection;
+they are not swallowed.
 
-For batch *transformations* (rather than instrumentation), use ``postproc``
-on the collector constructor instead.
+For batch *transformations* (rather than instrumentation), use ``postproc`` on
+the collector constructor instead.
 
 Where to look in the code
 -------------------------
@@ -238,10 +243,12 @@ Where to look in the code
      - File / function
    * - Per-step rollout loop
      - :meth:`SyncDataCollector.rollout` in ``torchrl/collectors/_single.py``
-   * - Carrier allocation
-     - :meth:`SyncDataCollector._make_shuttle`
-   * - Device setup, cast flags
+   * - Carrier initialization
+     - :meth:`SyncDataCollector._make_carrier`
+   * - Device setup and policy cast flag
      - :meth:`SyncDataCollector._setup_devices`
+   * - Environment device application and env cast flag
+     - :meth:`SyncDataCollector._apply_env_device`
    * - Sync function dispatch
      - :meth:`SyncDataCollector._get_sync_fn`
    * - Trajectory ID update
