@@ -16,9 +16,11 @@ from typing import Literal
 import numpy as np
 import torch
 from tensordict import TensorDictBase
+from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Binary, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import resolve_xml_string
 from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.transforms import URScriptPrimitiveTransform
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -744,6 +746,182 @@ class CubeBowlEnv(MujocoEnv):
     def _success(self, cube_pos: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         dist = (cube_pos - target).norm(dim=-1, keepdim=True)
         return dist <= self.placement_tolerance
+
+    # ------------------------------------------------------------------
+    # Scripted-control helper API.
+    # ------------------------------------------------------------------
+
+    @property
+    def gripper_open_ctrl(self) -> float:
+        """Low-level command that opens the gripper."""
+        return 0.0
+
+    @property
+    def gripper_close_ctrl(self) -> float:
+        """Low-level command that closes the gripper."""
+        if self.robot_model == "menagerie_ur5e":
+            return 255.0
+        return 0.038
+
+    def low_level_action(
+        self,
+        robot_qpos: torch.Tensor,
+        gripper: float | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Build a seven-dimensional low-level action.
+
+        Args:
+            robot_qpos: six robot joint targets.
+            gripper: optional gripper command. If omitted,
+                :attr:`gripper_open_ctrl` is used.
+
+        Returns:
+            A tensor whose last dimension is ``[six joints, gripper]``.
+
+        Examples:
+            >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
+            >>> env = CubeBowlEnv()  # doctest: +SKIP
+            >>> td = env.reset()  # doctest: +SKIP
+            >>> env.low_level_action(td["robot_qpos"]).shape  # doctest: +SKIP
+            torch.Size([1, 7])
+        """
+        action = torch.zeros(
+            robot_qpos.shape[:-1] + (self.ROBOT_QPOS_DIM + 1,),
+            dtype=robot_qpos.dtype,
+            device=robot_qpos.device,
+        )
+        action[..., : self.ROBOT_QPOS_DIM] = robot_qpos[
+            ..., : self.ROBOT_QPOS_DIM
+        ]
+        if gripper is None:
+            action[..., -1] = self.gripper_open_ctrl
+        elif isinstance(gripper, torch.Tensor):
+            gripper = gripper.to(dtype=robot_qpos.dtype, device=robot_qpos.device)
+            if gripper.numel() == 1:
+                action[..., -1] = gripper.reshape(())
+            else:
+                action[..., -1:] = gripper.reshape(robot_qpos.shape[:-1] + (1,))
+        else:
+            action[..., -1] = float(gripper)
+        return action
+
+    @staticmethod
+    def pose_at(
+        xyz: torch.Tensor,
+        quat: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Pack an ``xyz + quaternion`` pose tensor.
+
+        Args:
+            xyz: Cartesian position with trailing dimension ``3``.
+            quat: optional quaternion with trailing dimension ``4``. If omitted,
+                the identity quaternion is used.
+
+        Examples:
+            >>> import torch
+            >>> from torchrl.envs import CubeBowlEnv
+            >>> CubeBowlEnv.pose_at(torch.zeros(1, 3)).shape
+            torch.Size([1, 7])
+        """
+        if quat is None:
+            quat = torch.zeros(xyz.shape[:-1] + (4,), dtype=xyz.dtype, device=xyz.device)
+            quat[..., 0] = 1.0
+        else:
+            quat = quat.to(dtype=xyz.dtype, device=xyz.device)
+            quat = quat.expand(xyz.shape[:-1] + (4,))
+        return torch.cat([xyz, quat], dim=-1)
+
+    def gripper_cube_distance(self, observation: TensorDictBase) -> torch.Tensor:
+        """Return the shortest gripper-pad distance to the cube surface.
+
+        Args:
+            observation: observation TensorDict emitted by this environment.
+
+        Examples:
+            >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
+            >>> env = CubeBowlEnv()  # doctest: +SKIP
+            >>> td = env.reset()  # doctest: +SKIP
+            >>> env.gripper_cube_distance(td).shape  # doctest: +SKIP
+            torch.Size([1, 1])
+        """
+        cube_pos = observation["cube_pos"]
+        half_size = torch.full_like(cube_pos, self.OBJECT_HALF_SIZE)
+
+        def pad_to_cube(pad_pos: torch.Tensor) -> torch.Tensor:
+            q = (pad_pos - cube_pos).abs() - half_size
+            outside = q.clamp_min(0.0).norm(dim=-1, keepdim=True)
+            inside = q.max(dim=-1, keepdim=True).values.clamp_max(0.0)
+            return outside + inside
+
+        left_distance = pad_to_cube(observation["gripper_left_pad_pos"])
+        right_distance = pad_to_cube(observation["gripper_right_pad_pos"])
+        return torch.minimum(left_distance, right_distance).clamp_min(0.0)
+
+    def make_urscript_transform(
+        self,
+        *,
+        macro_steps: int = 16,
+        settle_steps: int = 0,
+        action_key: NestedKey = "action",
+        primitive_id_key: NestedKey = "primitive_id",
+        target_qpos_key: NestedKey = "target_qpos",
+        target_pose_key: NestedKey = "target_pose",
+        gripper_key: NestedKey = "gripper",
+        robot_qpos_key: NestedKey = "robot_qpos",
+        gripper_qpos_key: NestedKey = "gripper_qpos",
+        ik_kwargs: dict[str, float | int] | None = None,
+    ) -> URScriptPrimitiveTransform:
+        """Create a URScript-style primitive transform for this environment.
+
+        The returned transform uses this environment's low-level gripper command
+        range and Cartesian IK helper, so tutorials do not need to write custom
+        solver closures.
+
+        Args:
+            macro_steps: number of interpolated low-level actions per primitive.
+            settle_steps: number of repeated final actions appended per
+                primitive.
+            action_key: low-level action key consumed by the environment.
+            primitive_id_key: primitive id key.
+            target_qpos_key: joint target key for ``movej``.
+            target_pose_key: Cartesian pose target key for ``movel``.
+            gripper_key: optional gripper command key.
+            robot_qpos_key: observation key for robot joints.
+            gripper_qpos_key: observation key for gripper joints.
+            ik_kwargs: optional keyword arguments forwarded to the MuJoCo DLS
+                IK helper used by ``movel``.
+
+        Examples:
+            >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
+            >>> env = CubeBowlEnv()  # doctest: +SKIP
+            >>> transform = env.make_urscript_transform(macro_steps=4)  # doctest: +SKIP
+        """
+        if ik_kwargs is None:
+            ik_kwargs = {}
+        else:
+            ik_kwargs = dict(ik_kwargs)
+
+        def cartesian_solver(
+            target_pose: torch.Tensor, start_action: torch.Tensor
+        ) -> torch.Tensor:
+            return self._cartesian_pose_to_joint_target(
+                target_pose, start_action, **ik_kwargs
+            )
+
+        return URScriptPrimitiveTransform(
+            macro_steps=macro_steps,
+            settle_steps=settle_steps,
+            action_key=action_key,
+            primitive_id_key=primitive_id_key,
+            target_qpos_key=target_qpos_key,
+            target_pose_key=target_pose_key,
+            gripper_key=gripper_key,
+            robot_qpos_key=robot_qpos_key,
+            gripper_qpos_key=gripper_qpos_key,
+            cartesian_solver=cartesian_solver,
+            open_gripper_ctrl=self.gripper_open_ctrl,
+            close_gripper_ctrl=self.gripper_close_ctrl,
+        )
 
     # ------------------------------------------------------------------
     # Privileged geometry helpers for scripted primitives.

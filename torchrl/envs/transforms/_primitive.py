@@ -122,6 +122,30 @@ class _JointPositionGripperAdapter:
             start[..., -1] = gripper_qpos[..., 0]
         return start
 
+    def low_level_action(
+        self,
+        robot_qpos: torch.Tensor,
+        gripper: float | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        action = torch.zeros(
+            robot_qpos.shape[:-1] + (self.action_dim,),
+            dtype=robot_qpos.dtype,
+            device=robot_qpos.device,
+        )
+        n = min(robot_qpos.shape[-1], self.action_dim - 1)
+        action[..., :n] = robot_qpos[..., :n]
+        if gripper is None:
+            action[..., -1] = self.open_gripper_ctrl
+        elif isinstance(gripper, torch.Tensor):
+            gripper = gripper.to(dtype=robot_qpos.dtype, device=robot_qpos.device)
+            if gripper.numel() == 1:
+                action[..., -1] = gripper.reshape(())
+            else:
+                action[..., -1:] = gripper.reshape(robot_qpos.shape[:-1] + (1,))
+        else:
+            action[..., -1] = float(gripper)
+        return action
+
     def target_qpos(
         self,
         tensordict: TensorDictBase,
@@ -551,6 +575,186 @@ class MacroPrimitiveTransform(Transform):
         self.open_gripper_ctrl = float(self.adapter.open_gripper_ctrl)
         self.close_gripper_ctrl = float(self.adapter.close_gripper_ctrl)
 
+    def low_level_action(
+        self,
+        robot_qpos: torch.Tensor,
+        gripper: float | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Build a low-level joint-position action for the default adapter.
+
+        Args:
+            robot_qpos: robot joint targets. With the default adapter, the first
+                ``action_dim - 1`` entries are copied into the low-level action.
+            gripper: optional gripper command. If omitted, the transform's
+                ``open_gripper_ctrl`` value is used.
+
+        Returns:
+            A tensor with trailing dimension ``action_dim``.
+
+        Examples:
+            >>> import torch
+            >>> from torchrl.envs.transforms import URScriptPrimitiveTransform
+            >>> transform = URScriptPrimitiveTransform(open_gripper_ctrl=0.0)
+            >>> transform.low_level_action(torch.zeros(1, 6)).shape
+            torch.Size([1, 7])
+        """
+        if not hasattr(self.adapter, "low_level_action"):
+            raise NotImplementedError(
+                f"{type(self.adapter).__name__} does not implement low_level_action."
+            )
+        return self.adapter.low_level_action(robot_qpos, gripper)
+
+    def make_primitive(
+        self,
+        tensordict: TensorDictBase,
+        primitive_id: int | IntEnum | torch.Tensor,
+        *,
+        target_pose: torch.Tensor | None = None,
+        target_qpos: torch.Tensor | None = None,
+        gripper: float | torch.Tensor | None = None,
+    ) -> TensorDictBase:
+        """Return a TensorDict action for one macro primitive.
+
+        This helper centralizes the TensorDict keys used by the transform. It is
+        equivalent to cloning an observation TensorDict and filling
+        ``primitive_id``, ``target_pose``, ``target_qpos`` and optionally
+        ``gripper`` under the keys configured on the transform.
+
+        Args:
+            tensordict: observation/action context used for batch size, dtype,
+                device and current joint state.
+            primitive_id: integer or enum primitive id.
+            target_pose: optional Cartesian target for ``movel``.
+            target_qpos: optional low-level target for ``movej``. If omitted,
+                the current action inferred from ``tensordict`` is used.
+            gripper: optional gripper command override.
+
+        Returns:
+            A cloned TensorDict containing the primitive action.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.envs.transforms import (
+            ...     URScriptPrimitive,
+            ...     URScriptPrimitiveTransform,
+            ... )
+            >>> transform = URScriptPrimitiveTransform(macro_steps=2)
+            >>> obs = TensorDict({
+            ...     "robot_qpos": torch.zeros(1, 6),
+            ...     "gripper_qpos": torch.zeros(1, 2),
+            ... }, batch_size=[1])
+            >>> primitive = transform.make_primitive(
+            ...     obs, URScriptPrimitive.OPEN_GRIPPER
+            ... )
+            >>> int(primitive["primitive_id"].item())
+            3
+        """
+        batch_shape = tensordict.batch_size
+        device = self._primitive_device(tensordict, target_pose, target_qpos, gripper)
+        dtype = self.adapter.action_dtype(tensordict)
+        start = self.adapter.current_action(tensordict, batch_shape, device, dtype)
+        out = tensordict.clone()
+        out.set(
+            self.primitive_id_key,
+            self._expand_value(
+                primitive_id,
+                batch_shape=batch_shape,
+                last_dim=1,
+                dtype=torch.long,
+                device=device,
+            ),
+        )
+        if target_qpos is None:
+            target_qpos = start
+        else:
+            target_qpos = target_qpos.to(dtype=dtype, device=device)
+            target_qpos = target_qpos.reshape(batch_shape + (self.action_dim,))
+        out.set(self.target_qpos_key, target_qpos)
+        if target_pose is None:
+            target_pose = torch.zeros(batch_shape + (7,), dtype=dtype, device=device)
+        else:
+            target_pose = target_pose.to(dtype=dtype, device=device)
+            target_pose = target_pose.reshape(batch_shape + (7,))
+        out.set(self.target_pose_key, target_pose)
+        if gripper is None:
+            if self.gripper_key in out.keys(True, True):
+                out.del_(self.gripper_key)
+        else:
+            out.set(
+                self.gripper_key,
+                self._expand_value(
+                    gripper,
+                    batch_shape=batch_shape,
+                    last_dim=1,
+                    dtype=dtype,
+                    device=device,
+                ),
+            )
+        return out
+
+    def action_sequence(
+        self,
+        tensordict: TensorDictBase,
+        primitive_id: int | IntEnum | torch.Tensor | None = None,
+        *,
+        target_pose: torch.Tensor | None = None,
+        target_qpos: torch.Tensor | None = None,
+        gripper: float | torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Expand a primitive action and return its low-level action sequence.
+
+        Args:
+            tensordict: observation/action context.
+            primitive_id: optional primitive id. If provided, the primitive
+                TensorDict is first built with :meth:`make_primitive`; if
+                omitted, ``tensordict`` is assumed to already contain the
+                primitive keys.
+            target_pose: optional Cartesian target passed to
+                :meth:`make_primitive`.
+            target_qpos: optional joint target passed to :meth:`make_primitive`.
+            gripper: optional gripper command passed to :meth:`make_primitive`.
+
+        Returns:
+            The tensor stored at ``action_key`` after inverse expansion.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.envs.transforms import (
+            ...     URScriptPrimitive,
+            ...     URScriptPrimitiveTransform,
+            ... )
+            >>> transform = URScriptPrimitiveTransform(macro_steps=2)
+            >>> obs = TensorDict({
+            ...     "robot_qpos": torch.zeros(1, 6),
+            ...     "gripper_qpos": torch.zeros(1, 2),
+            ... }, batch_size=[1])
+            >>> sequence = transform.action_sequence(
+            ...     obs, URScriptPrimitive.OPEN_GRIPPER
+            ... )
+            >>> sequence.shape
+            torch.Size([1, 2, 7])
+        """
+        if primitive_id is not None:
+            tensordict = self.make_primitive(
+                tensordict,
+                primitive_id,
+                target_pose=target_pose,
+                target_qpos=target_qpos,
+                gripper=gripper,
+            )
+        elif (
+            target_pose is not None
+            or target_qpos is not None
+            or gripper is not None
+        ):
+            raise ValueError(
+                "target_pose, target_qpos and gripper can only be passed when "
+                "primitive_id is provided."
+            )
+        return self.inv(tensordict).get(self.action_key)
+
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         primitive_id = self.adapter.primitive_id(tensordict)
         batch_shape = primitive_id.shape
@@ -640,6 +844,42 @@ class MacroPrimitiveTransform(Transform):
                 return env
             env = getattr(env, "base_env", None)
         return None
+
+    def _primitive_device(
+        self,
+        tensordict: TensorDictBase,
+        *values: torch.Tensor | float | None,
+    ) -> torch.device:
+        for value in values:
+            if isinstance(value, torch.Tensor):
+                return value.device
+        for key in (
+            self.action_key,
+            self.target_qpos_key,
+            self.target_pose_key,
+            self.robot_qpos_key,
+            self.gripper_qpos_key,
+        ):
+            if key in tensordict.keys(True, True):
+                return tensordict.get(key).device
+        if tensordict.device is not None:
+            return tensordict.device
+        return torch.device("cpu")
+
+    @staticmethod
+    def _expand_value(
+        value: int | IntEnum | float | torch.Tensor,
+        *,
+        batch_shape: torch.Size,
+        last_dim: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        value = torch.as_tensor(value, dtype=dtype, device=device)
+        shape = batch_shape + (last_dim,)
+        if value.numel() == 1:
+            return value.reshape(()).expand(shape).clone()
+        return value.reshape(shape)
 
     def __repr__(self) -> str:
         return (

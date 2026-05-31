@@ -940,6 +940,51 @@ class TestURScriptPrimitiveTransform:
         assert action[1, -1, -1] == 255
         assert (action[1, :, -1].diff() > 0).all()
 
+    def test_make_primitive_and_action_sequence_with_nested_keys(self):
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"),
+            primitive_id_key=("agent", "primitive_id"),
+            target_qpos_key=("agent", "target_qpos"),
+            target_pose_key=("agent", "target_pose"),
+            gripper_key=("agent", "gripper"),
+            robot_qpos_key=("obs", "robot_qpos"),
+            gripper_qpos_key=("obs", "gripper_qpos"),
+            macro_steps=3,
+            close_gripper_ctrl=0.5,
+        )
+        td = TensorDict(
+            {
+                "obs": TensorDict(
+                    {
+                        "robot_qpos": torch.zeros(2, 6),
+                        "gripper_qpos": torch.zeros(2, 2),
+                    },
+                    batch_size=[2],
+                )
+            },
+            batch_size=[2],
+        )
+        target_qpos = transform.low_level_action(td["obs", "robot_qpos"], gripper=0.5)
+        primitive = transform.make_primitive(
+            td,
+            URScriptPrimitive.MOVEJ,
+            target_qpos=target_qpos,
+            gripper=0.5,
+        )
+
+        assert primitive[("agent", "primitive_id")].shape == torch.Size([2, 1])
+        assert (primitive[("agent", "primitive_id")] == URScriptPrimitive.MOVEJ).all()
+        torch.testing.assert_close(primitive[("agent", "target_qpos")], target_qpos)
+
+        action = transform.action_sequence(
+            td,
+            URScriptPrimitive.MOVEJ,
+            target_qpos=target_qpos,
+            gripper=0.5,
+        )
+        assert action.shape == torch.Size([2, 3, 7])
+        torch.testing.assert_close(action[:, -1], target_qpos)
+
     def test_settle_steps_repeat_final_action_with_nested_key(self):
         transform = URScriptPrimitiveTransform(
             action_key=("agent", "action"), macro_steps=3, settle_steps=2

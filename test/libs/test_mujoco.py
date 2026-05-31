@@ -778,8 +778,7 @@ class TestMujoco:
     def test_cube_bowl_sparse_coordinate_reward(self):
         env = CubeBowlEnv(seed=0, max_episode_steps=3)
         observation = env.reset()
-        hold_action = torch.zeros_like(env.action_spec.rand())
-        hold_action[..., :6] = observation["robot_qpos"]
+        hold_action = env.low_level_action(observation["robot_qpos"])
 
         default_transition = env.step(observation.clone().set("action", hold_action))
         torch.testing.assert_close(
@@ -790,20 +789,14 @@ class TestMujoco:
         observation = env.reset(
             TensorDict({"cube_pos": env._target_pos().clone()}, batch_size=[1])
         )
-        primitive = observation.clone()
-        primitive["primitive_id"] = torch.full(
-            (1, 1), URScriptPrimitiveTransform.WAIT, dtype=torch.long
+        transform = env.make_urscript_transform(macro_steps=1)
+        expanded_action = transform.action_sequence(
+            observation,
+            URScriptPrimitiveTransform.WAIT,
+            gripper=env.gripper_open_ctrl,
         )
-        primitive["target_qpos"] = torch.zeros(1, 7)
-        primitive["target_pose"] = torch.zeros(1, 7)
-        primitive["gripper"] = torch.zeros(1, 1)
-        expanded = URScriptPrimitiveTransform(
-            macro_steps=1,
-            open_gripper_ctrl=0.0,
-            close_gripper_ctrl=0.038,
-        ).inv(primitive)
         target_transition = env.step(
-            observation.clone().set("action", expanded["action"][:, 0])
+            observation.clone().set("action", expanded_action[:, 0])
         )
         torch.testing.assert_close(
             target_transition["next", "reward"],
@@ -833,6 +826,27 @@ class TestMujoco:
             atol=1e-6,
             rtol=0.0,
         )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_macro_helper_api(self):
+        env = CubeBowlEnv(seed=0, max_episode_steps=3)
+        observation = env.reset()
+        transform = env.make_urscript_transform(macro_steps=2)
+        target_qpos = env.low_level_action(
+            observation["robot_qpos"], gripper=env.gripper_close_ctrl
+        )
+        primitive = transform.make_primitive(
+            observation,
+            URScriptPrimitiveTransform.MOVEJ,
+            target_qpos=target_qpos,
+            gripper=env.gripper_close_ctrl,
+        )
+        action = transform.action_sequence(primitive)
+
+        assert action.shape == torch.Size([1, 2, 7])
+        torch.testing.assert_close(action[:, -1], target_qpos)
+        assert env.gripper_cube_distance(observation).shape == torch.Size([1, 1])
+        assert env.pose_at(observation["cube_pos"]).shape == torch.Size([1, 7])
 
     @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
     def test_cube_bowl_menagerie_ur5e_when_available(self):
