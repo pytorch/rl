@@ -13,6 +13,8 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+from torchrl.envs.transforms._action import MultiAction
+from torchrl.envs.transforms._base import Compose
 from torchrl.envs.transforms._base import Transform
 
 __all__ = [
@@ -105,7 +107,8 @@ class _JointPositionGripperAdapter:
     ) -> torch.Tensor:
         if self.action_key in tensordict.keys(True, True):
             action = tensordict.get(self.action_key).to(dtype=dtype, device=device)
-            return action.reshape(batch_shape + (self.action_dim,))
+            if isinstance(action, torch.Tensor):
+                return action.reshape(batch_shape + (self.action_dim,))
         start = torch.zeros(
             batch_shape + (self.action_dim,), dtype=dtype, device=device
         )
@@ -756,6 +759,12 @@ class MacroPrimitiveTransform(Transform):
         return self.inv(tensordict).get(self.action_key)
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        macro_steps = self.macro_steps
+        settle_steps = self.settle_steps
+        if self._has_structured_action(tensordict):
+            tensordict, macro_steps, settle_steps = self._unpack_structured_action(
+                tensordict
+            )
         primitive_id = self.adapter.primitive_id(tensordict)
         batch_shape = primitive_id.shape
         device = primitive_id.device
@@ -790,16 +799,16 @@ class MacroPrimitiveTransform(Transform):
         )
 
         alpha = torch.linspace(
-            1.0 / self.macro_steps,
+            1.0 / macro_steps,
             1.0,
-            self.macro_steps,
+            macro_steps,
             dtype=dtype,
             device=device,
-        ).reshape((1,) * len(batch_shape) + (self.macro_steps, 1))
+        ).reshape((1,) * len(batch_shape) + (macro_steps, 1))
         sequence = start.unsqueeze(-2) + alpha * (target - start).unsqueeze(-2)
-        if self.settle_steps:
+        if settle_steps:
             settle = target.unsqueeze(-2).expand(
-                batch_shape + (self.settle_steps, self.action_dim)
+                batch_shape + (settle_steps, self.action_dim)
             )
             sequence = torch.cat([sequence, settle], dim=-2)
         return tensordict.set(self.action_key, sequence)
@@ -845,6 +854,132 @@ class MacroPrimitiveTransform(Transform):
             env = getattr(env, "base_env", None)
         return None
 
+    def _has_structured_action(self, tensordict: TensorDictBase) -> bool:
+        if self.action_key not in tensordict.keys(True, True):
+            return False
+        action = tensordict.get(self.action_key)
+        if isinstance(action, torch.Tensor):
+            return False
+        if not hasattr(action, "keys") or not hasattr(action, "get"):
+            return False
+        return "mode" in action.keys(True, True)
+
+    def _unpack_structured_action(
+        self, tensordict: TensorDictBase
+    ) -> tuple[TensorDictBase, int, int]:
+        action = tensordict.get(self.action_key)
+        mode = action.get("mode").to(torch.long)
+        if mode.shape[-1:] != torch.Size([1]):
+            mode = mode.unsqueeze(-1)
+        batch_shape = mode.shape[:-1]
+        device = mode.device
+        dtype = self.adapter.action_dtype(tensordict)
+        start = self.adapter.current_action(tensordict, batch_shape, device, dtype)
+
+        position = self._structured_action_field(
+            action,
+            "position",
+            torch.zeros(batch_shape + (3,), dtype=dtype, device=device),
+            batch_shape,
+            dtype,
+            device,
+            3,
+        )
+        quaternion_default = torch.zeros(batch_shape + (4,), dtype=dtype, device=device)
+        quaternion_default[..., 0] = 1.0
+        quaternion = self._structured_action_field(
+            action,
+            "quaternion",
+            quaternion_default,
+            batch_shape,
+            dtype,
+            device,
+            4,
+        )
+        joints = self._structured_action_field(
+            action,
+            "joints",
+            start[..., : self.action_dim - 1],
+            batch_shape,
+            dtype,
+            device,
+            self.action_dim - 1,
+        )
+        joints = torch.where(
+            mode == self.primitive_library.MOVEJ,
+            joints,
+            start[..., : self.action_dim - 1],
+        )
+        gripper = self._structured_gripper(action, start, batch_shape, dtype, device)
+
+        out = tensordict.clone()
+        out.set(self.primitive_id_key, mode)
+        out.set(self.target_pose_key, torch.cat([position, quaternion], dim=-1))
+        out.set(self.target_qpos_key, self.adapter.low_level_action(joints, gripper))
+        out.set(self.gripper_key, gripper)
+        return (
+            out,
+            self._structured_action_int(action, "steps", self.macro_steps),
+            self._structured_action_int(action, "settle_steps", self.settle_steps),
+        )
+
+    @staticmethod
+    def _structured_action_field(
+        action: Any,
+        key: str,
+        default: torch.Tensor,
+        batch_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+        last_dim: int,
+    ) -> torch.Tensor:
+        if key not in action.keys(True, True):
+            return default
+        value = action.get(key).to(dtype=dtype, device=device)
+        return value.reshape(batch_shape + (last_dim,))
+
+    def _structured_gripper(
+        self,
+        action: Any,
+        start: torch.Tensor,
+        batch_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
+        if "gripper" not in action.keys(True, True):
+            return start[..., -1:]
+        gripper = action.get("gripper").to(dtype=torch.long, device=device).reshape(
+            batch_shape + (1,)
+        )
+        open_value = torch.full(
+            batch_shape + (1,),
+            self.open_gripper_ctrl,
+            dtype=dtype,
+            device=device,
+        )
+        close_value = torch.full(
+            batch_shape + (1,),
+            self.close_gripper_ctrl,
+            dtype=dtype,
+            device=device,
+        )
+        return torch.where(
+            gripper == 0,
+            open_value,
+            torch.where(gripper == 1, close_value, start[..., -1:]),
+        )
+
+    @staticmethod
+    def _structured_action_int(action: Any, key: str, default: int) -> int:
+        if key not in action.keys(True, True):
+            return int(default)
+        value = int(action.get(key).reshape(-1)[0].item())
+        if value < 0:
+            raise ValueError(f"{key} must be non-negative.")
+        if key == "steps" and value <= 0:
+            raise ValueError("steps must be strictly positive.")
+        return value
+
     def _primitive_device(
         self,
         tensordict: TensorDictBase,
@@ -861,7 +996,9 @@ class MacroPrimitiveTransform(Transform):
             self.gripper_qpos_key,
         ):
             if key in tensordict.keys(True, True):
-                return tensordict.get(key).device
+                device = getattr(tensordict.get(key), "device", None)
+                if device is not None:
+                    return device
         if tensordict.device is not None:
             return tensordict.device
         return torch.device("cpu")
@@ -902,6 +1039,9 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         primitive_library: primitive id library. Defaults to ``"urscript"``.
         adapter: action adapter. Defaults to ``"joint_position_gripper"``.
         solver: macro solver backend. Defaults to ``"mujoco_dls_ik"``.
+        execute: if ``True``, return a transform composition that first expands
+            the primitive action and then executes the emitted low-level action
+            sequence with :class:`~torchrl.envs.transforms.MultiAction`.
         action_key: low-level action key read by the inner environment.
         primitive_id_key: key containing the primitive id.
         target_qpos_key: key containing the joint target for ``movej``.
@@ -933,12 +1073,37 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         torch.Size([1, 2, 7])
     """
 
+    def __new__(
+        cls,
+        *args,
+        execute: bool = False,
+        multi_action_dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
+        **kwargs,
+    ):
+        if execute:
+            primitive = cls(*args, execute=False, **kwargs)
+            return Compose(
+                MultiAction(
+                    dim=multi_action_dim,
+                    stack_rewards=stack_rewards,
+                    stack_observations=stack_observations,
+                ),
+                primitive,
+            )
+        return super().__new__(cls)
+
     def __init__(
         self,
         *,
         primitive_library: PrimitiveLibraryName | Any | None = "urscript",
         adapter: MacroAdapterName | Any | None = "joint_position_gripper",
         solver: MacroSolverName | CartesianSolver | Any | None = "mujoco_dls_ik",
+        execute: bool = False,
+        multi_action_dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
         action_key: NestedKey = "action",
         primitive_id_key: NestedKey = "primitive_id",
         target_qpos_key: NestedKey = "target_qpos",
@@ -953,6 +1118,7 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         open_gripper_ctrl: float = 0.0,
         close_gripper_ctrl: float = 255.0,
     ) -> None:
+        del execute, multi_action_dim, stack_rewards, stack_observations
         super().__init__(
             primitive_library=primitive_library,
             adapter=adapter,

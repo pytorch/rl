@@ -20,7 +20,7 @@ from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Binary, Composite, Unbounded
 from torchrl.envs.custom.mujoco._backends import resolve_xml_string
 from torchrl.envs.custom.mujoco.base import MujocoEnv
-from torchrl.envs.transforms import URScriptPrimitiveTransform
+from torchrl.envs.transforms import Transform, URScriptPrimitiveTransform
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -862,6 +862,10 @@ class CubeBowlEnv(MujocoEnv):
         *,
         macro_steps: int = 16,
         settle_steps: int = 0,
+        execute: bool = False,
+        multi_action_dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
         action_key: NestedKey = "action",
         primitive_id_key: NestedKey = "primitive_id",
         target_qpos_key: NestedKey = "target_qpos",
@@ -870,7 +874,7 @@ class CubeBowlEnv(MujocoEnv):
         robot_qpos_key: NestedKey = "robot_qpos",
         gripper_qpos_key: NestedKey = "gripper_qpos",
         ik_kwargs: dict[str, float | int] | None = None,
-    ) -> URScriptPrimitiveTransform:
+    ) -> Transform:
         """Create a URScript-style primitive transform for this environment.
 
         The returned transform uses this environment's low-level gripper command
@@ -881,6 +885,15 @@ class CubeBowlEnv(MujocoEnv):
             macro_steps: number of interpolated low-level actions per primitive.
             settle_steps: number of repeated final actions appended per
                 primitive.
+            execute: if ``True``, append a ``MultiAction`` executor around the
+                primitive expansion so a high-level primitive can be passed
+                directly to :meth:`step`.
+            multi_action_dim: stack dimension consumed by ``MultiAction`` when
+                ``execute=True``.
+            stack_rewards: whether ``MultiAction`` should return each low-level
+                reward when ``execute=True``.
+            stack_observations: whether ``MultiAction`` should return each
+                low-level observation when ``execute=True``.
             action_key: low-level action key consumed by the environment.
             primitive_id_key: primitive id key.
             target_qpos_key: joint target key for ``movej``.
@@ -911,6 +924,10 @@ class CubeBowlEnv(MujocoEnv):
         return URScriptPrimitiveTransform(
             macro_steps=macro_steps,
             settle_steps=settle_steps,
+            execute=execute,
+            multi_action_dim=multi_action_dim,
+            stack_rewards=stack_rewards,
+            stack_observations=stack_observations,
             action_key=action_key,
             primitive_id_key=primitive_id_key,
             target_qpos_key=target_qpos_key,

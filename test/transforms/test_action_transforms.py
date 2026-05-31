@@ -1050,6 +1050,71 @@ class TestURScriptPrimitiveTransform:
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[:, -1, :3], torch.tensor([[1.0, 2.0, 3.0]]))
 
+    def test_structured_robot_action_reach_pose(self):
+        def solver(target_pose, start_action):
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        transform = URScriptPrimitiveTransform(macro_steps=1, cartesian_solver=solver)
+        robot_action = TensorDict(
+            {
+                "mode": torch.tensor([[int(URScriptPrimitive.MOVEL)]]),
+                "position": torch.tensor([[1.0, 2.0, 3.0]]),
+                "quaternion": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                "joints": torch.zeros(1, 6),
+                "gripper": torch.tensor([[1]]),
+                "steps": torch.tensor([[3]]),
+                "settle_steps": torch.tensor([[2]]),
+            },
+            batch_size=[1],
+        )
+        td = TensorDict(
+            {
+                "action": robot_action,
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 5, 7])
+        torch.testing.assert_close(action[:, 2, :3], torch.tensor([[1.0, 2.0, 3.0]]))
+        torch.testing.assert_close(action[:, -1, -1:], torch.tensor([[255.0]]))
+
+    def test_structured_robot_action_reach_joints_keep_gripper(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        robot_action = TensorDict(
+            {
+                "mode": torch.tensor([[int(URScriptPrimitive.MOVEJ)]]),
+                "position": torch.zeros(1, 3),
+                "quaternion": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                "joints": torch.ones(1, 6),
+                "gripper": torch.tensor([[-1]]),
+            },
+            batch_size=[1],
+        )
+        td = TensorDict(
+            {
+                "action": robot_action,
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.full((1, 2), 7.0),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :6], torch.ones(1, 6))
+        torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 7.0))
+
+    def test_urscript_execute_returns_multi_action_compose(self):
+        transform = URScriptPrimitiveTransform(macro_steps=2, execute=True)
+
+        assert isinstance(transform, Compose)
+        assert isinstance(transform[0], MultiAction)
+        assert isinstance(transform[1], URScriptPrimitiveTransform)
+
     def test_macro_transform_string_proxies(self):
         transform = MacroPrimitiveTransform(
             primitive_library="urscript",

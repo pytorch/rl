@@ -1192,29 +1192,26 @@ class TestMujoco:
         base = CubeBowlEnv(seed=0, max_episode_steps=20)
         env = TransformedEnv(
             base,
-            Compose(
-                MultiAction(stack_rewards=True),
-                URScriptPrimitiveTransform(
-                    macro_steps=2,
-                    open_gripper_ctrl=0.0,
-                    close_gripper_ctrl=0.038,
-                ),
+            URScriptPrimitiveTransform(
+                macro_steps=2,
+                execute=True,
+                open_gripper_ctrl=0.0,
+                close_gripper_ctrl=0.038,
             ),
         )
         td = env.reset()
-        target_pose = torch.cat(
-            [
-                td["cube_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
-                torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
-            ],
-            dim=-1,
+        td["action"] = TensorDict(
+            {
+                "mode": torch.full(
+                    (1, 1), URScriptPrimitiveTransform.MOVEL, dtype=torch.long
+                ),
+                "position": td["cube_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
+                "quaternion": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                "joints": torch.zeros(1, 6),
+                "gripper": torch.zeros(1, 1, dtype=torch.long),
+            },
+            batch_size=[1],
         )
-        td["primitive_id"] = torch.full(
-            (1, 1), URScriptPrimitiveTransform.MOVEL, dtype=torch.long
-        )
-        td["target_pose"] = target_pose
-        td["target_qpos"] = torch.zeros(1, 7)
-        td["gripper"] = torch.zeros(1, 1)
 
         out = env.step(td)
         assert torch.isfinite(out.get(("next", "reward"))).all()
