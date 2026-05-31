@@ -528,12 +528,14 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     quat = td["pinch_quat"].clone()
     grasp_offset = cube.new_tensor([[0.0, 0.0, -0.016]])
 
+    # Action 0: Keep the arm at the reset joint target and let the scene settle.
     yield RobotAction.reach_joints(
         joints=td["robot_qpos"].clone(),
         gripper="open",
         steps=1,
         settle_steps=19,
     )
+    # Action 1: Fully open the gripper before approaching the cube.
     yield RobotAction.open_gripper(steps=100, settle_steps=20)
 
     current_td = policy_state["td"]
@@ -541,6 +543,7 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     bowl = current_td["bowl_pos"].clone()
     quat = current_td["pinch_quat"].clone()
     position, quaternion = pose_at(cube + cube.new_tensor([[0.0, 0.0, 0.18]]), quat)
+    # Action 2: Move the open gripper above the cube.
     yield RobotAction.reach_pose(
         position=position,
         quaternion=quaternion,
@@ -550,6 +553,7 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     )
 
     position, quaternion = pose_at(cube + grasp_offset, quat)
+    # Action 3: Lower the open gripper to the grasp pose around the cube.
     yield RobotAction.reach_pose(
         position=position,
         quaternion=quaternion,
@@ -558,6 +562,7 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
         settle_steps=60,
     )
 
+    # Action 4: Close the gripper to grasp the cube.
     yield RobotAction.close_gripper(steps=160, settle_steps=80)
 
     current_td = policy_state["td"]
@@ -567,6 +572,7 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
         cube + pinch_to_cube + cube.new_tensor([[0.0, 0.0, 0.20]]),
         quat,
     )
+    # Action 5: Lift the grasped cube above the table.
     yield RobotAction.reach_pose(
         position=position,
         quaternion=quaternion,
@@ -578,27 +584,94 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     current_td = policy_state["td"]
     start_y = current_td["cube_pos"][..., 1:2].clone()
     target_y = bowl[..., 1:2]
-    for waypoint in range(1, 5):
-        alpha = float(waypoint) / 4.0
-        desired_cube = torch.cat(
-            [
-                bowl[..., :1],
-                start_y + alpha * (target_y - start_y),
-                torch.full_like(bowl[..., 2:3], 0.24),
-            ],
-            dim=-1,
-        )
-        current_td = policy_state["td"]
-        cube = current_td["cube_pos"].clone()
-        pinch_to_cube = current_td["pinch_pos"].clone() - cube
-        position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
-        yield RobotAction.reach_pose(
-            position=position,
-            quaternion=quaternion,
-            gripper="closed",
-            steps=80,
-            settle_steps=20,
-        )
+
+    # Action 6: Carry the cube one quarter of the way toward the bowl.
+    alpha = 0.25
+    desired_cube = torch.cat(
+        [
+            bowl[..., :1],
+            start_y + alpha * (target_y - start_y),
+            torch.full_like(bowl[..., 2:3], 0.24),
+        ],
+        dim=-1,
+    )
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    pinch_to_cube = current_td["pinch_pos"].clone() - cube
+    position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="closed",
+        steps=80,
+        settle_steps=20,
+    )
+
+    # Action 7: Carry the cube halfway toward the bowl.
+    alpha = 0.50
+    desired_cube = torch.cat(
+        [
+            bowl[..., :1],
+            start_y + alpha * (target_y - start_y),
+            torch.full_like(bowl[..., 2:3], 0.24),
+        ],
+        dim=-1,
+    )
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    pinch_to_cube = current_td["pinch_pos"].clone() - cube
+    position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="closed",
+        steps=80,
+        settle_steps=20,
+    )
+
+    # Action 8: Carry the cube three quarters of the way toward the bowl.
+    alpha = 0.75
+    desired_cube = torch.cat(
+        [
+            bowl[..., :1],
+            start_y + alpha * (target_y - start_y),
+            torch.full_like(bowl[..., 2:3], 0.24),
+        ],
+        dim=-1,
+    )
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    pinch_to_cube = current_td["pinch_pos"].clone() - cube
+    position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="closed",
+        steps=80,
+        settle_steps=20,
+    )
+
+    # Action 9: Carry the cube above the bowl center.
+    alpha = 1.0
+    desired_cube = torch.cat(
+        [
+            bowl[..., :1],
+            start_y + alpha * (target_y - start_y),
+            torch.full_like(bowl[..., 2:3], 0.24),
+        ],
+        dim=-1,
+    )
+    current_td = policy_state["td"]
+    cube = current_td["cube_pos"].clone()
+    pinch_to_cube = current_td["pinch_pos"].clone() - cube
+    position, quaternion = pose_at(desired_cube + pinch_to_cube, quat)
+    yield RobotAction.reach_pose(
+        position=position,
+        quaternion=quaternion,
+        gripper="closed",
+        steps=80,
+        settle_steps=20,
+    )
 
     drop_cube = torch.cat(
         [
@@ -612,6 +685,7 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
     cube = current_td["cube_pos"].clone()
     pinch_to_cube = current_td["pinch_pos"].clone() - cube
     position, quaternion = pose_at(drop_cube + pinch_to_cube, quat)
+    # Action 10: Lower the grasped cube into the bowl.
     yield RobotAction.reach_pose(
         position=position,
         quaternion=quaternion,
@@ -620,7 +694,9 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
         settle_steps=40,
     )
 
+    # Action 11: Open the gripper to release the cube.
     yield RobotAction.open_gripper(steps=100, settle_steps=20)
+    # Action 12: Wait with the gripper open so the cube can settle in the bowl.
     yield RobotAction.wait(gripper="open", steps=240)
 
     current_td = policy_state["td"]
@@ -632,6 +708,7 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
         dim=-1,
     )
     position, quaternion = pose_at(retreat_xyz, quat)
+    # Action 13: Retreat upward and away from the released cube.
     yield RobotAction.reach_pose(
         position=position,
         quaternion=quaternion,
@@ -640,12 +717,14 @@ def gen_actions(td: TensorDictBase) -> Iterator[TensorDictBase]:
         settle_steps=60,
     )
 
+    # Action 14: Return the arm to its reset joint configuration.
     yield RobotAction.home(
         joints=initial_robot_qpos,
         gripper="open",
         steps=250,
         settle_steps=1600,
     )
+    # Action 15: Hold the reset pose while the final reward is measured.
     yield RobotAction.wait(gripper="open", steps=800)
 
 
