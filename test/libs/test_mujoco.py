@@ -840,6 +840,15 @@ class TestMujoco:
         torch.testing.assert_close(td["cube_pos"], cube_pos, atol=1e-6, rtol=0.0)
         torch.testing.assert_close(td["bowl_pos"], bowl_pos, atol=1e-6, rtol=0.0)
 
+        transformed_env = TransformedEnv(
+            CubeBowlEnv(seed=0, max_episode_steps=3), Compose()
+        )
+        td = transformed_env.reset(
+            TensorDict({"cube_pos": cube_pos, "bowl_pos": bowl_pos}, batch_size=[1])
+        )
+        torch.testing.assert_close(td["cube_pos"], cube_pos, atol=1e-6, rtol=0.0)
+        torch.testing.assert_close(td["bowl_pos"], bowl_pos, atol=1e-6, rtol=0.0)
+
         td = env.reset()
         torch.testing.assert_close(
             td["bowl_pos"],

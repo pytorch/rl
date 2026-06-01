@@ -39,7 +39,8 @@ class CubeBowlEnv(MujocoEnv):
     privileged manipulation diagnostics such as the pinch pose and gripper pad
     positions. The task reward is sparse: it is ``1`` when the cube center is
     within ``placement_tolerance`` of the bowl target coordinate and ``0``
-    otherwise.
+    otherwise. ``cube_pos`` and ``bowl_pos`` may also be provided in the
+    reset TensorDict to start an episode from a different reachable layout.
 
     Args:
         robot_model: ``"primitive"`` for the bundled low-footprint model or
@@ -605,6 +606,20 @@ class CubeBowlEnv(MujocoEnv):
     # ------------------------------------------------------------------
     # Specs and reset state.
     # ------------------------------------------------------------------
+
+    def _make_specs(self) -> None:
+        super()._make_specs()
+        reset_position_spec = Composite(
+            cube_pos=Unbounded(
+                shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
+            ),
+            bowl_pos=Unbounded(
+                shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
+            ),
+            shape=(self.num_envs,),
+            device=self.device,
+        )
+        self.state_spec = reset_position_spec
 
     def _make_obs_spec(self) -> Composite:
         return Composite(
