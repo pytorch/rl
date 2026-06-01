@@ -1150,7 +1150,21 @@ class MacroPrimitiveTransform(Transform):
             dtype=dtype,
             device=device,
         ).reshape((1,) * len(batch_shape) + (macro_steps, 1))
-        sequence = start.unsqueeze(-2) + alpha * (target - start).unsqueeze(-2)
+        sequence_start = start
+        if gripper is not None:
+            hold_gripper = (
+                (primitive_id == library.WAIT)
+                | (primitive_id == library.MOVEJ)
+                | (primitive_id == library.MOVEL)
+            ).unsqueeze(-1)
+            sequence_start = torch.where(
+                hold_gripper,
+                self.adapter.set_gripper(start, gripper),
+                start,
+            )
+        sequence = sequence_start.unsqueeze(-2) + alpha * (
+            target - sequence_start
+        ).unsqueeze(-2)
         if settle_steps:
             settle = target.unsqueeze(-2).expand(
                 batch_shape + (settle_steps, self.action_dim)

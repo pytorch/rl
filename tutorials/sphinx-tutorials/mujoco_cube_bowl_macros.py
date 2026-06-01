@@ -107,10 +107,11 @@ IK_KWARGS = {
 #
 # The symbolic gripper commands ``"open"``, ``"closed"`` and ``"keep"`` are
 # resolved by the transform. User code never has to know the Robotiq actuator's
-# numeric command range. In this task, ``"closed"`` means "close enough to hold
-# the cube." It is deliberately not the maximum actuator target, because asking
-# a position-controlled gripper to close through a solid object creates a fight
-# between the gripper actuator and MuJoCo's contact solver.
+# numeric command range. In this task, ``"closed"`` means "close about one
+# millimeter past the cube width." It is deliberately not the maximum actuator
+# target, because asking a position-controlled gripper to close through a solid
+# object creates a fight between the gripper actuator and MuJoCo's contact
+# solver.
 
 
 # %%

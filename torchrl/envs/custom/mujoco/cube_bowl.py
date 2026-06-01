@@ -84,6 +84,12 @@ class CubeBowlEnv(MujocoEnv):
     MENAGERIE_BOWL_POSITION = (0.45, 0.08, 0.01)
     MENAGERIE_BOWL_TARGET_OFFSET = (0.0, 0.0, 0.015)
     MENAGERIE_GRIPPER_QPOS_DIM = 8
+    # Calibration values for converting a desired pad-center distance into the
+    # Menagerie Robotiq actuator's 0..255 command range.
+    MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE = 0.09313070774078369
+    MENAGERIE_GRIPPER_CUBE_WIDTH_CTRL = 150.0
+    MENAGERIE_GRIPPER_CUBE_WIDTH_PAD_DISTANCE = 0.04430961608886719
+    MENAGERIE_GRIPPER_GRASP_MARGIN = 0.001
     MENAGERIE_PINCH_SITE_NAME = "gripper/pinch"
     MENAGERIE_LEFT_PAD_GEOM_NAMES = ("gripper/left_pad1", "gripper/left_pad2")
     MENAGERIE_RIGHT_PAD_GEOM_NAMES = ("gripper/right_pad1", "gripper/right_pad2")
@@ -760,8 +766,22 @@ class CubeBowlEnv(MujocoEnv):
     def gripper_close_ctrl(self) -> float:
         """Low-level command that closes the gripper for object grasping."""
         if self.robot_model == "menagerie_ur5e":
-            return 200.0
+            target_pad_distance = (
+                2 * self.OBJECT_HALF_SIZE - self.MENAGERIE_GRIPPER_GRASP_MARGIN
+            )
+            return self._menagerie_gripper_ctrl_for_pad_distance(target_pad_distance)
         return 0.038
+
+    @classmethod
+    def _menagerie_gripper_ctrl_for_pad_distance(cls, pad_distance: float) -> float:
+        ctrl_per_meter = cls.MENAGERIE_GRIPPER_CUBE_WIDTH_CTRL / (
+            cls.MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE
+            - cls.MENAGERIE_GRIPPER_CUBE_WIDTH_PAD_DISTANCE
+        )
+        ctrl = (
+            cls.MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE - float(pad_distance)
+        ) * ctrl_per_meter
+        return min(255.0, max(0.0, ctrl))
 
     @property
     def robot_home_qpos(self) -> tuple[float, ...] | None:

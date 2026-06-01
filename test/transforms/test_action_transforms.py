@@ -1080,6 +1080,33 @@ class TestURScriptPrimitiveTransform:
         torch.testing.assert_close(action[:, 2, :3], torch.tensor([[1.0, 2.0, 3.0]]))
         torch.testing.assert_close(action[:, -1, -1:], torch.tensor([[255.0]]))
 
+    def test_robot_action_reach_pose_closed_holds_gripper_command(self):
+        def solver(target_pose, start_action):
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        transform = URScriptPrimitiveTransform(
+            macro_steps=4,
+            cartesian_solver=solver,
+            close_gripper_ctrl=200.0,
+        )
+        td = TensorDict(
+            {
+                "action": RobotAction.reach_pose(
+                    position=torch.zeros(1, 3),
+                    gripper="closed",
+                    steps=4,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.full((1, 8), 0.62),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[..., -1], torch.full((1, 4), 200.0))
+
     def test_robot_action_close_gripper_keeps_arm(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)
         robot_qpos = torch.arange(6, dtype=torch.float32).view(1, 6)
