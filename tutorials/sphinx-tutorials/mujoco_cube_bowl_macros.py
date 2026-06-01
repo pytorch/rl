@@ -107,7 +107,10 @@ IK_KWARGS = {
 #
 # The symbolic gripper commands ``"open"``, ``"closed"`` and ``"keep"`` are
 # resolved by the transform. User code never has to know the Robotiq actuator's
-# numeric command range.
+# numeric command range. In this task, ``"closed"`` means "close enough to hold
+# the cube." It is deliberately not the maximum actuator target, because asking
+# a position-controlled gripper to close through a solid object creates a fight
+# between the gripper actuator and MuJoCo's contact solver.
 
 
 # %%
@@ -295,6 +298,14 @@ def gen_actions(td: TensorDictBase) -> Iterator:
         steps=120,
         settle_steps=60,
     )
+
+    # The cube is not welded to the gripper. It is held by contact and
+    # friction between the pads. If we ask for one large move directly to the
+    # bowl, the fingers can drag faster than the cube can safely follow: the
+    # cube may slide inside the grasp, get pushed out, or arrive shifted enough
+    # that the final drop misses the bowl. We therefore carry it through a few
+    # intermediate waypoints. After each waypoint, the next command uses the
+    # latest observed cube and finger positions.
 
     # Action 6: Carry the cube one quarter of the way toward the bowl.
     yield carry_action(0.25, bowl)

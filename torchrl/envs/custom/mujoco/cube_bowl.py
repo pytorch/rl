@@ -758,9 +758,9 @@ class CubeBowlEnv(MujocoEnv):
 
     @property
     def gripper_close_ctrl(self) -> float:
-        """Low-level command that closes the gripper."""
+        """Low-level command that closes the gripper for object grasping."""
         if self.robot_model == "menagerie_ur5e":
-            return 255.0
+            return 200.0
         return 0.038
 
     @property
