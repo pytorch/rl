@@ -81,13 +81,7 @@ _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
 _has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
-pytestmark = [
-    pytest.mark.filterwarnings("error"),
-    pytest.mark.filterwarnings(
-        "ignore:Exception ignored in.*Finalize object.*:"
-        "pytest.PytestUnraisableExceptionWarning"
-    ),
-]
+pytestmark = pytest.mark.filterwarnings("error")
 
 
 @pytest.mark.skipif(
@@ -153,7 +147,10 @@ class TestEnvConfigs:
             batched_env_type=batched_env_type,
         )
         env = instantiate(cfg)
-        assert isinstance(env, cls)
+        try:
+            assert isinstance(env, cls)
+        finally:
+            env.close(raise_if_closed=False)
 
 
 @pytest.mark.skipif(

@@ -724,7 +724,8 @@ class BatchedEnvBase(EnvBase):
         worker raise here so the user gets immediate feedback rather than
         silently-wrong runtime behavior.
         """
-        transform = getattr(env, "transform", None)
+        env_vars = getattr(env, "__dict__", {})
+        transform = env_vars.get("transform", env_vars.get("_transform", None))
         if transform is not None:
             transform._check_batched_worker_compat()
 
