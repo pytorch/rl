@@ -112,6 +112,11 @@ uv pip install "sglang[all]" "kernels>=0.12,<0.13"
 printf "* Installing torchvision matching SGLang's torch wheel\n"
 uv pip install --reinstall --index-url https://pypi.org/simple "torchvision===0.26.0"
 
+# Keep secondary dependencies inside the ranges required by the latest SGLang
+# dependency set so uv pip check catches real breakage instead of resolver drift.
+printf "* Constraining secondary dependencies for SGLang\n"
+uv pip install "pillow>=9.2,<12" "numpy>=1.25,<2.4" "fsspec[http]<=2026.2.0"
+
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
 
@@ -147,7 +152,7 @@ printf "* Installed versions:\n"
 python - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 
-for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "triton"):
+for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "triton", "numpy", "pillow", "fsspec"):
     try:
         print(f"{package}: {version(package)}")
     except PackageNotFoundError:
