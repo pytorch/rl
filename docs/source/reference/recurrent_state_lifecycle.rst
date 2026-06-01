@@ -21,6 +21,131 @@ preserved. The rest of this page explains what the automated path wires up,
 and what to check when building a custom loop, custom replay transform, or
 manually constructed training batch.
 
+Minimal recurrent PPO wiring
+----------------------------
+
+The following block is intentionally small: it only shows the recurrent
+plumbing for a PPO-style update. It omits optimization, logging, and
+multi-epoch training so the data path stays visible.
+
+.. code-block:: python
+
+    from __future__ import annotations
+
+    import torch
+    from tensordict.nn import TensorDictModule, TensorDictSequential
+    from torch import nn
+
+    from torchrl.collectors import SyncDataCollector
+    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+    from torchrl.data.replay_buffers import SliceSampler
+    from torchrl.envs import GymEnv
+    from torchrl.modules import (
+        GRUModule,
+        OneHotCategorical,
+        ProbabilisticActor,
+        ValueOperator,
+        set_recurrent_mode,
+    )
+    from torchrl.objectives import ClipPPOLoss
+    from torchrl.objectives.value import GAE
+
+    hidden_size = 32
+    frames_per_batch = 96
+    slice_len = 16
+    num_slices = 4
+    recurrent_backend = "scan"  # use "triton" on CUDA builds with Triton
+
+    env = GymEnv("CartPole-v1")
+    obs_dim = env.observation_spec["observation"].shape[-1]
+    action_dim = env.action_spec.shape[-1]
+
+
+    def recurrent_body(prefix):
+        return TensorDictSequential(
+            TensorDictModule(
+                nn.Linear(obs_dim, hidden_size),
+                in_keys=["observation"],
+                out_keys=[f"{prefix}_embed"],
+            ),
+            GRUModule(
+                input_size=hidden_size,
+                hidden_size=hidden_size,
+                in_keys=[f"{prefix}_embed", f"{prefix}_rs", "is_init"],
+                out_keys=[f"{prefix}_features", ("next", f"{prefix}_rs")],
+                recurrent_backend=recurrent_backend,
+            ),
+        )
+
+
+    actor = ProbabilisticActor(
+        module=TensorDictSequential(
+            recurrent_body("actor"),
+            TensorDictModule(
+                nn.Linear(hidden_size, action_dim),
+                in_keys=["actor_features"],
+                out_keys=["logits"],
+            ),
+        ),
+        in_keys=["logits"],
+        out_keys=["action"],
+        spec=env.action_spec,
+        distribution_class=OneHotCategorical,
+        return_log_prob=True,
+    )
+    critic = TensorDictSequential(
+        recurrent_body("critic"),
+        ValueOperator(nn.Linear(hidden_size, 1), in_keys=["critic_features"]),
+    )
+
+    # The collector sees both RNNs and appends InitTracker + TensorDictPrimers.
+    collector_policy = TensorDictSequential(actor, critic)
+    collector = SyncDataCollector(
+        env,
+        collector_policy,
+        frames_per_batch=frames_per_batch,
+        total_frames=frames_per_batch,
+        auto_register_policy_transforms=True,
+    )
+
+    rb = TensorDictReplayBuffer(
+        storage=LazyTensorStorage(frames_per_batch),
+        sampler=SliceSampler(slice_len=slice_len),
+        batch_size=num_slices * slice_len,
+    )
+    advantage = GAE(
+        gamma=0.99,
+        lmbda=0.95,
+        value_network=critic,
+        deactivate_vmap=True,
+    )
+    loss_module = ClipPPOLoss(actor, critic, clip_epsilon=0.2, entropy_coeff=0.0)
+
+    try:
+        data = next(iter(collector))
+    finally:
+        collector.shutdown()
+
+    # The keys below came from collector-side auto-registration.
+    assert "is_init" in data.keys()
+    assert "actor_rs" in data.keys()
+    assert "critic_rs" in data.keys()
+
+    # GAE recomputes values on sequence samples.
+    rb.extend(data.exclude("state_value"))
+    sequence = rb.sample()
+    with set_recurrent_mode(True), torch.no_grad():
+        advantage(sequence)
+
+    # PPO usually computes advantages once, then samples minibatches.
+    rb.empty()
+    rb.extend(sequence)
+    minibatch = rb.sample()
+    with set_recurrent_mode(True), torch.no_grad():
+        loss_td = loss_module(minibatch)
+
+    assert "loss_objective" in loss_td.keys()
+
 The signal that ties it together is the ``"is_init"`` key: a boolean per
 batch element that says "this is the first step of a fresh trajectory,
 do not use the hidden state coming in." Every reset of recurrent state
