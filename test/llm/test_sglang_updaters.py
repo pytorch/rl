@@ -62,7 +62,7 @@ class TestSGLangWeightSyncScheme:
         )
 
         assert scheme.master_port > 0
-        assert scheme.master_port < 65536
+        assert scheme.master_port <= 55535
         assert scheme.world_size == 3  # 1 trainer + 2 gpus
 
     def test_create_transport(self):
