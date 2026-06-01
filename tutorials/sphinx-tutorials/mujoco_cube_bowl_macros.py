@@ -37,7 +37,7 @@ import importlib.util
 import os
 
 import torch
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torchrl.envs import CubeBowlEnv, RobotAction, RobotActionMode, step_mdp
 from torchrl.record import VideoRecorder
 
@@ -154,14 +154,38 @@ recorder = VideoRecorder(
 env = env.append_transform(recorder)
 env = env.append_transform(primitive_control)
 
-td = env.reset()
-assert td["robot_qpos"].shape[-1] == 6
-assert env.low_level_action(td["robot_qpos"]).shape[-1] == 7
-assert td["pixels"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3])
-
 cube_width = 2 * env.OBJECT_HALF_SIZE
 grasp_width = cube_width - 0.001
 gripper_close_command = env.gripper_ctrl_for_width(grasp_width)
+
+scene_generator = torch.Generator().manual_seed(11)
+
+
+def random_scene_reset() -> TensorDict:
+    cube_x = 0.42 + 0.06 * torch.rand(1, 1, generator=scene_generator)
+    cube_y = -0.20 + 0.06 * torch.rand(1, 1, generator=scene_generator)
+    bowl_x = 0.42 + 0.06 * torch.rand(1, 1, generator=scene_generator)
+    bowl_y = 0.04 + 0.06 * torch.rand(1, 1, generator=scene_generator)
+    cube_pos = torch.cat(
+        [cube_x, cube_y, torch.full_like(cube_x, env.cube_position[2])],
+        dim=-1,
+    )
+    bowl_target_z = env.bowl_position[2] + env.MENAGERIE_BOWL_TARGET_OFFSET[2]
+    bowl_pos = torch.cat([bowl_x, bowl_y, torch.full_like(bowl_x, bowl_target_z)], -1)
+    return TensorDict(
+        {
+            "cube_pos": cube_pos.to(dtype=env.dtype, device=env.device),
+            "bowl_pos": bowl_pos.to(dtype=env.dtype, device=env.device),
+        },
+        batch_size=[1],
+        device=env.device,
+    )
+
+
+td = env.reset(random_scene_reset())
+assert td["robot_qpos"].shape[-1] == 6
+assert env.low_level_action(td["robot_qpos"]).shape[-1] == 7
+assert td["pixels"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3])
 
 
 # %%
@@ -196,19 +220,15 @@ assert td["action"].mode.shape == torch.Size([1, 1])
 # poses we want the pinch site to reach and interleaves them with gripper
 # commands.
 
-gripper_quat = td["pinch_quat"].clone()
 home_qpos = torch.as_tensor(
     env.robot_home_qpos,
     dtype=td["robot_qpos"].dtype,
     device=td["robot_qpos"].device,
 ).view(1, 6)
-grasp_distance = torch.full_like(td["cube_pos"][..., :1], float("inf"))
-cube_motion_while_closed = torch.zeros_like(grasp_distance)
-cube_lift_while_closed = torch.zeros_like(grasp_distance)
-max_reward = torch.zeros_like(grasp_distance)
-last_reward = torch.zeros_like(grasp_distance)
-closed_reference_cube: torch.Tensor | None = None
-policy_state: dict[str, TensorDictBase] = {"td": td}
+policy_state: dict[str, TensorDictBase | torch.Tensor] = {
+    "td": td,
+    "gripper_quat": td["pinch_quat"].clone(),
+}
 
 
 def pose_at(
@@ -226,6 +246,7 @@ def pose_at(
 
 def carry_action(alpha: float, bowl: torch.Tensor) -> RobotAction:
     current_td = policy_state["td"]
+    gripper_quat = policy_state["gripper_quat"]
     cube = current_td["cube_pos"].clone()
     pinch_to_cube = current_td["pinch_pos"].clone() - cube
     start_y = cube[..., 1:2]
@@ -381,14 +402,6 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     yield RobotAction.wait(gripper="open", steps=800)
 
 
-def update_closed_motion(reference_cube: torch.Tensor, td: TensorDictBase) -> None:
-    global cube_motion_while_closed, cube_lift_while_closed
-    cube_motion = (td["cube_pos"] - reference_cube).norm(dim=-1, keepdim=True)
-    cube_lift = td["cube_pos"][..., 2:3] - reference_cube[..., 2:3]
-    cube_motion_while_closed = torch.maximum(cube_motion_while_closed, cube_motion)
-    cube_lift_while_closed = torch.maximum(cube_lift_while_closed, cube_lift)
-
-
 def action_mode(action) -> int | None:
     if not hasattr(action, "mode"):
         return None
@@ -401,55 +414,90 @@ def action_gripper(action) -> int:
     return int(action.gripper.reshape(-1)[0].item())
 
 
-script_actions = gen_actions(td)
-
-while True:
-    try:
-        td["action"] = next(script_actions)
-    except StopIteration:
-        break
-
-    action = td["action"]
-    transition = env.step(td)
-    reward = transition["next", "reward"]
-    max_reward = torch.maximum(max_reward, reward.amax(dim=-2))
-    last_reward = reward[..., -1, :]
-    td = step_mdp(transition)
+def run_scripted_rollout(td: TensorDictBase) -> TensorDictBase:
     policy_state["td"] = td
+    policy_state["gripper_quat"] = td["pinch_quat"].clone()
+    grasp_distance = torch.full_like(td["cube_pos"][..., :1], float("inf"))
+    cube_motion_while_closed = torch.zeros_like(grasp_distance)
+    cube_lift_while_closed = torch.zeros_like(grasp_distance)
+    max_reward = torch.zeros_like(grasp_distance)
+    last_reward = torch.zeros_like(grasp_distance)
+    closed_reference_cube: torch.Tensor | None = None
 
-    mode = action_mode(action)
-    gripper = action_gripper(action)
-    if mode == int(RobotActionMode.CLOSE_GRIPPER):
-        grasp_distance = torch.minimum(grasp_distance, env.gripper_cube_distance(td))
-        closed_reference_cube = td["cube_pos"].clone()
-    if closed_reference_cube is not None and gripper == RobotAction.GRIPPER_CLOSED:
-        update_closed_motion(closed_reference_cube, td)
+    script_actions = gen_actions(td)
+    while True:
+        try:
+            td["action"] = next(script_actions)
+        except StopIteration:
+            break
 
-robot_home_error = (td["robot_qpos"] - home_qpos).norm(dim=-1, keepdim=True)
+        action = td["action"]
+        transition = env.step(td)
+        reward = transition["next", "reward"]
+        max_reward = torch.maximum(max_reward, reward.amax(dim=-2))
+        last_reward = reward[..., -1, :]
+        td = step_mdp(transition)
+        policy_state["td"] = td
 
-assert grasp_distance.item() <= 0.025, grasp_distance.item()
-assert cube_motion_while_closed.item() >= 0.05, cube_motion_while_closed.item()
-assert cube_lift_while_closed.item() >= 0.08, cube_lift_while_closed.item()
-assert robot_home_error.item() <= 0.04, robot_home_error.item()
-assert max_reward.item() == 1.0, (
-    max_reward.item(),
-    td["cube_pos"],
-    td["bowl_pos"],
-)
-assert last_reward.item() == 1.0, last_reward.item()
-assert td["success"].all()
+        mode = action_mode(action)
+        gripper = action_gripper(action)
+        if mode == int(RobotActionMode.CLOSE_GRIPPER):
+            grasp_distance = torch.minimum(
+                grasp_distance, env.gripper_cube_distance(td)
+            )
+            closed_reference_cube = td["cube_pos"].clone()
+        if closed_reference_cube is not None and gripper == RobotAction.GRIPPER_CLOSED:
+            cube_motion = (td["cube_pos"] - closed_reference_cube).norm(
+                dim=-1, keepdim=True
+            )
+            cube_lift = td["cube_pos"][..., 2:3] - closed_reference_cube[..., 2:3]
+            cube_motion_while_closed = torch.maximum(
+                cube_motion_while_closed, cube_motion
+            )
+            cube_lift_while_closed = torch.maximum(cube_lift_while_closed, cube_lift)
+
+    robot_home_error = (td["robot_qpos"] - home_qpos).norm(dim=-1, keepdim=True)
+
+    assert grasp_distance.item() <= 0.025, grasp_distance.item()
+    assert cube_motion_while_closed.item() >= 0.05, cube_motion_while_closed.item()
+    assert cube_lift_while_closed.item() >= 0.08, cube_lift_while_closed.item()
+    assert robot_home_error.item() <= 0.04, robot_home_error.item()
+    assert max_reward.item() == 1.0, (
+        max_reward.item(),
+        td["cube_pos"],
+        td["bowl_pos"],
+    )
+    assert last_reward.item() == 1.0, last_reward.item()
+    assert td["success"].all()
+    return td
 
 
 # %%
-# Rendered rollout
-# ----------------
+# Four randomized scenes
+# ----------------------
 #
-# The environment produced the ``"pixels"`` observation during the same rollout
-# that executed the robot actions. The recorder can turn those frames into an
-# inline animation for the tutorial.
+# The same hand-written policy can be reset onto new reachable table layouts.
+# We run four consecutive episodes before creating the animation. The
+# ``VideoRecorder`` keeps appending frames until we ask it to render, so the
+# final video is one long clip containing all four rollouts.
+
+rollout_count = 4
+for rollout_index in range(rollout_count):
+    if rollout_index:
+        td = env.reset(random_scene_reset())
+    td = run_scripted_rollout(td)
+
+
+# %%
+# Rendered rollouts
+# -----------------
+#
+# The environment produced the ``"pixels"`` observation during the same four
+# rollouts that executed the robot actions. The recorder can turn those frames
+# into an inline animation for the tutorial.
 
 scripted_macro_animation = recorder.to_animation(
-    title="Scripted RobotAction rollout",
+    title="Scripted RobotAction rollouts",
     interval=VIDEO_INTERVAL_MS,
     clear=True,
 )

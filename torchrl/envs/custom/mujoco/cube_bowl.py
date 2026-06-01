@@ -157,6 +157,7 @@ class CubeBowlEnv(MujocoEnv):
         self._cube_qpos_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
         self._cube_qvel_start = self.ROBOT_QPOS_DIM + self._gripper_qpos_dim
         self._pinch_site_id: int | None = None
+        self._bowl_body_id: int | None = None
         self._bowl_target_site_id: int | None = None
         self._left_pad_geom_ids: tuple[int, ...] = ()
         self._right_pad_geom_ids: tuple[int, ...] = ()
@@ -171,6 +172,7 @@ class CubeBowlEnv(MujocoEnv):
             device=self.device,
         ).view(1, 3)
         self._pinch_site_id = self._find_site_id(self._pinch_site_name)
+        self._bowl_body_id = self._find_body_id("bowl")
         self._bowl_target_site_id = self._find_site_id(self.BOWL_TARGET_SITE_NAME)
         self._left_pad_geom_ids = self._find_geom_ids(
             self.MENAGERIE_LEFT_PAD_GEOM_NAMES
@@ -680,6 +682,19 @@ class CubeBowlEnv(MujocoEnv):
             (1.0, 0.0, 0.0, 0.0), dtype=qpos.dtype, device=qpos.device
         )
         qvel[..., self._cube_qvel_start : self._cube_qvel_start + 6] = 0.0
+        bowl_pos = torch.tensor(
+            self.bowl_position, dtype=qpos.dtype, device=qpos.device
+        ).expand(n, 3)
+        if tensordict is not None and "bowl_pos" in tensordict.keys(True, True):
+            target_pos = tensordict.get("bowl_pos").to(
+                device=qpos.device, dtype=qpos.dtype
+            )
+            target_pos = target_pos.reshape(n, 3)
+            offset = torch.tensor(
+                self._bowl_target_offset, dtype=qpos.dtype, device=qpos.device
+            )
+            bowl_pos = target_pos - offset
+        self._set_bowl_body_position(bowl_pos)
         return qpos, qvel
 
     # ------------------------------------------------------------------
@@ -1013,6 +1028,19 @@ class CubeBowlEnv(MujocoEnv):
         )
         return pos.view(1, 3)
 
+    def _set_bowl_body_position(self, bowl_pos: torch.Tensor) -> None:
+        if bowl_pos.shape[0] != 1:
+            raise RuntimeError("Per-reset `bowl_pos` overrides require `num_envs=1`.")
+        offset = torch.tensor(
+            self._bowl_target_offset, dtype=self.dtype, device=self.device
+        )
+        bowl_pos = bowl_pos.reshape(1, 3).to(dtype=self.dtype, device=self.device)
+        self._bowl_target_pos = bowl_pos + offset.view(1, 3)
+        model = getattr(self._backend, "_m", getattr(self._backend, "_m_mj", None))
+        if model is None or self._bowl_body_id is None:
+            return
+        model.body_pos[self._bowl_body_id] = bowl_pos[0].detach().cpu().numpy()
+
     def _pinch_pos(self) -> torch.Tensor:
         if self._pinch_site_id is None or not hasattr(self._backend, "_d"):
             return torch.zeros(self.num_envs, 3, dtype=self.dtype, device=self.device)
@@ -1060,6 +1088,14 @@ class CubeBowlEnv(MujocoEnv):
 
         site_id = mujoco.mj_name2id(self._backend._m, mujoco.mjtObj.mjOBJ_SITE, name)
         return None if site_id < 0 else int(site_id)
+
+    def _find_body_id(self, name: str) -> int | None:
+        if not _has_mujoco or not hasattr(self._backend, "_m"):
+            return None
+        import mujoco
+
+        body_id = mujoco.mj_name2id(self._backend._m, mujoco.mjtObj.mjOBJ_BODY, name)
+        return None if body_id < 0 else int(body_id)
 
     def _find_geom_ids(self, names: tuple[str, ...]) -> tuple[int, ...]:
         if not _has_mujoco or not hasattr(self._backend, "_m"):

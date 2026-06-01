@@ -829,6 +829,26 @@ class TestMujoco:
         )
 
     @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_reset_position_overrides(self):
+        env = CubeBowlEnv(seed=0, max_episode_steps=3)
+        cube_pos = torch.tensor([[0.30, -0.12, 0.035]], dtype=env.dtype)
+        bowl_pos = torch.tensor([[0.24, 0.15, 0.05]], dtype=env.dtype)
+
+        td = env.reset(
+            TensorDict({"cube_pos": cube_pos, "bowl_pos": bowl_pos}, batch_size=[1])
+        )
+        torch.testing.assert_close(td["cube_pos"], cube_pos, atol=1e-6, rtol=0.0)
+        torch.testing.assert_close(td["bowl_pos"], bowl_pos, atol=1e-6, rtol=0.0)
+
+        td = env.reset()
+        torch.testing.assert_close(
+            td["bowl_pos"],
+            torch.tensor([[0.28, 0.19, 0.05]], dtype=td["bowl_pos"].dtype),
+            atol=1e-6,
+            rtol=0.0,
+        )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
     def test_cube_bowl_macro_helper_api(self):
         env = CubeBowlEnv(seed=0, max_episode_steps=3)
         observation = env.reset()
