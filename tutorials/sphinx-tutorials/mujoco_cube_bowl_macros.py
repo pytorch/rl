@@ -159,21 +159,32 @@ grasp_width = cube_width - 0.001
 gripper_close_command = env.gripper_ctrl_for_width(grasp_width)
 
 scene_generator = torch.Generator().manual_seed(11)
-workspace_center = torch.tensor([[0.45, -0.05]])
-workspace_half_extent = torch.tensor([[0.10, 0.16]])
+workspace_layouts = torch.tensor(
+    [
+        # Cube in front of the robot, bowl behind it.
+        [[0.45, -0.25], [0.45, 0.16]],
+        # Cube on the robot's right, bowl on the left-front side.
+        [[0.58, -0.02], [0.34, -0.23]],
+        # Cube on the left-back side, bowl on the right-front side.
+        [[0.34, 0.12], [0.58, -0.20]],
+        # Cube on the right-back side, bowl on the left-front side.
+        [[0.57, 0.13], [0.35, -0.22]],
+    ],
+)
+workspace_jitter = torch.tensor([[0.015, 0.015]])
 
 
-def sample_workspace_xy() -> torch.Tensor:
-    return workspace_center + (
+def jitter_workspace_xy(anchor_xy: torch.Tensor) -> torch.Tensor:
+    jitter = (
         2 * torch.rand(1, 2, generator=scene_generator) - 1
-    ) * workspace_half_extent
+    ) * workspace_jitter
+    return anchor_xy.view(1, 2) + jitter
 
 
-def random_scene_reset() -> TensorDict:
-    cube_xy = sample_workspace_xy()
-    bowl_xy = sample_workspace_xy()
-    while (cube_xy - bowl_xy).norm() < 0.18:
-        bowl_xy = sample_workspace_xy()
+def random_scene_reset(rollout_index: int) -> TensorDict:
+    layout = workspace_layouts[rollout_index % len(workspace_layouts)]
+    cube_xy = jitter_workspace_xy(layout[0])
+    bowl_xy = jitter_workspace_xy(layout[1])
     cube_pos = torch.cat(
         [cube_xy, torch.full_like(cube_xy[..., :1], env.cube_position[2])],
         dim=-1,
@@ -506,15 +517,17 @@ scripted_macro_animation = recorder.to_animation(
 # --------------------------
 #
 # Next, reset the same environment onto new reachable layouts sampled from a
-# square in the table plane. The cube and bowl are sampled independently, so
-# the policy cannot assume that the transfer is just along one line. We run
-# four consecutive randomized episodes before creating the animation. The
-# ``VideoRecorder`` keeps appending frames until we ask it to render, so the
-# final video is one long clip containing all four randomized rollouts.
+# square in the table plane. For readability, each rollout starts from a
+# different opposing pair of workspace regions, with a small random jitter. That
+# makes the video visibly show cases such as "bowl behind, cube in front" and
+# "cube on the right, bowl on the left", instead of four samples that happen to
+# cluster near the center. The ``VideoRecorder`` keeps appending frames until we
+# ask it to render, so the final video is one long clip containing all four
+# randomized rollouts.
 
-rollout_count = 4
+rollout_count = len(workspace_layouts)
 for rollout_index in range(rollout_count):
-    td = env.reset(random_scene_reset())
+    td = env.reset(random_scene_reset(rollout_index))
     td = run_scripted_rollout(td)
 
 
