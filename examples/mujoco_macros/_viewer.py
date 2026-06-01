@@ -11,6 +11,7 @@ import importlib.util
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import time
 
@@ -20,7 +21,7 @@ from types import MethodType
 from typing import Any
 
 import torch
-from torchrl.record import CSVLogger, PixelRenderTransform, VideoRecorder
+from torchrl.record import PixelRenderTransform, VideoRecorder
 
 _has_mujoco_viewer = (
     importlib.util.find_spec("mujoco") is not None
@@ -28,6 +29,85 @@ _has_mujoco_viewer = (
 )
 _MJPYTHON_REEXEC_ENV = "TORCHRL_MUJOCO_MACRO_MJPYTHON_REEXEC"
 _DEFAULT_VIDEO_DIR = Path("mujoco_macro_videos")
+
+
+class _FFmpegVideoExperiment:
+    def __init__(self, log_dir: Path) -> None:
+        self.log_dir = str(log_dir)
+        (log_dir / "videos").mkdir(parents=True, exist_ok=True)
+
+
+class _FFmpegVideoLogger:
+    def __init__(self, *, exp_name: str, log_dir: Path, video_fps: int) -> None:
+        self.exp_name = exp_name
+        self.log_dir = str(log_dir)
+        self.video_fps = int(video_fps)
+        self.experiment = _FFmpegVideoExperiment(log_dir / exp_name)
+
+    def log_video(
+        self,
+        name: str,
+        video: torch.Tensor,
+        step: int | None = None,
+        **kwargs: Any,
+    ) -> None:
+        if video.dim() != 5 or video.size(dim=2) not in {1, 3}:
+            raise RuntimeError("Expected video format ((N), T, C, H, W).")
+        fps = int(kwargs.pop("fps", self.video_fps))
+        if kwargs:
+            raise TypeError(f"Unsupported video kwargs: {sorted(kwargs)}")
+        if step is None:
+            step = 0
+        frames = video.flatten(0, 1).detach().to("cpu", torch.uint8)
+        if frames.shape[1] == 1:
+            frames = frames.expand(-1, 3, -1, -1)
+        frames = frames.permute(0, 2, 3, 1).contiguous()
+        filepath = Path(self.experiment.log_dir) / "videos" / f"{name}_{step}.mp4"
+        _write_mp4_with_ffmpeg(filepath, frames, fps=fps)
+
+
+def _write_mp4_with_ffmpeg(filepath: Path, frames: torch.Tensor, *, fps: int) -> None:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError(
+            "Writing MP4 videos requires either `ffmpeg` on PATH or TorchRL's "
+            "CSVLogger video dependencies (`torchvision` plus `torchcodec`)."
+        )
+    height, width = frames.shape[1:3]
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-s",
+        f"{width}x{height}",
+        "-pix_fmt",
+        "rgb24",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-an",
+        "-vcodec",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(filepath),
+    ]
+    try:
+        subprocess.run(
+            cmd,
+            input=frames.numpy().tobytes(),
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as err:
+        stderr = err.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(f"ffmpeg failed while writing {filepath}: {stderr}") from err
 
 
 class ViewerClosed(RuntimeError):
@@ -97,7 +177,7 @@ def maybe_add_video_recorder(
     args: Any,
     *,
     tag: str,
-) -> tuple[Any, VideoRecorder | None, CSVLogger | None]:
+) -> tuple[Any, VideoRecorder | None, _FFmpegVideoLogger | None]:
     """Append ``PixelRenderTransform`` / ``VideoRecorder`` when requested."""
     video_dir = args.video_dir
     if video_dir is None and args.max_rollouts is not None:
@@ -105,10 +185,9 @@ def maybe_add_video_recorder(
     if video_dir is None:
         return env, None, None
 
-    logger = CSVLogger(
+    logger = _FFmpegVideoLogger(
         exp_name=tag,
-        log_dir=str(video_dir),
-        video_format="mp4",
+        log_dir=video_dir,
         video_fps=args.video_fps,
     )
     env = env.append_transform(
@@ -129,14 +208,14 @@ def maybe_add_video_recorder(
     return env, recorder, logger
 
 
-def video_path(logger: CSVLogger, tag: str, step: int) -> Path:
-    """Return the CSVLogger MP4 path for a given tag and step."""
+def video_path(logger: _FFmpegVideoLogger, tag: str, step: int) -> Path:
+    """Return the MP4 path for a given tag and step."""
     return Path(logger.experiment.log_dir) / "videos" / f"{tag}_{step}.mp4"
 
 
 def dump_video(
     recorder: VideoRecorder | None,
-    logger: CSVLogger | None,
+    logger: _FFmpegVideoLogger | None,
     *,
     tag: str,
     step: int,
