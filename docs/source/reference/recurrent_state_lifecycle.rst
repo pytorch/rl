@@ -98,7 +98,8 @@ multi-epoch training so the data path stays visible.
         ValueOperator(nn.Linear(hidden_size, 1), in_keys=["critic_features"]),
     )
 
-    # The collector sees both RNNs and appends InitTracker + TensorDictPrimers.
+    # Thanks to auto_register_policy_transforms=True below, the collector sees
+    # both RNNs and appends InitTracker + TensorDictPrimers.
     collector_policy = TensorDictSequential(actor, critic)
     collector = SyncDataCollector(
         env,
