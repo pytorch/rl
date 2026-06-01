@@ -246,7 +246,7 @@ class SatelliteEnv(MujocoEnv):
             xml,
         )
         camera = (
-            '<camera name="side" pos="3 -3 2" '
+            '<camera name="side" pos="6 -6 4" '
             'xyaxes="0.707 0.707 0 -0.302 0.302 0.905" fovy="60"/>'
         )
         light = (

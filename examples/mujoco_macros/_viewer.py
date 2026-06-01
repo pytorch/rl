@@ -28,6 +28,7 @@ _has_mujoco_viewer = (
 )
 _MJPYTHON_REEXEC_ENV = "TORCHRL_MUJOCO_MACRO_MJPYTHON_REEXEC"
 _DEFAULT_VIDEO_DIR = Path("mujoco_macro_videos")
+_DEFAULT_VIEWER_DISTANCE_SCALE = 2.0
 
 
 class ViewerClosed(RuntimeError):
@@ -167,6 +168,7 @@ class MujocoViewerLoop:
         *,
         realtime: bool = True,
         speed: float = 1.0,
+        camera_distance_scale: float = _DEFAULT_VIEWER_DISTANCE_SCALE,
     ) -> None:
         self.env = env
         self.backend = getattr(env, "_backend", None)
@@ -179,8 +181,11 @@ class MujocoViewerLoop:
             )
         if speed <= 0:
             raise ValueError("speed must be strictly positive.")
+        if camera_distance_scale <= 0:
+            raise ValueError("camera_distance_scale must be strictly positive.")
         self.realtime = bool(realtime)
         self.speed = float(speed)
+        self.camera_distance_scale = float(camera_distance_scale)
         self.viewer = None
         self._step: Callable[[torch.Tensor, int], None] | None = None
         self._reset: Callable[[torch.Tensor, torch.Tensor], None] | None = None
@@ -197,6 +202,8 @@ class MujocoViewerLoop:
             )
         mujoco_viewer = importlib.import_module("mujoco.viewer")
         self.viewer = mujoco_viewer.launch_passive(self.backend._m, self.backend._d)
+        with self.viewer.lock():
+            self.viewer.cam.distance *= self.camera_distance_scale
         self._step = self.backend.step
         self._reset = self.backend.reset
         self._reset_mask = self.backend.reset_mask

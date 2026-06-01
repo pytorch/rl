@@ -191,6 +191,22 @@ class TestMujoco:
         )
         torch.testing.assert_close(body_quat, target.squeeze(0), rtol=1e-6, atol=1e-6)
 
+        camera_id = env._backend._mujoco.mj_name2id(
+            env._backend._m,
+            env._backend._mujoco.mjtObj.mjOBJ_CAMERA,
+            "side",
+        )
+        assert camera_id >= 0
+        camera_pos = torch.as_tensor(
+            env._backend._m.cam_pos[camera_id],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        torch.testing.assert_close(
+            camera_pos,
+            torch.tensor([6.0, -6.0, 4.0], dtype=env.dtype, device=env.device),
+        )
+
         for geom_name in ("bus", "panel_port", "cmg1_disk"):
             geom_id = env._backend._mujoco.mj_name2id(
                 env._backend._m,
