@@ -17,6 +17,23 @@ ln -s /usr/bin/swig3.0 /usr/bin/swig 2>/dev/null || true
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
 
+nvidia_lib_path="$(python - <<'PY'
+from pathlib import Path
+import site
+
+paths = []
+for site_dir in site.getsitepackages():
+    nvidia_dir = Path(site_dir) / "nvidia"
+    if nvidia_dir.is_dir():
+        paths.extend(str(path) for path in nvidia_dir.glob("*/lib") if path.is_dir())
+
+print(":".join(paths))
+PY
+)"
+if [[ -n "${nvidia_lib_path}" ]]; then
+    export LD_LIBRARY_PATH="${nvidia_lib_path}:${LD_LIBRARY_PATH:-}"
+fi
+
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
