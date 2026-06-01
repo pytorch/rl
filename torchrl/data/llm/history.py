@@ -27,15 +27,15 @@ if TYPE_CHECKING:
 
 # Global storage for custom templates and their metadata
 _CHAT_TEMPLATES = {
-    "chatml_format": """{% for message in messages %}
-    {%- if message['role'] == 'assistant' %}
-    {{'<|im_start|>' + message['role'] + '\n'}}{% generation %}{{ message['content'] }}{% endgeneration %}{{'<|im_end|>' + '\n'}}
-    {%- else %}
-    {{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
-    {%- endif %}
-{% endfor %}
-{%- if add_generation_prompt %}
-    {{- '<|im_start|>assistant\n' }}
+    "chatml_format": """{%- for message in messages %}
+{%- if message['role'] == 'assistant' -%}
+{{ '<|im_start|>' + message['role'] + '\n' }}{% generation %}{{ message['content'] }}{% endgeneration %}{{ '<|im_end|>\n' }}
+{%- else -%}
+{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}
+{%- endif %}
+{%- endfor %}
+{%- if add_generation_prompt -%}
+{{ '<|im_start|>assistant\n' }}
 {%- endif %}
 """,
     "qwen": """
@@ -103,8 +103,8 @@ _CHAT_TEMPLATES = {
 {%- endif %}
 """,
     "dialogpt": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'user' %}{{ message['content'] }}{{ eos_token }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ ' ' }}{% endif %}""",
-    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{{ 'Assistant: ' }}{% generation %}{{ message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant: ' }}{% endif %}""",
-    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{{ 'Assistant: ' }}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}""",
+    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{{ 'Assistant:' }}{% generation %}{{ ' ' + message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}""",
+    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{{ 'Assistant:' }}{% generation %}{{ ' ' + message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}""",
     "llama": """{{- bos_token }}
 {%- if messages[0]['role'] == 'system' %}
     {%- set system_message = messages[0]['content']|trim %}

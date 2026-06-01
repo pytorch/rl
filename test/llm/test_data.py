@@ -1084,7 +1084,7 @@ To get to the other side!<|im_end|>""",
 You are a helpful assistant.<|im_end|>
 <|im_start|>assistant
 I'm doing well, thank you for asking!<|im_end|>
-    """
+"""
         assert template_0 == expected_0
 
         # Test second response (should show all 3 messages)
@@ -1095,11 +1095,11 @@ I'm doing well, thank you for asking!<|im_end|>
 You are a helpful assistant.<|im_end|>
 <|im_start|>assistant
 Why did the chicken cross the road?<|im_end|>
-    <|im_start|>user
+<|im_start|>user
 I don't know, why?<|im_end|>
 <|im_start|>assistant
 To get to the other side!<|im_end|>
-    """
+"""
         assert template_1 == expected_1
 
 
