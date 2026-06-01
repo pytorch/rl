@@ -308,7 +308,8 @@ class VideoRecorder(ObservationTransform):
             repeat_delay=repeat_delay,
         )
         if clear:
-            self.obs = []
+            self.obs.clear()
+            self.count = 0
         return out
 
     def dump(self, suffix: str | None = None, step: int | None = None) -> None:

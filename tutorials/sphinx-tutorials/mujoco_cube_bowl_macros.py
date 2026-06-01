@@ -159,19 +159,29 @@ grasp_width = cube_width - 0.001
 gripper_close_command = env.gripper_ctrl_for_width(grasp_width)
 
 scene_generator = torch.Generator().manual_seed(11)
+workspace_center = torch.tensor([[0.45, -0.05]])
+workspace_half_extent = torch.tensor([[0.10, 0.16]])
+
+
+def sample_workspace_xy() -> torch.Tensor:
+    return workspace_center + (
+        2 * torch.rand(1, 2, generator=scene_generator) - 1
+    ) * workspace_half_extent
 
 
 def random_scene_reset() -> TensorDict:
-    cube_x = 0.42 + 0.06 * torch.rand(1, 1, generator=scene_generator)
-    cube_y = -0.20 + 0.06 * torch.rand(1, 1, generator=scene_generator)
-    bowl_x = 0.42 + 0.06 * torch.rand(1, 1, generator=scene_generator)
-    bowl_y = 0.04 + 0.06 * torch.rand(1, 1, generator=scene_generator)
+    cube_xy = sample_workspace_xy()
+    bowl_xy = sample_workspace_xy()
+    while (cube_xy - bowl_xy).norm() < 0.18:
+        bowl_xy = sample_workspace_xy()
     cube_pos = torch.cat(
-        [cube_x, cube_y, torch.full_like(cube_x, env.cube_position[2])],
+        [cube_xy, torch.full_like(cube_xy[..., :1], env.cube_position[2])],
         dim=-1,
     )
     bowl_target_z = env.bowl_position[2] + env.MENAGERIE_BOWL_TARGET_OFFSET[2]
-    bowl_pos = torch.cat([bowl_x, bowl_y, torch.full_like(bowl_x, bowl_target_z)], -1)
+    bowl_pos = torch.cat(
+        [bowl_xy, torch.full_like(bowl_xy[..., :1], bowl_target_z)], -1
+    )
     return TensorDict(
         {
             "cube_pos": cube_pos.to(dtype=env.dtype, device=env.device),
@@ -182,7 +192,7 @@ def random_scene_reset() -> TensorDict:
     )
 
 
-td = env.reset(random_scene_reset())
+td = env.reset()
 assert td["robot_qpos"].shape[-1] == 6
 assert env.low_level_action(td["robot_qpos"]).shape[-1] == 7
 assert td["pixels"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3])
@@ -248,13 +258,14 @@ def carry_action(alpha: float, bowl: torch.Tensor) -> RobotAction:
     current_td = policy_state["td"]
     gripper_quat = policy_state["gripper_quat"]
     cube = current_td["cube_pos"].clone()
+    carry_start_cube = policy_state["carry_start_cube"]
     pinch_to_cube = current_td["pinch_pos"].clone() - cube
-    start_y = cube[..., 1:2]
-    target_y = bowl[..., 1:2]
+    desired_xy = carry_start_cube[..., :2] + alpha * (
+        bowl[..., :2] - carry_start_cube[..., :2]
+    )
     desired_cube = torch.cat(
         [
-            bowl[..., :1],
-            start_y + alpha * (target_y - start_y),
+            desired_xy,
             torch.full_like(bowl[..., 2:3], 0.24),
         ],
         dim=-1,
@@ -334,8 +345,9 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     # bowl, the fingers can drag faster than the cube can safely follow: the
     # cube may slide inside the grasp, get pushed out, or arrive shifted enough
     # that the final drop misses the bowl. We therefore carry it through a few
-    # intermediate waypoints. After each waypoint, the next command uses the
-    # latest observed cube and finger positions.
+    # intermediate waypoints in the table plane. After each waypoint, the next
+    # command uses the latest observed cube and finger positions.
+    policy_state["carry_start_cube"] = policy_state["td"]["cube_pos"].clone()
 
     # Action 6: Carry the cube one quarter of the way toward the bowl.
     yield carry_action(0.25, bowl)
@@ -417,6 +429,7 @@ def action_gripper(action) -> int:
 def run_scripted_rollout(td: TensorDictBase) -> TensorDictBase:
     policy_state["td"] = td
     policy_state["gripper_quat"] = td["pinch_quat"].clone()
+    policy_state.pop("carry_start_cube", None)
     grasp_distance = torch.full_like(td["cube_pos"][..., :1], float("inf"))
     cube_motion_while_closed = torch.zeros_like(grasp_distance)
     cube_lift_while_closed = torch.zeros_like(grasp_distance)
@@ -473,31 +486,47 @@ def run_scripted_rollout(td: TensorDictBase) -> TensorDictBase:
 
 
 # %%
-# Four randomized scenes
-# ----------------------
+# Fixed scene video
+# -----------------
 #
-# The same hand-written policy can be reset onto new reachable table layouts.
-# We run four consecutive episodes before creating the animation. The
+# First, render the default task once. This is the simple cube-to-bowl scene
+# used above to introduce the scripted policy.
+
+td = run_scripted_rollout(td)
+
+scripted_macro_animation = recorder.to_animation(
+    title="Scripted RobotAction rollout",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
+)
+
+
+# %%
+# Randomized workspace video
+# --------------------------
+#
+# Next, reset the same environment onto new reachable layouts sampled from a
+# square in the table plane. The cube and bowl are sampled independently, so
+# the policy cannot assume that the transfer is just along one line. We run
+# four consecutive randomized episodes before creating the animation. The
 # ``VideoRecorder`` keeps appending frames until we ask it to render, so the
-# final video is one long clip containing all four rollouts.
+# final video is one long clip containing all four randomized rollouts.
 
 rollout_count = 4
 for rollout_index in range(rollout_count):
-    if rollout_index:
-        td = env.reset(random_scene_reset())
+    td = env.reset(random_scene_reset())
     td = run_scripted_rollout(td)
 
 
 # %%
-# Rendered rollouts
-# -----------------
+# Rendered randomized rollouts
+# ----------------------------
 #
-# The environment produced the ``"pixels"`` observation during the same four
-# rollouts that executed the robot actions. The recorder can turn those frames
-# into an inline animation for the tutorial.
+# The second animation shows the same hand-written policy on the randomized
+# scenes.
 
-scripted_macro_animation = recorder.to_animation(
-    title="Scripted RobotAction rollouts",
+randomized_macro_animation = recorder.to_animation(
+    title="Randomized RobotAction rollouts",
     interval=VIDEO_INTERVAL_MS,
     clear=True,
 )

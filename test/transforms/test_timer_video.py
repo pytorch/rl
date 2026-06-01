@@ -155,11 +155,14 @@ class TestVideoRecorder:
         recorder = VideoRecorder(None, None, fps=30)
         obs = torch.randint(0, 255, (3, 16, 16), dtype=torch.uint8)
         recorder._apply_transform(obs)
+        obs_buffer = recorder.obs
 
         anim = recorder.to_animation(title="test", clear=True)
 
         assert isinstance(anim, ArtistAnimation)
         assert recorder.obs == []
+        assert recorder.obs is obs_buffer
+        assert recorder.count == 0
 
     def test_video_recorder_grayscale_batched(self):
         """Test that VideoRecorder handles batched grayscale observations."""
