@@ -139,6 +139,20 @@ class _PhysicsBackend(abc.ABC):
             f"{type(self).__name__} does not implement rendering."
         )
 
+    def set_static_body_pose(
+        self,
+        body_name: str,
+        position: torch.Tensor,
+        quaternion: torch.Tensor,
+    ) -> None:
+        """Update a non-jointed visual body when the backend supports it.
+
+        Backends that keep immutable compiled models can safely ignore this.
+        The hook is for renderer-only markers and must not be used for
+        simulated bodies.
+        """
+        return
+
 
 # ----------------------------------------------------------------------
 # mujoco-torch backend
@@ -392,6 +406,7 @@ class _MujocoBackend(_PhysicsBackend):
 
         self._m = m_mj
         self._d = d_mj
+        self._mujoco = mujoco
 
         self.nq = int(m_mj.nq)
         self.nv = int(m_mj.nv)
@@ -478,6 +493,26 @@ class _MujocoBackend(_PhysicsBackend):
         return torch.as_tensor(np.ascontiguousarray(rgb), device=self.device).unsqueeze(
             0
         )
+
+    def set_static_body_pose(
+        self,
+        body_name: str,
+        position: torch.Tensor,
+        quaternion: torch.Tensor,
+    ) -> None:
+        body_id = self._mujoco.mj_name2id(
+            self._m,
+            self._mujoco.mjtObj.mjOBJ_BODY,
+            body_name,
+        )
+        if body_id < 0:
+            return
+        pos = position.reshape(-1, 3)[0].detach().cpu().to(torch.float64)
+        quat = quaternion.reshape(-1, 4)[0].detach().cpu().to(torch.float64)
+        quat = quat / quat.norm().clamp_min(1e-12)
+        self._m.body_pos[body_id] = pos.numpy()
+        self._m.body_quat[body_id] = quat.numpy()
+        self._mujoco.mj_forward(self._m, self._d)
 
 
 # ----------------------------------------------------------------------

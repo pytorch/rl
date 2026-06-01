@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Literal
+from typing import ClassVar, Literal
 
 import torch
 from tensordict import TensorDictBase
@@ -86,6 +86,28 @@ class SatelliteEnv(MujocoEnv):
     ROTOR_SPEED_4 = 100.0
     ROTOR_SPEED_6 = 200.0
     RENDER_BACKGROUND = (0.0, 0.0, 0.05)
+    _TARGET_ARROW_BODY: ClassVar[str] = "target_attitude_arrow"
+    _TARGET_ARROW_POS: ClassVar[tuple[float, float, float]] = (0.0, 0.0, 0.75)
+    _TARGET_ARROW_XML: ClassVar[
+        str
+    ] = """
+  <body name="target_attitude_arrow" pos="0 0 0.75" quat="1 0 0 0">
+    <geom name="target_direction_shaft" type="capsule"
+          fromto="0 0 0 0.9 0 0" size="0.025"
+          rgba="0.1 0.9 0.2 0.65" contype="0" conaffinity="0"/>
+    <geom name="target_direction_head_y" type="capsule"
+          fromto="0.9 0 0 0.72 0.11 0" size="0.025"
+          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
+    <geom name="target_direction_head_minus_y" type="capsule"
+          fromto="0.9 0 0 0.72 -0.11 0" size="0.025"
+          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
+    <geom name="target_direction_head_z" type="capsule"
+          fromto="0.9 0 0 0.72 0 0.11" size="0.025"
+          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
+    <geom name="target_direction_head_minus_z" type="capsule"
+          fromto="0.9 0 0 0.72 0 -0.11" size="0.025"
+          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
+  </body>"""
 
     def __init__(
         self,
@@ -204,7 +226,22 @@ class SatelliteEnv(MujocoEnv):
             '<light name="top" pos="0 0 4" dir="0 0 -1" '
             'diffuse="0.8 0.8 0.8" ambient="0.3 0.3 0.3" directional="true"/>'
         )
-        return xml.replace("<worldbody>", f"<worldbody>\n  {camera}\n  {light}")
+        return xml.replace(
+            "<worldbody>",
+            f"<worldbody>\n  {camera}\n  {light}{cls._TARGET_ARROW_XML}",
+        )
+
+    def _sync_target_marker(self) -> None:
+        position = torch.as_tensor(
+            self._TARGET_ARROW_POS,
+            dtype=self.dtype,
+            device=self.device,
+        ).expand(self.num_envs, 3)
+        self._backend.set_static_body_pose(
+            self._TARGET_ARROW_BODY,
+            position,
+            self._target_quat,
+        )
 
     # ------------------------------------------------------------------
     # Specs
@@ -308,6 +345,7 @@ class SatelliteEnv(MujocoEnv):
         self._last_manip = self._compute_manip_from_qpos(
             self._backend.qpos.to(self.dtype)
         )
+        self._sync_target_marker()
 
     def _on_reset_mask(
         self,
@@ -333,6 +371,7 @@ class SatelliteEnv(MujocoEnv):
         self._target_quat = torch.where(m, t, self._target_quat)
         new_manip = self._compute_manip_from_qpos(self._backend.qpos.to(self.dtype))
         self._last_manip = torch.where(m, new_manip, self._last_manip)
+        self._sync_target_marker()
 
     # ------------------------------------------------------------------
     # Observation, reward, done

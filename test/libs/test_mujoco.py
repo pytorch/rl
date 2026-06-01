@@ -112,7 +112,7 @@ class TestMujoco:
             action_dim=env.action_spec.shape[-1], macro_steps=3, settle_steps=1
         )
         td = env.reset()
-        target = torch.zeros_like(env.action_spec.rand())
+        target = env.action_spec.zero()
         target[..., 0] = 0.2
         sequence = transform.action_sequence(
             td, MacroPrimitive.MOVEJ, target_qpos=target
@@ -127,7 +127,7 @@ class TestMujoco:
             action_dim=env.action_spec.shape[-1], macro_steps=2
         )
         td = env.reset()
-        target = torch.zeros_like(env.action_spec.rand())
+        target = env.action_spec.zero()
         sequence = transform.action_sequence(
             td, MacroPrimitive.MOVEJ, target_qpos=target
         )
@@ -152,6 +152,61 @@ class TestMujoco:
         assert obs_spec["gimbal_angles"].shape == torch.Size([n, 2 * num_cmgs])
         assert obs_spec["gimbal_rates"].shape == torch.Size([n, num_cmgs])
         assert obs_spec["manipulability"].shape == torch.Size([n, 1])
+
+    @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
+    def test_satellite_target_arrow_tracks_target_quat(self):
+        env = SatelliteEnv(
+            num_cmgs=4,
+            seed=0,
+            backend="mujoco",
+            reset_noise_scale=0.0,
+        )
+        target = torch.tensor(
+            [[0.70710678, 0.0, 0.0, 0.70710678]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        identity = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        env.reset(
+            TensorDict(
+                {"init_bus_quat": identity, "target_quat": target},
+                batch_size=env.batch_size,
+            )
+        )
+
+        body_id = env._backend._mujoco.mj_name2id(
+            env._backend._m,
+            env._backend._mujoco.mjtObj.mjOBJ_BODY,
+            env._TARGET_ARROW_BODY,
+        )
+        assert body_id >= 0
+        body_quat = torch.as_tensor(
+            env._backend._m.body_quat[body_id],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        torch.testing.assert_close(body_quat, target.squeeze(0), rtol=1e-6, atol=1e-6)
+
+        for geom_name in (
+            "target_direction_shaft",
+            "target_direction_head_y",
+            "target_direction_head_minus_y",
+            "target_direction_head_z",
+            "target_direction_head_minus_z",
+        ):
+            geom_id = env._backend._mujoco.mj_name2id(
+                env._backend._m,
+                env._backend._mujoco.mjtObj.mjOBJ_GEOM,
+                geom_name,
+            )
+            assert geom_id >= 0
+            assert env._backend._m.geom_contype[geom_id] == 0
+            assert env._backend._m.geom_conaffinity[geom_id] == 0
+        env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     @pytest.mark.parametrize("num_cmgs", [4, 6])
@@ -944,7 +999,7 @@ class TestMujoco:
         observation = env.reset(
             TensorDict({"cube_pos": env._target_pos().clone()}, batch_size=[1])
         )
-        hold_action = torch.zeros_like(env.action_spec.rand())
+        hold_action = env.action_spec.zero()
         hold_action[..., :6] = observation["robot_qpos"]
         transition = env.step(observation.clone().set("action", hold_action))
         torch.testing.assert_close(

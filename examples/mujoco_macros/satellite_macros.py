@@ -44,7 +44,7 @@ class SatelliteSlewPolicy:
         # the destination under ``td["action"]`` as a ``MacroAction``. The
         # appended transform expands and executes the manoeuver.
         quat_err = tensordict["quat_err"]
-        target = torch.zeros_like(self.action_spec.rand())
+        target = self.action_spec.zero()
         gains = (0.55, 0.40, 0.25, 0.12, 0.0)
         gain = gains[min(self.macro_count, len(gains) - 1)]
         target[..., :3] = gain * quat_err.clamp(-1.0, 1.0)
@@ -66,6 +66,8 @@ def main() -> None:
     # passive viewer can display the live ``mjData`` object. We repeatedly reset
     # the satellite to identity attitude, ask it to slew to a 90 degree yaw
     # target, and let ``rollout`` call the policy for each high-level macro.
+    # ``reset_noise_scale=0.0`` keeps each viewer replay on the same manoeuver;
+    # the default SatelliteEnv reset remains stochastic for training.
     target_quat = torch.tensor([[0.70710678, 0.0, 0.0, 0.70710678]])
     init_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
     base_env = SatelliteEnv(
@@ -73,6 +75,7 @@ def main() -> None:
         seed=0,
         backend="mujoco",
         max_episode_steps=512,
+        reset_noise_scale=0.0,
     )
     low_level_action_spec = base_env.action_spec.clone()
     env = base_env.append_transform(

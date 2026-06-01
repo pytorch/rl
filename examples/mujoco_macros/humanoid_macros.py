@@ -25,7 +25,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _target(action_spec: TensorSpec, values: list[float]) -> torch.Tensor:
-    target = torch.zeros_like(action_spec.rand())
+    target = action_spec.zero()
     values_tensor = torch.as_tensor(values, dtype=target.dtype, device=target.device)
     action_dim = min(target.shape[-1], values_tensor.numel())
     target[..., :action_dim] = values_tensor[:action_dim]
