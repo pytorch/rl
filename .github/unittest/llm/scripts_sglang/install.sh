@@ -47,15 +47,15 @@ uv pip install \
 printf "* Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
     if [ "${CU_VERSION:-}" == cpu ]; then
-        uv pip install --upgrade --pre torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu
+        uv pip install --upgrade --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu
     else
-        uv pip install --upgrade --pre torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/${CU_VERSION}
+        uv pip install --upgrade --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/${CU_VERSION}
     fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ]; then
-        uv pip install --upgrade torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
+        uv pip install --upgrade torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
     else
-        uv pip install --upgrade torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/${CU_VERSION}
+        uv pip install --upgrade torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/${CU_VERSION}
     fi
 else
     printf "Failed to install pytorch\n"
@@ -103,10 +103,14 @@ apt-get update && apt-get install -y libnuma-dev
 
 # Install SGLang with all extras
 # Note: We do NOT install vLLM here to avoid Triton version conflicts
-# SGLang pins torch 2.11.0, whose PyPI wheel carries CUDA 13.0; keep
-# torchvision on the matching release instead of the earlier cu129 wheel.
 printf "* Installing SGLang\n"
-uv pip install "sglang[all]" "kernels>=0.12,<0.13" "torchvision==0.26.0"
+uv pip install "sglang[all]" "kernels>=0.12,<0.13"
+
+# SGLang pins torch 2.11.0, whose PyPI wheel carries CUDA 13.0. Install
+# the exact PyPI torchvision build after SGLang resolves torch so the
+# initial PyTorch cu129 wheel cannot satisfy the version constraint.
+printf "* Installing torchvision matching SGLang's torch wheel\n"
+uv pip install --reinstall --index-url https://pypi.org/simple "torchvision===0.26.0"
 
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
@@ -148,6 +152,14 @@ for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "tr
         print(f"{package}: {version(package)}")
     except PackageNotFoundError:
         print(f"{package}: not installed")
+PY
+
+printf "* Verifying torch/torchvision CUDA compatibility\n"
+python - <<'PY'
+import torch
+import torchvision
+
+print(f"torch CUDA: {torch.version.cuda}; torchvision: {torchvision.__version__}")
 PY
 
 uv pip check
