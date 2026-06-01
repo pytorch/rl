@@ -15,7 +15,7 @@ from tensordict import set_list_to_stack, TensorDict
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.modules.llm.backends import AsyncSGLang, RLSGLangEngine
-from torchrl.modules.llm.policies import SGLangWrapper
+from torchrl.modules.llm.policies import SGLangWrapper, TransformersWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Text, Tokens
 
 _has_sglang = importlib.util.find_spec("sglang") is not None
@@ -43,6 +43,18 @@ def tokenizer():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
+
+
+@pytest.fixture(scope="module")
+def transformers_model():
+    """Create a Transformers model for backend log-probability checks."""
+    if not _has_transformers:
+        pytest.skip("transformers not available")
+    from transformers import AutoModelForCausalLM
+
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    model.eval()
+    return model
 
 
 # Maximum allowed time for SGLang server startup (seconds)
@@ -229,7 +241,6 @@ class TestAsyncSGLangIntegration:
 
 
 @pytest.mark.gpu
-@pytest.mark.gpu
 @pytest.mark.slow
 @pytest.mark.timeout(300)  # 5 minutes should be enough with --disable-cuda-graph
 @pytest.mark.skipif(not _has_sglang, reason="sglang not available")
@@ -365,6 +376,119 @@ class TestSGLangWrapper:
 
         # Check log probs are returned
         assert "log_probs" in result.keys() or hasattr(result.get("text"), "log_probs")
+
+    @pytest.mark.parametrize("pad_output", [True, False], ids=["padded", "unpadded"])
+    def test_generated_assistant_log_probs_match_transformers(
+        self, sglang_service, tokenizer, transformers_model, sample_history, pad_output
+    ):
+        """Test that generated assistant-token log-probs match Transformers."""
+        wrapper = SGLangWrapper(
+            model=sglang_service,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            return_log_probs=True,
+            pad_output=pad_output,
+            generate_kwargs={"max_new_tokens": 5, "temperature": 0.0},
+        )
+
+        td = TensorDict(
+            {"history": ChatHistory(prompt=sample_history)},
+            batch_size=[2],
+        )
+        result = wrapper(td)
+
+        tokens = result.get(
+            ("tokens", "full"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=tokenizer.pad_token_id,
+        )
+        attention_mask = result.get(
+            ("masks", "all_attention_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        ).bool()
+        assistant_mask = result.get(
+            ("masks", "all_assistant_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        ).bool()
+        log_probs = result.get(
+            ("log_probs", "full"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0.0,
+        )
+        response_tokens = result.get(
+            ("tokens", "response"),
+            as_padded_tensor=True,
+            padding_side="right",
+            padding_value=tokenizer.pad_token_id,
+        )
+
+        assert tokens is not None
+        assert log_probs is not None
+        assert response_tokens is not None
+        assert tokens.shape == attention_mask.shape == assistant_mask.shape
+        assert log_probs.shape == tokens.shape
+        assert assistant_mask.any()
+        for i, response in enumerate(response_tokens):
+            response = response[response != tokenizer.pad_token_id].long()
+            selected = tokens[i, assistant_mask[i]].long()
+            torch.testing.assert_close(selected, response)
+        sglang_selected_tokens = tokens[assistant_mask].long()
+
+        tf_wrapper = TransformersWrapper(
+            transformers_model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=False,
+            pad_output=True,
+        )
+        tf_td = TensorDict(
+            {
+                "history": ChatHistory(full=result["history"].full),
+            },
+            batch_size=[tokens.shape[0]],
+        )
+        with torch.inference_mode():
+            tf_result = tf_wrapper(tf_td)
+        tf_tokens = tf_result.get(
+            ("tokens", "full"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=tokenizer.pad_token_id,
+        )
+        tf_assistant_mask = tf_result.get(
+            ("masks", "all_assistant_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        ).bool()
+        tf_log_probs = tf_result.get(
+            ("log_probs", "full"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0.0,
+        )
+        tf_selected_tokens = tf_tokens[tf_assistant_mask].long()
+        torch.testing.assert_close(tf_selected_tokens, sglang_selected_tokens)
+        sglang_selected = log_probs[assistant_mask].float()
+        transformers_selected = tf_log_probs[tf_assistant_mask].float()
+        assert torch.isfinite(sglang_selected).all()
+        assert torch.isfinite(transformers_selected).all()
+        torch.testing.assert_close(
+            sglang_selected, transformers_selected, atol=3e-1, rtol=1e-1
+        )
+        delta = sglang_selected - transformers_selected
+        importance_weights = torch.exp(delta.double())
+        ess = importance_weights.sum().square() / (
+            importance_weights.square().sum() * importance_weights.numel()
+        )
+        assert ess > 0.99
 
     def test_get_new_version(self, sglang_service, tokenizer):
         """Test get_new_version for policy version tracking."""

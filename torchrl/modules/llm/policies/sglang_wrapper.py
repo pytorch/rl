@@ -15,6 +15,7 @@ import warnings
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
@@ -617,14 +618,22 @@ class SGLangWrapper(LLMWrapperBase):
             out.set(self.text_key, text_obj)
 
         # Build Tokens output
+        padding_value = (
+            self.tokenizer.pad_token_id
+            if self.tokenizer is not None and self.tokenizer.pad_token_id is not None
+            else 0
+        )
+        tokens_full = None
+        assistant_mask = None
+        attention_mask = None
         if self.return_tokens:
             if self.pad_output:
                 # Pad response tokens to same length for batching
-                from torch.nn.utils.rnn import pad_sequence
-
                 if response_token_ids:
                     response_tokens_padded = pad_sequence(
-                        response_token_ids, batch_first=True, padding_value=0
+                        response_token_ids,
+                        batch_first=True,
+                        padding_value=padding_value,
                     )
                 else:
                     response_tokens_padded = None
@@ -643,13 +652,31 @@ class SGLangWrapper(LLMWrapperBase):
                                 for t in tokens_prompt
                             ]
                             tokens_prompt_padded = pad_sequence(
-                                prompt_tensors, batch_first=True, padding_value=0
+                                prompt_tensors,
+                                batch_first=True,
+                                padding_value=padding_value,
                             )
                         else:
                             tokens_prompt_padded = tokens_prompt
-                        tokens_obj.full = torch.cat(
+                        tokens_full = torch.cat(
                             [tokens_prompt_padded, response_tokens_padded], dim=-1
                         )
+                        tokens_obj.full = tokens_full
+                        attention_mask = torch.zeros_like(tokens_full, dtype=torch.bool)
+                        assistant_mask = torch.zeros_like(tokens_full, dtype=torch.bool)
+                        prompt_width = tokens_prompt_padded.shape[-1]
+                        for i, (prompt, response) in enumerate(
+                            zip(tokens_prompt, response_token_ids)
+                        ):
+                            prompt_len = len(prompt)
+                            response_len = response.numel()
+                            attention_mask[i, :prompt_len] = True
+                            attention_mask[
+                                i, prompt_width : prompt_width + response_len
+                            ] = True
+                            assistant_mask[
+                                i, prompt_width : prompt_width + response_len
+                            ] = True
                 tokens_obj.response = response_tokens_padded
             else:
                 # Use nested tensors to handle variable-length sequences
@@ -681,7 +708,30 @@ class SGLangWrapper(LLMWrapperBase):
                             else:
                                 p_tensor = torch.tensor(p, dtype=torch.long)
                             full_tokens.append(torch.cat([p_tensor, r], dim=0))
-                        tokens_obj.full = torch.nested.nested_tensor(full_tokens)
+                        tokens_full = torch.nested.nested_tensor(full_tokens)
+                        tokens_obj.full = tokens_full
+                        attention_mask = torch.nested.nested_tensor(
+                            [
+                                torch.ones_like(tokens, dtype=torch.bool)
+                                for tokens in full_tokens
+                            ]
+                        )
+                        assistant_mask = torch.nested.nested_tensor(
+                            [
+                                torch.cat(
+                                    [
+                                        torch.zeros_like(
+                                            tokens[: p.numel()], dtype=torch.bool
+                                        ),
+                                        torch.ones_like(r, dtype=torch.bool),
+                                    ],
+                                    dim=-1,
+                                )
+                                for p, r, tokens in zip(
+                                    prompt_tensors, response_token_ids, full_tokens
+                                )
+                            ]
+                        )
                 # Convert response tokens to nested tensor
                 if response_token_ids:
                     tokens_obj.response = torch.nested.nested_tensor(response_token_ids)
@@ -691,32 +741,52 @@ class SGLangWrapper(LLMWrapperBase):
         # Build Masks output
         if self.return_masks:
             masks_obj = Masks._from_tensordict(out.empty())
-            masks_obj.all_attention_mask = None
-            masks_obj.all_assistant_mask = None
+            masks_obj.all_attention_mask = attention_mask
+            masks_obj.all_assistant_mask = assistant_mask
             masks_obj.padded = MetaData(self.pad_output)
             out.set(self.masks_key, masks_obj)
 
         # Build LogProbs output
         if self.return_log_probs and any(lp is not None for lp in log_probs_list):
             log_probs_obj = LogProbs._from_tensordict(out.empty())
-            log_probs_obj.response = log_probs_list
+            if self.pad_output:
+                log_probs_obj.response = pad_sequence(
+                    [
+                        lp if lp is not None else torch.empty(0, dtype=torch.float32)
+                        for lp in log_probs_list
+                    ],
+                    batch_first=True,
+                    padding_value=0.0,
+                )
+            else:
+                log_probs_obj.response = log_probs_list
             # Build full log probs (zeros for prompt + response log probs)
             # This is needed for GRPO loss importance sampling
             if tokens_prompt is not None:
-                full_log_probs = []
-                for i, lp in enumerate(log_probs_list):
-                    if lp is not None:
-                        prompt_len = (
-                            len(tokens_prompt[i])
-                            if isinstance(tokens_prompt[i], (list, torch.Tensor))
-                            else 0
-                        )
-                        prompt_zeros = torch.zeros(prompt_len, dtype=lp.dtype)
-                        full_log_probs.append(torch.cat([prompt_zeros, lp]))
-                    else:
-                        full_log_probs.append(None)
-                if any(lp is not None for lp in full_log_probs):
+                if self.pad_output and tokens_full is not None:
+                    full_log_probs = torch.zeros_like(tokens_full, dtype=torch.float32)
+                    prompt_width = tokens_full.shape[-1] - log_probs_obj.response.shape[-1]
+                    for i, lp in enumerate(log_probs_list):
+                        if lp is not None:
+                            full_log_probs[
+                                i, prompt_width : prompt_width + lp.numel()
+                            ] = lp
                     log_probs_obj.full = full_log_probs
+                else:
+                    full_log_probs = []
+                    for i, lp in enumerate(log_probs_list):
+                        if lp is not None:
+                            prompt_len = (
+                                len(tokens_prompt[i])
+                                if isinstance(tokens_prompt[i], (list, torch.Tensor))
+                                else 0
+                            )
+                            prompt_zeros = torch.zeros(prompt_len, dtype=lp.dtype)
+                            full_log_probs.append(torch.cat([prompt_zeros, lp]))
+                        else:
+                            full_log_probs.append(None)
+                    if any(lp is not None for lp in full_log_probs):
+                        log_probs_obj.full = full_log_probs
             log_probs_obj.padded = MetaData(self.pad_output)
             out.set(self.log_probs_key, log_probs_obj)
 

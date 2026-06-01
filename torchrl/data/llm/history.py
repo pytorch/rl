@@ -29,13 +29,13 @@ if TYPE_CHECKING:
 _CHAT_TEMPLATES = {
     "chatml_format": """{% for message in messages %}
     {%- if message['role'] == 'assistant' %}
-    {% generation %}{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}{% endgeneration %}
+    {{'<|im_start|>' + message['role'] + '\n'}}{% generation %}{{ message['content'] }}{% endgeneration %}{{'<|im_end|>' + '\n'}}
     {%- else %}
     {{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
     {%- endif %}
 {% endfor %}
 {%- if add_generation_prompt %}
-    {% generation %}{{- '<|im_start|>assistant\n' }}{% endgeneration %}
+    {{- '<|im_start|>assistant\n' }}
 {%- endif %}
 """,
     "qwen": """
@@ -63,13 +63,14 @@ _CHAT_TEMPLATES = {
     {%- if (message.role == "user") or (message.role == "system" and not loop.first) %}
         {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}
     {%- elif (message.role == "assistant" and not message.tool_calls) %}
-    {% generation %}    {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}    {% endgeneration %}
+        {{- '<|im_start|>' + message.role + '\\n' }}{% generation %}{{- message.content }}{% endgeneration %}{{- '<|im_end|>' + '\\n' }}
     {%- elif message.role == "assistant" %}
-        {% generation %}{{- '<|im_start|>' + message.role }}
+        {{- '<|im_start|>' + message.role }}
         {%- if message.content %}
-            {{- '\\n' + message.content }}
+            {{- '\\n' }}{% generation %}{{- message.content }}{% endgeneration %}
         {%- endif %}
         {%- for tool_call in message.tool_calls %}
+            {% generation %}
             {%- if tool_call.function is defined %}
                 {%- set tool_call = tool_call.function %}
             {%- endif %}
@@ -78,8 +79,9 @@ _CHAT_TEMPLATES = {
             {{- '\\\", \\\"arguments\\\": ' }}
             {{- tool_call.arguments | tojson }}
             {{- '}\\n</tool_call>' }}
+            {%- endgeneration %}
         {%- endfor %}
-        {{- '<|im_end|>\\n' }}{% endgeneration %}
+        {{- '<|im_end|>\\n' }}
     {%- elif message.role == "tool" %}
         {%- if (loop.index0 == 0) or (messages[loop.index0 - 1].role != "tool") %}
             {{- '<|im_start|>tool' }}
@@ -97,12 +99,12 @@ _CHAT_TEMPLATES = {
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
-    {% generation %}{{- '<|im_start|>assistant\\n' }}{% endgeneration %}
+    {{- '<|im_start|>assistant\\n' }}
 {%- endif %}
 """,
-    "dialogpt": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'user' %}{{ message['content'] }}{{ eos_token }}{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ ' ' }}{% endgeneration %}{% endif %}""",
-    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ 'Assistant: ' + message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ 'Assistant: ' }}{% endgeneration %}{% endif %}""",
-    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{% generation %}{{ 'Assistant: ' + message['content'] + eos_token }}{% endgeneration %}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{% generation %}{{ 'Assistant:' }}{% endgeneration %}{% endif %}""",
+    "dialogpt": """{% for message in messages %}{% if message['role'] == 'assistant' %}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'user' %}{{ message['content'] }}{{ eos_token }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ ' ' }}{% endif %}""",
+    "falcon": """{% for message in messages %}{% if message['role'] == 'assistant' %}{{ 'Assistant: ' }}{% generation %}{{ message['content'] }}{% endgeneration %}\n\n{% elif message['role'] == 'user' %}{{ 'User: ' + message['content'] }}\n\n{% elif message['role'] == 'system' %}{{ message['content'] }}\n\n{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant: ' }}{% endif %}""",
+    "deepseek": """{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{{ bos_token }}{% for message in messages %}{% if message['role'] == 'user' %}{{ 'User: ' + message['content'] + '\n\n' }}{% elif message['role'] == 'assistant' %}{{ 'Assistant: ' }}{% generation %}{{ message['content'] }}{% endgeneration %}{{ eos_token }}{% elif message['role'] == 'system' %}{{ message['content'] + '\n\n' }}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}""",
     "llama": """{{- bos_token }}
 {%- if messages[0]['role'] == 'system' %}
     {%- set system_message = messages[0]['content']|trim %}
@@ -117,7 +119,7 @@ _CHAT_TEMPLATES = {
 {%- endif %}
 {%- for message in messages %}
     {%- if message['role'] == 'assistant' %}
-    {% generation %}{{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}
+    {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}{% generation %}
         {%- if message['content'] is string %}
             {{- message['content'] }}
         {%- else %}
@@ -127,7 +129,7 @@ _CHAT_TEMPLATES = {
                 {%- endif %}
             {%- endfor %}
         {%- endif %}
-    {{- "<|eot|>" }}{% endgeneration %}
+    {%- endgeneration %}{{- "<|eot|>" }}
     {%- else %}
     {{- '<|header_start|>' + message['role'] + '<|header_end|>\n\n' }}
         {%- if message['content'] is string %}
@@ -143,7 +145,7 @@ _CHAT_TEMPLATES = {
     {%- endif %}
 {%- endfor %}
 {%- if add_generation_prompt %}
-    {% generation %}{{- '<|header_start|>assistant<|header_end|>\n\n' }}{% endgeneration %}
+    {{- '<|header_start|>assistant<|header_end|>\n\n' }}
 {%- endif %}""",
 }
 

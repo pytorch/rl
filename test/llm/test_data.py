@@ -75,6 +75,38 @@ class TestHistory:
 
         return tokenizer
 
+    @staticmethod
+    def _assert_assistant_mask_matches_content(tokenizer, proc, history):
+        assistant_contents = [
+            content
+            for role, content in zip(history.role, history.content)
+            if role == "assistant" and content
+        ]
+        if not assistant_contents:
+            assert not proc["assistant_masks"].any()
+            return
+
+        assert proc["assistant_masks"].any()
+        decoded = tokenizer.decode(
+            proc["input_ids"][proc["assistant_masks"].bool()],
+            skip_special_tokens=False,
+        )
+        assert isinstance(decoded, str)
+        for content in assistant_contents:
+            assert content in decoded, (decoded, content)
+
+        for marker in (
+            "<|im_start|>",
+            "<|im_end|>",
+            "<|header_start|>",
+            "<|header_end|>",
+            "<|eot|>",
+            "Assistant:",
+        ):
+            assert marker not in decoded, decoded
+        if not any("assistant" in content.lower() for content in assistant_contents):
+            assert "assistant" not in decoded.lower(), decoded
+
     def test_history_construct(self):
         hst0 = History(role="user", content="a message")
         assert not hst0.shape
@@ -382,23 +414,7 @@ The result is""",
             return_dict=True,
             return_assistant_tokens_mask=True,
         )
-        role_assistant = torch.tensor([r == "assistant" for r in history.role])
-        last_item: str = history[role_assistant].apply_chat_template(
-            tokenizer=tokenizer,
-            chat_template_name="qwen",
-            add_generation_prompt=False,
-        )
-
-        if "assistant" in history.role:
-            assert proc["assistant_masks"].any()
-        else:
-            assert not proc["assistant_masks"].any()
-        if last_item:
-            decoded = tokenizer.decode(
-                proc["input_ids"][proc["assistant_masks"].bool()]
-            )
-            assert type(decoded) is str
-            assert last_item.endswith(decoded), (decoded, last_item)
+        self._assert_assistant_mask_matches_content(tokenizer, proc, history)
 
     LLAMA_TEST_CASES = [
         # Case 1: All messages complete
@@ -473,23 +489,7 @@ The result is""",
             return_dict=True,
             return_assistant_tokens_mask=True,
         )
-        role_assistant = torch.tensor([r == "assistant" for r in history.role])
-        last_item: str = history[role_assistant].apply_chat_template(
-            tokenizer=tokenizer,
-            chat_template_name="llama",
-            add_generation_prompt=False,
-        )
-
-        if "assistant" in history.role:
-            assert proc["assistant_masks"].any()
-        else:
-            assert not proc["assistant_masks"].any()
-        if last_item:
-            decoded = tokenizer.decode(
-                proc["input_ids"][proc["assistant_masks"].bool()]
-            )
-            assert type(decoded) is str
-            assert last_item.endswith(decoded), (decoded, last_item)
+        self._assert_assistant_mask_matches_content(tokenizer, proc, history)
 
     def test_history_completion(self):
         """Test the History class's handling of complete and incomplete messages."""
@@ -643,6 +643,7 @@ The result is""",
 
         assert "assistant_masks" in result
         assert result["assistant_masks"].sum().item() > 0
+        self._assert_assistant_mask_matches_content(tokenizer, result, history[0])
 
     @pytest.mark.parametrize(
         "model_name, template_name",
