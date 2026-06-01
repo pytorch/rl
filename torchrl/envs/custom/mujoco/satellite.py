@@ -86,27 +86,33 @@ class SatelliteEnv(MujocoEnv):
     ROTOR_SPEED_4 = 100.0
     ROTOR_SPEED_6 = 200.0
     RENDER_BACKGROUND = (0.0, 0.0, 0.05)
-    _TARGET_ARROW_BODY: ClassVar[str] = "target_attitude_arrow"
-    _TARGET_ARROW_POS: ClassVar[tuple[float, float, float]] = (0.0, 0.0, 0.75)
-    _TARGET_ARROW_XML: ClassVar[
+    _TARGET_FRAME_BODY: ClassVar[str] = "target_attitude_frame"
+    _TARGET_FRAME_POS: ClassVar[tuple[float, float, float]] = (0.0, 0.0, 0.0)
+    _BODY_FRAME_XML: ClassVar[
         str
     ] = """
-  <body name="target_attitude_arrow" pos="0 0 0.75" quat="1 0 0 0">
-    <geom name="target_direction_shaft" type="capsule"
-          fromto="0 0 0 0.9 0 0" size="0.025"
-          rgba="0.1 0.9 0.2 0.65" contype="0" conaffinity="0"/>
-    <geom name="target_direction_head_y" type="capsule"
-          fromto="0.9 0 0 0.72 0.11 0" size="0.025"
-          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
-    <geom name="target_direction_head_minus_y" type="capsule"
-          fromto="0.9 0 0 0.72 -0.11 0" size="0.025"
-          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
-    <geom name="target_direction_head_z" type="capsule"
-          fromto="0.9 0 0 0.72 0 0.11" size="0.025"
-          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
-    <geom name="target_direction_head_minus_z" type="capsule"
-          fromto="0.9 0 0 0.72 0 -0.11" size="0.025"
-          rgba="0.1 0.9 0.2 0.85" contype="0" conaffinity="0"/>
+      <site name="satellite_body_x_axis" type="capsule"
+            fromto="0 0 0 0.75 0 0" size="0.018" rgba="1 0.1 0.1 0.55"/>
+      <site name="satellite_body_y_axis" type="capsule"
+            fromto="0 0 0 0 0.75 0" size="0.018" rgba="0.1 1 0.1 0.55"/>
+      <site name="satellite_body_z_axis" type="capsule"
+            fromto="0 0 0 0 0 0.75" size="0.018" rgba="0.2 0.4 1 0.55"/>"""
+    _TARGET_FRAME_XML: ClassVar[
+        str
+    ] = """
+  <body name="target_attitude_frame" pos="0 0 0" quat="1 0 0 0">
+    <site name="target_x_axis" type="capsule"
+          fromto="0 0 0 1.1 0 0" size="0.026" rgba="1 0.1 0.1 0.85"/>
+    <site name="target_y_axis" type="capsule"
+          fromto="0 0 0 0 1.1 0" size="0.026" rgba="0.1 1 0.1 0.85"/>
+    <site name="target_z_axis" type="capsule"
+          fromto="0 0 0 0 0 1.1" size="0.026" rgba="0.2 0.4 1 0.85"/>
+    <site name="target_x_tip" type="sphere"
+          pos="1.1 0 0" size="0.055" rgba="1 0.1 0.1 0.9"/>
+    <site name="target_y_tip" type="sphere"
+          pos="0 1.1 0" size="0.055" rgba="0.1 1 0.1 0.9"/>
+    <site name="target_z_tip" type="sphere"
+          pos="0 0 1.1" size="0.055" rgba="0.2 0.4 1 0.9"/>
   </body>"""
 
     def __init__(
@@ -233,19 +239,24 @@ class SatelliteEnv(MujocoEnv):
             '<light name="top" pos="0 0 4" dir="0 0 -1" '
             'diffuse="0.8 0.8 0.8" ambient="0.3 0.3 0.3" directional="true"/>'
         )
+        xml = xml.replace(
+            '<freejoint name="root"/>',
+            f'<freejoint name="root"/>\n{cls._BODY_FRAME_XML}',
+            1,
+        )
         return xml.replace(
             "<worldbody>",
-            f"<worldbody>\n  {camera}\n  {light}{cls._TARGET_ARROW_XML}",
+            f"<worldbody>\n  {camera}\n  {light}{cls._TARGET_FRAME_XML}",
         )
 
-    def _sync_target_marker(self) -> None:
+    def _sync_target_frame(self) -> None:
         position = torch.as_tensor(
-            self._TARGET_ARROW_POS,
+            self._TARGET_FRAME_POS,
             dtype=self.dtype,
             device=self.device,
         ).expand(self.num_envs, 3)
         self._backend.set_static_body_pose(
-            self._TARGET_ARROW_BODY,
+            self._TARGET_FRAME_BODY,
             position,
             self._target_quat,
         )
@@ -375,7 +386,7 @@ class SatelliteEnv(MujocoEnv):
         self._last_manip = self._compute_manip_from_qpos(
             self._backend.qpos.to(self.dtype)
         )
-        self._sync_target_marker()
+        self._sync_target_frame()
 
     def _on_reset_mask(
         self,
@@ -401,7 +412,7 @@ class SatelliteEnv(MujocoEnv):
         self._target_quat = torch.where(m, t, self._target_quat)
         new_manip = self._compute_manip_from_qpos(self._backend.qpos.to(self.dtype))
         self._last_manip = torch.where(m, new_manip, self._last_manip)
-        self._sync_target_marker()
+        self._sync_target_frame()
 
     # ------------------------------------------------------------------
     # Observation, reward, done

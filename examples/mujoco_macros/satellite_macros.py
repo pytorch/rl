@@ -39,8 +39,8 @@ class SatelliteSlewPolicy:
         action_spec: TensorSpec,
         action_scale: float,
         *,
-        attitude_gain: float = 3.0,
-        angular_rate_gain: float = 6.0,
+        attitude_gain: float = 5.0,
+        angular_rate_gain: float = 8.0,
         macro_steps: int = 36,
         settle_steps: int = 8,
     ) -> None:
@@ -102,11 +102,11 @@ def main() -> None:
 
     # The viewer examples use the official MuJoCo C-bindings backend so the
     # passive viewer can display the live ``mjData`` object. We repeatedly reset
-    # the satellite to identity attitude, ask it to slew to a 90 degree yaw
-    # target, and let ``rollout`` call the policy for each high-level macro.
+    # the satellite to identity attitude, ask it to slew to a tilted target
+    # frame, and let ``rollout`` call the policy for each high-level macro.
     # ``reset_noise_scale=0.0`` keeps each viewer replay on the same manoeuver;
     # the default SatelliteEnv reset remains stochastic for training.
-    target_quat = torch.tensor([[0.70710678, 0.0, 0.0, 0.70710678]])
+    target_quat = torch.tensor([[0.79335334, 0.24229610, 0.42401818, 0.36344416]])
     init_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
     base_env = SatelliteEnv(
         num_cmgs=4,
@@ -138,7 +138,7 @@ def main() -> None:
             td = env.reset(reset)
             try:
                 env.rollout(
-                    max_steps=11,
+                    max_steps=17,
                     policy=SatelliteSlewPolicy(
                         low_level_action_spec,
                         action_scale=base_env.action_scale,

@@ -154,7 +154,7 @@ class TestMujoco:
         assert obs_spec["manipulability"].shape == torch.Size([n, 1])
 
     @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
-    def test_satellite_target_arrow_tracks_target_quat(self):
+    def test_satellite_target_frame_tracks_target_quat(self):
         env = SatelliteEnv(
             num_cmgs=4,
             seed=0,
@@ -181,7 +181,7 @@ class TestMujoco:
         body_id = env._backend._mujoco.mj_name2id(
             env._backend._m,
             env._backend._mujoco.mjtObj.mjOBJ_BODY,
-            env._TARGET_ARROW_BODY,
+            env._TARGET_FRAME_BODY,
         )
         assert body_id >= 0
         body_quat = torch.as_tensor(
@@ -191,21 +191,23 @@ class TestMujoco:
         )
         torch.testing.assert_close(body_quat, target.squeeze(0), rtol=1e-6, atol=1e-6)
 
-        for geom_name in (
-            "target_direction_shaft",
-            "target_direction_head_y",
-            "target_direction_head_minus_y",
-            "target_direction_head_z",
-            "target_direction_head_minus_z",
+        for site_name in (
+            "satellite_body_x_axis",
+            "satellite_body_y_axis",
+            "satellite_body_z_axis",
+            "target_x_axis",
+            "target_y_axis",
+            "target_z_axis",
+            "target_x_tip",
+            "target_y_tip",
+            "target_z_tip",
         ):
-            geom_id = env._backend._mujoco.mj_name2id(
+            site_id = env._backend._mujoco.mj_name2id(
                 env._backend._m,
-                env._backend._mujoco.mjtObj.mjOBJ_GEOM,
-                geom_name,
+                env._backend._mujoco.mjtObj.mjOBJ_SITE,
+                site_name,
             )
-            assert geom_id >= 0
-            assert env._backend._m.geom_contype[geom_id] == 0
-            assert env._backend._m.geom_conaffinity[geom_id] == 0
+            assert site_id >= 0
         env.close()
 
     def test_satellite_reset_overrides_survive_transformed_env(self):
