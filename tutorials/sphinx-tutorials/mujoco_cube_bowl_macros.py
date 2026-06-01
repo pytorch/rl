@@ -557,6 +557,8 @@ assert reset_td["robot_qpos"].shape == td["robot_qpos"].shape
 #
 # .. seealso::
 #
+#    - :ref:`macro-primitives-guide` for the design guide comparing generic
+#      and domain-specific macro transforms.
 #    - :class:`~torchrl.envs.CubeBowlEnv` for the custom MuJoCo task used here.
 #    - :class:`~torchrl.envs.MujocoEnv` for the base class behind custom MuJoCo
 #      environments.
