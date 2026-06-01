@@ -848,6 +848,9 @@ class TestMujoco:
         torch.testing.assert_close(action[:, -1], target_qpos)
         assert env.gripper_cube_distance(observation).shape == torch.Size([1, 1])
         assert env.pose_at(observation["cube_pos"]).shape == torch.Size([1, 7])
+        grasp_width = 2 * env.OBJECT_HALF_SIZE - 0.001
+        grasp_ctrl = env.gripper_ctrl_for_width(grasp_width)
+        assert env.gripper_open_ctrl <= grasp_ctrl <= env.gripper_close_ctrl
 
     @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
     def test_cube_bowl_menagerie_ur5e_when_available(self):

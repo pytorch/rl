@@ -107,11 +107,10 @@ IK_KWARGS = {
 #
 # The symbolic gripper commands ``"open"``, ``"closed"`` and ``"keep"`` are
 # resolved by the transform. User code never has to know the Robotiq actuator's
-# numeric command range. In this task, ``"closed"`` means "close about one
-# millimeter past the cube width." It is deliberately not the maximum actuator
-# target, because asking a position-controlled gripper to close through a solid
-# object creates a fight between the gripper actuator and MuJoCo's contact
-# solver.
+# numeric command range. When we want a task-specific grasp, we can still make
+# the target explicit in object units: close about one millimeter past the cube
+# width, ask the environment to convert that width to a gripper command, and
+# pass that command to the ``RobotAction``.
 
 
 # %%
@@ -159,6 +158,10 @@ td = env.reset()
 assert td["robot_qpos"].shape[-1] == 6
 assert env.low_level_action(td["robot_qpos"]).shape[-1] == 7
 assert td["pixels"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3])
+
+cube_width = 2 * env.OBJECT_HALF_SIZE
+grasp_width = cube_width - 0.001
+gripper_close_command = env.gripper_ctrl_for_width(grasp_width)
 
 
 # %%
@@ -240,6 +243,7 @@ def carry_action(alpha: float, bowl: torch.Tensor) -> RobotAction:
         position=position,
         quaternion=quaternion,
         gripper="closed",
+        gripper_command=gripper_close_command,
         steps=80,
         settle_steps=20,
     )
@@ -281,8 +285,11 @@ def gen_actions(td: TensorDictBase) -> Iterator:
         settle_steps=60,
     )
 
-    # Action 4: Close the gripper to grasp the cube.
-    yield RobotAction.close_gripper(steps=160, settle_steps=80)
+    # Action 4: Close the gripper to a grasp about one millimeter tighter than
+    # the cube width.
+    yield RobotAction.close_gripper(
+        command=gripper_close_command, steps=160, settle_steps=80
+    )
 
     current_td = policy_state["td"]
     cube = current_td["cube_pos"].clone()
@@ -296,6 +303,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
         position=position,
         quaternion=quaternion,
         gripper="closed",
+        gripper_command=gripper_close_command,
         steps=120,
         settle_steps=60,
     )
@@ -337,6 +345,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
         position=position,
         quaternion=quaternion,
         gripper="closed",
+        gripper_command=gripper_close_command,
         steps=100,
         settle_steps=40,
     )

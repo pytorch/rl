@@ -133,6 +133,22 @@ def _batch_size(batch_size: torch.Size | tuple[int, ...] | None) -> torch.Size:
     return torch.Size(batch_size)
 
 
+def _optional_gripper_command(
+    value: float | torch.Tensor | None,
+    batch_size: torch.Size,
+    dtype: torch.dtype,
+    device: torch.device,
+) -> torch.Tensor:
+    if value is None:
+        return torch.full(batch_size + (1,), float("nan"), dtype=dtype, device=device)
+    value = torch.as_tensor(value, dtype=dtype, device=device)
+    if value.ndim == 0:
+        return value.reshape(1).expand(batch_size + (1,)).clone()
+    if value.shape == batch_size:
+        return value.unsqueeze(-1)
+    return value.reshape(batch_size + (1,))
+
+
 @tensorclass
 class RobotAction:
     r"""A human-writable robot macro action.
@@ -158,6 +174,7 @@ class RobotAction:
     quaternion: torch.Tensor
     joints: torch.Tensor
     gripper: torch.Tensor
+    gripper_command: torch.Tensor
     steps: torch.Tensor
     settle_steps: torch.Tensor
 
@@ -173,6 +190,7 @@ class RobotAction:
         position: torch.Tensor,
         quaternion: torch.Tensor | None = None,
         gripper: GripperCommand = "keep",
+        gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
     ) -> RobotAction:
@@ -189,6 +207,7 @@ class RobotAction:
             position=position,
             quaternion=quaternion,
             gripper=gripper,
+            gripper_command=gripper_command,
             steps=steps,
             settle_steps=settle_steps,
         )
@@ -199,6 +218,7 @@ class RobotAction:
         *,
         joints: torch.Tensor,
         gripper: GripperCommand = "keep",
+        gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
     ) -> RobotAction:
@@ -207,6 +227,7 @@ class RobotAction:
             RobotActionMode.REACH_JOINTS,
             joints=_as_batch(joints, 6),
             gripper=gripper,
+            gripper_command=gripper_command,
             steps=steps,
             settle_steps=settle_steps,
         )
@@ -217,6 +238,7 @@ class RobotAction:
         *,
         joints: torch.Tensor,
         gripper: GripperCommand = "open",
+        gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
     ) -> RobotAction:
@@ -224,6 +246,7 @@ class RobotAction:
         return cls.reach_joints(
             joints=joints,
             gripper=gripper,
+            gripper_command=gripper_command,
             steps=steps,
             settle_steps=settle_steps,
         )
@@ -233,6 +256,7 @@ class RobotAction:
         cls,
         *,
         gripper: GripperCommand = "open",
+        gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
         batch_size: torch.Size | tuple[int, ...] | None = None,
@@ -248,6 +272,7 @@ class RobotAction:
             RobotActionMode.RESET,
             position=position,
             gripper=gripper,
+            gripper_command=gripper_command,
             steps=steps,
             settle_steps=settle_steps,
         )
@@ -277,6 +302,7 @@ class RobotAction:
     def close_gripper(
         cls,
         *,
+        command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
         batch_size: torch.Size | tuple[int, ...] | None = None,
@@ -287,6 +313,7 @@ class RobotAction:
         return cls._empty(
             RobotActionMode.CLOSE_GRIPPER,
             gripper="closed",
+            gripper_command=command,
             steps=steps,
             settle_steps=settle_steps,
             batch_size=batch_size,
@@ -299,6 +326,7 @@ class RobotAction:
         cls,
         *,
         gripper: GripperCommand = "keep",
+        gripper_command: float | torch.Tensor | None = None,
         steps: int = 1,
         settle_steps: int = 0,
         batch_size: torch.Size | tuple[int, ...] | None = None,
@@ -309,6 +337,7 @@ class RobotAction:
         return cls._empty(
             RobotActionMode.WAIT,
             gripper=gripper,
+            gripper_command=gripper_command,
             steps=steps,
             settle_steps=settle_steps,
             batch_size=batch_size,
@@ -327,6 +356,7 @@ class RobotAction:
         batch_size: torch.Size | tuple[int, ...] | None,
         dtype: torch.dtype | None,
         device: torch.device | None,
+        gripper_command: float | torch.Tensor | None = None,
     ) -> RobotAction:
         dtype = torch.get_default_dtype() if dtype is None else dtype
         device = torch.device("cpu") if device is None else device
@@ -335,6 +365,7 @@ class RobotAction:
             mode,
             position=torch.zeros(batch_size + (3,), dtype=dtype, device=device),
             gripper=gripper,
+            gripper_command=gripper_command,
             steps=steps,
             settle_steps=settle_steps,
         )
@@ -348,6 +379,7 @@ class RobotAction:
         quaternion: torch.Tensor | None = None,
         joints: torch.Tensor | None = None,
         gripper: GripperCommand = "keep",
+        gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
     ) -> RobotAction:
@@ -388,6 +420,9 @@ class RobotAction:
                 _gripper_code(gripper),
                 dtype=torch.long,
                 device=device,
+            ),
+            gripper_command=_optional_gripper_command(
+                gripper_command, batch_size, dtype, device
             ),
             steps=torch.full(
                 batch_size + (1,), steps, dtype=torch.long, device=device
@@ -1376,11 +1411,18 @@ class MacroPrimitiveTransform(Transform):
             dtype=dtype,
             device=device,
         )
-        return torch.where(
+        value = torch.where(
             gripper == 0,
             open_value,
             torch.where(gripper == 1, close_value, start[..., -1:]),
         )
+        if "gripper_command" not in action.keys(True, True):
+            return value
+        gripper_command = action.get("gripper_command").to(
+            dtype=dtype, device=device
+        )
+        gripper_command = gripper_command.reshape(batch_shape + (1,))
+        return torch.where(torch.isfinite(gripper_command), gripper_command, value)
 
     @staticmethod
     def _structured_action_int(action: Any, key: str, default: int) -> int:

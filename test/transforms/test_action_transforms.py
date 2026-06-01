@@ -1096,6 +1096,7 @@ class TestURScriptPrimitiveTransform:
                 "action": RobotAction.reach_pose(
                     position=torch.zeros(1, 3),
                     gripper="closed",
+                    gripper_command=154.0,
                     steps=4,
                 ),
                 "robot_qpos": torch.zeros(1, 6),
@@ -1105,7 +1106,7 @@ class TestURScriptPrimitiveTransform:
         )
 
         action = transform.inv(td)["action"]
-        torch.testing.assert_close(action[..., -1], torch.full((1, 4), 200.0))
+        torch.testing.assert_close(action[..., -1], torch.full((1, 4), 154.0))
 
     def test_robot_action_close_gripper_keeps_arm(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)
@@ -1122,6 +1123,22 @@ class TestURScriptPrimitiveTransform:
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[:, -1, :6], robot_qpos)
         torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 255.0))
+
+    def test_robot_action_close_gripper_command_override(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        robot_qpos = torch.arange(6, dtype=torch.float32).view(1, 6)
+        td = TensorDict(
+            {
+                "action": RobotAction.close_gripper(command=154.0, steps=4),
+                "robot_qpos": robot_qpos,
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :6], robot_qpos)
+        torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 154.0))
 
     def test_structured_robot_action_reach_joints_keep_gripper(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)

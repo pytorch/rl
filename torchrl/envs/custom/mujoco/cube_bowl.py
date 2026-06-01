@@ -70,6 +70,7 @@ class CubeBowlEnv(MujocoEnv):
     RESET_NOISE_SCALE = 0.0
     OBJECT_HALF_SIZE = 0.022
     CUBE_HALF_SIZE = OBJECT_HALF_SIZE
+    PRIMITIVE_GRIPPER_OPEN_WIDTH = 0.092
     ROBOT_QPOS_DIM = 6
     GRIPPER_QPOS_DIM = 2
     CUBE_QPOS_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
@@ -766,22 +767,55 @@ class CubeBowlEnv(MujocoEnv):
     def gripper_close_ctrl(self) -> float:
         """Low-level command that closes the gripper for object grasping."""
         if self.robot_model == "menagerie_ur5e":
-            target_pad_distance = (
+            target_width = (
                 2 * self.OBJECT_HALF_SIZE - self.MENAGERIE_GRIPPER_GRASP_MARGIN
             )
-            return self._menagerie_gripper_ctrl_for_pad_distance(target_pad_distance)
+            return self.gripper_ctrl_for_width(target_width)
         return 0.038
 
+    def gripper_ctrl_for_width(
+        self, width: float | torch.Tensor
+    ) -> float | torch.Tensor:
+        """Return a low-level gripper command for an object width.
+
+        Args:
+            width: desired grasp width in meters.
+
+        Returns:
+            The corresponding low-level gripper command.
+
+        Examples:
+            >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
+            >>> env = CubeBowlEnv()  # doctest: +SKIP
+            >>> env.gripper_ctrl_for_width(2 * env.OBJECT_HALF_SIZE)  # doctest: +SKIP
+        """
+        if self.robot_model == "menagerie_ur5e":
+            return self._menagerie_gripper_ctrl_for_width(width)
+        ctrl = (self.PRIMITIVE_GRIPPER_OPEN_WIDTH - width) / 2
+        return self._clamp_gripper_ctrl(
+            ctrl, self.gripper_open_ctrl, self.gripper_close_ctrl
+        )
+
     @classmethod
-    def _menagerie_gripper_ctrl_for_pad_distance(cls, pad_distance: float) -> float:
+    def _menagerie_gripper_ctrl_for_width(
+        cls, width: float | torch.Tensor
+    ) -> float | torch.Tensor:
         ctrl_per_meter = cls.MENAGERIE_GRIPPER_CUBE_WIDTH_CTRL / (
             cls.MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE
             - cls.MENAGERIE_GRIPPER_CUBE_WIDTH_PAD_DISTANCE
         )
-        ctrl = (
-            cls.MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE - float(pad_distance)
-        ) * ctrl_per_meter
-        return min(255.0, max(0.0, ctrl))
+        ctrl = (cls.MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE - width) * ctrl_per_meter
+        return cls._clamp_gripper_ctrl(ctrl, 0.0, 255.0)
+
+    @staticmethod
+    def _clamp_gripper_ctrl(
+        ctrl: float | torch.Tensor,
+        low: float,
+        high: float,
+    ) -> float | torch.Tensor:
+        if isinstance(ctrl, torch.Tensor):
+            return ctrl.clamp(min=low, max=high)
+        return min(high, max(low, ctrl))
 
     @property
     def robot_home_qpos(self) -> tuple[float, ...] | None:
