@@ -13,9 +13,19 @@ from pathlib import Path
 
 import torch
 
-from _viewer import ensure_mjpython_for_passive_viewer, MujocoViewerLoop, ViewerClosed
+from _viewer import (
+    add_rollout_video_args,
+    dump_video,
+    ensure_mjpython_for_passive_viewer,
+    maybe_add_video_recorder,
+    MujocoViewerLoop,
+    ViewerClosed,
+)
 from tensordict import TensorDictBase
 from torchrl.envs import CubeBowlEnv, EnvBase, RobotAction
+
+
+_VIDEO_TAG = "cube_bowl_macros"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -31,6 +41,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--pause-between-rollouts", type=float, default=0.5)
+    add_rollout_video_args(parser)
     return parser.parse_args()
 
 
@@ -186,17 +197,24 @@ def main() -> None:
             stack_observations=False,
         )
     )
+    env, recorder, logger = maybe_add_video_recorder(env, args, tag=_VIDEO_TAG)
 
     # Loop forever: reset the scene, execute the full pick/carry/release macro
     # sequence, pause, and reset to replay it in the MuJoCo viewer.
+    rollout_count = 0
     with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
-        while viewer.is_running():
+        while viewer.is_running() and (
+            args.max_rollouts is None or rollout_count < args.max_rollouts
+        ):
             td = env.reset()
             try:
                 _run_pick_carry_release(env, base_env, td)
             except ViewerClosed:
                 break
-            time.sleep(args.pause_between_rollouts)
+            dump_video(recorder, logger, tag=_VIDEO_TAG, step=rollout_count)
+            rollout_count += 1
+            if args.max_rollouts is None or rollout_count < args.max_rollouts:
+                time.sleep(args.pause_between_rollouts)
 
 
 if __name__ == "__main__":
