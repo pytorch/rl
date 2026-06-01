@@ -94,7 +94,7 @@ python -c "import torchrl"
 # ============================================================================================ #
 
 printf "* Installing SGLang dependencies\n"
-uv pip install transformers accelerate datasets
+uv pip install transformers accelerate datasets huggingface_hub
 
 # Install system dependencies required by SGLang
 # libnuma is required by sgl_kernel
@@ -104,11 +104,7 @@ apt-get update && apt-get install -y libnuma-dev
 # Install SGLang with all extras
 # Note: We do NOT install vLLM here to avoid Triton version conflicts
 printf "* Installing SGLang\n"
-uv pip install "sglang[all]"
-
-# Install sgl_kernel separately to ensure it's properly installed
-printf "* Installing sgl_kernel\n"
-uv pip install --upgrade sgl_kernel
+uv pip install "sglang[all]==0.5.12.post1" "kernels>=0.12,<0.13"
 
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
@@ -136,7 +132,7 @@ deno --version || echo "Warning: Deno not installed"
 
 # Pre-download models for LLM tests to avoid timeout during test execution
 printf "* Pre-downloading models for LLM tests\n"
-python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-0.5B'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B')"
+python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2.5-0.5B')"
 
 printf "* SGLang installation complete\n"
 
@@ -144,4 +140,8 @@ printf "* SGLang installation complete\n"
 printf "* Installed versions:\n"
 python -c "import torch; print(f'PyTorch: {torch.__version__}')"
 python -c "import sglang; print(f'SGLang: {sglang.__version__}')" || echo "SGLang version check failed"
+python -c "import transformers; print(f'Transformers: {transformers.__version__}')" || echo "Transformers version check failed"
+python -c "import kernels; print(f'Kernels: {kernels.__version__}')" || echo "Kernels version check failed"
 python -c "import triton; print(f'Triton: {triton.__version__}')" || echo "Triton version check failed"
+
+uv pip check
