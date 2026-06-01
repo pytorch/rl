@@ -14,7 +14,7 @@ import torch
 from _viewer import ensure_mjpython_for_passive_viewer, MujocoViewerLoop, ViewerClosed
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data import TensorSpec
-from torchrl.envs import MacroAction, MacroPrimitiveTransform, SatelliteEnv
+from torchrl.envs import EnvBase, MacroAction, MacroPrimitiveTransform, SatelliteEnv
 from torchrl.envs.custom.mujoco._math import cmg_jacobian, pyramid_4cmg_geometry
 
 
@@ -22,6 +22,18 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--pause-between-rollouts", type=float, default=0.5)
+    parser.add_argument(
+        "--max-macros",
+        type=int,
+        default=32,
+        help="Maximum number of high-level macro actions before resetting.",
+    )
+    parser.add_argument(
+        "--target-error-threshold",
+        type=float,
+        default=0.06,
+        help="Stop the current replay once ||quat_err|| is below this value.",
+    )
     return parser.parse_args()
 
 
@@ -96,6 +108,22 @@ class SatelliteSlewPolicy:
         return tensordict
 
 
+def _run_until_aligned(
+    env: EnvBase,
+    tensordict: TensorDictBase,
+    policy: SatelliteSlewPolicy,
+    *,
+    max_macros: int,
+    target_error_threshold: float,
+) -> TensorDictBase:
+    for _ in range(max_macros):
+        if bool(tensordict["quat_err"].norm(dim=-1).max() < target_error_threshold):
+            break
+        tensordict = policy(tensordict)
+        _, tensordict = env.step_and_maybe_reset(tensordict)
+    return tensordict
+
+
 def main() -> None:
     args = _parse_args()
     ensure_mjpython_for_passive_viewer()
@@ -103,7 +131,7 @@ def main() -> None:
     # The viewer examples use the official MuJoCo C-bindings backend so the
     # passive viewer can display the live ``mjData`` object. We repeatedly reset
     # the satellite to identity attitude, ask it to slew to a tilted target
-    # frame, and let ``rollout`` call the policy for each high-level macro.
+    # frame, and run high-level macro actions until the attitude error is small.
     # ``reset_noise_scale=0.0`` keeps each viewer replay on the same manoeuver;
     # the default SatelliteEnv reset remains stochastic for training.
     target_quat = torch.tensor([[0.79335334, 0.24229610, 0.42401818, 0.36344416]])
@@ -112,7 +140,7 @@ def main() -> None:
         num_cmgs=4,
         seed=0,
         backend="mujoco",
-        max_episode_steps=512,
+        max_episode_steps=2048,
         reset_noise_scale=0.0,
     )
     low_level_action_spec = base_env.action_spec.clone()
@@ -137,15 +165,15 @@ def main() -> None:
         while viewer.is_running():
             td = env.reset(reset)
             try:
-                env.rollout(
-                    max_steps=17,
-                    policy=SatelliteSlewPolicy(
+                _run_until_aligned(
+                    env,
+                    td,
+                    SatelliteSlewPolicy(
                         low_level_action_spec,
                         action_scale=base_env.action_scale,
                     ),
-                    auto_reset=False,
-                    break_when_any_done=False,
-                    tensordict=td,
+                    max_macros=args.max_macros,
+                    target_error_threshold=args.target_error_threshold,
                 )
             except ViewerClosed:
                 break
