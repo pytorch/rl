@@ -388,7 +388,7 @@ class SatelliteEnv(MujocoEnv):
 
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         out: dict[str, torch.Tensor] = {}
-        if not self.pixel_only:
+        if not self.pixels_only:
             out.update(self._make_obs_split(state))
         if self.from_pixels:
             out["pixels"] = self._backend.render(

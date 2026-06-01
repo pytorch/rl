@@ -1921,7 +1921,7 @@ class Compose(Transform):
                 self.append(t)
         else:
             self.transforms.append(transform)
-        transform.set_container(self)
+            transform.set_container(self)
         parent = self.parent
         if parent is not None:
             parent.empty_cache()

@@ -680,7 +680,7 @@ class CubeBowlEnv(MujocoEnv):
     # ------------------------------------------------------------------
 
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
-        out = self._make_obs_split(state) if not self.pixel_only else {}
+        out = self._make_obs_split(state) if not self.pixels_only else {}
         if self.from_pixels:
             out["pixels"] = self._backend.render(
                 camera_id=self.camera_id,

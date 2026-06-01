@@ -134,6 +134,14 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         compile_step: when ``backend="mujoco-torch"``, wrap the per-env
             physics step in :func:`torch.compile`. Ignored otherwise.
         compile_kwargs: forwarded to :func:`torch.compile` when applicable.
+        from_pixels: if ``True``, include a ``"pixels"`` observation rendered
+            from MuJoCo at reset and after every step.
+        pixels_only: if ``True``, return only the ``"pixels"`` observation.
+            Requires ``from_pixels=True``.
+        render_width: pixel observation width used when ``from_pixels=True``.
+        render_height: pixel observation height used when ``from_pixels=True``.
+        camera_id: MuJoCo camera id used for pixel observations and by
+            :meth:`render` when no camera override is provided.
 
     Example:
         >>> from torchrl.envs import HumanoidEnv  # doctest: +SKIP
@@ -173,7 +181,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         compile_step: bool = False,
         compile_kwargs: dict | None = None,
         from_pixels: bool = False,
-        pixel_only: bool = False,
+        pixels_only: bool = False,
         render_width: int = 64,
         render_height: int = 64,
         camera_id: int = 0,
@@ -190,9 +198,9 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         self.max_episode_steps = int(max_episode_steps)
         self.backend_name: BackendName = backend
         self.from_pixels = bool(from_pixels)
-        self.pixel_only = bool(pixel_only)
-        if pixel_only and not from_pixels:
-            raise ValueError("pixel_only=True requires from_pixels=True.")
+        self.pixels_only = bool(pixels_only)
+        if pixels_only and not from_pixels:
+            raise ValueError("pixels_only=True requires from_pixels=True.")
         self.render_width = int(render_width)
         self.render_height = int(render_height)
         self.camera_id = int(camera_id)
@@ -385,7 +393,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         """Assemble the obs dict, including ``pixels`` when ``from_pixels``."""
         out: dict[str, torch.Tensor] = {}
-        if not self.pixel_only:
+        if not self.pixels_only:
             out["observation"] = self._make_obs(state)
         if self.from_pixels:
             out["pixels"] = self._backend.render(
@@ -400,7 +408,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         backend = self._backend
         obs_spec = self._make_obs_spec()
         if self.from_pixels:
-            if self.pixel_only:
+            if self.pixels_only:
                 obs_spec = Composite(
                     pixels=self._pixels_spec(),
                     shape=(self.num_envs,),

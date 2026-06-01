@@ -25,6 +25,8 @@ What you will learn
   consume those actions directly;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
   of poses and gripper commands;
+- how to request rendered pixels from the environment and record them with
+  :class:`~torchrl.record.VideoRecorder`;
 - how to reset and reuse one environment across scripted scenes.
 """
 
@@ -37,6 +39,7 @@ import os
 import torch
 from tensordict import TensorDictBase
 from torchrl.envs import CubeBowlEnv, RobotAction, RobotActionMode, step_mdp
+from torchrl.record import VideoRecorder
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -74,6 +77,10 @@ if MENAGERIE_PATH is None:
     )
 
 MAX_EPISODE_STEPS = 12000
+RENDER_WIDTH = 480
+RENDER_HEIGHT = 360
+VIDEO_FRAME_SKIP = 16
+VIDEO_INTERVAL_MS = 55
 IK_KWARGS = {
     "iterations": 220,
     "orientation_weight": 1.0,
@@ -107,16 +114,22 @@ IK_KWARGS = {
 # Create the MuJoCo scene
 # -----------------------
 #
-# We start by constructing the cube-and-bowl task once. Then we append one
-# primitive-control transform with ``execute=True``. After that, ``env.step``
-# accepts a ``RobotAction`` directly under ``td["action"]`` and executes the
-# expanded low-level sequence internally.
+# We start by constructing the cube-and-bowl task once. ``from_pixels=True``
+# asks the environment to include rendered frames in the TensorDict, which a
+# standard :class:`~torchrl.record.VideoRecorder` can capture. We then append
+# one primitive-control transform with ``execute=True``. After that,
+# ``env.step`` accepts a ``RobotAction`` directly under ``td["action"]`` and
+# executes the expanded low-level sequence internally.
 
 env = CubeBowlEnv(
     seed=0,
     max_episode_steps=MAX_EPISODE_STEPS,
     robot_model="menagerie_ur5e",
     menagerie_path=MENAGERIE_PATH,
+    from_pixels=True,
+    pixels_only=False,
+    render_width=RENDER_WIDTH,
+    render_height=RENDER_HEIGHT,
 )
 assert env.action_spec.shape[-1] == 7
 assert env.robot_home_qpos is not None
@@ -129,11 +142,19 @@ primitive_control = env.make_urscript_transform(
     stack_rewards=True,
     stack_observations=False,
 )
+recorder = VideoRecorder(
+    logger=None,
+    tag="scripted_macro",
+    skip=VIDEO_FRAME_SKIP,
+    make_grid=False,
+)
+env = env.append_transform(recorder)
 env = env.append_transform(primitive_control)
 
 td = env.reset()
 assert td["robot_qpos"].shape[-1] == 6
 assert env.low_level_action(td["robot_qpos"]).shape[-1] == 7
+assert td["pixels"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3])
 
 
 # %%
@@ -396,6 +417,21 @@ assert max_reward.item() == 1.0, (
 )
 assert last_reward.item() == 1.0, last_reward.item()
 assert td["success"].all()
+
+
+# %%
+# Rendered rollout
+# ----------------
+#
+# The environment produced the ``"pixels"`` observation during the same rollout
+# that executed the robot actions. The recorder can turn those frames into an
+# inline animation for the tutorial.
+
+scripted_macro_animation = recorder.to_animation(
+    title="Scripted RobotAction rollout",
+    interval=VIDEO_INTERVAL_MS,
+    clear=True,
+)
 
 
 # %%

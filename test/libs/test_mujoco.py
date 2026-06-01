@@ -730,7 +730,7 @@ class TestMujoco:
         assert pixels.float().std().item() > 0
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
-    def test_pixel_only_drops_observation_key(self, backend):
+    def test_pixels_only_drops_observation_key(self, backend):
         n = 1 if backend == "mujoco" else 2
         env = SatelliteEnv(
             num_cmgs=4,
@@ -738,17 +738,17 @@ class TestMujoco:
             seed=0,
             backend=backend,
             from_pixels=True,
-            pixel_only=True,
+            pixels_only=True,
             render_width=32,
             render_height=32,
         )
         check_env_specs(env)
         keys = set(env.observation_spec.keys())
-        assert keys == {"pixels"}, f"pixel_only must drop 'observation', got {keys}"
+        assert keys == {"pixels"}, f"pixels_only must drop 'observation', got {keys}"
 
-    def test_pixel_only_without_from_pixels_raises(self):
-        with pytest.raises(ValueError, match="pixel_only"):
-            HopperEnv(num_envs=1, seed=0, pixel_only=True)
+    def test_pixels_only_without_from_pixels_raises(self):
+        with pytest.raises(ValueError, match="pixels_only"):
+            HopperEnv(num_envs=1, seed=0, pixels_only=True)
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_render_method(self, backend):
