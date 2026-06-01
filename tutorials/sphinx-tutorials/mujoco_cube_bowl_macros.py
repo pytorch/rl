@@ -32,9 +32,10 @@ What you will learn
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 import importlib.util
 import os
+
+from collections.abc import Iterator
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -127,7 +128,6 @@ IK_KWARGS = {
 env = CubeBowlEnv(
     seed=0,
     max_episode_steps=MAX_EPISODE_STEPS,
-    robot_model="menagerie_ur5e",
     menagerie_path=MENAGERIE_PATH,
     from_pixels=True,
     pixels_only=False,
@@ -250,9 +250,7 @@ def pose_at(
         quat = torch.zeros(xyz.shape[:-1] + (4,), dtype=xyz.dtype, device=xyz.device)
         quat[..., 0] = 1.0
     else:
-        quat = quat.to(dtype=xyz.dtype, device=xyz.device).expand(
-            xyz.shape[:-1] + (4,)
-        )
+        quat = quat.to(dtype=xyz.dtype, device=xyz.device).expand(xyz.shape[:-1] + (4,))
     return xyz, quat
 
 

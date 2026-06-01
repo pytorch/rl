@@ -11,6 +11,11 @@ The implementations have been split into per-category modules
 """
 from __future__ import annotations
 
+from torchrl.envs.custom.mujoco._ur_primitives import (
+    URScriptPrimitive,
+    URScriptPrimitiveTransform,
+)
+
 from torchrl.envs.transforms._action import (
     ActionDiscretizer,
     ActionMask,
@@ -74,11 +79,6 @@ from torchrl.envs.transforms._normalization import (
     RewardScaling,
     VecNorm,
 )
-from torchrl.envs.transforms._primitive import (
-    MacroPrimitiveTransform,
-    URScriptPrimitive,
-    URScriptPrimitiveTransform,
-)
 from torchrl.envs.transforms._observation import (
     CatFrames,
     CenterCrop,
@@ -91,6 +91,12 @@ from torchrl.envs.transforms._observation import (
     SqueezeTransform,
     ToTensorImage,
     UnsqueezeTransform,
+)
+from torchrl.envs.transforms._primitive import (
+    MacroAction,
+    MacroActionMode,
+    MacroPrimitive,
+    MacroPrimitiveTransform,
 )
 from torchrl.envs.transforms._reward import (
     BinarizeReward,
@@ -142,6 +148,9 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
+    "MacroAction",
+    "MacroActionMode",
+    "MacroPrimitive",
     "MacroPrimitiveTransform",
     "MultiAction",
     "NextObservationDelta",

@@ -276,6 +276,9 @@ Available Transforms
     Hash
     InitTracker
     LineariseRewards
+    MacroAction
+    MacroActionMode
+    MacroPrimitive
     MacroPrimitiveTransform
     RobotAction
     RobotActionMode

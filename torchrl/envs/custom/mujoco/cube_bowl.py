@@ -18,9 +18,9 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.data.tensor_specs import Binary, Composite, Unbounded
-from torchrl.envs.custom.mujoco._backends import resolve_xml_string
+from torchrl.envs.custom.mujoco._ur_primitives import URScriptPrimitiveTransform
 from torchrl.envs.custom.mujoco.base import MujocoEnv
-from torchrl.envs.transforms import Transform, URScriptPrimitiveTransform
+from torchrl.envs.transforms._base import Transform
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
 
@@ -30,12 +30,10 @@ class CubeBowlEnv(MujocoEnv):
 
     ``CubeBowlEnv`` is a compact MuJoCo task meant for tutorials on custom
     MuJoCo environments, action sequences, and scripted robot primitives. The
-    default bundled MJCF uses only primitive geoms: a six-joint arm, a simple
-    two-finger gripper, a free cube, and a static bowl. For demos, the
-    environment can also compose the MuJoCo Menagerie UR5e arm and Robotiq
-    2F-85 gripper from a local Menagerie checkout, without vendoring their mesh
-    assets in TorchRL. The low-level action is a 7D position command: six arm
-    joint targets followed by one gripper command. Observations include
+    scene composes the MuJoCo Menagerie UR5e arm and Robotiq 2F-85 gripper from
+    a local Menagerie checkout, without vendoring their mesh assets in TorchRL.
+    The low-level action is a 7D position command: six arm joint targets
+    followed by one gripper command. Observations include
     privileged manipulation diagnostics such as the pinch pose and gripper pad
     positions. The task reward is sparse: it is ``1`` when the cube center is
     within ``placement_tolerance`` of the bowl target coordinate and ``0``
@@ -43,12 +41,9 @@ class CubeBowlEnv(MujocoEnv):
     reset TensorDict to start an episode from a different reachable layout.
 
     Args:
-        robot_model: ``"primitive"`` for the bundled low-footprint model or
-            ``"menagerie_ur5e"`` to compose a local MuJoCo Menagerie UR5e +
-            Robotiq 2F-85 scene.
         menagerie_path: optional path to a local ``mujoco_menagerie`` checkout.
-            When ``robot_model="menagerie_ur5e"`` and this is omitted, the
-            ``TORCHRL_MUJOCO_MENAGERIE_PATH`` environment variable is used.
+            When omitted, the ``TORCHRL_MUJOCO_MENAGERIE_PATH`` environment
+            variable is used.
         cube_position: initial xyz position of the cube center.
         bowl_position: xyz position of the bowl body. The task target is the
             ``bowl_target`` site inside that body.
@@ -66,26 +61,19 @@ class CubeBowlEnv(MujocoEnv):
     """
 
     DEFAULT_BACKEND = "mujoco"
-    XML_PATH = "cube_bowl.xml"
     FRAME_SKIP = 5
     RESET_NOISE_SCALE = 0.0
     OBJECT_HALF_SIZE = 0.022
     CUBE_HALF_SIZE = OBJECT_HALF_SIZE
-    PRIMITIVE_GRIPPER_OPEN_WIDTH = 0.092
     ROBOT_QPOS_DIM = 6
-    GRIPPER_QPOS_DIM = 2
-    CUBE_QPOS_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
-    CUBE_QVEL_START = ROBOT_QPOS_DIM + GRIPPER_QPOS_DIM
-    PINCH_SITE_NAME = "pinch"
+    MENAGERIE_GRIPPER_QPOS_DIM = 8
+    CUBE_QPOS_START = ROBOT_QPOS_DIM + MENAGERIE_GRIPPER_QPOS_DIM
+    CUBE_QVEL_START = ROBOT_QPOS_DIM + MENAGERIE_GRIPPER_QPOS_DIM
     BOWL_TARGET_SITE_NAME = "bowl_target"
-    DEFAULT_CUBE_POSITION = (0.34, -0.14, 0.035)
-    DEFAULT_BOWL_POSITION = (0.28, 0.19, 0.01)
-    BOWL_TARGET_OFFSET = (0.0, 0.0, 0.04)
     MENAGERIE_ENV_VAR = "TORCHRL_MUJOCO_MENAGERIE_PATH"
     MENAGERIE_CUBE_POSITION = (0.45, -0.18, 0.035)
     MENAGERIE_BOWL_POSITION = (0.45, 0.08, 0.01)
     MENAGERIE_BOWL_TARGET_OFFSET = (0.0, 0.0, 0.015)
-    MENAGERIE_GRIPPER_QPOS_DIM = 8
     # Calibration values for converting a desired pad-center distance into the
     # Menagerie Robotiq actuator's 0..255 command range.
     MENAGERIE_GRIPPER_OPEN_PAD_DISTANCE = 0.09313070774078369
@@ -96,14 +84,6 @@ class CubeBowlEnv(MujocoEnv):
     MENAGERIE_LEFT_PAD_GEOM_NAMES = ("gripper/left_pad1", "gripper/left_pad2")
     MENAGERIE_RIGHT_PAD_GEOM_NAMES = ("gripper/right_pad1", "gripper/right_pad2")
     MENAGERIE_HOME_QPOS = (-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0)
-    PRIMITIVE_ROBOT_JOINT_NAMES = (
-        "robot/shoulder_pan_joint",
-        "robot/shoulder_lift_joint",
-        "robot/elbow_joint",
-        "robot/wrist_1_joint",
-        "robot/wrist_2_joint",
-        "robot/wrist_3_joint",
-    )
     MENAGERIE_ROBOT_JOINT_NAMES = (
         "shoulder_pan_joint",
         "shoulder_lift_joint",
@@ -116,7 +96,6 @@ class CubeBowlEnv(MujocoEnv):
     def __init__(
         self,
         *,
-        robot_model: Literal["primitive", "menagerie_ur5e"] = "primitive",
         menagerie_path: str | Path | None = None,
         cube_position: tuple[float, float, float] | None = None,
         bowl_position: tuple[float, float, float] | None = None,
@@ -125,28 +104,13 @@ class CubeBowlEnv(MujocoEnv):
         backend: Literal["mujoco-torch", "mjx", "mujoco"] = "mujoco",
         **kwargs,
     ) -> None:
-        self.robot_model = robot_model
-        if robot_model == "primitive":
-            default_cube_position = self.DEFAULT_CUBE_POSITION
-            default_bowl_position = self.DEFAULT_BOWL_POSITION
-            self._gripper_qpos_dim = self.GRIPPER_QPOS_DIM
-            self._pinch_site_name = self.PINCH_SITE_NAME
-            self._bowl_target_offset = self.BOWL_TARGET_OFFSET
-            self._robot_home_qpos = None
-            self._menagerie_path = None
-        elif robot_model == "menagerie_ur5e":
-            default_cube_position = self.MENAGERIE_CUBE_POSITION
-            default_bowl_position = self.MENAGERIE_BOWL_POSITION
-            self._gripper_qpos_dim = self.MENAGERIE_GRIPPER_QPOS_DIM
-            self._pinch_site_name = self.MENAGERIE_PINCH_SITE_NAME
-            self._bowl_target_offset = self.MENAGERIE_BOWL_TARGET_OFFSET
-            self._robot_home_qpos = self.MENAGERIE_HOME_QPOS
-            self._menagerie_path = self._resolve_menagerie_path(menagerie_path)
-        else:
-            raise ValueError(
-                "robot_model must be one of 'primitive' or 'menagerie_ur5e', "
-                f"got {robot_model!r}."
-            )
+        default_cube_position = self.MENAGERIE_CUBE_POSITION
+        default_bowl_position = self.MENAGERIE_BOWL_POSITION
+        self._gripper_qpos_dim = self.MENAGERIE_GRIPPER_QPOS_DIM
+        self._pinch_site_name = self.MENAGERIE_PINCH_SITE_NAME
+        self._bowl_target_offset = self.MENAGERIE_BOWL_TARGET_OFFSET
+        self._robot_home_qpos = self.MENAGERIE_HOME_QPOS
+        self._menagerie_path = self._resolve_menagerie_path(menagerie_path)
         if cube_position is None:
             cube_position = default_cube_position
         if bowl_position is None:
@@ -197,11 +161,7 @@ class CubeBowlEnv(MujocoEnv):
 
         import mujoco
 
-        robot_joint_names = (
-            self.PRIMITIVE_ROBOT_JOINT_NAMES
-            if self.robot_model == "primitive"
-            else self.MENAGERIE_ROBOT_JOINT_NAMES
-        )
+        robot_joint_names = self.MENAGERIE_ROBOT_JOINT_NAMES
         robot_qpos_indices: list[int] = []
         robot_qvel_indices: list[int] = []
         for name in robot_joint_names:
@@ -241,37 +201,12 @@ class CubeBowlEnv(MujocoEnv):
     # ------------------------------------------------------------------
 
     def _load_xml(self, xml_path: str | Path | None) -> str:
-        if self.robot_model == "menagerie_ur5e":
-            if xml_path is not None:
-                raise ValueError(
-                    "xml_path is only supported with robot_model='primitive'. "
-                    "Pass menagerie_path for robot_model='menagerie_ur5e'."
-                )
-            return self._make_menagerie_ur5e_xml(self._menagerie_path)
-        if xml_path is None:
-            path_or_url: str | Path = Path(__file__).parent / "assets" / self.XML_PATH
-        else:
-            path_or_url = xml_path
-        try:
-            xml = resolve_xml_string(path_or_url)
-        except OSError as err:
-            raise FileNotFoundError(
-                f"{type(self).__name__}: xml_path={path_or_url!r} could not be "
-                "resolved."
-            ) from err
-        return self._patch_scene_xml(xml)
-
-    def _patch_scene_xml(self, xml: str) -> str:
-        root = ET.fromstring(xml)
-        cube = root.find(".//body[@name='cube']")
-        if cube is None:
-            raise ValueError("CubeBowlEnv XML is missing body name='cube'.")
-        cube.set("pos", self._format_vec(self.cube_position))
-        bowl = root.find(".//body[@name='bowl']")
-        if bowl is None:
-            raise ValueError("CubeBowlEnv XML is missing body name='bowl'.")
-        bowl.set("pos", self._format_vec(self.bowl_position))
-        return ET.tostring(root, encoding="unicode")
+        if xml_path is not None:
+            raise ValueError(
+                "CubeBowlEnv composes a MuJoCo Menagerie UR5e scene; pass "
+                "menagerie_path=... instead of xml_path=..."
+            )
+        return self._make_menagerie_ur5e_xml(self._menagerie_path)
 
     @classmethod
     def _resolve_menagerie_path(cls, menagerie_path: str | Path | None) -> Path:
@@ -279,15 +214,13 @@ class CubeBowlEnv(MujocoEnv):
             menagerie_path = os.environ.get(cls.MENAGERIE_ENV_VAR)
         if menagerie_path is None:
             raise ValueError(
-                "robot_model='menagerie_ur5e' requires a local MuJoCo "
+                "CubeBowlEnv requires a local MuJoCo "
                 f"Menagerie checkout. Pass menagerie_path=... or set "
                 f"{cls.MENAGERIE_ENV_VAR}."
             )
         path = Path(menagerie_path).expanduser()
         if not path.exists():
-            raise FileNotFoundError(
-                f"MuJoCo Menagerie path does not exist: {path}."
-            )
+            raise FileNotFoundError(f"MuJoCo Menagerie path does not exist: {path}.")
         return path
 
     def _make_menagerie_ur5e_xml(self, menagerie_path: Path) -> str:
@@ -297,7 +230,7 @@ class CubeBowlEnv(MujocoEnv):
         gripper_xml = gripper_dir / "2f85.xml"
         if not ur_xml.exists() or not gripper_xml.exists():
             raise FileNotFoundError(
-                "robot_model='menagerie_ur5e' requires "
+                "CubeBowlEnv requires "
                 "universal_robots_ur5e/ur5e.xml and robotiq_2f85/2f85.xml "
                 f"under {menagerie_path}."
             )
@@ -410,9 +343,7 @@ class CubeBowlEnv(MujocoEnv):
         return root
 
     @classmethod
-    def _merge_menagerie_gripper(
-        cls, root: ET.Element, gripper: ET.Element
-    ) -> None:
+    def _merge_menagerie_gripper(cls, root: ET.Element, gripper: ET.Element) -> None:
         root_default = cls._ensure_child(root, "default")
         gripper_default = gripper.find("default")
         if gripper_default is not None:
@@ -796,12 +727,8 @@ class CubeBowlEnv(MujocoEnv):
     @property
     def gripper_close_ctrl(self) -> float:
         """Low-level command that closes the gripper for object grasping."""
-        if self.robot_model == "menagerie_ur5e":
-            target_width = (
-                2 * self.OBJECT_HALF_SIZE - self.MENAGERIE_GRIPPER_GRASP_MARGIN
-            )
-            return self.gripper_ctrl_for_width(target_width)
-        return 0.038
+        target_width = 2 * self.OBJECT_HALF_SIZE - self.MENAGERIE_GRIPPER_GRASP_MARGIN
+        return self.gripper_ctrl_for_width(target_width)
 
     def gripper_ctrl_for_width(
         self, width: float | torch.Tensor
@@ -819,12 +746,7 @@ class CubeBowlEnv(MujocoEnv):
             >>> env = CubeBowlEnv()  # doctest: +SKIP
             >>> env.gripper_ctrl_for_width(2 * env.OBJECT_HALF_SIZE)  # doctest: +SKIP
         """
-        if self.robot_model == "menagerie_ur5e":
-            return self._menagerie_gripper_ctrl_for_width(width)
-        ctrl = (self.PRIMITIVE_GRIPPER_OPEN_WIDTH - width) / 2
-        return self._clamp_gripper_ctrl(
-            ctrl, self.gripper_open_ctrl, self.gripper_close_ctrl
-        )
+        return self._menagerie_gripper_ctrl_for_width(width)
 
     @classmethod
     def _menagerie_gripper_ctrl_for_width(
@@ -879,9 +801,7 @@ class CubeBowlEnv(MujocoEnv):
             dtype=robot_qpos.dtype,
             device=robot_qpos.device,
         )
-        action[..., : self.ROBOT_QPOS_DIM] = robot_qpos[
-            ..., : self.ROBOT_QPOS_DIM
-        ]
+        action[..., : self.ROBOT_QPOS_DIM] = robot_qpos[..., : self.ROBOT_QPOS_DIM]
         if gripper is None:
             action[..., -1] = self.gripper_open_ctrl
         elif isinstance(gripper, torch.Tensor):
@@ -913,7 +833,9 @@ class CubeBowlEnv(MujocoEnv):
             torch.Size([1, 7])
         """
         if quat is None:
-            quat = torch.zeros(xyz.shape[:-1] + (4,), dtype=xyz.dtype, device=xyz.device)
+            quat = torch.zeros(
+                xyz.shape[:-1] + (4,), dtype=xyz.dtype, device=xyz.device
+            )
             quat[..., 0] = 1.0
         else:
             quat = quat.to(dtype=xyz.dtype, device=xyz.device)
@@ -951,7 +873,7 @@ class CubeBowlEnv(MujocoEnv):
         *,
         macro_steps: int = 16,
         settle_steps: int = 0,
-        execute: bool = False,
+        execute: bool = True,
         multi_action_dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,
@@ -974,9 +896,10 @@ class CubeBowlEnv(MujocoEnv):
             macro_steps: number of interpolated low-level actions per primitive.
             settle_steps: number of repeated final actions appended per
                 primitive.
-            execute: if ``True``, append a ``MultiAction`` executor around the
-                primitive expansion so a high-level primitive can be passed
-                directly to :meth:`step`.
+            execute: if ``True`` (default), append a ``MultiAction`` executor
+                around the primitive expansion so a high-level primitive can be
+                passed directly to :meth:`step`. Pass ``False`` to inspect or
+                manually execute the expanded action sequence.
             multi_action_dim: stack dimension consumed by ``MultiAction`` when
                 ``execute=True``.
             stack_rewards: whether ``MultiAction`` should return each low-level
@@ -996,7 +919,13 @@ class CubeBowlEnv(MujocoEnv):
         Examples:
             >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
             >>> env = CubeBowlEnv()  # doctest: +SKIP
-            >>> transform = env.make_urscript_transform(macro_steps=4)  # doctest: +SKIP
+            >>> transform = env.make_urscript_transform(macro_steps=4, execute=False)  # doctest: +SKIP
+            >>> td = env.reset()  # doctest: +SKIP
+            >>> transform.action_sequence(td, transform.WAIT).shape  # doctest: +SKIP
+            torch.Size([1, 4, 7])
+            >>> env = env.append_transform(env.make_urscript_transform(macro_steps=4))  # doctest: +SKIP
+            >>> env.rollout(2).shape  # doctest: +SKIP
+            torch.Size([2])
         """
         if ik_kwargs is None:
             ik_kwargs = {}

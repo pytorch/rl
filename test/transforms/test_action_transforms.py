@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 import collections
 
 from functools import partial
@@ -53,7 +54,6 @@ from torchrl.envs import (
     MultiAction,
     ParallelEnv,
     RobotAction,
-    RobotActionMode,
     SerialEnv,
     StepCounter,
     TransformedEnv,
@@ -921,7 +921,6 @@ class TestURScriptPrimitiveTransform:
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[:, -1], torch.ones(1, 7))
 
-
     def test_nested_action_key(self):
         transform = URScriptPrimitiveTransform(
             action_key=("agent", "action"), macro_steps=3
@@ -1190,10 +1189,11 @@ class TestURScriptPrimitiveTransform:
 
     def test_macro_transform_string_proxies(self):
         transform = MacroPrimitiveTransform(
-            primitive_library="urscript",
-            adapter="joint_position_gripper",
+            primitive_library="basic",
+            adapter="tensordict",
             solver="joint_interpolation",
             macro_steps=2,
+            action_dim=7,
         )
         target = torch.arange(7, dtype=torch.float32).view(1, 7)
         td = TensorDict(
@@ -1207,6 +1207,21 @@ class TestURScriptPrimitiveTransform:
         )
 
         action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1], target)
+
+    def test_macro_transform_non_gripper_action_dim(self):
+        transform = MacroPrimitiveTransform(action_dim=4, macro_steps=3)
+        target = torch.arange(8, dtype=torch.float32).view(2, 4)
+        td = TensorDict(
+            {
+                "primitive_id": torch.tensor([[1], [1]]),
+                "target_qpos": target,
+            },
+            batch_size=[2],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([2, 3, 4])
         torch.testing.assert_close(action[:, -1], target)
 
     def test_macro_transform_custom_solver_object(self):
@@ -2125,4 +2140,5 @@ class TestFlattenAction(TransformBase):
 
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

@@ -3,18 +3,24 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .gym_transforms import EndOfLifeTransform
-from .mean_action_selector import MeanActionSelector
-from .module import ModuleTransform
-from .r3m import R3MTransform
-from .ray_service import RayTransform
-from ._primitive import (
-    MacroPrimitiveTransform,
+from torchrl.envs.custom.mujoco._ur_primitives import (
     RobotAction,
     RobotActionMode,
     URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
+
+from ._primitive import (
+    MacroAction,
+    MacroActionMode,
+    MacroPrimitive,
+    MacroPrimitiveTransform,
+)
+from .gym_transforms import EndOfLifeTransform
+from .mean_action_selector import MeanActionSelector
+from .module import ModuleTransform
+from .r3m import R3MTransform
+from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform, NextStateReconstructor
 from .transforms import (
     ActionDiscretizer,
@@ -120,6 +126,9 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
+    "MacroAction",
+    "MacroActionMode",
+    "MacroPrimitive",
     "MacroPrimitiveTransform",
     "RobotAction",
     "RobotActionMode",
