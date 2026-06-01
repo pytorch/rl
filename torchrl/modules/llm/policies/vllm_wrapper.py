@@ -847,6 +847,23 @@ class vLLMWrapper(LLMWrapperBase):
             # Both sync_vllm and async_vllm have direct generate methods
             return self.model.generate(*args, **kwargs)
 
+    def _reset_prefix_cache_for_logprobs(self) -> None:
+        """Reset sync vLLM prefix cache before prompt-logprob requests.
+
+        vLLM may omit prompt log-probabilities for tokens that are served from
+        the prefix cache. That is fine for plain generation, but a log-prob
+        wrapper must return the actual per-token values for the full evaluated
+        sequence. Resetting the cache before log-prob-only requests preserves
+        correctness for user-provided ``vllm.LLM`` instances that keep prefix
+        caching enabled.
+        """
+        if self._model_type != "sync_vllm":
+            return
+        reset_prefix_cache = getattr(self.model, "reset_prefix_cache", None)
+        if reset_prefix_cache is None:
+            return
+        reset_prefix_cache()
+
     @set_list_to_stack(True)
     @_batching
     def forward(
@@ -1545,6 +1562,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
+        self._reset_prefix_cache_for_logprobs()
         request_output = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(request_output)
@@ -1966,6 +1984,7 @@ class vLLMWrapper(LLMWrapperBase):
         }
 
         # Generate with vLLM to get prompt_logprobs
+        self._reset_prefix_cache_for_logprobs()
         tokens_out_stuct = self._call_generate(**generate_kwargs)
 
         request_output_tc = _RequestOutput_tc.from_request_output(tokens_out_stuct)

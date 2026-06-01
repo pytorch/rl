@@ -1958,9 +1958,10 @@ class TestKLTransforms:
 
 @pytest.mark.gpu
 class TestLogProbsComparison:
-    """Test vLLM log-probability outputs across input modes."""
+    """Test log-probability consistency between vLLM and Transformers wrappers."""
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+    @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
     @pytest.mark.parametrize(
         "input_mode", ["history", "text", "tokens"], ids=["history", "text", "tokens"]
     )
@@ -1968,14 +1969,16 @@ class TestLogProbsComparison:
     def test_log_probs_consistency(
         self,
         vllm_instance,
+        transformers_instance,
         input_mode,
         pad_output,
         sample_history,
         sample_text,
         sample_tokens,
     ):
-        """Test vLLM log-probability shape, masking, and token consistency."""
+        """Test that log-probabilities are consistent between vLLM and Transformers wrappers."""
         vllm_model, vllm_tokenizer = vllm_instance
+        tf_model, tf_tokenizer = transformers_instance
 
         # Create test data based on input mode
         if input_mode == "history":
@@ -2008,7 +2011,11 @@ class TestLogProbsComparison:
             generate=True,
             pad_output=pad_output,
             return_log_probs=False,
-            generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
+            generate_kwargs={
+                "max_tokens": 5,
+                "temperature": 0.0,
+                "ignore_eos": True,
+            },  # Deterministic fixed-length response
         )
 
         # Step 1: Generate tokens with vLLM.
@@ -2040,19 +2047,11 @@ class TestLogProbsComparison:
             original_tokens = data["input_ids"]
             generated_tokens = vllm_gen_result["tokens"].response
             if pad_output:
-                # Remove padding from generated tokens
-                mask = generated_tokens != vllm_tokenizer.pad_token_id
                 new_tokens = []
                 for i in range(len(original_tokens)):
-                    valid_tokens = generated_tokens[i][mask[i]]
-                    combined = torch.cat([original_tokens[i], valid_tokens])
+                    combined = torch.cat([original_tokens[i], generated_tokens[i]])
                     new_tokens.append(combined)
-                new_tokens = torch.nn.utils.rnn.pad_sequence(
-                    new_tokens,
-                    batch_first=True,
-                    padding_value=vllm_tokenizer.pad_token_id,
-                    padding_side="left",
-                )
+                new_tokens = torch.stack(new_tokens)
             else:
                 new_tokens = []
                 for i in range(len(original_tokens)):
@@ -2072,54 +2071,24 @@ class TestLogProbsComparison:
             pad_output=pad_output,
         )
 
+        tf_lp_wrapper = TransformersWrapper(
+            tf_model,
+            tokenizer=tf_tokenizer,
+            input_mode=input_mode,
+            input_key=input_key,
+            generate=False,
+            pad_output=pad_output,
+        )
+
         # Step 4: Compute vLLM log-probs for the full sequence (original + generated)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
+        tf_lp_result = tf_lp_wrapper(new_data.copy())
         check_output_shapes(vllm_lp_result, pad_output, requested_log_probs=True)
+        check_output_shapes(tf_lp_result, pad_output, requested_log_probs=True)
 
-        tokens_full = vllm_lp_result.get(
-            ("tokens", "full"),
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=vllm_tokenizer.pad_token_id,
+        assert_close(
+            vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
         )
-        log_probs_full = vllm_lp_result.get(
-            ("log_probs", "full"),
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0.0,
-        )
-        attention_mask = vllm_lp_result.get(
-            ("masks", "all_attention_mask"),
-            as_padded_tensor=True,
-            padding_side="left",
-            padding_value=0,
-        ).bool()
-
-        assert log_probs_full is not None
-        assert attention_mask is not None
-        assert log_probs_full.shape == attention_mask.shape
-        if tokens_full is not None:
-            assert tokens_full.shape == log_probs_full.shape
-        assert attention_mask.any()
-        assert torch.isfinite(log_probs_full[attention_mask]).all()
-
-        padding_mask = ~attention_mask
-        if padding_mask.any():
-            torch.testing.assert_close(
-                log_probs_full[padding_mask],
-                torch.zeros_like(log_probs_full[padding_mask]),
-            )
-
-        if input_mode == "tokens":
-            assert tokens_full is not None
-            expected_tokens = new_data.get(
-                "input_ids",
-                as_padded_tensor=True,
-                padding_side="left",
-                padding_value=vllm_tokenizer.pad_token_id,
-            )
-            assert tokens_full.shape == expected_tokens.shape
-            assert torch.equal(tokens_full.long(), expected_tokens.long())
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
