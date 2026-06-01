@@ -88,7 +88,9 @@ def test_gym():
                 "ALE namespace not registered (gymnasium installed without atari extra)."
             )
         # Handle ale-py compatibility issues with older gym versions
-        if isinstance(err, AttributeError) and "ale_py" in str(err):
+        if isinstance(err, AttributeError) and (
+            "ale_py" in str(err) or "atari_py" in str(err)
+        ):
             pytest.skip(f"ALE/gym version incompatibility: {err}")
         raise
     env.reset()

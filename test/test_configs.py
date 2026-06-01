@@ -83,6 +83,10 @@ _has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
 pytestmark = [
     pytest.mark.filterwarnings("error"),
+    pytest.mark.filterwarnings(
+        "ignore:Exception ignored in.*Finalize object.*:"
+        "pytest.PytestUnraisableExceptionWarning"
+    ),
 ]
 
 
