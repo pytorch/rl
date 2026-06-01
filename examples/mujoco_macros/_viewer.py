@@ -8,9 +8,14 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
+import platform
+import shutil
+import sys
 import time
 
 from collections.abc import Callable
+from pathlib import Path
 from types import MethodType
 from typing import Any
 
@@ -20,10 +25,44 @@ _has_mujoco_viewer = (
     importlib.util.find_spec("mujoco") is not None
     and importlib.util.find_spec("mujoco.viewer") is not None
 )
+_MJPYTHON_REEXEC_ENV = "TORCHRL_MUJOCO_MACRO_MJPYTHON_REEXEC"
 
 
 class ViewerClosed(RuntimeError):
     """Raised internally when the passive MuJoCo viewer is closed."""
+
+
+def ensure_mjpython_for_passive_viewer() -> None:
+    """Relaunch the current script with ``mjpython`` when macOS requires it."""
+    if platform.system() != "Darwin":
+        return
+    if Path(sys.executable).name == "mjpython":
+        return
+    if os.environ.get(_MJPYTHON_REEXEC_ENV) == "1":
+        return
+
+    mjpython = shutil.which("mjpython")
+    if mjpython is None:
+        raise RuntimeError(
+            "MuJoCo's passive viewer requires mjpython on macOS, but mjpython "
+            "was not found on PATH. Try `uv run --no-sync mjpython "
+            "examples/mujoco_macros/<script>.py`."
+        )
+
+    env = os.environ.copy()
+    env[_MJPYTHON_REEXEC_ENV] = "1"
+    python_lib = Path(sys.base_prefix) / "lib"
+    if python_lib.exists():
+        current_dyld = env.get("DYLD_LIBRARY_PATH", "")
+        entries = [str(python_lib)]
+        if current_dyld:
+            entries.append(current_dyld)
+        env["DYLD_LIBRARY_PATH"] = ":".join(entries)
+
+    cmd = [mjpython, *sys.argv]
+    sys.stdout.write("Relaunching MuJoCo viewer example under mjpython on macOS.\n")
+    sys.stdout.flush()
+    os.execvpe(mjpython, cmd, env)
 
 
 class MujocoViewerLoop:
@@ -60,6 +99,7 @@ class MujocoViewerLoop:
         self._step: Callable[[torch.Tensor, int], None] | None = None
 
     def __enter__(self) -> MujocoViewerLoop:
+        ensure_mjpython_for_passive_viewer()
         if not _has_mujoco_viewer:
             raise ImportError(
                 "The MuJoCo viewer requires the `mujoco.viewer` module. Install "

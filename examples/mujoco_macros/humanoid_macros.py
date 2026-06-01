@@ -11,7 +11,7 @@ import time
 
 import torch
 
-from _viewer import MujocoViewerLoop, ViewerClosed
+from _viewer import ensure_mjpython_for_passive_viewer, MujocoViewerLoop, ViewerClosed
 from tensordict import TensorDictBase
 from torchrl.data import TensorSpec
 from torchrl.envs import HumanoidEnv, MacroAction, MacroPrimitiveTransform
@@ -72,6 +72,7 @@ class HumanoidPosePolicy:
 
 def main() -> None:
     args = _parse_args()
+    ensure_mjpython_for_passive_viewer()
     base_env = HumanoidEnv(
         seed=0,
         backend="mujoco",

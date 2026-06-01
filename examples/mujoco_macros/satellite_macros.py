@@ -11,7 +11,7 @@ import time
 
 import torch
 
-from _viewer import MujocoViewerLoop, ViewerClosed
+from _viewer import ensure_mjpython_for_passive_viewer, MujocoViewerLoop, ViewerClosed
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data import TensorSpec
 from torchrl.envs import MacroAction, MacroPrimitiveTransform, SatelliteEnv
@@ -60,6 +60,7 @@ class SatelliteSlewPolicy:
 
 def main() -> None:
     args = _parse_args()
+    ensure_mjpython_for_passive_viewer()
 
     # The viewer examples use the official MuJoCo C-bindings backend so the
     # passive viewer can display the live ``mjData`` object. We repeatedly reset

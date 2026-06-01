@@ -13,7 +13,7 @@ from pathlib import Path
 
 import torch
 
-from _viewer import MujocoViewerLoop, ViewerClosed
+from _viewer import ensure_mjpython_for_passive_viewer, MujocoViewerLoop, ViewerClosed
 from tensordict import TensorDictBase
 from torchrl.envs import CubeBowlEnv, EnvBase, RobotAction
 
@@ -155,6 +155,7 @@ def _run_pick_carry_release(
 
 def main() -> None:
     args = _parse_args()
+    ensure_mjpython_for_passive_viewer()
     menagerie_path = args.menagerie_path
     if menagerie_path is None:
         menagerie_env = os.environ.get(CubeBowlEnv.MENAGERIE_ENV_VAR)
