@@ -3,12 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from torchrl.envs.custom.mujoco._ur_primitives import (
-    RobotAction,
-    RobotActionMode,
-    URScriptPrimitive,
-    URScriptPrimitiveTransform,
-)
+import importlib
 
 from ._primitive import (
     MacroAction,
@@ -92,6 +87,22 @@ from .transforms import (
 from .vc1 import VC1Transform
 from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
+
+_UR_PRIMITIVE_EXPORTS = {
+    "RobotAction",
+    "RobotActionMode",
+    "URScriptPrimitive",
+    "URScriptPrimitiveTransform",
+}
+
+
+def __getattr__(name: str):
+    if name in _UR_PRIMITIVE_EXPORTS:
+        module = importlib.import_module("torchrl.envs.custom.mujoco._ur_primitives")
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [

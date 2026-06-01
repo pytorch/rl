@@ -1,4 +1,4 @@
-# Copyright (c) Meta Plobs_dictnc. and affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -10,11 +10,6 @@ The implementations have been split into per-category modules
 (legacy path) both continue to work unchanged.
 """
 from __future__ import annotations
-
-from torchrl.envs.custom.mujoco._ur_primitives import (
-    URScriptPrimitive,
-    URScriptPrimitiveTransform,
-)
 
 from torchrl.envs.transforms._action import (
     ActionDiscretizer,
@@ -182,8 +177,6 @@ __all__ = [
     "TrajCounter",
     "Transform",
     "TransformedEnv",
-    "URScriptPrimitive",
-    "URScriptPrimitiveTransform",
     "UnaryTransform",
     "UnsqueezeTransform",
     "VecGymEnvTransform",

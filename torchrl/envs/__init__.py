@@ -20,6 +20,12 @@ from .custom import (
     TicTacToeEnv,
     Walker2dEnv,
 )
+from .custom.mujoco._ur_primitives import (
+    RobotAction,
+    RobotActionMode,
+    URScriptPrimitive,
+    URScriptPrimitiveTransform,
+)
 from .env_creator import env_creator, EnvCreator, get_env_metadata
 from .gym_like import default_info_dict_reader, GymLikeEnv
 from .libs import (
@@ -118,8 +124,6 @@ from .transforms import (
     RewardClipping,
     RewardScaling,
     RewardSum,
-    RobotAction,
-    RobotActionMode,
     SelectTransform,
     SignTransform,
     SqueezeTransform,
@@ -136,8 +140,6 @@ from .transforms import (
     TransformedEnv,
     UnaryTransform,
     UnsqueezeTransform,
-    URScriptPrimitive,
-    URScriptPrimitiveTransform,
     VC1Transform,
     VecGymEnvTransform,
     VecNorm,
