@@ -28,15 +28,17 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.tensordict_module._rnn_precision import _validate_user_precision
 
-# ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. Gate the
-# import on the runtime torch version: probing via ``importlib.util.find_spec``
-# would eagerly import the (missing) ``torch._higher_order_ops`` parent on
-# older builds and crash this module at load time.
-_has_torch_scan = version.parse(torch.__version__) >= version.parse("2.6.0")
-if _has_torch_scan:
-    from torch._higher_order_ops import scan as _torch_scan
-else:
-    _torch_scan = None
+# ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. hoptorch
+# wraps it and owns the scan backward health check / temporary compatibility
+# patching needed by older PyTorch versions.
+from hoptorch import scan as _torch_scan
+from hoptorch.scan import ensure_scan_backward as _ensure_scan_backward
+
+
+def _maybe_warm_scan_backward(device: torch.device | str | int | None) -> None:
+    device = torch.device("cpu") if device is None else torch.device(device)
+    if device.type != "meta":
+        _ensure_scan_backward(device)
 
 
 def _check_triton_available() -> bool:
@@ -91,11 +93,6 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
 
 @implement_for("torch", "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
-    if _torch_scan is None:
-        raise NotImplementedError(
-            "torch._higher_order_ops.scan is required for the scan recurrent "
-            "backend but is not available in this PyTorch build."
-        )
     return _torch_scan(*args, **kwargs)
 
 
@@ -329,6 +326,8 @@ class LSTM(LSTMBase):
         # to capture the scan; eager use will fail. Dropout is not supported
         # on this path. See :meth:`_lstm_scan`.
         self.use_scan = use_scan
+        if use_scan:
+            _maybe_warm_scan_backward(device)
 
     @staticmethod
     def _lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -573,7 +572,8 @@ class LSTMModule(ModuleBase):
         recurrent_backend: backend used in recurrent mode when trajectories reset
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
-            avoids materializing padded trajectory chunks. ``"triton"``
+            avoids materializing padded trajectory chunks via ``hoptorch``.
+            ``"triton"``
             (prototype, CUDA only) uses Triton kernels where available and
             otherwise preserves pad-backend recurrent semantics for dropout,
             projections and bidirectional layers. ``"auto"`` uses ``"pad"``
@@ -793,6 +793,9 @@ class LSTMModule(ModuleBase):
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
         self.recurrent_matmul_precision = recurrent_matmul_precision
+        if recurrent_backend == "scan":
+            param = next(lstm.parameters(), None)
+            _maybe_warm_scan_backward(device if param is None else param.device)
 
     def make_python_based(self) -> LSTMModule:
         """Transforms the LSTM layer in its python-based version.
@@ -1639,6 +1642,8 @@ class GRU(GRUBase):
         )
         # Opt-in prototype: see :meth:`_gru_scan` and :class:`LSTM`.
         self.use_scan = use_scan
+        if use_scan:
+            _maybe_warm_scan_backward(device)
 
     @staticmethod
     def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -1842,7 +1847,8 @@ class GRUModule(ModuleBase):
         recurrent_backend: backend used in recurrent mode when trajectories reset
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
-            avoids materializing padded trajectory chunks. ``"triton"``
+            avoids materializing padded trajectory chunks via ``hoptorch``.
+            ``"triton"``
             (prototype, CUDA only) uses Triton kernels where available and
             otherwise preserves pad-backend recurrent semantics for dropout
             and bidirectional layers.
@@ -2084,6 +2090,9 @@ class GRUModule(ModuleBase):
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
         self.recurrent_matmul_precision = recurrent_matmul_precision
+        if recurrent_backend == "scan":
+            param = next(gru.parameters(), None)
+            _maybe_warm_scan_backward(device if param is None else param.device)
 
     def make_python_based(self) -> GRUModule:
         """Transforms the GRU layer in its python-based version.

@@ -1253,6 +1253,86 @@ class TestLSTMModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.parametrize("rnn_type", ["lstm", "gru"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    def test_scan_backend_backward_matches_pad(self, rnn_type):
+        torch.manual_seed(0)
+        B, T, F, H, L = 3, 5, 4, 8, 1
+        if rnn_type == "lstm":
+            kwargs = {
+                "input_size": F,
+                "hidden_size": H,
+                "num_layers": L,
+                "in_keys": ["obs", "hidden0", "hidden1"],
+                "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            }
+            pad_module = LSTMModule(**kwargs)
+            scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
+        else:
+            kwargs = {
+                "input_size": F,
+                "hidden_size": H,
+                "num_layers": L,
+                "in_keys": ["obs", "hidden"],
+                "out_keys": ["feat", ("next", "hidden")],
+            }
+            pad_module = GRUModule(**kwargs)
+            scan_module = GRUModule(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(B, T, F)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        is_init[1, 3] = True
+        is_init[2, 2] = True
+
+        def make_data():
+            obs = obs_source.detach().clone().requires_grad_()
+            if rnn_type == "lstm":
+                hidden0 = torch.zeros(B, T, L, H)
+                hidden1 = torch.zeros(B, T, L, H)
+                data = TensorDict(
+                    {
+                        "obs": obs,
+                        "hidden0": hidden0,
+                        "hidden1": hidden1,
+                        "is_init": is_init.clone(),
+                    },
+                    [B, T],
+                )
+            else:
+                hidden = torch.zeros(B, T, L, H)
+                data = TensorDict(
+                    {"obs": obs, "hidden": hidden, "is_init": is_init.clone()},
+                    [B, T],
+                )
+            return data, obs
+
+        def grads(module):
+            data, obs = make_data()
+            with set_recurrent_mode(True):
+                out = module(data)
+                loss = out["feat"].square().mean()
+            loss.backward()
+            param_grads = [
+                (name, param.grad.detach().clone())
+                for name, param in module.named_parameters()
+            ]
+            return obs.grad.detach().clone(), param_grads
+
+        pad_obs_grad, pad_param_grads = grads(pad_module)
+        scan_obs_grad, scan_param_grads = grads(scan_module)
+
+        torch.testing.assert_close(pad_obs_grad, scan_obs_grad, atol=5e-3, rtol=5e-3)
+        for (pad_name, pad_grad), (scan_name, scan_grad) in zip(
+            pad_param_grads, scan_param_grads
+        ):
+            assert pad_name == scan_name
+            torch.testing.assert_close(pad_grad, scan_grad, atol=5e-3, rtol=5e-3)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
