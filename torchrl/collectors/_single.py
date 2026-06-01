@@ -529,8 +529,8 @@ class Collector(BaseCollector):
         self.track_traj_ids = track_traj_ids
         self._exclude_private_keys = True
 
-        # Create shuttle and rollout buffers
-        self._make_shuttle()
+        # Create carrier and rollout buffers
+        self._make_carrier()
         self._maybe_make_final_rollout(make_rollout=self._use_buffers)
         self._set_truncated_keys()
 
@@ -1053,15 +1053,15 @@ class Collector(BaseCollector):
             pool = self._traj_pool_val = _TrajectoryPool()
         return pool
 
-    def _make_shuttle(self):
-        # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
+    def _make_carrier(self):
+        # The carrier holds rollout state across iterations and calls.
         with torch.no_grad():
             self._carrier = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
-            self._shuttle_has_no_device = True
+            self._carrier_has_no_device = True
             self._carrier.clear_device_()
         else:
-            self._shuttle_has_no_device = False
+            self._carrier_has_no_device = False
 
         if self.track_traj_ids:
             traj_ids = self._traj_pool.get_traj_and_increment(
@@ -1677,6 +1677,31 @@ class Collector(BaseCollector):
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
 
+        Each call runs ``frames_per_batch`` env steps and returns (or writes
+        to the replay buffer) the resulting batch.  The per-timestep flow is:
+
+        1. **Carrier prep** — read ``self._carrier``, the persistent
+           tensordict that survives across timesteps (allocated once in
+           :meth:`_make_carrier`).  If ``reset_at_each_iter=True``, reset
+           the env first.
+        2. **Policy step** — cast the carrier to ``policy_device`` if it
+           differs from ``env_device`` (then ``_sync_policy()``), invoke
+           the policy, and merge its outputs back into the carrier.
+        3. **Env step** — cast the carrier to ``env_device`` if needed
+           (then ``_sync_env()``), call ``env.step_and_maybe_reset``, and
+           write the returned ``"next"`` sub-tensordict back into the
+           carrier.
+        4. **Persist** — append the per-step snapshot to a list after
+           casting to ``storing_device`` and ``_sync_storage()`` if needed,
+           or write it directly with ``replay_buffer.add(...)`` when direct
+           replay-buffer writes are enabled.
+        5. **Advance** — swap the carrier for the post-reset
+           ``env_next_output`` and update ``("collector", "traj_ids")`` for
+           any envs that finished.
+
+        See :ref:`ref_collectors_internals` for the full flow diagram and
+        an explanation of the carrier / sync / device-cast machinery.
+
         Returns:
             TensorDictBase containing the computed rollout.
 
@@ -1687,7 +1712,7 @@ class Collector(BaseCollector):
         if self.reset_at_each_iter:
             self._carrier.update(self.env.reset())
 
-        # self._shuttle.fill_(("collector", "step_count"), 0)
+        # self._carrier.fill_(("collector", "step_count"), 0)
         if self._use_buffers and self.track_traj_ids:
             self._final_rollout.fill_(("collector", "traj_ids"), -1)
         else:
@@ -1715,7 +1740,8 @@ class Collector(BaseCollector):
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
-                            # This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking
+                            # This is unsafe if the carrier is in pin_memory;
+                            # otherwise CUDA will be happy with non_blocking.
                             non_blocking = (
                                 not self.no_cuda_sync
                                 or self.policy_device.type == "cuda"
@@ -1729,7 +1755,7 @@ class Collector(BaseCollector):
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             # we can pass this, clear_device_ must have been called earlier
-                            # policy_input = self._shuttle.clear_device_()
+                            # policy_input = self._carrier.clear_device_()
                             policy_input = self._carrier
                     else:
                         policy_input = self._carrier
@@ -1741,7 +1767,7 @@ class Collector(BaseCollector):
                     if self.compiled_policy:
                         policy_output = policy_output.clone()
                     if self._carrier is not policy_output:
-                        # ad-hoc update shuttle
+                        # ad-hoc update carrier
                         self._carrier.update(
                             policy_output, keys_to_update=self._policy_output_keys
                         )
@@ -1759,16 +1785,16 @@ class Collector(BaseCollector):
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
                         # we can pass this, clear_device_ must have been called earlier
-                        # env_input = self._shuttle.clear_device_()
+                        # env_input = self._carrier.clear_device_()
                         env_input = self._carrier
                 else:
                     env_input = self._carrier
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
                 if self._carrier is not env_output:
-                    # ad-hoc update shuttle
+                    # ad-hoc update carrier
                     next_data = env_output.get("next")
-                    if self._shuttle_has_no_device:
+                    if self._carrier_has_no_device:
                         # Make sure
                         next_data.clear_device_()
                     self._carrier.set("next", next_data)
@@ -1808,7 +1834,7 @@ class Collector(BaseCollector):
                     # carry over collector data without messing up devices
                     collector_data = self._carrier.get("collector").copy()
                 self._carrier = env_next_output
-                if self._shuttle_has_no_device:
+                if self._carrier_has_no_device:
                     self._carrier.clear_device_()
                 if self.track_traj_ids:
                     self._carrier.set("collector", collector_data)

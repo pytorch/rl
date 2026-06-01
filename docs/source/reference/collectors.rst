@@ -134,6 +134,7 @@ Documentation Sections
 
    collectors_basics
    collectors_single
+   collectors_internals
    collectors_eval
    collectors_distributed
    collectors_weightsync
