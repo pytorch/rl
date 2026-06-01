@@ -106,6 +106,13 @@ apt-get update && apt-get install -y libnuma-dev
 printf "* Installing SGLang\n"
 uv pip install "sglang[all]==0.5.12.post1" "kernels>=0.12,<0.13"
 
+# SGLang 0.5.12.post1 resolves torch 2.11.0, while the base docker image
+# carries an older torchvision built against its preinstalled torch. Reinstall
+# the matching torchvision wheel after the backend resolves torch so SGLang can
+# import torchvision.io when launching the server.
+printf "* Installing torchvision matching the SGLang torch wheel\n"
+uv pip install --force-reinstall --no-deps "torchvision==0.26.0"
+
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
 
@@ -139,6 +146,7 @@ printf "* SGLang installation complete\n"
 # Show installed versions for debugging
 printf "* Installed versions:\n"
 python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+python -c "import torchvision; print(f'TorchVision: {torchvision.__version__}')"
 python -c "import sglang; print(f'SGLang: {sglang.__version__}')" || echo "SGLang version check failed"
 python -c "import transformers; print(f'Transformers: {transformers.__version__}')" || echo "Transformers version check failed"
 python -c "import kernels; print(f'Kernels: {kernels.__version__}')" || echo "Kernels version check failed"
