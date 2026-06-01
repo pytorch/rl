@@ -13,42 +13,34 @@ import torch
 from tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl._utils import _RayServiceMetaClass, implement_for
+from torchrl._utils import _RayServiceMetaClass
 
 _has_tv = importlib.util.find_spec("torchvision") is not None
-try:
-    from torchcodec.encoders import VideoEncoder  # noqa: F401
-
-    _has_torchcodec = True
-    del VideoEncoder
-except Exception:
-    _has_torchcodec = False
+_has_torchcodec = importlib.util.find_spec("torchcodec") is not None
 
 
 __all__ = ["Logger"]
 
 
-@implement_for("torchvision", None, "0.22")
 def _write_video(filename, video_array, **kwargs):
-    if not _has_tv:
-        raise ImportError(
-            "Writing mp4 videos with torchvision < 0.22 requires torchvision to be installed. "
-            "Install it with: pip install torchvision"
-        )
-    import torchvision
-
-    torchvision.io.write_video(filename, video_array, **kwargs)
-
-
-@implement_for("torchvision", "0.22")
-def _write_video(filename, video_array, **kwargs):  # noqa: F811
     if not _has_torchcodec:
-        raise ImportError(
-            "Writing mp4 videos with torchvision >= 0.22 requires torchcodec >= 0.10.0, "
-            "since torchvision.io.write_video was deprecated in 0.22 and removed in 0.24. "
-            "Install it with: pip install 'torchcodec>=0.10.0'"
+        raise ModuleNotFoundError(
+            "Writing MP4 videos with VideoRecorder or CSVLogger requires "
+            "torchcodec >= 0.10.0. When running TorchRL from this repository "
+            "with uv, use `uv run --extra video <command>` (or "
+            "`uv run --extra rendering <command>`) so torchcodec is installed "
+            "in the command environment. Otherwise install it with "
+            "`pip install 'torchcodec>=0.10.0'`."
         )
-    from torchcodec.encoders import VideoEncoder
+    try:
+        from torchcodec.encoders import VideoEncoder
+    except Exception as err:
+        raise ImportError(
+            "torchcodec is installed but could not be imported for MP4 video "
+            "writing. Make sure the installed torchcodec build is compatible "
+            "with the active PyTorch build, or rerun the command with "
+            "`uv run --extra video <command>` from the TorchRL repository."
+        ) from err
 
     fps = kwargs.pop("fps", 30)
     video_codec = kwargs.pop("video_codec", None)
