@@ -103,8 +103,10 @@ apt-get update && apt-get install -y libnuma-dev
 
 # Install SGLang with all extras
 # Note: We do NOT install vLLM here to avoid Triton version conflicts
+# SGLang pins torch 2.11.0, whose PyPI wheel carries CUDA 13.0; keep
+# torchvision on the matching release instead of the earlier cu129 wheel.
 printf "* Installing SGLang\n"
-uv pip install "sglang[all]" "kernels>=0.12,<0.13"
+uv pip install "sglang[all]" "kernels>=0.12,<0.13" "torchvision==0.26.0"
 
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
@@ -141,7 +143,7 @@ printf "* Installed versions:\n"
 python - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 
-for package in ("sglang", "transformers", "kernels", "torch", "triton"):
+for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "triton"):
     try:
         print(f"{package}: {version(package)}")
     except PackageNotFoundError:
