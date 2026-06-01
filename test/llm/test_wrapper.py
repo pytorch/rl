@@ -2095,7 +2095,11 @@ class TestLogProbsComparison:
             padding_value=0,
         ).bool()
 
-        assert tokens_full.shape == log_probs_full.shape == attention_mask.shape
+        assert log_probs_full is not None
+        assert attention_mask is not None
+        assert log_probs_full.shape == attention_mask.shape
+        if tokens_full is not None:
+            assert tokens_full.shape == log_probs_full.shape
         assert attention_mask.any()
         assert torch.isfinite(log_probs_full[attention_mask]).all()
 
@@ -2107,6 +2111,7 @@ class TestLogProbsComparison:
             )
 
         if input_mode == "tokens":
+            assert tokens_full is not None
             expected_tokens = new_data.get(
                 "input_ids",
                 as_padded_tensor=True,

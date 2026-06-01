@@ -17,6 +17,28 @@ ln -s /usr/bin/swig3.0 /usr/bin/swig 2>/dev/null || true
 export PYTORCH_TEST_WITH_SLOW='1'
 export LAZY_LEGACY_OP=False
 
+# SGLang binary kernels dlopen CUDA libraries from the PyPI nvidia packages.
+# Add those library directories so libnvrtc.so.* is visible to the server.
+cuda_library_path="$(
+python - <<'PY'
+from pathlib import Path
+import site
+
+paths = []
+for site_packages in site.getsitepackages():
+    nvidia_dir = Path(site_packages) / "nvidia"
+    if nvidia_dir.is_dir():
+        paths.extend(
+            str(path) for path in sorted(nvidia_dir.glob("*/lib")) if path.is_dir()
+        )
+print(":".join(dict.fromkeys(paths)))
+PY
+)"
+if [ -n "${cuda_library_path}" ]; then
+    export LD_LIBRARY_PATH="${cuda_library_path}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    printf "* Added PyPI CUDA libraries to LD_LIBRARY_PATH\n"
+fi
+
 python -m torch.utils.collect_env
 # Avoid error: "fatal: unsafe repository"
 git config --global --add safe.directory '*'
