@@ -191,6 +191,17 @@ class TestMujoco:
         )
         torch.testing.assert_close(body_quat, target.squeeze(0), rtol=1e-6, atol=1e-6)
 
+        for geom_name in ("bus", "panel_port", "cmg1_disk"):
+            geom_id = env._backend._mujoco.mj_name2id(
+                env._backend._m,
+                env._backend._mujoco.mjtObj.mjOBJ_GEOM,
+                geom_name,
+            )
+            assert geom_id >= 0
+            assert env._backend._m.geom_rgba[geom_id, 3] == pytest.approx(
+                env._SATELLITE_GEOM_ALPHA
+            )
+
         for site_name in (
             "satellite_body_x_axis",
             "satellite_body_y_axis",

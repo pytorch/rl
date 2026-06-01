@@ -86,6 +86,7 @@ class SatelliteEnv(MujocoEnv):
     ROTOR_SPEED_4 = 100.0
     ROTOR_SPEED_6 = 200.0
     RENDER_BACKGROUND = (0.0, 0.0, 0.05)
+    _SATELLITE_GEOM_ALPHA: ClassVar[float] = 0.55
     _TARGET_FRAME_BODY: ClassVar[str] = "target_attitude_frame"
     _TARGET_FRAME_POS: ClassVar[tuple[float, float, float]] = (0.0, 0.0, 0.0)
     _BODY_FRAME_XML: ClassVar[
@@ -228,9 +229,22 @@ class SatelliteEnv(MujocoEnv):
     # ------------------------------------------------------------------
 
     @classmethod
+    def _transparent_satellite_geom(cls, match: re.Match[str]) -> str:
+        rgba = match.group(2).split()
+        if len(rgba) != 4:
+            return match.group(0)
+        rgba[-1] = f"{cls._SATELLITE_GEOM_ALPHA:.2f}"
+        return f"{match.group(1)}{' '.join(rgba)}{match.group(3)}"
+
+    @classmethod
     def _patch_xml(cls, xml: str) -> str:
         xml = re.sub(r"<camera\b[^/]*/>\s*", "", xml)
         xml = re.sub(r"<light\b[^/]*/>\s*", "", xml)
+        xml = re.sub(
+            r'(<geom\b[^>]*\brgba=")([^"]+)(")',
+            cls._transparent_satellite_geom,
+            xml,
+        )
         camera = (
             '<camera name="side" pos="3 -3 2" '
             'xyaxes="0.707 0.707 0 -0.302 0.302 0.905" fovy="60"/>'
