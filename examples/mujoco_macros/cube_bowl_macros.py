@@ -2,20 +2,20 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""CubeBowlEnv example for UR-style MuJoCo macro actions with rendering."""
+"""CubeBowlEnv example for UR-style MuJoCo macro actions in the MuJoCo viewer."""
 
 from __future__ import annotations
 
 import argparse
 import os
+import time
 from pathlib import Path
 
 import torch
+
+from _viewer import MujocoViewerLoop, ViewerClosed
 from tensordict import TensorDictBase
 from torchrl.envs import CubeBowlEnv, EnvBase, RobotAction
-from torchrl.record import VideoRecorder
-
-_DEFAULT_OUTPUT = Path(__file__).resolve().parent / "videos" / "cube_bowl_macros.html"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -29,28 +29,9 @@ def _parse_args() -> argparse.Namespace:
             f"${CubeBowlEnv.MENAGERIE_ENV_VAR}."
         ),
     )
-    parser.add_argument("--output", type=Path, default=_DEFAULT_OUTPUT)
-    parser.add_argument("--render-width", type=int, default=360)
-    parser.add_argument("--render-height", type=int, default=270)
-    parser.add_argument("--video-interval-ms", type=int, default=60)
+    parser.add_argument("--speed", type=float, default=1.0)
+    parser.add_argument("--pause-between-rollouts", type=float, default=0.5)
     return parser.parse_args()
-
-
-def _save_animation(
-    recorder: VideoRecorder,
-    output: Path,
-    *,
-    title: str,
-    interval: int,
-) -> Path:
-    output = output.expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    animation = recorder.to_animation(title=title, interval=interval, clear=True)
-    if output.suffix.lower() == ".html":
-        output.write_text(animation.to_jshtml(), encoding="utf-8")
-    else:
-        animation.save(output)
-    return output
 
 
 def _offset_like(reference: torch.Tensor, xyz: list[float]) -> torch.Tensor:
@@ -73,6 +54,105 @@ def _run_macro(
     return tensordict
 
 
+def _run_pick_carry_release(
+    env: EnvBase,
+    base_env: CubeBowlEnv,
+    td: TensorDictBase,
+) -> TensorDictBase:
+    gripper_quat = td["pinch_quat"].clone()
+    home_qpos = torch.as_tensor(
+        base_env.robot_home_qpos,
+        dtype=td["robot_qpos"].dtype,
+        device=td["robot_qpos"].device,
+    ).view(1, 6)
+    close_command = base_env.gripper_ctrl_for_width(
+        2 * base_env.OBJECT_HALF_SIZE - 0.001
+    )
+
+    # The manoeuver is intentionally readable: open, hover above the cube,
+    # descend, close the gripper, lift, carry over the bowl, release, then
+    # return to the home posture. Every item is an explicit ``RobotAction``
+    # destination placed under ``td["action"]``.
+    cube = td["cube_pos"].clone()
+    td = _run_macro(env, td, RobotAction.open_gripper(steps=18, settle_steps=4))
+    td = _run_macro(
+        env,
+        td,
+        RobotAction.reach_pose(
+            position=cube + _offset_like(cube, [0.0, 0.0, 0.12]),
+            quaternion=gripper_quat,
+            gripper="open",
+            steps=32,
+            settle_steps=6,
+        ),
+    )
+    td = _run_macro(
+        env,
+        td,
+        RobotAction.reach_pose(
+            position=cube + _offset_like(cube, [0.0, 0.0, 0.02]),
+            quaternion=gripper_quat,
+            gripper="open",
+            steps=32,
+            settle_steps=6,
+        ),
+    )
+    td = _run_macro(
+        env,
+        td,
+        RobotAction.close_gripper(command=close_command, steps=24, settle_steps=12),
+    )
+
+    cube = td["cube_pos"].clone()
+    pinch_to_cube = td["pinch_pos"].clone() - cube
+    td = _run_macro(
+        env,
+        td,
+        RobotAction.reach_pose(
+            position=cube + pinch_to_cube + _offset_like(cube, [0.0, 0.0, 0.20]),
+            quaternion=gripper_quat,
+            gripper="closed",
+            gripper_command=close_command,
+            steps=36,
+            settle_steps=8,
+        ),
+    )
+
+    bowl = td["bowl_pos"].clone()
+    cube = td["cube_pos"].clone()
+    pinch_to_cube = td["pinch_pos"].clone() - cube
+    td = _run_macro(
+        env,
+        td,
+        RobotAction.reach_pose(
+            position=bowl + pinch_to_cube + _offset_like(bowl, [0.0, 0.0, 0.16]),
+            quaternion=gripper_quat,
+            gripper="closed",
+            gripper_command=close_command,
+            steps=36,
+            settle_steps=8,
+        ),
+    )
+    td = _run_macro(
+        env,
+        td,
+        RobotAction.reach_pose(
+            position=bowl + pinch_to_cube + _offset_like(bowl, [0.0, 0.0, 0.06]),
+            quaternion=gripper_quat,
+            gripper="closed",
+            gripper_command=close_command,
+            steps=28,
+            settle_steps=6,
+        ),
+    )
+    td = _run_macro(env, td, RobotAction.open_gripper(steps=24, settle_steps=8))
+    return _run_macro(
+        env,
+        td,
+        RobotAction.home(joints=home_qpos, gripper="open", steps=36),
+    )
+
+
 def main() -> None:
     args = _parse_args()
     menagerie_path = args.menagerie_path
@@ -84,137 +164,38 @@ def main() -> None:
             )
         menagerie_path = Path(menagerie_env)
 
-    env = CubeBowlEnv(
+    base_env = CubeBowlEnv(
         menagerie_path=menagerie_path,
         seed=0,
+        backend="mujoco",
         max_episode_steps=1024,
-        from_pixels=True,
-        pixels_only=False,
-        render_width=args.render_width,
-        render_height=args.render_height,
     )
-    recorder = VideoRecorder(
-        logger=None,
-        tag="cube_bowl_macros",
-        skip=2,
-        make_grid=False,
+    env = base_env.append_transform(
+        base_env.make_urscript_transform(
+            macro_steps=28,
+            settle_steps=8,
+            execute=True,
+            ik_kwargs={
+                "iterations": 160,
+                "orientation_weight": 1.0,
+                "step_size": 0.7,
+                "damping": 1e-4,
+            },
+            stack_rewards=True,
+            stack_observations=False,
+        )
     )
-    primitive_control = env.make_urscript_transform(
-        macro_steps=28,
-        settle_steps=8,
-        execute=True,
-        ik_kwargs={
-            "iterations": 160,
-            "orientation_weight": 1.0,
-            "step_size": 0.7,
-            "damping": 1e-4,
-        },
-        stack_rewards=True,
-        stack_observations=False,
-    )
-    env = env.append_transform(recorder)
-    env = env.append_transform(primitive_control)
 
-    td = env.reset()
-    gripper_quat = td["pinch_quat"].clone()
-    home_qpos = torch.as_tensor(
-        env.robot_home_qpos,
-        dtype=td["robot_qpos"].dtype,
-        device=td["robot_qpos"].device,
-    ).view(1, 6)
-    close_command = env.gripper_ctrl_for_width(2 * env.OBJECT_HALF_SIZE - 0.001)
-    try:
-        # The manoeuver is intentionally readable: open, hover above the cube,
-        # descend, close the gripper, lift, carry over the bowl, release, then
-        # return to the home posture. Every item is an explicit ``RobotAction``
-        # destination placed under ``td["action"]``.
-        cube = td["cube_pos"].clone()
-        td = _run_macro(env, td, RobotAction.open_gripper(steps=18, settle_steps=4))
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.reach_pose(
-                position=cube + _offset_like(cube, [0.0, 0.0, 0.12]),
-                quaternion=gripper_quat,
-                gripper="open",
-                steps=32,
-                settle_steps=6,
-            ),
-        )
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.reach_pose(
-                position=cube + _offset_like(cube, [0.0, 0.0, 0.02]),
-                quaternion=gripper_quat,
-                gripper="open",
-                steps=32,
-                settle_steps=6,
-            ),
-        )
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.close_gripper(command=close_command, steps=24, settle_steps=12),
-        )
-
-        cube = td["cube_pos"].clone()
-        pinch_to_cube = td["pinch_pos"].clone() - cube
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.reach_pose(
-                position=cube + pinch_to_cube + _offset_like(cube, [0.0, 0.0, 0.20]),
-                quaternion=gripper_quat,
-                gripper="closed",
-                gripper_command=close_command,
-                steps=36,
-                settle_steps=8,
-            ),
-        )
-
-        bowl = td["bowl_pos"].clone()
-        cube = td["cube_pos"].clone()
-        pinch_to_cube = td["pinch_pos"].clone() - cube
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.reach_pose(
-                position=bowl + pinch_to_cube + _offset_like(bowl, [0.0, 0.0, 0.16]),
-                quaternion=gripper_quat,
-                gripper="closed",
-                gripper_command=close_command,
-                steps=36,
-                settle_steps=8,
-            ),
-        )
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.reach_pose(
-                position=bowl + pinch_to_cube + _offset_like(bowl, [0.0, 0.0, 0.06]),
-                quaternion=gripper_quat,
-                gripper="closed",
-                gripper_command=close_command,
-                steps=28,
-                settle_steps=6,
-            ),
-        )
-        td = _run_macro(env, td, RobotAction.open_gripper(steps=24, settle_steps=8))
-        td = _run_macro(
-            env,
-            td,
-            RobotAction.home(joints=home_qpos, gripper="open", steps=36),
-        )
-        output = _save_animation(
-            recorder,
-            args.output,
-            title="CubeBowl pick-carry-release macro sequence",
-            interval=args.video_interval_ms,
-        )
-        print(f"Saved rendered macro animation to {output}")
-    finally:
-        env.close()
+    # Loop forever: reset the scene, execute the full pick/carry/release macro
+    # sequence, pause, and reset to replay it in the MuJoCo viewer.
+    with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
+        while viewer.is_running():
+            td = env.reset()
+            try:
+                _run_pick_carry_release(env, base_env, td)
+            except ViewerClosed:
+                break
+            time.sleep(args.pause_between_rollouts)
 
 
 if __name__ == "__main__":

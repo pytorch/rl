@@ -2,48 +2,26 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""SatelliteEnv example for generic MuJoCo macro actions with rendering."""
+"""SatelliteEnv example for generic MuJoCo macro actions in the MuJoCo viewer."""
 
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
+import time
 
 import torch
+
+from _viewer import MujocoViewerLoop, ViewerClosed
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data import TensorSpec
 from torchrl.envs import MacroAction, MacroPrimitiveTransform, SatelliteEnv
-from torchrl.record import VideoRecorder
-
-_DEFAULT_OUTPUT = Path(__file__).resolve().parent / "videos" / "satellite_macros.html"
-_BACKENDS = ("mujoco-torch", "mjx", "mujoco")
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", default="mujoco-torch", choices=_BACKENDS)
-    parser.add_argument("--output", type=Path, default=_DEFAULT_OUTPUT)
-    parser.add_argument("--render-width", type=int, default=320)
-    parser.add_argument("--render-height", type=int, default=240)
-    parser.add_argument("--video-interval-ms", type=int, default=60)
+    parser.add_argument("--speed", type=float, default=1.0)
+    parser.add_argument("--pause-between-rollouts", type=float, default=0.5)
     return parser.parse_args()
-
-
-def _save_animation(
-    recorder: VideoRecorder,
-    output: Path,
-    *,
-    title: str,
-    interval: int,
-) -> Path:
-    output = output.expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    animation = recorder.to_animation(title=title, interval=interval, clear=True)
-    if output.suffix.lower() == ".html":
-        output.write_text(animation.to_jshtml(), encoding="utf-8")
-    else:
-        animation.save(output)
-    return output
 
 
 def _project_action(action_spec: TensorSpec, action: torch.Tensor) -> torch.Tensor:
@@ -61,10 +39,10 @@ class SatelliteSlewPolicy:
 
     def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
         # ``SatelliteEnv`` exposes ``quat_err``: the logarithmic attitude error
-        # between the current bus attitude and the reset-time target attitude.
-        # This tiny steering law maps that 3D error to a destination gimbal-rate
-        # command, then wraps it in ``MacroAction``. The transform appended to the
-        # env expands this single action into a smooth low-level manoeuver.
+        # from the current bus attitude to the reset-time target attitude. The
+        # policy maps that error to one destination gimbal-rate command and puts
+        # the destination under ``td["action"]`` as a ``MacroAction``. The
+        # appended transform expands and executes the manoeuver.
         quat_err = tensordict["quat_err"]
         target = torch.zeros_like(self.action_spec.rand())
         gains = (0.55, 0.40, 0.25, 0.12, 0.0)
@@ -83,64 +61,50 @@ class SatelliteSlewPolicy:
 def main() -> None:
     args = _parse_args()
 
-    # Ask the satellite to slew from identity to a 90 degree yaw target. The
-    # policy above never writes low-level action sequences itself: it only places
-    # one explicit ``MacroAction`` destination under ``td["action"]`` at each
-    # macro step, and TorchRL's transform stack does the expansion and execution.
+    # The viewer examples use the official MuJoCo C-bindings backend so the
+    # passive viewer can display the live ``mjData`` object. We repeatedly reset
+    # the satellite to identity attitude, ask it to slew to a 90 degree yaw
+    # target, and let ``rollout`` call the policy for each high-level macro.
     target_quat = torch.tensor([[0.70710678, 0.0, 0.0, 0.70710678]])
     init_quat = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
-    env = SatelliteEnv(
+    base_env = SatelliteEnv(
         num_cmgs=4,
         seed=0,
-        backend=args.backend,
+        backend="mujoco",
         max_episode_steps=512,
-        from_pixels=True,
-        pixels_only=False,
-        render_width=args.render_width,
-        render_height=args.render_height,
     )
-    low_level_action_spec = env.action_spec.clone()
-    primitive_control = MacroPrimitiveTransform(
-        action_dim=low_level_action_spec.shape[-1],
-        execute=True,
-        stack_rewards=True,
-        stack_observations=False,
+    low_level_action_spec = base_env.action_spec.clone()
+    env = base_env.append_transform(
+        MacroPrimitiveTransform(
+            action_dim=low_level_action_spec.shape[-1],
+            execute=True,
+            stack_rewards=True,
+            stack_observations=False,
+        )
     )
-    recorder = VideoRecorder(
-        logger=None,
-        tag="satellite_macros",
-        skip=2,
-        make_grid=False,
-    )
-    env = env.append_transform(recorder)
-    env = env.append_transform(primitive_control)
 
     reset = TensorDict(
         {
-            "target_quat": target_quat.to(dtype=env.dtype, device=env.device),
-            "init_bus_quat": init_quat.to(dtype=env.dtype, device=env.device),
+            "target_quat": target_quat.to(dtype=base_env.dtype, device=base_env.device),
+            "init_bus_quat": init_quat.to(dtype=base_env.dtype, device=base_env.device),
         },
         batch_size=[1],
-        device=env.device,
+        device=base_env.device,
     )
-    td = env.reset(reset)
-    try:
-        env.rollout(
-            max_steps=8,
-            policy=SatelliteSlewPolicy(low_level_action_spec),
-            auto_reset=False,
-            break_when_any_done=False,
-            tensordict=td,
-        )
-        output = _save_animation(
-            recorder,
-            args.output,
-            title="Satellite macro slew to target attitude",
-            interval=args.video_interval_ms,
-        )
-        print(f"Saved rendered macro animation to {output}")
-    finally:
-        env.close()
+    with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
+        while viewer.is_running():
+            td = env.reset(reset)
+            try:
+                env.rollout(
+                    max_steps=8,
+                    policy=SatelliteSlewPolicy(low_level_action_spec),
+                    auto_reset=False,
+                    break_when_any_done=False,
+                    tensordict=td,
+                )
+            except ViewerClosed:
+                break
+            time.sleep(args.pause_between_rollouts)
 
 
 if __name__ == "__main__":
