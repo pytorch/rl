@@ -210,6 +210,13 @@ class SatelliteEnv(MujocoEnv):
             f"bad_rows={row_list}, sample={sample}."
         )
 
+    def _normalize_quat_or_identity(self, quat: torch.Tensor) -> torch.Tensor:
+        norm = quat.norm(dim=-1, keepdim=True)
+        normalized = quat / norm.clamp_min(1e-12)
+        identity = torch.zeros_like(quat)
+        identity[..., 0] = 1.0
+        return torch.where(norm > 1e-12, normalized, identity)
+
     # ------------------------------------------------------------------
     # XML patching: no ground floor in space.
     # ------------------------------------------------------------------
@@ -284,6 +291,17 @@ class SatelliteEnv(MujocoEnv):
             dtype=self.dtype,
             device=self.device,
         )
+        self.state_spec = Composite(
+            target_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
+            init_bus_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
+            shape=(self.num_envs,),
+            device=self.device,
+            step_mdp_static=True,
+        )
 
     # ------------------------------------------------------------------
     # State plumbing
@@ -307,9 +325,21 @@ class SatelliteEnv(MujocoEnv):
         # actually resets, so we can write through without masking.
         if tensordict is not None and "init_bus_quat" in tensordict.keys():
             init_q = tensordict.get("init_bus_quat").to(qpos.dtype).to(qpos.device)
-            init_q = init_q / init_q.norm(dim=-1, keepdim=True).clamp_min(1e-12)
-            qpos[..., 3:7] = init_q
+            qpos[..., 3:7] = self._normalize_quat_or_identity(init_q)
         return qpos, qvel
+
+    def _reset(
+        self,
+        tensordict: TensorDictBase | None = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        out = super()._reset(tensordict, **kwargs)
+        out.set("target_quat", self._target_quat.clone())
+        out.set(
+            "init_bus_quat",
+            self._backend.qpos[..., 3:7].to(self.dtype).clone(),
+        )
+        return out
 
     def _prepare_ctrl(self, action: torch.Tensor) -> torch.Tensor:
         # Scale the agent's [-1, 1] command up to ``[-action_scale,
@@ -331,7 +361,7 @@ class SatelliteEnv(MujocoEnv):
     def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
         if tensordict is not None and "target_quat" in tensordict.keys():
             t = tensordict.get("target_quat").to(self.dtype).to(self.device)
-            self._target_quat = t / t.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            self._target_quat = self._normalize_quat_or_identity(t)
         else:
             self._target_quat = random_unit_quat(
                 (self.num_envs,),
@@ -359,7 +389,7 @@ class SatelliteEnv(MujocoEnv):
         # boolean indexing).
         if tensordict is not None and "target_quat" in tensordict.keys():
             t = tensordict.get("target_quat").to(self.dtype).to(self.device)
-            t = t / t.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            t = self._normalize_quat_or_identity(t)
         else:
             t = random_unit_quat(
                 (self.num_envs,),

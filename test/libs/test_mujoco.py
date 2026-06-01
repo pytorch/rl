@@ -208,6 +208,58 @@ class TestMujoco:
             assert env._backend._m.geom_conaffinity[geom_id] == 0
         env.close()
 
+    def test_satellite_reset_overrides_survive_transformed_env(self):
+        backend = "mujoco" if _has_mujoco else _AVAILABLE_BACKENDS[0]
+        n = 1 if backend == "mujoco" else 2
+        base_env = SatelliteEnv(
+            num_cmgs=4,
+            num_envs=n,
+            seed=0,
+            backend=backend,
+            reset_noise_scale=0.0,
+        )
+        env = base_env.append_transform(
+            MacroPrimitiveTransform(
+                action_dim=base_env.action_spec.shape[-1],
+                execute=True,
+            )
+        )
+        init = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]] * n,
+            dtype=base_env.dtype,
+            device=base_env.device,
+        )
+        target = torch.tensor(
+            [[0.70710678, 0.0, 0.0, 0.70710678]] * n,
+            dtype=base_env.dtype,
+            device=base_env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": init, "target_quat": target},
+                batch_size=base_env.batch_size,
+                device=base_env.device,
+            )
+        )
+
+        torch.testing.assert_close(
+            base_env._target_quat,
+            target,
+            rtol=1e-6,
+            atol=1e-6,
+        )
+        torch.testing.assert_close(
+            td["quat_err"],
+            torch.tensor(
+                [[0.0, 0.0, torch.pi / 2]] * n,
+                dtype=base_env.dtype,
+                device=base_env.device,
+            ),
+            rtol=1e-5,
+            atol=1e-5,
+        )
+        base_env.close()
+
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     @pytest.mark.parametrize("num_cmgs", [4, 6])
     def test_satellite_reward_finite(self, num_cmgs, backend):
