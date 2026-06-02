@@ -15,7 +15,6 @@ import warnings
 from typing import Any, Literal, TYPE_CHECKING
 
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from tensordict import (
     lazy_stack,
     LazyStackedTensorDict,
@@ -25,6 +24,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.utils import NestedKey
+from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.modules.llm.policies.common import (
     _batching,
@@ -765,7 +765,9 @@ class SGLangWrapper(LLMWrapperBase):
             if tokens_prompt is not None:
                 if self.pad_output and tokens_full is not None:
                     full_log_probs = torch.zeros_like(tokens_full, dtype=torch.float32)
-                    prompt_width = tokens_full.shape[-1] - log_probs_obj.response.shape[-1]
+                    prompt_width = (
+                        tokens_full.shape[-1] - log_probs_obj.response.shape[-1]
+                    )
                     for i, lp in enumerate(log_probs_list):
                         if lp is not None:
                             full_log_probs[

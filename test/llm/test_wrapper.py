@@ -2060,7 +2060,9 @@ class TestLogProbsComparison:
         if use_assistant_mask:
             assert backend_assistant_mask is not None
             assert transformers_assistant_mask is not None
-            torch.testing.assert_close(backend_assistant_mask, transformers_assistant_mask)
+            torch.testing.assert_close(
+                backend_assistant_mask, transformers_assistant_mask
+            )
             for i, response in enumerate(response_tokens):
                 selected = backend_tokens[i, backend_assistant_mask[i]].long()
                 torch.testing.assert_close(selected, response)

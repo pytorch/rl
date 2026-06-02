@@ -233,9 +233,9 @@ def _fallback_assistant_tokens_mask(
             return current_mask
         fallback_mask = torch.zeros_like(target_mask)
         for span_start, span_end in spans:
-            prefix_ids = tokenizer(
-                rendered[:span_start], add_special_tokens=False
-            ).get("input_ids")
+            prefix_ids = tokenizer(rendered[:span_start], add_special_tokens=False).get(
+                "input_ids"
+            )
             prefix_and_content_ids = tokenizer(
                 rendered[:span_end], add_special_tokens=False
             ).get("input_ids")

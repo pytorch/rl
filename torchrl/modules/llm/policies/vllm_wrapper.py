@@ -1772,13 +1772,10 @@ class vLLMWrapper(LLMWrapperBase):
                     [response.numel() for response in tokens_response_unpadded],
                     device=tokens_response_padded.device,
                 )
-                response_mask = (
-                    torch.arange(
-                        tokens_response_padded.shape[-1],
-                        device=tokens_response_padded.device,
-                    ).expand(response_lengths.shape[0], -1)
-                    < response_lengths.unsqueeze(-1)
-                )
+                response_mask = torch.arange(
+                    tokens_response_padded.shape[-1],
+                    device=tokens_response_padded.device,
+                ).expand(response_lengths.shape[0], -1) < response_lengths.unsqueeze(-1)
                 full_attention_mask_padded = torch.cat(
                     [prompt_mask.bool(), response_mask.bool()], dim=-1
                 )
