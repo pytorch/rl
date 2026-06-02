@@ -25,7 +25,7 @@ from torchrl.envs import (
     MacroPrimitiveTransform,
     MujocoEnv,
     ParallelEnv,
-    RobotAction,
+    RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
     TransformedEnv,
@@ -1401,7 +1401,7 @@ class TestMujoco:
             ),
         )
         td = env.reset()
-        td["action"] = RobotAction.reach_pose(
+        td["action"] = RobotMacroAction.reach_pose(
             position=td["cube_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
             quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
             gripper="open",

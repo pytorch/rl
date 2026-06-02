@@ -84,13 +84,13 @@ from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
 _UR_PRIMITIVE_EXPORTS = {
-    "RobotAction",
-    "RobotActionMode",
+    "RobotMacroAction",
+    "RobotMacroActionMode",
     "URScriptPrimitive",
     "URScriptPrimitiveTransform",
 }
-_HUMANOID_PRIMITIVE_EXPORTS = {"HumanoidAction"}
-_SATELLITE_PRIMITIVE_EXPORTS = {"SatelliteAction", "SatelliteAttitudeTransform"}
+_HUMANOID_PRIMITIVE_EXPORTS = {"HumanoidMacroAction"}
+_SATELLITE_PRIMITIVE_EXPORTS = {"SatelliteMacroAction", "SatelliteAttitudeTransform"}
 
 
 def __getattr__(name: str):
@@ -146,14 +146,14 @@ __all__ = [
     "FrameSkipTransform",
     "GrayScale",
     "Hash",
-    "HumanoidAction",
+    "HumanoidMacroAction",
     "InitTracker",
     "LineariseRewards",
     "MacroPrimitive",
     "MacroPrimitiveTransform",
-    "RobotAction",
-    "RobotActionMode",
-    "SatelliteAction",
+    "RobotMacroAction",
+    "RobotMacroActionMode",
+    "SatelliteMacroAction",
     "SatelliteAttitudeTransform",
     "MeanActionSelector",
     "ModuleTransform",

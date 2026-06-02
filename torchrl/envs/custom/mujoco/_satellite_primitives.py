@@ -22,7 +22,7 @@ from torchrl.envs.custom.mujoco._math import (
 )
 from torchrl.envs.transforms._primitive import MacroPrimitive, MacroPrimitiveTransform
 
-__all__ = ["SatelliteAction", "SatelliteAttitudeTransform"]
+__all__ = ["SatelliteMacroAction", "SatelliteAttitudeTransform"]
 
 
 def _as_batch(value: torch.Tensor, last_dim: int) -> torch.Tensor:
@@ -43,7 +43,7 @@ def _normalize_quat_or_identity(quat: torch.Tensor) -> torch.Tensor:
     return torch.where(norm > 1e-12, normalized, identity)
 
 
-class SatelliteAction(TensorClass["nocast"]):
+class SatelliteMacroAction(TensorClass["nocast"]):
     r"""Structured action containing a desired satellite attitude.
 
     The action stores the target attitude quaternion. A
@@ -53,8 +53,8 @@ class SatelliteAction(TensorClass["nocast"]):
 
     Examples:
         >>> import torch
-        >>> from torchrl.envs import SatelliteAction
-        >>> action = SatelliteAction.slew_attitude(torch.tensor([1.0, 0.0, 0.0, 0.0]))
+        >>> from torchrl.envs import SatelliteMacroAction
+        >>> action = SatelliteMacroAction.slew_attitude(torch.tensor([1.0, 0.0, 0.0, 0.0]))
         >>> action.target_quat.shape
         torch.Size([1, 4])
     """
@@ -70,7 +70,7 @@ class SatelliteAction(TensorClass["nocast"]):
         *,
         steps: int = 36,
         settle_steps: int = 8,
-    ) -> SatelliteAction:
+    ) -> SatelliteMacroAction:
         """Ask the transform to steer the satellite toward ``target_quat``."""
         if steps <= 0:
             raise ValueError("steps must be strictly positive.")
@@ -100,7 +100,7 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
     r"""Expand desired satellite attitudes into CMG gimbal-rate sequences.
 
     This transform is a satellite-specific preset. The policy-facing action is
-    a :class:`SatelliteAction` containing a target quaternion. The transform
+    a :class:`SatelliteMacroAction` containing a target quaternion. The transform
     computes the current attitude error, applies a small proportional-derivative
     steering law in body-rate coordinates, maps it through the instantaneous
     CMG Jacobian, and delegates fixed-length interpolation/execution to
@@ -122,9 +122,9 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.envs import SatelliteAction, SatelliteAttitudeTransform
+        >>> from torchrl.envs import SatelliteMacroAction, SatelliteAttitudeTransform
         >>> td = TensorDict({
-        ...     "action": SatelliteAction.slew_attitude(
+        ...     "action": SatelliteMacroAction.slew_attitude(
         ...         torch.tensor([[1.0, 0.0, 0.0, 0.0]]), steps=2
         ...     ),
         ...     "bus_quat": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),

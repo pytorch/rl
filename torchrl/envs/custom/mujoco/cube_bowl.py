@@ -918,12 +918,12 @@ class CubeBowlEnv(MujocoEnv):
 
         Examples:
             >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
-            >>> from torchrl.envs import RobotAction  # doctest: +SKIP
+            >>> from torchrl.envs import RobotMacroAction  # doctest: +SKIP
             >>> env = CubeBowlEnv()  # doctest: +SKIP
             >>> env = env.append_transform(env.make_urscript_transform(macro_steps=4))  # doctest: +SKIP
             >>> td = env.reset()  # doctest: +SKIP
             >>> offset = td["cube_pos"].new_tensor([[0.0, 0.0, 0.1]])  # doctest: +SKIP
-            >>> td["action"] = RobotAction.reach_pose(  # doctest: +SKIP
+            >>> td["action"] = RobotMacroAction.reach_pose(  # doctest: +SKIP
             ...     position=td["cube_pos"] + offset,
             ...     quaternion=td["pinch_quat"],
             ...     gripper="open",

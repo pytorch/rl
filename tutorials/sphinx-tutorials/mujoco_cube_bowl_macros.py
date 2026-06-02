@@ -11,7 +11,7 @@ as "reach this pose", "close the gripper", or "go home" while TorchRL handles
 the low-level action plumbing.
 
 We will control a cube-to-bowl task without learning. A policy emits a single
-``RobotAction`` object under the normal ``"action"`` key, and a TorchRL
+``RobotMacroAction`` object under the normal ``"action"`` key, and a TorchRL
 transform expands and executes that high-level command through MuJoCo. The same
 pattern can later provide demonstrations, curricula, or a safe initialization
 for residual RL.
@@ -20,7 +20,7 @@ What you will learn
 -------------------
 
 - how to instantiate a Menagerie-backed custom MuJoCo environment;
-- how to use :class:`~torchrl.envs.RobotAction` as a readable action object;
+- how to use :class:`~torchrl.envs.RobotMacroAction` as a readable action object;
 - how :class:`~torchrl.envs.URScriptPrimitiveTransform` lets ``env.step(td)``
   consume those actions directly;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
@@ -39,7 +39,7 @@ from collections.abc import Iterator
 
 import torch
 from tensordict import TensorDict, TensorDictBase
-from torchrl.envs import CubeBowlEnv, RobotAction, RobotActionMode, step_mdp
+from torchrl.envs import CubeBowlEnv, RobotMacroAction, RobotMacroActionMode, step_mdp
 from torchrl.record import VideoRecorder
 
 _has_mujoco = importlib.util.find_spec("mujoco") is not None
@@ -91,19 +91,19 @@ IK_KWARGS = {
 
 
 # %%
-# RobotAction as the action
+# RobotMacroAction as the action
 # -------------------------
 #
 # A readable manipulation policy should not have to emit magic flat tensors or
 # loose collections of root TensorDict keys. It can emit one structured object
-# under ``"action"``. ``RobotAction`` is that object:
+# under ``"action"``. ``RobotMacroAction`` is that object:
 #
-# - ``RobotAction.reach_pose(position=..., quaternion=...)`` moves the arm;
-# - ``RobotAction.close_gripper()`` closes only the gripper and keeps the arm
+# - ``RobotMacroAction.reach_pose(position=..., quaternion=...)`` moves the arm;
+# - ``RobotMacroAction.close_gripper()`` closes only the gripper and keeps the arm
 #   where it is;
-# - ``RobotAction.reach_pose(..., gripper="closed")`` moves the arm and closes
+# - ``RobotMacroAction.reach_pose(..., gripper="closed")`` moves the arm and closes
 #   the gripper in one macro action;
-# - ``RobotAction.RESET`` asks the environment to return to its configured home
+# - ``RobotMacroAction.RESET`` asks the environment to return to its configured home
 #   joint posture.
 #
 # The symbolic gripper commands ``"open"``, ``"closed"`` and ``"keep"`` are
@@ -111,7 +111,7 @@ IK_KWARGS = {
 # numeric command range. When we want a task-specific grasp, we can still make
 # the target explicit in object units: close about one millimeter past the cube
 # width, ask the environment to convert that width to a gripper command, and
-# pass that command to the ``RobotAction``.
+# pass that command to the ``RobotMacroAction``.
 
 
 # %%
@@ -122,7 +122,7 @@ IK_KWARGS = {
 # asks the environment to include rendered frames in the TensorDict, which a
 # standard :class:`~torchrl.record.VideoRecorder` can capture. We then append
 # one primitive-control transform with ``execute=True``. After that,
-# ``env.step`` accepts a ``RobotAction`` directly under ``td["action"]`` and
+# ``env.step`` accepts a ``RobotMacroAction`` directly under ``td["action"]`` and
 # executes the expanded low-level sequence internally.
 
 env = CubeBowlEnv(
@@ -206,15 +206,15 @@ assert td["pixels"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3])
 #
 # A scripted policy can be just a generator of explicit robot commands. This is
 # the minimal shape we want users to see: build a list of poses and gripper
-# commands, place the next ``RobotAction`` under the normal action key, and call
+# commands, place the next ``RobotMacroAction`` under the normal action key, and call
 # ``env.step``.
 
 
-def gen_small_actions(td: TensorDictBase) -> Iterator[RobotAction]:
+def gen_small_actions(td: TensorDictBase) -> Iterator[RobotMacroAction]:
     joints = td["robot_qpos"].clone()
     joints[..., 0] = joints[..., 0] + 0.35
-    yield RobotAction.reach_joints(joints=joints, gripper="open", steps=18)
-    yield RobotAction.close_gripper(steps=18)
+    yield RobotMacroAction.reach_joints(joints=joints, gripper="open", steps=18)
+    yield RobotMacroAction.close_gripper(steps=18)
 
 
 small_actions = gen_small_actions(td)
@@ -254,7 +254,7 @@ def pose_at(
     return xyz, quat
 
 
-def carry_action(alpha: float, bowl: torch.Tensor) -> RobotAction:
+def carry_action(alpha: float, bowl: torch.Tensor) -> RobotMacroAction:
     current_td = policy_state["td"]
     gripper_quat = policy_state["gripper_quat"]
     cube = current_td["cube_pos"].clone()
@@ -271,7 +271,7 @@ def carry_action(alpha: float, bowl: torch.Tensor) -> RobotAction:
         dim=-1,
     )
     position, quaternion = pose_at(desired_cube + pinch_to_cube, gripper_quat)
-    return RobotAction.reach_pose(
+    return RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
         gripper="closed",
@@ -288,10 +288,10 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     grasp_offset = cube.new_tensor([[0.0, 0.0, -0.016]])
 
     # Action 0: Keep the arm at the reset joint target and let the scene settle.
-    yield RobotAction.wait(gripper="open", steps=1, settle_steps=19)
+    yield RobotMacroAction.wait(gripper="open", steps=1, settle_steps=19)
 
     # Action 1: Fully open the gripper before approaching the cube.
-    yield RobotAction.open_gripper(steps=100, settle_steps=20)
+    yield RobotMacroAction.open_gripper(steps=100, settle_steps=20)
 
     current_td = policy_state["td"]
     cube = current_td["cube_pos"].clone()
@@ -299,7 +299,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     quat = current_td["pinch_quat"].clone()
     position, quaternion = pose_at(cube + cube.new_tensor([[0.0, 0.0, 0.18]]), quat)
     # Action 2: Move the open gripper above the cube.
-    yield RobotAction.reach_pose(
+    yield RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
         gripper="open",
@@ -309,7 +309,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
 
     position, quaternion = pose_at(cube + grasp_offset, quat)
     # Action 3: Lower the open gripper to the grasp pose around the cube.
-    yield RobotAction.reach_pose(
+    yield RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
         gripper="open",
@@ -319,7 +319,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
 
     # Action 4: Close the gripper to a grasp about one millimeter tighter than
     # the cube width.
-    yield RobotAction.close_gripper(
+    yield RobotMacroAction.close_gripper(
         command=gripper_close_command, steps=160, settle_steps=80
     )
 
@@ -331,7 +331,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
         quat,
     )
     # Action 5: Lift the grasped cube above the table.
-    yield RobotAction.reach_pose(
+    yield RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
         gripper="closed",
@@ -374,7 +374,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     pinch_to_cube = current_td["pinch_pos"].clone() - cube
     position, quaternion = pose_at(drop_cube + pinch_to_cube, quat)
     # Action 10: Lower the grasped cube into the bowl.
-    yield RobotAction.reach_pose(
+    yield RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
         gripper="closed",
@@ -384,10 +384,10 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     )
 
     # Action 11: Open the gripper to release the cube.
-    yield RobotAction.open_gripper(steps=100, settle_steps=20)
+    yield RobotMacroAction.open_gripper(steps=100, settle_steps=20)
 
     # Action 12: Wait with the gripper open so the cube can settle in the bowl.
-    yield RobotAction.wait(gripper="open", steps=240)
+    yield RobotMacroAction.wait(gripper="open", steps=240)
 
     current_td = policy_state["td"]
     retreat_xyz = torch.cat(
@@ -399,7 +399,7 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     )
     position, quaternion = pose_at(retreat_xyz, quat)
     # Action 13: Retreat upward and away from the released cube.
-    yield RobotAction.reach_pose(
+    yield RobotMacroAction.reach_pose(
         position=position,
         quaternion=quaternion,
         gripper="open",
@@ -408,10 +408,10 @@ def gen_actions(td: TensorDictBase) -> Iterator:
     )
 
     # Action 14: Return the arm to the environment's reset joint configuration.
-    yield RobotAction.RESET
+    yield RobotMacroAction.RESET
 
     # Action 15: Hold the reset pose while the final reward is measured.
-    yield RobotAction.wait(gripper="open", steps=800)
+    yield RobotMacroAction.wait(gripper="open", steps=800)
 
 
 def action_mode(action) -> int | None:
@@ -422,7 +422,7 @@ def action_mode(action) -> int | None:
 
 def action_gripper(action) -> int:
     if not hasattr(action, "gripper"):
-        return RobotAction.GRIPPER_OPEN
+        return RobotMacroAction.GRIPPER_OPEN
     return int(action.gripper.reshape(-1)[0].item())
 
 
@@ -454,12 +454,15 @@ def run_scripted_rollout(td: TensorDictBase) -> TensorDictBase:
 
         mode = action_mode(action)
         gripper = action_gripper(action)
-        if mode == int(RobotActionMode.CLOSE_GRIPPER):
+        if mode == int(RobotMacroActionMode.CLOSE_GRIPPER):
             grasp_distance = torch.minimum(
                 grasp_distance, env.gripper_cube_distance(td)
             )
             closed_reference_cube = td["cube_pos"].clone()
-        if closed_reference_cube is not None and gripper == RobotAction.GRIPPER_CLOSED:
+        if (
+            closed_reference_cube is not None
+            and gripper == RobotMacroAction.GRIPPER_CLOSED
+        ):
             cube_motion = (td["cube_pos"] - closed_reference_cube).norm(
                 dim=-1, keepdim=True
             )
@@ -495,7 +498,7 @@ def run_scripted_rollout(td: TensorDictBase) -> TensorDictBase:
 td = run_scripted_rollout(td)
 
 scripted_macro_animation = recorder.to_animation(
-    title="Scripted RobotAction rollout",
+    title="Scripted RobotMacroAction rollout",
     interval=VIDEO_INTERVAL_MS,
     clear=True,
 )
@@ -526,7 +529,7 @@ for rollout_index in range(rollout_count):
 # scenes.
 
 randomized_macro_animation = recorder.to_animation(
-    title="Randomized RobotAction rollouts",
+    title="Randomized RobotMacroAction rollouts",
     interval=VIDEO_INTERVAL_MS,
     clear=True,
 )
@@ -562,7 +565,7 @@ assert reset_td["robot_qpos"].shape == td["robot_qpos"].shape
 #    - :class:`~torchrl.envs.CubeBowlEnv` for the custom MuJoCo task used here.
 #    - :class:`~torchrl.envs.MujocoEnv` for the base class behind custom MuJoCo
 #      environments.
-#    - :class:`~torchrl.envs.RobotAction` for the structured action object used
+#    - :class:`~torchrl.envs.RobotMacroAction` for the structured action object used
 #      by the scripted policy.
 #    - :class:`~torchrl.envs.MacroPrimitiveTransform` for robot-agnostic macro
 #      expansion with custom adapters and solvers.

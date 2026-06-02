@@ -21,7 +21,7 @@ from _viewer import (
 )
 from tensordict import TensorDictBase
 from torchrl.data import TensorSpec
-from torchrl.envs import HumanoidAction, HumanoidEnv
+from torchrl.envs import HumanoidEnv, HumanoidMacroAction
 
 
 _VIDEO_TAG = "humanoid_macros"
@@ -52,22 +52,22 @@ class HumanoidPosePolicy:
         # interpolates toward each destination and ``MultiAction`` executes the
         # resulting sequence through the env.
         self.actions = [
-            HumanoidAction.reach_control(
+            HumanoidMacroAction.reach_control(
                 _target(action_spec, [0.16, -0.14, 0.10, -0.10, 0.08, -0.08]),
                 steps=24,
                 settle_steps=8,
             ),
-            HumanoidAction.reach_control(
+            HumanoidMacroAction.reach_control(
                 _target(action_spec, [-0.14, 0.16, -0.10, 0.10, -0.08, 0.08]),
                 steps=24,
                 settle_steps=8,
             ),
-            HumanoidAction.reach_control(
+            HumanoidMacroAction.reach_control(
                 _target(action_spec, [0.08, 0.08, -0.14, -0.14, 0.10, 0.10]),
                 steps=24,
                 settle_steps=8,
             ),
-            HumanoidAction.reach_control(
+            HumanoidMacroAction.reach_control(
                 _target(action_spec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
                 steps=28,
                 settle_steps=10,

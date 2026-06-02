@@ -21,10 +21,10 @@ manipulability-based singularity penalty. :class:`CubeBowlEnv` is a
 compact Menagerie-backed manipulation task for macro-control examples.
 """
 
-from torchrl.envs.custom.mujoco._humanoid_primitives import HumanoidAction
+from torchrl.envs.custom.mujoco._humanoid_primitives import HumanoidMacroAction
 from torchrl.envs.custom.mujoco._satellite_primitives import (
-    SatelliteAction,
     SatelliteAttitudeTransform,
+    SatelliteMacroAction,
 )
 from torchrl.envs.custom.mujoco.ant import AntEnv
 from torchrl.envs.custom.mujoco.base import MujocoEnv
@@ -38,10 +38,10 @@ __all__ = [
     "AntEnv",
     "CubeBowlEnv",
     "HopperEnv",
-    "HumanoidAction",
+    "HumanoidMacroAction",
     "HumanoidEnv",
     "MujocoEnv",
-    "SatelliteAction",
+    "SatelliteMacroAction",
     "SatelliteAttitudeTransform",
     "SatelliteEnv",
     "Walker2dEnv",

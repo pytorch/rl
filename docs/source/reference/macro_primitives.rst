@@ -72,12 +72,12 @@ and the action consumed by ``env.step``.
 
 1. **The policy target is already in low-level action coordinates.** Use
    :class:`MacroPrimitiveTransform` directly, or a small domain action such as
-   :class:`HumanoidAction` that stores a low-level target under ``td["action"]``.
+   :class:`HumanoidMacroAction` that stores a low-level target under ``td["action"]``.
 
 2. **The policy target is semantic.** Write a domain action and a transform that
    maps that semantic target to the low-level action space. The satellite uses
-   :class:`SatelliteAction` with :class:`SatelliteAttitudeTransform`; the
-   manipulation example uses :class:`RobotAction` with
+   :class:`SatelliteMacroAction` with :class:`SatelliteAttitudeTransform`; the
+   manipulation example uses :class:`RobotMacroAction` with
    :class:`URScriptPrimitiveTransform`.
 
 3. **The policy already emits a sequence.** Use :class:`MultiAction` directly.
@@ -104,7 +104,7 @@ Example 1: humanoid actuator-control macros
 The humanoid example does not introduce a body-pose solver. Its target is a
 low-level MuJoCo actuator-control destination with the same trailing dimension,
 dtype, device and bounds as ``base_env.action_spec``. The helper action is
-therefore named :class:`HumanoidAction` rather than a generic pose action.
+therefore named :class:`HumanoidMacroAction` rather than a generic pose action.
 
 .. code-block:: python
 
@@ -117,7 +117,7 @@ therefore named :class:`HumanoidAction` rather than a generic pose action.
    target_action[..., : values.numel()] = values
    target_action = base_env.action_spec.project(target_action)
 
-   td["action"] = HumanoidAction.reach_control(
+   td["action"] = HumanoidMacroAction.reach_control(
        target_action,
        steps=24,
        settle_steps=8,
@@ -151,11 +151,11 @@ Example 2: satellite attitude slews
 -----------------------------------
 
 The satellite target is a desired attitude frame represented by a unit
-quaternion. The policy writes that quaternion as a :class:`SatelliteAction`:
+quaternion. The policy writes that quaternion as a :class:`SatelliteMacroAction`:
 
 .. code-block:: python
 
-   td["action"] = SatelliteAction.slew_attitude(
+   td["action"] = SatelliteMacroAction.slew_attitude(
        td["target_quat"],
        steps=36,
        settle_steps=8,
@@ -213,7 +213,7 @@ joint-position targets plus one gripper command, while the task is naturally
 described in terms of object and gripper poses.
 
 A policy can therefore use observations such as ``cube_pos``, ``bowl_pos`` and
-``pinch_quat`` to write readable :class:`RobotAction` commands:
+``pinch_quat`` to write readable :class:`RobotMacroAction` commands:
 
 .. code-block:: python
 
@@ -224,7 +224,7 @@ A policy can therefore use observations such as ``cube_pos``, ``bowl_pos`` and
        device=cube.device,
    )
 
-   td["action"] = RobotAction.reach_pose(
+   td["action"] = RobotMacroAction.reach_pose(
        position=cube + hover_offset,
        quaternion=td["pinch_quat"],
        gripper="open",
@@ -293,13 +293,13 @@ Comparison
      - What the target means
      - Where shape and dtype come from
    * - Humanoid
-     - :meth:`HumanoidAction.reach_control <HumanoidAction.reach_control>`
+     - :meth:`HumanoidMacroAction.reach_control <HumanoidMacroAction.reach_control>`
      - :meth:`HumanoidEnv.make_control_transform <HumanoidEnv.make_control_transform>`
        / :class:`MacroPrimitiveTransform`
      - A low-level MuJoCo actuator-control destination
      - ``base_env.action_spec``
    * - Satellite
-     - :meth:`SatelliteAction.slew_attitude <SatelliteAction.slew_attitude>`
+     - :meth:`SatelliteMacroAction.slew_attitude <SatelliteMacroAction.slew_attitude>`
      - :meth:`SatelliteEnv.make_attitude_transform <SatelliteEnv.make_attitude_transform>`
        / :class:`SatelliteAttitudeTransform`
      - A desired target attitude quaternion; the transform computes the
@@ -307,7 +307,7 @@ Comparison
      - ``state_spec`` for reset targets, ``observation_spec`` for current
        attitude and CMG state, ``action_spec`` for final commands
    * - Cube bowl
-     - :class:`RobotAction` commands such as ``reach_pose`` and ``close_gripper``
+     - :class:`RobotMacroAction` commands such as ``reach_pose`` and ``close_gripper``
      - :meth:`CubeBowlEnv.make_urscript_transform` /
        :class:`URScriptPrimitiveTransform`
      - A semantic Cartesian pose, joint target or gripper command; the transform

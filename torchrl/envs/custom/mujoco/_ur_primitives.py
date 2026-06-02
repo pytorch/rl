@@ -21,8 +21,8 @@ from torchrl.envs.transforms._primitive import (
 )
 
 __all__ = [
-    "RobotAction",
-    "RobotActionMode",
+    "RobotMacroAction",
+    "RobotMacroActionMode",
     "URScriptPrimitive",
     "URScriptPrimitiveTransform",
 ]
@@ -52,15 +52,15 @@ class URScriptPrimitive(IntEnum):
         return self.name.lower()
 
 
-class RobotActionMode(IntEnum):
-    r"""Readable modes for :class:`RobotAction`.
+class RobotMacroActionMode(IntEnum):
+    r"""Readable modes for :class:`RobotMacroAction`.
 
-    ``RobotActionMode`` mirrors the URScript primitive set and adds ``RESET``.
+    ``RobotMacroActionMode`` mirrors the URScript primitive set and adds ``RESET``.
     The reset mode requires a parent environment exposing ``robot_home_qpos``.
 
     Examples:
-        >>> from torchrl.envs.custom.mujoco._ur_primitives import RobotActionMode
-        >>> RobotActionMode.REACH_POSE.name
+        >>> from torchrl.envs.custom.mujoco._ur_primitives import RobotMacroActionMode
+        >>> RobotMacroActionMode.REACH_POSE.name
         'REACH_POSE'
     """
 
@@ -72,14 +72,14 @@ class RobotActionMode(IntEnum):
     RESET = len(URScriptPrimitive)
 
 
-class _RobotActionReset:
+class _RobotMacroActionReset:
     def __repr__(self) -> str:
-        return "RobotAction.RESET"
+        return "RobotMacroAction.RESET"
 
 
-def _unwrap_robot_action(action: Any) -> Any:
+def _unwrap_robot_macro_action(action: Any) -> Any:
     data = getattr(action, "data", None)
-    if isinstance(data, _RobotActionReset):
+    if isinstance(data, _RobotMacroActionReset):
         return data
     return action
 
@@ -104,11 +104,11 @@ def _identity_quaternion_like(position: torch.Tensor) -> torch.Tensor:
 
 def _gripper_code(gripper: GripperCommand) -> int:
     if gripper == "keep":
-        return RobotAction.GRIPPER_KEEP
+        return RobotMacroAction.GRIPPER_KEEP
     if gripper == "open":
-        return RobotAction.GRIPPER_OPEN
+        return RobotMacroAction.GRIPPER_OPEN
     if gripper == "closed":
-        return RobotAction.GRIPPER_CLOSED
+        return RobotMacroAction.GRIPPER_CLOSED
     raise ValueError(
         "gripper must be one of 'keep', 'open' or 'closed', " f"got {gripper!r}."
     )
@@ -136,18 +136,18 @@ def _optional_gripper_command(
     return value.reshape(batch_size + (1,))
 
 
-class RobotAction(TensorClass["nocast"]):
+class RobotMacroAction(TensorClass["nocast"]):
     r"""Human-writable UR-style macro action.
 
-    ``RobotAction`` is intentionally UR/gripper-specific. It is used by the
+    ``RobotMacroAction`` is intentionally UR/gripper-specific. It is used by the
     cube-to-bowl tutorial to store a readable command under ``td["action"]``;
     :class:`URScriptPrimitiveTransform` expands it to low-level joint-position
     and gripper commands.
 
     Examples:
         >>> import torch
-        >>> from torchrl.envs.custom.mujoco._ur_primitives import RobotAction
-        >>> action = RobotAction.reach_joints(joints=torch.zeros(1, 6))
+        >>> from torchrl.envs.custom.mujoco._ur_primitives import RobotMacroAction
+        >>> action = RobotMacroAction.reach_joints(joints=torch.zeros(1, 6))
         >>> action.joints.shape
         torch.Size([1, 6])
     """
@@ -164,7 +164,7 @@ class RobotAction(TensorClass["nocast"]):
     GRIPPER_KEEP: ClassVar[int] = -1
     GRIPPER_OPEN: ClassVar[int] = 0
     GRIPPER_CLOSED: ClassVar[int] = 1
-    RESET: ClassVar[_RobotActionReset]
+    RESET: ClassVar[_RobotMacroActionReset]
 
     @classmethod
     def reach_pose(
@@ -176,7 +176,7 @@ class RobotAction(TensorClass["nocast"]):
         gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Ask the end effector to reach a Cartesian pose."""
         position = _as_batch(position, 3)
         if quaternion is None:
@@ -186,7 +186,7 @@ class RobotAction(TensorClass["nocast"]):
                 dtype=position.dtype, device=position.device
             )
         return cls._make(
-            RobotActionMode.REACH_POSE,
+            RobotMacroActionMode.REACH_POSE,
             position=position,
             quaternion=quaternion,
             gripper=gripper,
@@ -204,10 +204,10 @@ class RobotAction(TensorClass["nocast"]):
         gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Ask the arm to reach a six-joint UR configuration."""
         return cls._make(
-            RobotActionMode.REACH_JOINTS,
+            RobotMacroActionMode.REACH_JOINTS,
             joints=_as_batch(joints, 6),
             gripper=gripper,
             gripper_command=gripper_command,
@@ -224,7 +224,7 @@ class RobotAction(TensorClass["nocast"]):
         gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Ask the arm to return to an explicit home joint configuration."""
         return cls.reach_joints(
             joints=joints,
@@ -245,14 +245,14 @@ class RobotAction(TensorClass["nocast"]):
         batch_size: torch.Size | tuple[int, ...] | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | None = None,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Ask the transform to resolve the environment's reset/home posture."""
         dtype = torch.get_default_dtype() if dtype is None else dtype
         device = torch.device("cpu") if device is None else device
         batch_size = _batch_size(batch_size)
         position = torch.zeros(batch_size + (3,), dtype=dtype, device=device)
         return cls._make(
-            RobotActionMode.RESET,
+            RobotMacroActionMode.RESET,
             position=position,
             gripper=gripper,
             gripper_command=gripper_command,
@@ -269,10 +269,10 @@ class RobotAction(TensorClass["nocast"]):
         batch_size: torch.Size | tuple[int, ...] | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | None = None,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Open the gripper while keeping the current arm state."""
         return cls._empty(
-            RobotActionMode.OPEN_GRIPPER,
+            RobotMacroActionMode.OPEN_GRIPPER,
             gripper="open",
             steps=steps,
             settle_steps=settle_steps,
@@ -291,10 +291,10 @@ class RobotAction(TensorClass["nocast"]):
         batch_size: torch.Size | tuple[int, ...] | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | None = None,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Close the gripper while keeping the current arm state."""
         return cls._empty(
-            RobotActionMode.CLOSE_GRIPPER,
+            RobotMacroActionMode.CLOSE_GRIPPER,
             gripper="closed",
             gripper_command=command,
             steps=steps,
@@ -315,10 +315,10 @@ class RobotAction(TensorClass["nocast"]):
         batch_size: torch.Size | tuple[int, ...] | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | None = None,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         """Hold the current arm target for a number of low-level steps."""
         return cls._empty(
-            RobotActionMode.WAIT,
+            RobotMacroActionMode.WAIT,
             gripper=gripper,
             gripper_command=gripper_command,
             steps=steps,
@@ -331,7 +331,7 @@ class RobotAction(TensorClass["nocast"]):
     @classmethod
     def _empty(
         cls,
-        mode: RobotActionMode,
+        mode: RobotMacroActionMode,
         *,
         gripper: GripperCommand,
         steps: int,
@@ -340,7 +340,7 @@ class RobotAction(TensorClass["nocast"]):
         dtype: torch.dtype | None,
         device: torch.device | None,
         gripper_command: float | torch.Tensor | None = None,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         dtype = torch.get_default_dtype() if dtype is None else dtype
         device = torch.device("cpu") if device is None else device
         batch_size = _batch_size(batch_size)
@@ -356,7 +356,7 @@ class RobotAction(TensorClass["nocast"]):
     @classmethod
     def _make(
         cls,
-        mode: RobotActionMode,
+        mode: RobotMacroActionMode,
         *,
         position: torch.Tensor | None = None,
         quaternion: torch.Tensor | None = None,
@@ -365,7 +365,7 @@ class RobotAction(TensorClass["nocast"]):
         gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
-    ) -> RobotAction:
+    ) -> RobotMacroAction:
         if steps <= 0:
             raise ValueError("steps must be strictly positive.")
         if settle_steps < 0:
@@ -419,7 +419,7 @@ class RobotAction(TensorClass["nocast"]):
         )
 
 
-RobotAction.RESET = _RobotActionReset()
+RobotMacroAction.RESET = _RobotMacroActionReset()
 
 
 class _URScriptPrimitiveLibrary:
@@ -732,10 +732,10 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.envs.custom.mujoco._ur_primitives import RobotAction
+        >>> from torchrl.envs.custom.mujoco._ur_primitives import RobotMacroAction
         >>> from torchrl.envs.custom.mujoco._ur_primitives import URScriptPrimitiveTransform
         >>> td = TensorDict({
-        ...     "action": RobotAction.reach_joints(joints=torch.ones(1, 6)),
+        ...     "action": RobotMacroAction.reach_joints(joints=torch.ones(1, 6)),
         ...     "robot_qpos": torch.zeros(1, 6),
         ...     "gripper_qpos": torch.zeros(1, 2),
         ... }, batch_size=[1])
@@ -915,8 +915,8 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
     def _has_structured_action(self, tensordict: TensorDictBase) -> bool:
         if self.action_key not in tensordict.keys(True, True):
             return False
-        action = _unwrap_robot_action(tensordict.get(self.action_key))
-        if isinstance(action, _RobotActionReset):
+        action = _unwrap_robot_macro_action(tensordict.get(self.action_key))
+        if isinstance(action, _RobotMacroActionReset):
             return True
         if isinstance(action, torch.Tensor):
             return False
@@ -927,10 +927,10 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
     def _unpack_structured_action(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, int, int]:
-        action = _unwrap_robot_action(tensordict.get(self.action_key))
+        action = _unwrap_robot_macro_action(tensordict.get(self.action_key))
         dtype = self.adapter.action_dtype(tensordict)
-        if isinstance(action, _RobotActionReset):
-            action = RobotAction.reset(
+        if isinstance(action, _RobotMacroActionReset):
+            action = RobotMacroAction.reset(
                 batch_size=tensordict.batch_size,
                 dtype=dtype,
                 device=self._primitive_device(tensordict),
@@ -943,7 +943,7 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         batch_shape = mode.shape[:-1]
         device = mode.device
         start = self.adapter.current_action(tensordict, batch_shape, device, dtype)
-        reset_mask = mode == int(RobotActionMode.RESET)
+        reset_mask = mode == int(RobotMacroActionMode.RESET)
         primitive_id = torch.where(
             reset_mask,
             torch.full_like(mode, int(self.primitive_library.MOVEJ)),
@@ -1025,8 +1025,8 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         env = self._find_parent_env_with("robot_home_qpos")
         if env is None:
             raise RuntimeError(
-                "RobotAction.RESET requires the parent environment to expose "
-                "`robot_home_qpos`. Use RobotAction.home(joints=...) when the "
+                "RobotMacroAction.RESET requires the parent environment to expose "
+                "`robot_home_qpos`. Use RobotMacroAction.home(joints=...) when the "
                 "home joint target is not environment-defined."
             )
         home_qpos = env.robot_home_qpos
@@ -1034,8 +1034,8 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
             home_qpos = home_qpos()
         if home_qpos is None:
             raise RuntimeError(
-                "RobotAction.RESET could not resolve an environment home joint "
-                "target. Use RobotAction.home(joints=...) instead."
+                "RobotMacroAction.RESET could not resolve an environment home joint "
+                "target. Use RobotMacroAction.home(joints=...) instead."
             )
         home_qpos = torch.as_tensor(home_qpos, dtype=dtype, device=device)
         joint_dim = self.action_dim - 1

@@ -10,7 +10,7 @@ import torch
 from tensordict.tensorclass import TensorClass
 from torchrl.envs.transforms._primitive import MacroPrimitive
 
-__all__ = ["HumanoidAction"]
+__all__ = ["HumanoidMacroAction"]
 
 
 def _as_batch(value: torch.Tensor) -> torch.Tensor:
@@ -27,10 +27,10 @@ def _batch_size(batch_size: torch.Size | tuple[int, ...] | None) -> torch.Size:
     return torch.Size(batch_size)
 
 
-class HumanoidAction(TensorClass["nocast"]):
+class HumanoidMacroAction(TensorClass["nocast"]):
     r"""Structured action for humanoid actuator-control macros.
 
-    ``HumanoidAction`` is intentionally small: the humanoid demo does not solve
+    ``HumanoidMacroAction`` is intentionally small: the humanoid demo does not solve
     a Cartesian inverse-kinematics problem, it asks the base env to move toward
     a low-level actuator-control destination. A
     :class:`~torchrl.envs.transforms.MacroPrimitiveTransform` expands this
@@ -38,8 +38,8 @@ class HumanoidAction(TensorClass["nocast"]):
 
     Examples:
         >>> import torch
-        >>> from torchrl.envs import HumanoidAction
-        >>> action = HumanoidAction.reach_control(torch.zeros(1, 4), steps=2)
+        >>> from torchrl.envs import HumanoidMacroAction
+        >>> action = HumanoidMacroAction.reach_control(torch.zeros(1, 4), steps=2)
         >>> action.target_qpos.shape
         torch.Size([1, 4])
     """
@@ -56,7 +56,7 @@ class HumanoidAction(TensorClass["nocast"]):
         *,
         steps: int = 16,
         settle_steps: int = 0,
-    ) -> HumanoidAction:
+    ) -> HumanoidMacroAction:
         """Ask the transform to interpolate to a low-level control target."""
         return cls._make(
             primitive_id=MacroPrimitive.MOVEJ,
@@ -75,7 +75,7 @@ class HumanoidAction(TensorClass["nocast"]):
         batch_size: torch.Size | tuple[int, ...] | None = None,
         dtype: torch.dtype | None = None,
         device: torch.device | None = None,
-    ) -> HumanoidAction:
+    ) -> HumanoidMacroAction:
         """Hold the current low-level action for a number of simulator steps."""
         if action_dim <= 0:
             raise ValueError("action_dim must be strictly positive.")
@@ -98,7 +98,7 @@ class HumanoidAction(TensorClass["nocast"]):
         target_qpos: torch.Tensor,
         steps: int,
         settle_steps: int,
-    ) -> HumanoidAction:
+    ) -> HumanoidMacroAction:
         if target_qpos.ndim == 0 or target_qpos.shape[-1] <= 0:
             raise ValueError("target must have a non-empty trailing action dimension.")
         if steps <= 0:

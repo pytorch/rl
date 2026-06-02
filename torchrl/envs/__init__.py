@@ -20,14 +20,14 @@ from .custom import (
     TicTacToeEnv,
     Walker2dEnv,
 )
-from .custom.mujoco._humanoid_primitives import HumanoidAction
+from .custom.mujoco._humanoid_primitives import HumanoidMacroAction
 from .custom.mujoco._satellite_primitives import (
-    SatelliteAction,
     SatelliteAttitudeTransform,
+    SatelliteMacroAction,
 )
 from .custom.mujoco._ur_primitives import (
-    RobotAction,
-    RobotActionMode,
+    RobotMacroAction,
+    RobotMacroActionMode,
     URScriptPrimitive,
     URScriptPrimitiveTransform,
 )
@@ -219,7 +219,7 @@ __all__ = [
     "HabitatEnv",
     "Hash",
     "HopperEnv",
-    "HumanoidAction",
+    "HumanoidMacroAction",
     "HumanoidEnv",
     "InitTracker",
     "ImaginedEnv",
@@ -268,12 +268,12 @@ __all__ = [
     "RewardClipping",
     "RewardScaling",
     "RewardSum",
-    "RobotAction",
-    "RobotActionMode",
+    "RobotMacroAction",
+    "RobotMacroActionMode",
     "RoboHiveEnv",
     "SMACv2Env",
     "SatelliteEnv",
-    "SatelliteAction",
+    "SatelliteMacroAction",
     "SatelliteAttitudeTransform",
     "SMACv2Wrapper",
     "SelectTransform",

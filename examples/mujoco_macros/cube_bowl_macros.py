@@ -22,7 +22,7 @@ from _viewer import (
     ViewerClosed,
 )
 from tensordict import TensorDictBase
-from torchrl.envs import CubeBowlEnv, EnvBase, RobotAction
+from torchrl.envs import CubeBowlEnv, EnvBase, RobotMacroAction
 
 
 _VIDEO_TAG = "cube_bowl_macros"
@@ -54,12 +54,12 @@ def _offset_like(reference: torch.Tensor, xyz: list[float]) -> torch.Tensor:
 def _run_macro(
     env: EnvBase,
     tensordict: TensorDictBase,
-    action: RobotAction,
+    action: RobotMacroAction,
 ) -> TensorDictBase:
     # The env has ``URScriptPrimitiveTransform(execute=True)`` appended, so one
     # call to ``step_and_maybe_reset`` runs a complete high-level command. We do
     # not manually unbind or step through the low-level sequence here: the
-    # transform expands ``RobotAction`` and ``MultiAction`` executes it.
+    # transform expands ``RobotMacroAction`` and ``MultiAction`` executes it.
     tensordict.set("action", action)
     _, tensordict = env.step_and_maybe_reset(tensordict)
     return tensordict
@@ -82,14 +82,14 @@ def _run_pick_carry_release(
 
     # The manoeuver is intentionally readable: open, hover above the cube,
     # descend, close the gripper, lift, carry over the bowl, release, then
-    # return to the home posture. Every item is an explicit ``RobotAction``
+    # return to the home posture. Every item is an explicit ``RobotMacroAction``
     # destination placed under ``td["action"]``.
     cube = td["cube_pos"].clone()
-    td = _run_macro(env, td, RobotAction.open_gripper(steps=18, settle_steps=4))
+    td = _run_macro(env, td, RobotMacroAction.open_gripper(steps=18, settle_steps=4))
     td = _run_macro(
         env,
         td,
-        RobotAction.reach_pose(
+        RobotMacroAction.reach_pose(
             position=cube + _offset_like(cube, [0.0, 0.0, 0.12]),
             quaternion=gripper_quat,
             gripper="open",
@@ -100,7 +100,7 @@ def _run_pick_carry_release(
     td = _run_macro(
         env,
         td,
-        RobotAction.reach_pose(
+        RobotMacroAction.reach_pose(
             position=cube + _offset_like(cube, [0.0, 0.0, 0.02]),
             quaternion=gripper_quat,
             gripper="open",
@@ -111,7 +111,9 @@ def _run_pick_carry_release(
     td = _run_macro(
         env,
         td,
-        RobotAction.close_gripper(command=close_command, steps=24, settle_steps=12),
+        RobotMacroAction.close_gripper(
+            command=close_command, steps=24, settle_steps=12
+        ),
     )
 
     cube = td["cube_pos"].clone()
@@ -119,7 +121,7 @@ def _run_pick_carry_release(
     td = _run_macro(
         env,
         td,
-        RobotAction.reach_pose(
+        RobotMacroAction.reach_pose(
             position=cube + pinch_to_cube + _offset_like(cube, [0.0, 0.0, 0.20]),
             quaternion=gripper_quat,
             gripper="closed",
@@ -135,7 +137,7 @@ def _run_pick_carry_release(
     td = _run_macro(
         env,
         td,
-        RobotAction.reach_pose(
+        RobotMacroAction.reach_pose(
             position=bowl + pinch_to_cube + _offset_like(bowl, [0.0, 0.0, 0.16]),
             quaternion=gripper_quat,
             gripper="closed",
@@ -147,7 +149,7 @@ def _run_pick_carry_release(
     td = _run_macro(
         env,
         td,
-        RobotAction.reach_pose(
+        RobotMacroAction.reach_pose(
             position=bowl + pinch_to_cube + _offset_like(bowl, [0.0, 0.0, 0.06]),
             quaternion=gripper_quat,
             gripper="closed",
@@ -156,11 +158,11 @@ def _run_pick_carry_release(
             settle_steps=6,
         ),
     )
-    td = _run_macro(env, td, RobotAction.open_gripper(steps=24, settle_steps=8))
+    td = _run_macro(env, td, RobotMacroAction.open_gripper(steps=24, settle_steps=8))
     return _run_macro(
         env,
         td,
-        RobotAction.home(joints=home_qpos, gripper="open", steps=36),
+        RobotMacroAction.home(joints=home_qpos, gripper="open", steps=36),
     )
 
 

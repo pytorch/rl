@@ -20,7 +20,7 @@ from _viewer import (
     ViewerClosed,
 )
 from tensordict import TensorDict, TensorDictBase
-from torchrl.envs import EnvBase, SatelliteAction, SatelliteEnv
+from torchrl.envs import EnvBase, SatelliteEnv, SatelliteMacroAction
 from torchrl.envs.custom.mujoco._math import quat_mul, random_unit_quat
 
 
@@ -119,7 +119,7 @@ class SatelliteSlewPolicy:
         target_quat = target_quat.expand(tensordict.batch_size + (4,))
         tensordict.set(
             "action",
-            SatelliteAction.slew_attitude(
+            SatelliteMacroAction.slew_attitude(
                 target_quat,
                 steps=self.macro_steps,
                 settle_steps=self.settle_steps,
