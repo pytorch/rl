@@ -17,15 +17,34 @@ import requests
 from torchrl._utils import logger as torchrl_logger
 
 
+_MIN_USER_PORT = 1024
+_MAX_SGLANG_HTTP_PORT = 55535
+
+
 def get_open_port() -> int:
     """Get an available port on localhost.
 
     Returns:
         int: An available port number
     """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
+    # Recent SGLang releases derive SGLANG_GRPC_PORT from the HTTP port by
+    # adding 10000. Keep auto-selected ports below that derived-port limit.
+    for _ in range(128):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            port = s.getsockname()[1]
+        if port <= _MAX_SGLANG_HTTP_PORT:
+            return port
+
+    for port in range(_MIN_USER_PORT, _MAX_SGLANG_HTTP_PORT + 1):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("", port))
+            except OSError:
+                continue
+            return port
+
+    raise RuntimeError("Could not find an available SGLang port")
 
 
 def get_local_ip_address() -> str:

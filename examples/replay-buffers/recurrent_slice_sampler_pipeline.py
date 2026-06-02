@@ -17,7 +17,7 @@ Pieces, in the order they appear:
   :class:`~torchrl.envs.transforms.TensorDictPrimer` the recurrent policy
   needs. If the env is passed in bare, the collector performs the same setup
   before collection starts.
-* :class:`~torchrl.collectors.SyncDataCollector` is constructed with
+* :class:`~torchrl.collectors.Collector` is constructed with
   ``replay_buffer=rb`` so the collector populates the buffer itself — no
   ``rb.extend(...)`` in the training loop. ``collector.start()`` runs it in a
   background thread; ``rb.write_count`` is the source of truth for "how much
@@ -48,7 +48,7 @@ import torch
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers import SliceSampler
 from torchrl.envs import GymEnv
@@ -91,12 +91,12 @@ policy = Seq(OrderedDict(embed=embed, gru=gru, mlp=mlp, qval=qval))
 #    appends `InitTracker` + the GRU's `TensorDictPrimer` to the env. The
 #    user types one keyword and gets a fully-wired env.
 #
-# 2. Hand a bare env and a policy to `SyncDataCollector(...,
+# 2. Hand a bare env and a policy to `Collector(...,
 #    auto_register_policy_transforms=True)`. The collector uses the same
 #    helper (`_maybe_append_env_transforms_from_module`), which is
 #    spec-based and idempotent — so doing both is fine, no double-wrapping.
 #    Default for `auto_register_policy_transforms` is `None` through v0.14
-#    (preserves pre-0.13 behavior, emits a `FutureWarning` if it would have
+#    (preserves pre-v0.15 behavior, emits a `FutureWarning` if it would have
 #    helped); the default flips to `True` in v0.15. Pass `False` to opt out
 #    permanently.
 # ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ rb = TensorDictReplayBuffer(
 # total_frames=-1 means "run forever" — we stop it ourselves when we've
 # trained enough.
 # ---------------------------------------------------------------------------
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy,
     frames_per_batch=200,

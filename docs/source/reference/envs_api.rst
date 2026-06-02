@@ -108,7 +108,7 @@ identically on every subclass. Pass it like any other keyword:
     env = GymEnv("CartPole-v1", policy=gru)
 
 The same auto-wrap helper is applied a second time by
-:class:`~torchrl.collectors.SyncDataCollector` when an env is passed to it,
+:class:`~torchrl.collectors.Collector` when an env is passed to it,
 so users who construct a bare env first and only later hand it to a
 collector with a recurrent policy still get the right transforms wired up.
 Because the helper is idempotent, going through both paths does not produce
@@ -154,12 +154,12 @@ The same flag works equally well with collectors:
 .. code-block:: python
 
     from functools import partial
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.envs import GymEnv, TransformedEnv
     from torchrl.envs.transforms import Compose
 
     # Plain env, compiled with a 4-call warmup.
-    collector = SyncDataCollector(
+    collector = Collector(
         partial(
             GymEnv,
             "HalfCheetah-v4",
@@ -170,7 +170,7 @@ The same flag works equally well with collectors:
 
     # TransformedEnv: compile applies to the outermost env, which is what
     # the collector calls step_and_maybe_reset on.
-    collector = SyncDataCollector(
+    collector = Collector(
         lambda: TransformedEnv(
             GymEnv("HalfCheetah-v4"),
             Compose(...),

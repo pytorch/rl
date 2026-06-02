@@ -141,6 +141,7 @@ def transformers_instance() -> (
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+    model.eval()
     tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
     tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
@@ -1956,8 +1957,122 @@ class TestKLTransforms:
         assert reward is not None
 
 
+@pytest.mark.gpu
 class TestLogProbsComparison:
     """Test log-probability consistency between vLLM and Transformers wrappers."""
+
+    @staticmethod
+    def _padded_tokens_log_probs_and_mask(result, pad_token_id):
+        tokens = result.get(
+            ("tokens", "full"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=pad_token_id,
+        )
+        log_probs = result.get(
+            ("log_probs", "full"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0.0,
+        )
+        attention_mask = result.get(
+            ("masks", "all_attention_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        ).bool()
+        assistant_mask = result.get(
+            ("masks", "all_assistant_mask"),
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=0,
+        )
+        if assistant_mask is not None:
+            assistant_mask = assistant_mask.bool()
+        assert log_probs is not None
+        assert attention_mask is not None
+        assert log_probs.shape == attention_mask.shape
+        if tokens is not None:
+            assert tokens.shape == log_probs.shape
+        if assistant_mask is not None:
+            assert assistant_mask.shape == log_probs.shape
+        return tokens, log_probs, attention_mask, assistant_mask
+
+    @staticmethod
+    def _logprob_comparison_mask(attention_mask):
+        comparison_mask = attention_mask.clone()
+        for row in comparison_mask:
+            attended = row.nonzero(as_tuple=False)
+            if attended.numel():
+                row[attended[0, 0]] = False
+        return comparison_mask
+
+    @classmethod
+    def _assert_vllm_transformers_log_probs_match(
+        cls, vllm_result, transformers_result, pad_token_id
+    ):
+        (
+            vllm_tokens,
+            vllm_log_probs,
+            vllm_mask,
+            vllm_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_mask(vllm_result, pad_token_id)
+        (
+            transformers_tokens,
+            transformers_log_probs,
+            transformers_mask,
+            transformers_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_mask(transformers_result, pad_token_id)
+
+        torch.testing.assert_close(vllm_mask, transformers_mask)
+        if vllm_tokens is not None and transformers_tokens is not None:
+            torch.testing.assert_close(
+                vllm_tokens[vllm_mask].long(),
+                transformers_tokens[transformers_mask].long(),
+            )
+
+        if (
+            vllm_assistant_mask is not None
+            and transformers_assistant_mask is not None
+            and vllm_assistant_mask.any()
+            and transformers_assistant_mask.any()
+        ):
+            torch.testing.assert_close(vllm_assistant_mask, transformers_assistant_mask)
+            comparison_mask = vllm_assistant_mask
+        else:
+            comparison_mask = cls._logprob_comparison_mask(vllm_mask)
+        assert comparison_mask.any()
+        vllm_selected = vllm_log_probs[comparison_mask]
+        transformers_selected = transformers_log_probs[comparison_mask]
+        assert torch.isfinite(vllm_selected).all()
+        assert torch.isfinite(transformers_selected).all()
+
+        delta = vllm_selected - transformers_selected
+        abs_delta = delta.abs()
+        mse = delta.square().mean()
+        max_abs = abs_delta.max()
+        mean_abs = abs_delta.mean()
+        importance_weights = torch.exp(delta.double())
+        ess = importance_weights.sum().square() / (
+            importance_weights.square().sum() * importance_weights.numel()
+        )
+        ess = ess.item()
+        mse = mse.item()
+        max_abs = max_abs.item()
+        mean_abs = mean_abs.item()
+
+        assert ess > 0.99, (
+            "vLLM and Transformers log-probs diverged: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
+        assert mean_abs < 0.08, (
+            "vLLM and Transformers mean absolute log-prob delta is too large: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
+        assert max_abs < 0.35, (
+            "vLLM and Transformers max absolute log-prob delta is too large: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -2009,27 +2124,16 @@ class TestLogProbsComparison:
             input_key=input_key,
             generate=True,
             pad_output=pad_output,
-            generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
-        )
-
-        # Create Transformers wrapper for generation
-        tf_gen_wrapper = TransformersWrapper(
-            tf_model,
-            tokenizer=tf_tokenizer,
-            input_mode=input_mode,
-            input_key=input_key,
-            generate=True,
-            pad_output=pad_output,
+            return_log_probs=False,
             generate_kwargs={
-                "max_new_tokens": 5,
-                "do_sample": False,
+                "max_tokens": 5,
                 "temperature": 0.0,
-            },  # Deterministic
+                "ignore_eos": True,
+            },  # Deterministic fixed-length response
         )
 
-        # Step 1: Generate tokens with both wrappers
+        # Step 1: Generate tokens with vLLM.
         vllm_gen_result = vllm_gen_wrapper(data.copy())
-        tf_gen_wrapper(data.copy())
 
         # Step 2: Extract generated tokens and create new input for log-probs computation
         if input_mode == "history":
@@ -2057,12 +2161,9 @@ class TestLogProbsComparison:
             original_tokens = data["input_ids"]
             generated_tokens = vllm_gen_result["tokens"].response
             if pad_output:
-                # Remove padding from generated tokens
-                mask = generated_tokens != vllm_tokenizer.pad_token_id
                 new_tokens = []
                 for i in range(len(original_tokens)):
-                    valid_tokens = generated_tokens[i][mask[i]]
-                    combined = torch.cat([original_tokens[i], valid_tokens])
+                    combined = torch.cat([original_tokens[i], generated_tokens[i]])
                     new_tokens.append(combined)
                 new_tokens = torch.stack(new_tokens)
             else:
@@ -2093,12 +2194,15 @@ class TestLogProbsComparison:
             pad_output=pad_output,
         )
 
-        # Step 4: Compute log-probs for the full sequence (original + generated)
+        # Step 4: Compute vLLM log-probs for the full sequence (original + generated)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
-        tf_lp_result = tf_lp_wrapper(new_data.copy())
+        with torch.inference_mode():
+            tf_lp_result = tf_lp_wrapper(new_data.copy())
+        check_output_shapes(vllm_lp_result, pad_output, requested_log_probs=True)
+        check_output_shapes(tf_lp_result, pad_output, requested_log_probs=True)
 
-        assert_close(
-            vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
+        self._assert_vllm_transformers_log_probs_match(
+            vllm_lp_result, tf_lp_result, vllm_tokenizer.pad_token_id
         )
 
     @pytest.mark.gpu

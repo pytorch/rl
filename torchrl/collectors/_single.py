@@ -25,7 +25,7 @@ from torchrl._utils import (
     prod,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
@@ -240,7 +240,7 @@ class Collector(BaseCollector):
             wrapped via :class:`~torchrl.envs.EnvBase`'s ``policy=``
             constructor argument is safe. If ``False``, the collector never
             modifies the env. Defaults to ``None`` through v0.14, which
-            preserves the pre-0.13 behavior (no auto-registration) but emits
+            preserves the pre-v0.15 behavior (no auto-registration) but emits
             a :class:`FutureWarning` if the env was missing transforms the
             policy needed. The default flips to ``True`` in v0.15.
 
@@ -258,7 +258,7 @@ class Collector(BaseCollector):
             RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
             This enables cascading weight updates in hierarchies like:
-            RPCDataCollector -> MultiSyncCollector -> Collector.
+            RPCCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
             A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
@@ -590,7 +590,7 @@ class Collector(BaseCollector):
             return _maybe_append_env_transforms_from_module(env, policy)
         if flag is False:
             return env
-        # flag is None — preserve the pre-0.13 behavior but warn that this
+        # flag is None — preserve the pre-v0.15 behavior but warn that this
         # will change in v0.15.
         from torchrl.modules.utils.utils import _compute_missing_env_transforms
 
@@ -1358,7 +1358,7 @@ class Collector(BaseCollector):
         # Bump the local PolicyVersion transform (if track_policy_version is on).
         # This is the canonical bump point for the leaf collector — it covers:
         #   - User calls collector.update_policy_weights_() on a single-process
-        #     SyncDataCollector / Collector.
+        #     Collector.
         #   - The receiver-side WeightSyncScheme cascade in a multi-process
         #     worker (which calls inner_collector.update_policy_weights_()
         #     after applying weights). MultiCollector does not inherit from
@@ -2166,9 +2166,3 @@ class Collector(BaseCollector):
 
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
-
-
-class SyncDataCollector(Collector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.Collector`."""
-
-    ...

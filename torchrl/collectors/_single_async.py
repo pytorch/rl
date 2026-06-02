@@ -8,10 +8,8 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule
 
 from torchrl._utils import accept_remote_rref_udf_invocation
-from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE, ExplorationType
 from torchrl.collectors._multi_async import MultiAsyncCollector
-from torchrl.collectors._multi_base import _MultiCollectorMeta
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.envs import EnvBase
 
@@ -255,12 +253,3 @@ class AsyncCollector(MultiAsyncCollector):
     # for RPC
     def load_state_dict(self, state_dict: OrderedDict) -> None:
         return super().load_state_dict(state_dict)
-
-
-_LegacyAsyncCollectorMeta = _make_legacy_metaclass(_MultiCollectorMeta)
-
-
-class aSyncDataCollector(AsyncCollector, metaclass=_LegacyAsyncCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.AsyncCollector`."""
-
-    ...

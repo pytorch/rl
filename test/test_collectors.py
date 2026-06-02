@@ -52,7 +52,6 @@ from torchrl.collectors import (
     MultiAsyncCollector,
     MultiSyncCollector,
     ProfileConfig,
-    SyncDataCollector,
     WeightUpdaterBase,
 )
 from torchrl.collectors._base import _ProfilerHook
@@ -3298,7 +3297,7 @@ class TestEnvTransformAutoWrap:
         keys_before = set(env.full_observation_spec.keys(True, True))
         assert "is_init" not in keys_before
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             frames_per_batch=10,
@@ -3321,7 +3320,7 @@ class TestEnvTransformAutoWrap:
         assert "recurrent_state" in env.full_observation_spec.keys(True, True)
 
         # The collector hook must not double-wrap.
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             frames_per_batch=10,
@@ -3344,7 +3343,7 @@ class TestEnvTransformAutoWrap:
         # lives inside child envs.
         assert "is_init" in env.full_observation_spec.keys(True, True)
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             frames_per_batch=10,
@@ -3364,7 +3363,7 @@ class TestEnvTransformAutoWrap:
 
         env = ParallelEnv(2, make_inner, mp_start_method="fork")
         assert "is_init" in env.full_observation_spec.keys(True, True)
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy,
             frames_per_batch=10,
@@ -3377,7 +3376,7 @@ class TestEnvTransformAutoWrap:
             collector.shutdown()
 
     def test_default_emits_future_warning_about_v0_15_flip(self):
-        """Default (None) preserves pre-0.13 behavior and emits a FutureWarning.
+        """Default (None) preserves pre-v0.15 behavior and emits a FutureWarning.
 
         The collector currently does *not* auto-wrap; the warning informs the
         user that the default flips to True in v0.15. Construction itself
@@ -3388,7 +3387,7 @@ class TestEnvTransformAutoWrap:
         env = GymEnv(CARTPOLE_VERSIONED())
         with pytest.warns(FutureWarning, match="auto_register_policy_transforms"):
             with pytest.raises(KeyError, match="is_init"):
-                SyncDataCollector(env, policy, frames_per_batch=10, total_frames=10)
+                Collector(env, policy, frames_per_batch=10, total_frames=10)
 
     def test_explicit_false_is_silent_and_does_not_wrap(self):
         """auto_register_policy_transforms=False suppresses the warning and the wrap."""
@@ -3397,7 +3396,7 @@ class TestEnvTransformAutoWrap:
         with warnings.catch_warnings():
             warnings.simplefilter("error", FutureWarning)
             with pytest.raises(KeyError, match="is_init"):
-                SyncDataCollector(
+                Collector(
                     env,
                     policy,
                     frames_per_batch=10,
@@ -3420,7 +3419,7 @@ class TestEnvTransformAutoWrap:
         assert "is_init" not in keys_before
         assert "recurrent_state" not in keys_before
 
-        collector = SyncDataCollector(
+        collector = Collector(
             env,
             policy_factory=self._make_recurrent_policy,
             frames_per_batch=10,
@@ -4187,9 +4186,9 @@ class TestPolicyVersion:
         )
 
     def test_single_collector_bumps_on_update(self):
-        """``SyncDataCollector`` bumps policy_version on each weight update."""
+        """``Collector`` bumps policy_version on each weight update."""
         policy = self._make_policy()
-        collector = SyncDataCollector(
+        collector = Collector(
             self._Env,
             policy=policy,
             total_frames=60,

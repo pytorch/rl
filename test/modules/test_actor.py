@@ -268,7 +268,7 @@ class TestProbabilisticActorGenerator:
 @pytest.mark.parametrize("device", get_default_devices())
 def test_noisy(layer_class, device, seed=0):
     torch.manual_seed(seed)
-    layer = layer_class(3, 4, device=device)
+    layer = layer_class(3, 4, device=device, use_exploration_type=False)
     x = torch.randn(10, 3, device=device)
     y1 = layer(x)
     layer.reset_noise()
