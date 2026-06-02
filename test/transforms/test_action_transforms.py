@@ -50,10 +50,13 @@ from torchrl.envs import (
     EnvBase,
     FlattenAction,
     GymWrapper,
+    HumanoidAction,
     MacroPrimitiveTransform,
     MultiAction,
     ParallelEnv,
     RobotAction,
+    SatelliteAction,
+    SatelliteAttitudeTransform,
     SerialEnv,
     StepCounter,
     TransformedEnv,
@@ -1223,6 +1226,60 @@ class TestURScriptPrimitiveTransform:
         action = transform.inv(td)["action"]
         assert action.shape == torch.Size([2, 3, 4])
         torch.testing.assert_close(action[:, -1], target)
+
+    def test_humanoid_action_uses_generic_transform(self):
+        transform = MacroPrimitiveTransform(action_dim=4, macro_steps=2)
+        target = torch.ones(1, 4)
+        td = TensorDict(
+            {"action": HumanoidAction.reach_control(target, steps=3, settle_steps=1)},
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 4, 4])
+        torch.testing.assert_close(action[:, 2], target)
+        torch.testing.assert_close(action[:, 3], target)
+
+    def test_structured_primitive_tensordict_under_action_key(self):
+        transform = MacroPrimitiveTransform(action_dim=3, macro_steps=2)
+        td = TensorDict(
+            {
+                "action": TensorDict(
+                    {
+                        "primitive_id": torch.tensor([[1]]),
+                        "target_qpos": torch.tensor([[1.0, 2.0, 3.0]]),
+                        "steps": torch.tensor([[3]]),
+                    },
+                    batch_size=[1],
+                )
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 3, 3])
+        torch.testing.assert_close(action[:, -1], torch.tensor([[1.0, 2.0, 3.0]]))
+
+    def test_satellite_action_transform_identity_target_is_zero(self):
+        transform = SatelliteAttitudeTransform(num_cmgs=4, macro_steps=2)
+        target = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+        td = TensorDict(
+            {
+                "action": SatelliteAction.slew_attitude(
+                    target,
+                    steps=2,
+                    settle_steps=0,
+                ),
+                "bus_quat": target.clone(),
+                "bus_omega": torch.zeros(1, 3),
+                "gimbal_angles": torch.cat([torch.zeros(1, 4), torch.ones(1, 4)], -1),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 2, 4])
+        torch.testing.assert_close(action, torch.zeros_like(action))
 
     def test_macro_transform_custom_solver_object(self):
         class Solver:

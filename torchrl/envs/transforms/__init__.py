@@ -5,12 +5,7 @@
 
 import importlib
 
-from ._primitive import (
-    MacroAction,
-    MacroActionMode,
-    MacroPrimitive,
-    MacroPrimitiveTransform,
-)
+from ._primitive import MacroPrimitive, MacroPrimitiveTransform
 from .gym_transforms import EndOfLifeTransform
 from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
@@ -94,11 +89,27 @@ _UR_PRIMITIVE_EXPORTS = {
     "URScriptPrimitive",
     "URScriptPrimitiveTransform",
 }
+_HUMANOID_PRIMITIVE_EXPORTS = {"HumanoidAction"}
+_SATELLITE_PRIMITIVE_EXPORTS = {"SatelliteAction", "SatelliteAttitudeTransform"}
 
 
 def __getattr__(name: str):
     if name in _UR_PRIMITIVE_EXPORTS:
         module = importlib.import_module("torchrl.envs.custom.mujoco._ur_primitives")
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    if name in _HUMANOID_PRIMITIVE_EXPORTS:
+        module = importlib.import_module(
+            "torchrl.envs.custom.mujoco._humanoid_primitives"
+        )
+        value = getattr(module, name)
+        globals()[name] = value
+        return value
+    if name in _SATELLITE_PRIMITIVE_EXPORTS:
+        module = importlib.import_module(
+            "torchrl.envs.custom.mujoco._satellite_primitives"
+        )
         value = getattr(module, name)
         globals()[name] = value
         return value
@@ -135,14 +146,15 @@ __all__ = [
     "FrameSkipTransform",
     "GrayScale",
     "Hash",
+    "HumanoidAction",
     "InitTracker",
     "LineariseRewards",
-    "MacroAction",
-    "MacroActionMode",
     "MacroPrimitive",
     "MacroPrimitiveTransform",
     "RobotAction",
     "RobotActionMode",
+    "SatelliteAction",
+    "SatelliteAttitudeTransform",
     "MeanActionSelector",
     "ModuleTransform",
     "MultiAction",

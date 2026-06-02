@@ -38,7 +38,9 @@ from torchrl.envs.custom.mujoco._math import (
     quat_mul,
     random_unit_quat,
 )
+from torchrl.envs.custom.mujoco._satellite_primitives import SatelliteAttitudeTransform
 from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.transforms._base import Transform
 
 
 class SatelliteEnv(MujocoEnv):
@@ -287,6 +289,9 @@ class SatelliteEnv(MujocoEnv):
         # into the policy.
         n = self.N_GIMBALS
         return Composite(
+            bus_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
             quat_err=Unbounded(
                 shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
             ),
@@ -469,7 +474,9 @@ class SatelliteEnv(MujocoEnv):
         n = self.N_GIMBALS
         gimbal_idx = [7 + 2 * i for i in range(n)]
         gimbal_rate_idx = [6 + 2 * i for i in range(n)]
+        bus_quat = qpos[..., 3:7].clone()
         return {
+            "bus_quat": bus_quat,
             "quat_err": self._attitude_error(qpos),
             "bus_omega": qvel[..., 3:6].clone(),
             "gimbal_angles": torch.cat(
@@ -479,6 +486,40 @@ class SatelliteEnv(MujocoEnv):
             "gimbal_rates": qvel[..., gimbal_rate_idx].clone(),
             "manipulability": self._last_manip,
         }
+
+    def make_attitude_transform(
+        self,
+        *,
+        execute: bool = False,
+        multi_action_dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
+        macro_steps: int = 36,
+        settle_steps: int = 8,
+        attitude_gain: float = 5.0,
+        angular_rate_gain: float = 8.0,
+        jacobian_rotor_h: float = 1.0,
+    ) -> Transform:
+        """Build the transform that expands target attitudes into CMG actions.
+
+        Examples:
+            >>> from torchrl.envs import SatelliteEnv  # doctest: +SKIP
+            >>> env = SatelliteEnv(num_cmgs=4)  # doctest: +SKIP
+            >>> transform = env.make_attitude_transform(execute=True)  # doctest: +SKIP
+        """
+        return SatelliteAttitudeTransform(
+            num_cmgs=self.num_cmgs,
+            action_scale=self.action_scale,
+            execute=execute,
+            multi_action_dim=multi_action_dim,
+            stack_rewards=stack_rewards,
+            stack_observations=stack_observations,
+            macro_steps=macro_steps,
+            settle_steps=settle_steps,
+            attitude_gain=attitude_gain,
+            angular_rate_gain=angular_rate_gain,
+            jacobian_rotor_h=jacobian_rotor_h,
+        )
 
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         out: dict[str, torch.Tensor] = {}

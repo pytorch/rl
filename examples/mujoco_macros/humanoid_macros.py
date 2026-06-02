@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""HumanoidEnv example for generic MuJoCo macro actions in the MuJoCo viewer."""
+"""HumanoidEnv example for actuator-control macros in the MuJoCo viewer."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from _viewer import (
 )
 from tensordict import TensorDictBase
 from torchrl.data import TensorSpec
-from torchrl.envs import HumanoidEnv, MacroAction, MacroPrimitiveTransform
+from torchrl.envs import HumanoidAction, HumanoidEnv
 
 
 _VIDEO_TAG = "humanoid_macros"
@@ -52,22 +52,22 @@ class HumanoidPosePolicy:
         # interpolates toward each destination and ``MultiAction`` executes the
         # resulting sequence through the env.
         self.actions = [
-            MacroAction.reach_action(
+            HumanoidAction.reach_control(
                 _target(action_spec, [0.16, -0.14, 0.10, -0.10, 0.08, -0.08]),
                 steps=24,
                 settle_steps=8,
             ),
-            MacroAction.reach_action(
+            HumanoidAction.reach_control(
                 _target(action_spec, [-0.14, 0.16, -0.10, 0.10, -0.08, 0.08]),
                 steps=24,
                 settle_steps=8,
             ),
-            MacroAction.reach_action(
+            HumanoidAction.reach_control(
                 _target(action_spec, [0.08, 0.08, -0.14, -0.14, 0.10, 0.10]),
                 steps=24,
                 settle_steps=8,
             ),
-            MacroAction.reach_action(
+            HumanoidAction.reach_control(
                 _target(action_spec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
                 steps=28,
                 settle_steps=10,
@@ -91,8 +91,7 @@ def main() -> None:
     )
     low_level_action_spec = base_env.action_spec.clone()
     env = base_env.append_transform(
-        MacroPrimitiveTransform(
-            action_dim=low_level_action_spec.shape[-1],
+        base_env.make_control_transform(
             execute=True,
             stack_rewards=True,
             stack_observations=False,

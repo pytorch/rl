@@ -759,7 +759,7 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         adapter: Literal["joint_position_gripper"]
         | _JointPositionGripperAdapter
         | None = "joint_position_gripper",
-        solver: MacroSolverName | CartesianSolver | Any | None = "mujoco_dls_ik",
+        solver: MacroSolverName | CartesianSolver | object | None = "mujoco_dls_ik",
         execute: bool = False,
         multi_action_dim: int = 1,
         stack_rewards: bool = True,

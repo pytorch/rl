@@ -13,7 +13,6 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 import torch
 from tensordict import TensorDictBase
-from tensordict.tensorclass import TensorClass
 from tensordict.utils import NestedKey, unravel_key
 from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
 from torchrl.envs.transforms._action import MultiAction
@@ -21,8 +20,6 @@ from torchrl.envs.transforms._base import Compose, Transform
 
 __all__ = [
     "CartesianSolver",
-    "MacroAction",
-    "MacroActionMode",
     "MacroPrimitive",
     "MacroPrimitiveTransform",
 ]
@@ -55,130 +52,6 @@ class MacroPrimitive(IntEnum):
         return self.name.lower()
 
 
-class MacroActionMode(IntEnum):
-    r"""Readable modes for :class:`MacroAction`.
-
-    Examples:
-        >>> from torchrl.envs.transforms import MacroActionMode
-        >>> MacroActionMode.REACH_ACTION.name
-        'REACH_ACTION'
-    """
-
-    WAIT = int(MacroPrimitive.WAIT)
-    REACH_ACTION = int(MacroPrimitive.MOVEJ)
-    REACH_POSE = int(MacroPrimitive.MOVEL)
-
-
-class MacroAction(TensorClass["nocast"]):
-    r"""Structured macro action for action-space interpolation.
-
-    ``MacroAction`` is the generic, robot-agnostic structured action. It only
-    stores a primitive mode, an optional low-level action target, and execution
-    lengths. Robot-specific action objects can subclass or mirror this shape and
-    add domain fields such as gripper commands.
-
-    Examples:
-        >>> import torch
-        >>> from torchrl.envs.transforms import MacroAction
-        >>> action = MacroAction.reach_action(torch.zeros(1, 4), steps=2)
-        >>> action.target.shape
-        torch.Size([1, 4])
-    """
-
-    mode: torch.Tensor
-    target: torch.Tensor
-    steps: torch.Tensor
-    settle_steps: torch.Tensor
-
-    @classmethod
-    def reach_action(
-        cls,
-        target: torch.Tensor,
-        *,
-        steps: int = 16,
-        settle_steps: int = 0,
-    ) -> MacroAction:
-        """Ask the transform to interpolate toward a low-level action target."""
-        target = _as_batch(target)
-        return cls._make(
-            MacroActionMode.REACH_ACTION,
-            target=target,
-            steps=steps,
-            settle_steps=settle_steps,
-        )
-
-    @classmethod
-    def reach_pose(
-        cls,
-        pose: torch.Tensor,
-        *,
-        steps: int = 16,
-        settle_steps: int = 0,
-    ) -> MacroAction:
-        """Ask the transform's solver to map a pose to a low-level target."""
-        pose = _as_batch(pose)
-        return cls._make(
-            MacroActionMode.REACH_POSE,
-            target=pose,
-            steps=steps,
-            settle_steps=settle_steps,
-        )
-
-    @classmethod
-    def wait(
-        cls,
-        *,
-        action_dim: int,
-        steps: int = 1,
-        settle_steps: int = 0,
-        batch_size: torch.Size | tuple[int, ...] | None = None,
-        dtype: torch.dtype | None = None,
-        device: torch.device | None = None,
-    ) -> MacroAction:
-        """Hold the current low-level action for ``steps`` simulator steps."""
-        dtype = torch.get_default_dtype() if dtype is None else dtype
-        device = torch.device("cpu") if device is None else device
-        batch_size = _batch_size(batch_size)
-        target = torch.zeros(batch_size + (action_dim,), dtype=dtype, device=device)
-        return cls._make(
-            MacroActionMode.WAIT,
-            target=target,
-            steps=steps,
-            settle_steps=settle_steps,
-        )
-
-    @classmethod
-    def _make(
-        cls,
-        mode: MacroActionMode,
-        *,
-        target: torch.Tensor,
-        steps: int,
-        settle_steps: int,
-    ) -> MacroAction:
-        if steps <= 0:
-            raise ValueError("steps must be strictly positive.")
-        if settle_steps < 0:
-            raise ValueError("settle_steps must be non-negative.")
-        batch_size = target.shape[:-1]
-        return cls(
-            mode=torch.full(
-                batch_size + (1,), int(mode), dtype=torch.long, device=target.device
-            ),
-            target=target,
-            steps=torch.full(
-                batch_size + (1,), steps, dtype=torch.long, device=target.device
-            ),
-            settle_steps=torch.full(
-                batch_size + (1,),
-                settle_steps,
-                dtype=torch.long,
-                device=target.device,
-            ),
-            batch_size=batch_size,
-        )
-
-
 @runtime_checkable
 class PrimitiveLibrary(Protocol):
     """Protocol for primitive id containers used by the generic transform."""
@@ -189,7 +62,7 @@ class PrimitiveLibrary(Protocol):
 
 
 @runtime_checkable
-class MacroActionAdapter(Protocol):
+class MacroPrimitiveAdapter(Protocol):
     """Protocol for env-specific low-level action adapters."""
 
     action_key: NestedKey
@@ -478,22 +351,6 @@ class _CallableMoveLSolver(_JointInterpolationSolver):
         return self.solver(target_pose, start)
 
 
-def _as_batch(value: torch.Tensor, last_dim: int | None = None) -> torch.Tensor:
-    if last_dim is not None and value.shape[-1] != last_dim:
-        raise ValueError(
-            f"Expected a tensor with trailing dimension {last_dim}, got {value.shape}."
-        )
-    if value.ndim == 1:
-        return value.unsqueeze(0)
-    return value
-
-
-def _batch_size(batch_size: torch.Size | tuple[int, ...] | None) -> torch.Size:
-    if batch_size is None:
-        return torch.Size([1])
-    return torch.Size(batch_size)
-
-
 def _num_primitives(primitive_library: PrimitiveLibrary) -> int:
     if hasattr(primitive_library, "NUM_PRIMITIVES"):
         return int(primitive_library.NUM_PRIMITIVES)
@@ -513,14 +370,14 @@ def _resolve_primitive_library(
 
 
 def _resolve_adapter(
-    adapter: MacroAdapterName | MacroActionAdapter | None,
+    adapter: MacroAdapterName | MacroPrimitiveAdapter | None,
     *,
     action_key: NestedKey,
     primitive_id_key: NestedKey,
     target_qpos_key: NestedKey,
     target_pose_key: NestedKey,
     action_dim: int | None,
-) -> MacroActionAdapter:
+) -> MacroPrimitiveAdapter:
     if adapter is None or adapter == "tensordict":
         return _TensorDictActionAdapter(
             action_key=action_key,
@@ -535,10 +392,10 @@ def _resolve_adapter(
 
 
 def _resolve_solver(
-    solver: MacroSolverName | CartesianSolver | Any | None,
+    solver: MacroSolverName | CartesianSolver | object | None,
     *,
     cartesian_solver: CartesianSolver | None,
-) -> Any:
+) -> object:
     if solver is None or solver == "joint_interpolation":
         if cartesian_solver is not None:
             raise ValueError(
@@ -611,13 +468,13 @@ class MacroPrimitiveTransform(Transform):
 
     def __new__(
         cls,
-        *args,
+        *args: Any,
         execute: bool = False,
         multi_action_dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> MacroPrimitiveTransform | Compose:
         if execute:
             primitive = cls(*args, execute=False, **kwargs)
             return Compose(
@@ -634,8 +491,8 @@ class MacroPrimitiveTransform(Transform):
         self,
         *,
         primitive_library: PrimitiveLibraryName | PrimitiveLibrary | None = None,
-        adapter: MacroAdapterName | MacroActionAdapter | None = None,
-        solver: MacroSolverName | CartesianSolver | Any | None = None,
+        adapter: MacroAdapterName | MacroPrimitiveAdapter | None = None,
+        solver: MacroSolverName | CartesianSolver | object | None = None,
         execute: bool = False,
         multi_action_dim: int = 1,
         stack_rewards: bool = True,
@@ -864,29 +721,47 @@ class MacroPrimitiveTransform(Transform):
             return False
         if not hasattr(action, "keys") or not hasattr(action, "get"):
             return False
-        return "mode" in action.keys(True, True) and "target" in action.keys(True, True)
+        keys = action.keys(True, True)
+        return (
+            "primitive_id" in keys
+            or ("mode" in keys and "target" in keys)
+            or "target_qpos" in keys
+            or "target_pose" in keys
+        )
 
     def _unpack_structured_action(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, int, int]:
         action = tensordict.get(self.action_key)
-        mode = action.get("mode").to(torch.long)
-        if mode.shape[-1:] != torch.Size([1]):
-            mode = mode.unsqueeze(-1)
-        target = action.get("target")
         out = tensordict.clone()
-        out.set(self.primitive_id_key, mode)
-        if (mode == int(MacroActionMode.REACH_POSE)).all():
-            out.set(self.target_pose_key, target)
-        elif (mode == int(MacroActionMode.REACH_ACTION)).all() or (
-            mode == int(MacroActionMode.WAIT)
-        ).all():
-            out.set(self.target_qpos_key, target)
+
+        keys = action.keys(True, True)
+        if "primitive_id" in keys:
+            primitive_id = action.get("primitive_id").to(torch.long)
         else:
-            raise RuntimeError(
-                "Batched MacroAction values must all use the same target kind. "
-                "Use TensorDict primitive keys directly for mixed macro batches."
-            )
+            primitive_id = action.get("mode").to(torch.long)
+        if primitive_id.shape[-1:] != torch.Size([1]):
+            primitive_id = primitive_id.unsqueeze(-1)
+        out.set(self.primitive_id_key, primitive_id)
+
+        if "target_qpos" in keys:
+            out.set(self.target_qpos_key, action.get("target_qpos"))
+        if "target_pose" in keys:
+            out.set(self.target_pose_key, action.get("target_pose"))
+        if "target" in keys:
+            target = action.get("target")
+            if (primitive_id == int(MacroPrimitive.MOVEL)).all():
+                out.set(self.target_pose_key, target)
+            elif (primitive_id == int(MacroPrimitive.MOVEJ)).all() or (
+                primitive_id == int(MacroPrimitive.WAIT)
+            ).all():
+                out.set(self.target_qpos_key, target)
+            else:
+                raise RuntimeError(
+                    "Batched structured macro actions must all use the same "
+                    "target kind. Use TensorDict primitive keys directly for "
+                    "mixed macro batches."
+                )
         return (
             out,
             self._structured_action_int(action, "steps", self.macro_steps),

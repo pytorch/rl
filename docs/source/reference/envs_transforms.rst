@@ -274,14 +274,15 @@ Available Transforms
     FrameSkipTransform
     GrayScale
     Hash
+    HumanoidAction
     InitTracker
     LineariseRewards
-    MacroAction
-    MacroActionMode
     MacroPrimitive
     MacroPrimitiveTransform
     RobotAction
     RobotActionMode
+    SatelliteAction
+    SatelliteAttitudeTransform
     URScriptPrimitive
     MeanActionSelector
     ModuleTransform

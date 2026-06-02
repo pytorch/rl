@@ -918,14 +918,18 @@ class CubeBowlEnv(MujocoEnv):
 
         Examples:
             >>> from torchrl.envs import CubeBowlEnv  # doctest: +SKIP
+            >>> from torchrl.envs import RobotAction  # doctest: +SKIP
             >>> env = CubeBowlEnv()  # doctest: +SKIP
-            >>> transform = env.make_urscript_transform(macro_steps=4, execute=False)  # doctest: +SKIP
-            >>> td = env.reset()  # doctest: +SKIP
-            >>> transform.action_sequence(td, transform.WAIT).shape  # doctest: +SKIP
-            torch.Size([1, 4, 7])
             >>> env = env.append_transform(env.make_urscript_transform(macro_steps=4))  # doctest: +SKIP
-            >>> env.rollout(2).shape  # doctest: +SKIP
-            torch.Size([2])
+            >>> td = env.reset()  # doctest: +SKIP
+            >>> offset = td["cube_pos"].new_tensor([[0.0, 0.0, 0.1]])  # doctest: +SKIP
+            >>> td["action"] = RobotAction.reach_pose(  # doctest: +SKIP
+            ...     position=td["cube_pos"] + offset,
+            ...     quaternion=td["pinch_quat"],
+            ...     gripper="open",
+            ... )
+            >>> env.step(td).get(("next", "reward")).shape  # doctest: +SKIP
+            torch.Size([1, 1])
         """
         if ik_kwargs is None:
             ik_kwargs = {}

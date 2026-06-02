@@ -123,9 +123,7 @@ class TestMujoco:
     def test_humanoid_generic_macro_sequence(self):
         backend = _AVAILABLE_BACKENDS[0]
         env = HumanoidEnv(num_envs=1, seed=0, backend=backend)
-        transform = MacroPrimitiveTransform(
-            action_dim=env.action_spec.shape[-1], macro_steps=2
-        )
+        transform = env.make_control_transform(macro_steps=2)
         td = env.reset()
         target = env.action_spec.zero()
         sequence = transform.action_sequence(
@@ -147,6 +145,7 @@ class TestMujoco:
         # a single policy input while keeping ``manipulability``
         # available for logging.
         obs_spec = env.observation_spec
+        assert obs_spec["bus_quat"].shape == torch.Size([n, 4])
         assert obs_spec["quat_err"].shape == torch.Size([n, 3])
         assert obs_spec["bus_omega"].shape == torch.Size([n, 3])
         assert obs_spec["gimbal_angles"].shape == torch.Size([n, 2 * num_cmgs])
@@ -247,12 +246,7 @@ class TestMujoco:
             backend=backend,
             reset_noise_scale=0.0,
         )
-        env = base_env.append_transform(
-            MacroPrimitiveTransform(
-                action_dim=base_env.action_spec.shape[-1],
-                execute=True,
-            )
-        )
+        env = base_env.append_transform(base_env.make_attitude_transform(execute=True))
         init = torch.tensor(
             [[1.0, 0.0, 0.0, 0.0]] * n,
             dtype=base_env.dtype,
@@ -276,6 +270,12 @@ class TestMujoco:
             target,
             rtol=1e-6,
             atol=1e-6,
+        )
+        torch.testing.assert_close(
+            td["bus_quat"],
+            init,
+            rtol=1e-5,
+            atol=1e-5,
         )
         torch.testing.assert_close(
             td["quat_err"],

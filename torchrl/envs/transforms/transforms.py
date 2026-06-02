@@ -87,12 +87,7 @@ from torchrl.envs.transforms._observation import (
     ToTensorImage,
     UnsqueezeTransform,
 )
-from torchrl.envs.transforms._primitive import (
-    MacroAction,
-    MacroActionMode,
-    MacroPrimitive,
-    MacroPrimitiveTransform,
-)
+from torchrl.envs.transforms._primitive import MacroPrimitive, MacroPrimitiveTransform
 from torchrl.envs.transforms._reward import (
     BinarizeReward,
     LineariseRewards,
@@ -143,8 +138,6 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
-    "MacroAction",
-    "MacroActionMode",
     "MacroPrimitive",
     "MacroPrimitiveTransform",
     "MultiAction",
