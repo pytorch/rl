@@ -1932,6 +1932,9 @@ def make_async_vllm_engine(
         tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
         data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
         pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
+        enable_prefix_caching (bool, optional): Whether to enable vLLM prefix
+            caching. Defaults to ``False`` to avoid reusing prompt KV caches
+            across online weight updates.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1997,9 +2000,10 @@ def make_async_vllm_engine(
     if pipeline_parallel_size is None:
         pipeline_parallel_size = 1
 
-    # Create engine args
-    # Don't explicitly set enable_prefix_caching to avoid conflicts
-    kwargs.setdefault("enable_prefix_caching", True)
+    # Prefix caches are keyed by prompt content, not by the model weights that
+    # produced their KV entries. AsyncVLLM is commonly used with online weight
+    # updates, so keep prefix caching off unless the caller explicitly opts in.
+    kwargs.setdefault("enable_prefix_caching", False)
 
     # Set compilation flag - this controls whether vLLM will compile the model for better performance
     # Disabled by default in GRPO since it can cause issues during training

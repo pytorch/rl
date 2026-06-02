@@ -252,6 +252,9 @@ def _get_vllm_inference_model(
         "enforce_eager": cfg.inference_model.enforce_eager,
         "verbose": verbose,
         "compile": compile_model,
+        "enable_prefix_caching": getattr(
+            cfg.inference_model, "enable_prefix_caching", False
+        ),
     }
 
     # Handle FP32 output configuration
@@ -276,7 +279,6 @@ def _get_vllm_inference_model(
         "seed",
         "swap_space",
         "cpu_offload_gb",
-        "enable_prefix_caching",
         "tensor_parallel_size",
         "pipeline_parallel_size",
     ]
