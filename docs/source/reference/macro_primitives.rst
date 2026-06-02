@@ -92,6 +92,12 @@ The policy-facing code should remain ordinary TorchRL code:
    td["action"] = MyDomainAction.reach_target(target_from_observation(td))
    _, td = env.step_and_maybe_reset(td)
 
+Random actions are still defined by the transformed ``full_action_spec``. That
+spec is a raw :class:`~torchrl.data.Composite` of primitive fields so collectors
+and random rollouts can sample valid tensors. A random primitive is valid by
+shape, dtype and bounds, but it is not guaranteed to be meaningful for the task;
+the structured action classes below are the readable policy API.
+
 Example 1: humanoid actuator-control macros
 -------------------------------------------
 
