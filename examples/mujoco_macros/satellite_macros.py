@@ -20,7 +20,7 @@ from _viewer import (
     ViewerClosed,
 )
 from tensordict import TensorDict, TensorDictBase
-from torchrl.envs import EnvBase, SatelliteEnv, SatelliteMacroAction
+from torchrl.envs import EnvBase, SatelliteEnv
 from torchrl.envs.custom.mujoco._math import quat_mul, random_unit_quat
 
 
@@ -41,6 +41,21 @@ _RELATIVE_TARGET_BANK = torch.tensor(
         [0.84306234, -0.21775915, -0.45735148, 0.18071111],
     ]
 )
+
+
+def _relative_target_angles_deg(target_bank: torch.Tensor) -> torch.Tensor:
+    return torch.rad2deg(
+        2
+        * torch.atan2(
+            target_bank[..., 1:].norm(dim=-1),
+            target_bank[..., 0].clamp(-1.0, 1.0),
+        )
+    )
+
+
+_RELATIVE_TARGET_ANGLES_DEG = _relative_target_angles_deg(_RELATIVE_TARGET_BANK)
+_TARGET_BANK_MIN_DEG = float(_RELATIVE_TARGET_ANGLES_DEG.min().item())
+_TARGET_BANK_MAX_DEG = float(_RELATIVE_TARGET_ANGLES_DEG.max().item())
 
 
 def _parse_args() -> argparse.Namespace:
@@ -91,47 +106,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-class SatelliteSlewPolicy:
-    """Scripted macro policy that slews toward the reset-time target attitude."""
-
-    def __init__(
-        self,
-        target_quat: torch.Tensor,
-        *,
-        macro_steps: int = 36,
-        settle_steps: int = 8,
-    ) -> None:
-        self.target_quat = target_quat
-        self.macro_steps = int(macro_steps)
-        self.settle_steps = int(settle_steps)
-
-    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
-        # The policy only states the desired attitude. The appended
-        # ``SatelliteAttitudeTransform`` reads the current bus attitude, angular
-        # velocity and CMG gimbal angles, computes a gimbal-rate destination, and
-        # expands it into a low-level action sequence.
-        target_quat = self.target_quat.to(
-            dtype=tensordict["bus_quat"].dtype,
-            device=tensordict["bus_quat"].device,
-        )
-        if target_quat.ndim == 1:
-            target_quat = target_quat.unsqueeze(0)
-        target_quat = target_quat.expand(tensordict.batch_size + (4,))
-        tensordict.set(
-            "action",
-            SatelliteMacroAction.slew_attitude(
-                target_quat,
-                steps=self.macro_steps,
-                settle_steps=self.settle_steps,
-            ),
-        )
-        return tensordict
-
-
 def _run_until_aligned(
     env: EnvBase,
     tensordict: TensorDictBase,
-    policy: SatelliteSlewPolicy,
     *,
     max_macros: int,
     target_error_threshold: float,
@@ -139,45 +116,55 @@ def _run_until_aligned(
     for _ in range(max_macros):
         if bool(tensordict["quat_err"].norm(dim=-1).max() < target_error_threshold):
             break
-        tensordict = policy(tensordict)
+        # The transformed action spec exposes ``("action", "attitude")``.
+        # Setting that desired target frame is enough: the appended
+        # ``SatelliteAttitudeTransform`` reads the current bus attitude, angular
+        # velocity and CMG gimbal angles, then expands the target attitude into
+        # a low-level gimbal-rate action sequence.
+        tensordict.set(
+            "action",
+            TensorDict(
+                {"attitude": tensordict["target_quat"]},
+                batch_size=tensordict.batch_size,
+                device=tensordict.device,
+            ),
+        )
         _, tensordict = env.step_and_maybe_reset(tensordict)
     return tensordict
 
 
-def _sample_relative_target(
+def _select_relative_target_bank(
     args: argparse.Namespace,
     *,
-    generator: torch.Generator,
     device: torch.device,
     dtype: torch.dtype,
 ) -> torch.Tensor:
-    # The scripted CMG feedback controller is intentionally simple, so the demo
-    # samples from a small bank of reliable relative slews instead of arbitrary
-    # SO(3) targets. The absolute start attitude is sampled independently below,
-    # which still makes the target frame and visible manoeuver change on every
-    # replay while keeping the "stop when aligned" behaviour reliable.
-    target_bank = _RELATIVE_TARGET_BANK.to(device=device, dtype=dtype)
-    target_angles = torch.rad2deg(
-        2
-        * torch.atan2(
-            target_bank[..., 1:].norm(dim=-1),
-            target_bank[..., 0].clamp(-1.0, 1.0),
-        )
-    )
-    mask = (target_angles >= args.target_angle_min_deg) & (
-        target_angles <= args.target_angle_max_deg
+    # The demo controller is intentionally small, so the example samples from a
+    # bank of reliable relative slews. Other targets are not invalid, but this
+    # bank keeps the reset->target->stop loop demonstrative and repeatable.
+    mask = (_RELATIVE_TARGET_ANGLES_DEG >= args.target_angle_min_deg) & (
+        _RELATIVE_TARGET_ANGLES_DEG <= args.target_angle_max_deg
     )
     if not bool(mask.any()):
         raise ValueError(
-            "No demonstrated target attitudes match the requested angle range. "
-            "Use bounds overlapping approximately 56 to 88 degrees."
+            "No demonstrated target attitudes match the requested angle range "
+            f"[{args.target_angle_min_deg:.1f}, {args.target_angle_max_deg:.1f}] "
+            f"deg. The cached bank spans approximately "
+            f"[{_TARGET_BANK_MIN_DEG:.1f}, {_TARGET_BANK_MAX_DEG:.1f}] deg."
         )
-    target_bank = target_bank[mask]
+    return _RELATIVE_TARGET_BANK[mask].to(device=device, dtype=dtype)
+
+
+def _sample_relative_target(
+    target_bank: torch.Tensor,
+    *,
+    generator: torch.Generator,
+) -> torch.Tensor:
     index = torch.randint(
         target_bank.shape[0],
         (1,),
         generator=generator,
-        device=device,
+        device=target_bank.device,
     )
     return target_bank[index]
 
@@ -186,6 +173,7 @@ def _make_reset_tensordict(
     args: argparse.Namespace,
     base_env: SatelliteEnv,
     generator: torch.Generator,
+    target_bank: torch.Tensor,
 ) -> TensorDict:
     if args.fixed_attitudes:
         init_quat = _IDENTITY_QUAT
@@ -201,10 +189,8 @@ def _make_reset_tensordict(
                 dtype=base_env.dtype,
             )
         relative_target = _sample_relative_target(
-            args,
+            target_bank,
             generator=generator,
-            device=base_env.device,
-            dtype=base_env.dtype,
         )
         target_quat = quat_mul(init_quat, relative_target)
 
@@ -249,6 +235,11 @@ def main() -> None:
         )
     )
     env, recorder, logger = maybe_add_video_recorder(env, args, tag=_VIDEO_TAG)
+    target_bank = _select_relative_target_bank(
+        args,
+        device=base_env.device,
+        dtype=base_env.dtype,
+    )
     generator = torch.Generator(device=base_env.device)
     generator.manual_seed(int(args.seed))
     rollout_count = 0
@@ -256,13 +247,12 @@ def main() -> None:
         while viewer.is_running() and (
             args.max_rollouts is None or rollout_count < args.max_rollouts
         ):
-            reset = _make_reset_tensordict(args, base_env, generator)
+            reset = _make_reset_tensordict(args, base_env, generator, target_bank)
             td = env.reset(reset)
             try:
                 _run_until_aligned(
                     env,
                     td,
-                    SatelliteSlewPolicy(td["target_quat"]),
                     max_macros=args.max_macros,
                     target_error_threshold=args.target_error_threshold,
                 )

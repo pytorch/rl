@@ -1285,6 +1285,75 @@ class TestURScriptPrimitiveTransform:
         assert action.shape == torch.Size([1, 2, 4])
         torch.testing.assert_close(action, torch.zeros_like(action))
 
+    def test_satellite_attitude_transform_accepts_target_tensor_action(self):
+        transform = SatelliteAttitudeTransform(
+            num_cmgs=4,
+            macro_steps=2,
+            settle_steps=0,
+        )
+        target = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+        td = TensorDict(
+            {
+                "action": target.clone(),
+                "bus_quat": target.clone(),
+                "bus_omega": torch.zeros(1, 3),
+                "gimbal_angles": torch.cat([torch.zeros(1, 4), torch.ones(1, 4)], -1),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 2, 4])
+        torch.testing.assert_close(action, torch.zeros_like(action))
+
+    def test_satellite_attitude_transform_accepts_nested_attitude_action(self):
+        transform = SatelliteAttitudeTransform(
+            num_cmgs=4,
+            macro_steps=2,
+            settle_steps=0,
+        )
+        target = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+        td = TensorDict(
+            {
+                "action": TensorDict({"attitude": target.clone()}, batch_size=[1]),
+                "bus_quat": target.clone(),
+                "bus_omega": torch.zeros(1, 3),
+                "gimbal_angles": torch.cat([torch.zeros(1, 4), torch.ones(1, 4)], -1),
+            },
+            batch_size=[1],
+        )
+
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 2, 4])
+        torch.testing.assert_close(action, torch.zeros_like(action))
+
+    def test_satellite_attitude_transform_exposes_attitude_action_spec(self):
+        transform = SatelliteAttitudeTransform(num_cmgs=4)
+        input_spec = Composite(
+            full_action_spec=Composite(
+                action=Bounded(
+                    low=-1.0,
+                    high=1.0,
+                    shape=(1, 4),
+                    dtype=torch.float32,
+                ),
+                shape=(1,),
+            ),
+            full_observation_spec=Composite(
+                bus_quat=Unbounded(shape=(1, 4), dtype=torch.float64),
+                shape=(1,),
+            ),
+            shape=(1,),
+        )
+
+        output_spec = transform.transform_input_spec(input_spec)
+        action_spec = output_spec["full_action_spec"]
+
+        assert ("action", "attitude") in action_spec.keys(True, True)
+        assert action_spec["action", "attitude"].shape == torch.Size([1, 4])
+        assert action_spec["action", "attitude"].dtype is torch.float64
+        assert ("action", "attitude") in action_spec.rand().keys(True, True)
+
     def test_macro_transform_custom_solver_object(self):
         class Solver:
             def movel(self, target_pose, start, fallback, *, transform, tensordict):

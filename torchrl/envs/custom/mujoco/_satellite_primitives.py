@@ -12,6 +12,7 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.tensorclass import TensorClass
 from tensordict.utils import NestedKey
+from torchrl.data.tensor_specs import Composite, Unbounded
 from torchrl.envs.custom.mujoco._math import (
     cmg_jacobian,
     orthogonal_6cmg_geometry,
@@ -100,10 +101,13 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
     r"""Expand desired satellite attitudes into CMG gimbal-rate sequences.
 
     This transform is a satellite-specific preset. The policy-facing action is
-    a :class:`SatelliteMacroAction` containing a target quaternion. The transform
-    computes the current attitude error, applies a small proportional-derivative
-    steering law in body-rate coordinates, maps it through the instantaneous
-    CMG Jacobian, and delegates fixed-length interpolation/execution to
+    a desired attitude quaternion. It can be provided directly under
+    ``action_key``, under ``(action_key, "attitude")``, or through a
+    :class:`SatelliteMacroAction` when per-action durations are needed. The
+    transform computes the current attitude error, applies a small
+    proportional-derivative steering law in body-rate coordinates, maps it
+    through the instantaneous CMG Jacobian, and delegates fixed-length
+    interpolation/execution to
     :class:`~torchrl.envs.transforms.MacroPrimitiveTransform`.
 
     Args:
@@ -122,17 +126,15 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
-        >>> from torchrl.envs import SatelliteMacroAction, SatelliteAttitudeTransform
+        >>> from torchrl.envs import SatelliteAttitudeTransform
         >>> td = TensorDict({
-        ...     "action": SatelliteMacroAction.slew_attitude(
-        ...         torch.tensor([[1.0, 0.0, 0.0, 0.0]]), steps=2
-        ...     ),
+        ...     "action": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
         ...     "bus_quat": torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
         ...     "bus_omega": torch.zeros(1, 3),
         ...     "gimbal_angles": torch.cat([torch.zeros(1, 4), torch.ones(1, 4)], -1),
         ... }, batch_size=[1])
-        >>> SatelliteAttitudeTransform(num_cmgs=4).inv(td)["action"].shape
-        torch.Size([1, 10, 4])
+        >>> SatelliteAttitudeTransform(num_cmgs=4, macro_steps=2, settle_steps=0).inv(td)["action"].shape
+        torch.Size([1, 2, 4])
     """
 
     def __init__(
@@ -198,19 +200,20 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
                 "SatelliteAttitudeTransform requires SatelliteEnv observations "
                 f"{required}; missing {tuple(missing)}."
             )
-        bus_quat = _normalize_quat_or_identity(tensordict["bus_quat"])
-        target_quat = _normalize_quat_or_identity(
-            target_quat.to(dtype=bus_quat.dtype, device=bus_quat.device)
-        )
+        bus_quat = tensordict["bus_quat"]
+        dtype = bus_quat.dtype
+        device = bus_quat.device
+        bus_quat = _normalize_quat_or_identity(bus_quat)
+        if target_quat.dtype != dtype or target_quat.device != device:
+            target_quat = target_quat.to(dtype=dtype, device=device)
+        target_quat = _normalize_quat_or_identity(target_quat)
         quat_err = quat_log(quat_mul(quat_conj(bus_quat), target_quat))
-        bus_omega = tensordict["bus_omega"].to(
-            dtype=quat_err.dtype,
-            device=quat_err.device,
-        )
-        gimbal_obs = tensordict["gimbal_angles"].to(
-            dtype=quat_err.dtype,
-            device=quat_err.device,
-        )
+        bus_omega = tensordict["bus_omega"]
+        if bus_omega.dtype != dtype or bus_omega.device != device:
+            bus_omega = bus_omega.to(dtype=dtype, device=device)
+        gimbal_obs = tensordict["gimbal_angles"]
+        if gimbal_obs.dtype != dtype or gimbal_obs.device != device:
+            gimbal_obs = gimbal_obs.to(dtype=dtype, device=device)
         n_gimbals = self.num_cmgs
         gimbal_angles = torch.atan2(
             gimbal_obs[..., :n_gimbals],
@@ -235,20 +238,55 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
             return False
         action = tensordict.get(self.action_key)
         if isinstance(action, torch.Tensor):
-            return False
+            return action.ndim == len(tensordict.batch_size) + 1 and (
+                action.shape[-1:] == torch.Size([4])
+            )
         if not hasattr(action, "keys") or not hasattr(action, "get"):
             return False
         keys = action.keys(True, True)
-        return "target_quat" in keys or super()._has_structured_action(tensordict)
+        return (
+            "attitude" in keys
+            or "target_quat" in keys
+            or super()._has_structured_action(tensordict)
+        )
 
     def _unpack_structured_action(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, int, int]:
         action = tensordict.get(self.action_key)
-        if "target_quat" not in action.keys(True, True):
-            return super()._unpack_structured_action(tensordict)
-        target = self.attitude_action_target(tensordict, action.get("target_quat"))
+        if isinstance(action, torch.Tensor):
+            target_quat = action
+            steps = self.macro_steps
+            settle_steps = self.settle_steps
+            drop_policy_action = True
+        else:
+            keys = action.keys(True, True)
+            if "attitude" in keys:
+                target_quat = action.get("attitude")
+            elif "target_quat" in keys:
+                target_quat = action.get("target_quat")
+            else:
+                return super()._unpack_structured_action(tensordict)
+            steps = self._structured_action_int(action, "steps", self.macro_steps)
+            settle_steps = self._structured_action_int(
+                action, "settle_steps", self.settle_steps
+            )
+            drop_policy_action = False
+        if target_quat.shape[-1:] != torch.Size([4]):
+            raise ValueError(
+                "SatelliteAttitudeTransform expected an attitude quaternion with "
+                f"trailing dimension 4, got {target_quat.shape}."
+            )
+        if target_quat.ndim != len(tensordict.batch_size) + 1:
+            raise ValueError(
+                "SatelliteAttitudeTransform expected an attitude quaternion with "
+                f"shape {tuple(tensordict.batch_size)} + (4,), got "
+                f"{target_quat.shape}."
+            )
+        target = self.attitude_action_target(tensordict, target_quat)
         out = tensordict.clone()
+        if drop_policy_action:
+            out.del_(self.action_key)
         batch_shape = target.shape[:-1]
         out.set(
             self.primitive_id_key,
@@ -260,11 +298,43 @@ class SatelliteAttitudeTransform(MacroPrimitiveTransform):
             ),
         )
         out.set(self.target_qpos_key, target)
-        return (
-            out,
-            self._structured_action_int(action, "steps", self.macro_steps),
-            self._structured_action_int(action, "settle_steps", self.settle_steps),
+        return (out, steps, settle_steps)
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        input_spec = input_spec.clone()
+        batch_size = input_spec.shape
+        device = input_spec.device
+        dtype = self._attitude_spec_dtype(input_spec)
+        full_action_spec = Composite(shape=batch_size, device=device)
+        full_action_spec.set(
+            self.action_key,
+            Composite(
+                attitude=Unbounded(
+                    shape=(*batch_size, 4),
+                    dtype=dtype,
+                    device=device,
+                ),
+                shape=batch_size,
+                device=device,
+            ),
         )
+        input_spec["full_action_spec"] = full_action_spec
+        return input_spec
+
+    def _attitude_spec_dtype(self, input_spec: Composite) -> torch.dtype:
+        for spec_name, key in (
+            ("full_observation_spec", "bus_quat"),
+            ("full_state_spec", "target_quat"),
+            ("full_action_spec", self.action_key),
+        ):
+            spec = input_spec.get(spec_name, None)
+            if not isinstance(spec, Composite) or key not in spec.keys(True, True):
+                continue
+            leaf = spec[key]
+            dtype = getattr(leaf, "dtype", None)
+            if dtype is not None:
+                return dtype
+        return torch.get_default_dtype()
 
     def _action_scale(self) -> float:
         if self.action_scale is not None:
