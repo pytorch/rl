@@ -177,6 +177,20 @@ def _mock_data_grpo(vocab_size: int, device: torch.device | str = "cpu") -> Tens
 
 
 class TestLosses:
+    def test_grpo_token_mean_expands_token_mask(self):
+        """Test token_mean aggregation with per-token values and masks."""
+        loss_fn = GRPOLoss(actor_network=None, aggregation="token_mean")
+        value = torch.arange(6, dtype=torch.float32).view(2, 3, 1)
+        mask = torch.tensor(
+            [[True, False, True], [False, True, True]], dtype=torch.bool
+        )
+
+        result = loss_fn._aggregate_loss_value(value, mask)
+
+        expected_mask = mask.unsqueeze(-1).expand_as(value)
+        expected = value[expected_mask].mean()
+        torch.testing.assert_close(result, expected)
+
     @pytest.mark.parametrize("dapo", [True, False], ids=["dapo", "symmetric"])
     def test_grpo(self, mock_transformer_model, dapo):
         """Test GRPO loss computation with mock models."""
