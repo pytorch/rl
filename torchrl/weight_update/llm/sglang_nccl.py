@@ -68,14 +68,32 @@ from typing import Any, Literal
 
 import requests
 import torch
+from torch.distributed.distributed_c10d import (
+    _new_process_group_helper,
+    _world,
+    Backend,
+    default_pg_timeout,
+    PrefixStore,
+    rendezvous,
+)
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 from torchrl.modules.llm.backends.sglang.sglang_utils import (
     dtype_to_str,
     get_local_ip_address,
     get_open_port,
 )
 from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
+
+
+@implement_for("torch", None, "2.6")
+def _process_group_options_kwargs() -> dict[str, None]:
+    return {"pg_options": None}
+
+
+@implement_for("torch", "2.6")
+def _process_group_options_kwargs() -> dict[str, None]:  # noqa: F811
+    return {"backend_options": None}
 
 
 def _init_custom_process_group(
@@ -95,15 +113,6 @@ def _init_custom_process_group(
 
     Adapted from SGLang (sglang.srt.distributed) and OpenRLHF.
     """
-    from torch.distributed.distributed_c10d import (
-        _new_process_group_helper,
-        _world,
-        Backend,
-        default_pg_timeout,
-        PrefixStore,
-        rendezvous,
-    )
-
     if init_method is None:
         init_method = "env://"
 
@@ -118,10 +127,6 @@ def _init_custom_process_group(
 
     store = PrefixStore(group_name, store)
 
-    # PyTorch >= 2.6 renamed pg_options to backend_options
-    pg_options_key = (
-        "backend_options" if str(torch.__version__) >= "2.6" else "pg_options"
-    )
     pg, _ = _new_process_group_helper(
         world_size,
         rank,
@@ -129,7 +134,7 @@ def _init_custom_process_group(
         backend,
         store,
         group_name=group_name,
-        **{pg_options_key: None},
+        **_process_group_options_kwargs(),
         timeout=timeout,
     )
 

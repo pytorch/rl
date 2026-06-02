@@ -8,9 +8,11 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import inspect
 
 import pytest
 import torch
+from torch.distributed.distributed_c10d import _new_process_group_helper
 from torchrl._utils import logger
 from torchrl.weight_update.llm import (
     get_sglang_model_metadata,
@@ -18,10 +20,21 @@ from torchrl.weight_update.llm import (
     SGLangWeightSender,
     SGLangWeightSyncScheme,
 )
+from torchrl.weight_update.llm.sglang_nccl import _process_group_options_kwargs
 
 # Check for dependencies
 _has_sglang = importlib.util.find_spec("sglang") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
+
+
+def test_process_group_options_kwargs_match_torch_signature():
+    kwargs = _process_group_options_kwargs()
+
+    assert len(kwargs) == 1
+    assert next(iter(kwargs)) in inspect.signature(
+        _new_process_group_helper
+    ).parameters
+    assert next(iter(kwargs.values())) is None
 
 
 @pytest.mark.gpu
