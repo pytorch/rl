@@ -7,8 +7,10 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import sys
 import threading
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
 from typing import Any, TYPE_CHECKING
@@ -22,6 +24,7 @@ from torchrl.data.llm import History
 from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
+from torchrl.modules.llm.backends.vllm import vllm_async
 from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
@@ -194,6 +197,36 @@ def sample_history_assistant():
         ],
     ]
     return History.from_chats(chats)
+
+
+def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
+    """AsyncVLLM should not reuse prompt KV caches across online weight updates."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_vllm = types.SimpleNamespace(AsyncEngineArgs=FakeAsyncEngineArgs)
+    captured = {}
+
+    def fake_launch(engine_args, num_replicas):
+        captured["engine_args"] = engine_args
+        captured["num_replicas"] = num_replicas
+        return object()
+
+    monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(vllm_async.AsyncVLLM, "launch", staticmethod(fake_launch))
+
+    vllm_async.make_async_vllm_engine(model_name="Qwen/Qwen2.5-0.5B", verbose=False)
+    assert captured["engine_args"].enable_prefix_caching is False
+
+    vllm_async.make_async_vllm_engine(
+        model_name="Qwen/Qwen2.5-0.5B",
+        enable_prefix_caching=True,
+        verbose=False,
+    )
+    assert captured["engine_args"].enable_prefix_caching is True
 
 
 @pytest.fixture

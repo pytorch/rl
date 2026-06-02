@@ -60,6 +60,7 @@ inference_model:
   max_tokens: 2048
   include_stop_str_in_output: true
   enforce_eager: false
+  enable_prefix_caching: false
   max_model_len: 4096
 
 ref_model:

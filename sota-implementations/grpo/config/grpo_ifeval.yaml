@@ -100,6 +100,7 @@ inference_model:
   max_tokens: 2048
   include_stop_str_in_output: true
   enforce_eager: false
+  enable_prefix_caching: false
   # compile: false  # Whether to enable model compilation (disabled by default for GRPO)
   # verbose: true   # Whether to show vLLM throughput statistics (enabled by default)
 
