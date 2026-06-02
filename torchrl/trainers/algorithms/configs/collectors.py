@@ -73,10 +73,6 @@ class CollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-SyncDataCollectorConfig = CollectorConfig
-
-
 @dataclass
 class AsyncCollectorConfig(BaseCollectorConfig):
     """Hydra configuration for :class:`~torchrl.collectors.AsyncCollector`.
@@ -130,10 +126,6 @@ class AsyncCollectorConfig(BaseCollectorConfig):
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:
             self.weight_updater._partial_ = True
-
-
-# Legacy alias
-AsyncDataCollectorConfig = AsyncCollectorConfig
 
 
 @dataclass
@@ -196,10 +188,6 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
             self.weight_updater._partial_ = True
 
 
-# Legacy alias
-MultiSyncCollectorConfig = MultiSyncCollectorConfig
-
-
 @dataclass
 class MultiAsyncCollectorConfig(BaseCollectorConfig):
     """Hydra configuration for :class:`~torchrl.collectors.MultiAsyncCollector`.
@@ -260,7 +248,3 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
             self.policy_factory._partial_ = True
         if self.weight_updater is not None:
             self.weight_updater._partial_ = True
-
-
-# Legacy alias
-MultiAsyncCollectorConfig = MultiAsyncCollectorConfig

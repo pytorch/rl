@@ -349,7 +349,30 @@ class LSTM(LSTMBase):
         return hy, cy
 
     def _lstm(self, x, hx, mask=None):
+        """Python LSTM rollout over the time dimension.
 
+        Shapes:
+            x: ``(B, T, input_size)`` when ``batch_first=True``, otherwise
+              ``(T, B, input_size)``. ``T`` is the time/step dim.
+            hx: tuple ``(h, c)`` each of shape
+              ``(num_layers, B, hidden_size)``.
+            mask: optional ``(B, T)`` (or ``(T, B)``) boolean tensor. Where
+              ``mask`` is False the hidden/cell carry is frozen (the cell is
+              still evaluated but its output is discarded). Used to mask out
+              padded time steps in batches with mixed trajectory lengths.
+
+        Returns:
+            outputs: ``(B, T, hidden_size)`` (matches ``batch_first``).
+            (h_T, c_T): final hidden / cell state, each ``(num_layers, B, hidden_size)``.
+
+        Why the unbind/stack-by-layer pattern:
+            We iterate cells per layer because :class:`LSTMCell` is vmap- and
+            ``torch.compile``-friendly while :class:`nn.LSTM` is not. Unbinding
+            ``h``/``c`` along dim 0 (num_layers) gives a list of per-layer
+            states; the outer loop walks the time dim, the inner loop walks
+            layers and feeds layer ``L``'s output as layer ``L+1``'s input
+            (with dropout in between for training).
+        """
         if self.use_scan:
             return self._lstm_scan(x, hx, mask)
 
@@ -927,6 +950,29 @@ class LSTMModule(ModuleBase):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
+        """Run the LSTM on a tensordict, honouring ``is_init`` for hidden-state resets.
+
+        Two execution paths, picked by :attr:`recurrent_mode`:
+
+        - **Sequential** (``recurrent_mode=False``): one step at a time, called
+          inside a collector rollout. Batch is flattened, a synthetic time dim
+          of size 1 is added, and ``is_init`` *zeros the incoming hidden* so
+          a fresh trajectory does not inherit the previous one's state
+          (see the ``torch.where`` block below).
+
+        - **Recurrent** (``recurrent_mode=True``): a full ``(B, T, ...)``
+          batch is processed at once, called inside loss / GAE / training
+          code. If any ``is_init[..., 1:]`` is set we have multiple
+          trajectories packed into the time dim; we split-and-pad along
+          trajectory boundaries (via ``_split_and_pad_sequence``) so each
+          chunk has a single trajectory, run the LSTM, then unpad. This is
+          what prevents hidden state from leaking *across* trajectories
+          within a single training batch.
+
+        ``is_init`` is sourced from :class:`~torchrl.envs.InitTracker` on the
+        env side; without that transform there is no signal for boundary
+        resets and hidden state will silently leak across episodes.
+        """
         from torchrl.objectives.value.functional import (
             _inv_pad_sequence,
             _split_and_pad_sequence,
@@ -1044,7 +1090,43 @@ class LSTMModule(ModuleBase):
         is_init: torch.Tensor | None = None,
         backend: str = "pad",
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Drive ``self.lstm`` for one or more steps and shape its outputs for TensorDict.
 
+        Shapes:
+            input: ``(batch, steps, input_size)``.
+            hidden{0,1}_in: ``(batch, steps, num_layers, hidden_size)`` — the
+                tensordict-native layout, with a time dim. May be ``None``
+                (zero-initialised below).
+
+        Returns ``(y, h, c)``:
+            y: ``(batch, steps, hidden_size)``.
+            h, c: ``(batch, steps, num_layers, hidden_size)``, padded with
+                zeros at steps ``0..steps-2`` and the true final state at
+                step ``steps-1`` (see "Why we pad" below).
+
+        Why ``[..., 0, :, :]`` + transpose:
+            TensorDict stores hidden state with a time dim because every step
+            in a trajectory carries one. ``nn.LSTM`` does not: it wants a
+            single input hidden of shape ``(num_layers, batch, hidden_size)``.
+            So we pick the *first* step's hidden (``[..., 0, :, :]`` →
+            ``(batch, num_layers, hidden)``), then transpose ``(-3, -2)`` to
+            put num_layers first. The mirror happens after the LSTM call:
+            transpose ``(0, 1)`` to move num_layers back behind batch.
+
+        Why we pad with zeros at intermediate steps:
+            ``nn.LSTM`` returns only the *final* hidden across the whole
+            sequence, but tensordict expects a hidden value at every step.
+            We zero-pad steps ``0..steps-2`` and place the true final
+            hidden at ``steps-1``. Those padded values are not real
+            per-step hiddens — they are placeholders to keep shapes aligned.
+            This is why the class docstring warns that "final hidden values
+            should not be trusted" for multi-trajectory inputs: under
+            recurrent_mode the splitter (see :meth:`forward`) breaks the
+            input into per-trajectory chunks before reaching here, so the
+            "final" hidden is meaningful per-trajectory; in raw recurrent
+            calls without that split, the final hidden may correspond to a
+            padded slot.
+        """
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
 
@@ -1071,7 +1153,8 @@ class LSTMModule(ModuleBase):
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
             )
 
-        # we only need the first hidden state
+        # Pick the first step's hidden and move num_layers to the front for
+        # nn.LSTM. See the docstring for the shape reasoning.
         _hidden0_in = hidden0_in[..., 0, :, :]
         _hidden1_in = hidden1_in[..., 0, :, :]
         hidden = (
@@ -2490,6 +2573,16 @@ class GRUModule(ModuleBase):
 
 
 # Recurrent mode manager
+#
+# Process-wide flag toggled by :class:`set_recurrent_mode`. RNN modules
+# (:class:`LSTMModule`, :class:`GRUModule`) read this via :func:`recurrent_mode`
+# inside their ``forward`` to decide between sequential (one-step) and
+# recurrent (full-sequence) execution. Keeping it as a context manager rather
+# than per-module state means a single block can flip every RNN in a composed
+# policy without touching submodule references. The custom subclass below
+# exists to keep this working under ``torch.compile``: Dynamo cannot trace
+# ``ContextVar.get``, so we mirror the mode into a plain attribute and read
+# from it during compilation.
 class _RecurrentModeContextManager(_ContextManager):
     def __init__(self):
         super().__init__()
@@ -2535,6 +2628,18 @@ class set_recurrent_mode(_DecoratorContextManager):
 
     .. note:: All of TorchRL methods are decorated with ``set_recurrent_mode(True)`` by default.
 
+    When to use which mode:
+        - **Sequential** (default, ``mode=False``): inside collectors, where
+          the policy is called step-by-step and the hidden state from the
+          previous step is fed back through the tensordict.
+        - **Recurrent** (``mode=True``): inside loss / advantage computation
+          (e.g. GAE) where a full ``(B, T, ...)`` batch is replayed and you
+          want the RNN to process the time dim in a single call. This is the
+          mode that activates the multi-trajectory split inside
+          :meth:`LSTMModule.forward`.
+
+        See the :ref:`Recurrent state lifecycle <ref_recurrent_state_lifecycle>`
+        guide for a full walkthrough of when each mode fires.
     """
 
     def __init__(

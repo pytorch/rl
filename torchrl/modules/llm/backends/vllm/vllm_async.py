@@ -440,7 +440,16 @@ class _AsyncLLMEngine:
         Args:
             update_request: WeightTransferUpdateRequest (or dict) for the engine.
         """
-        return await self.engine.update_weights(update_request)
+        start_weight_update = getattr(self.engine, "start_weight_update", None)
+        finish_weight_update = getattr(self.engine, "finish_weight_update", None)
+        if start_weight_update is None:
+            return await self.engine.update_weights(update_request)
+        await start_weight_update(is_checkpoint_format=True)
+        try:
+            return await self.engine.update_weights(update_request)
+        finally:
+            if finish_weight_update is not None:
+                await finish_weight_update()
 
     def get_world_size(self):
         """Get the world size (TP * DP) for this engine instance."""

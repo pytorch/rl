@@ -1,6 +1,6 @@
 @echo off
 if "%BUILD_VERSION%" == "" (
-    set TORCHRL_BUILD_VERSION=0.12.0
+    set TORCHRL_BUILD_VERSION=0.13.0
 ) else (
     set TORCHRL_BUILD_VERSION=%BUILD_VERSION%
 )

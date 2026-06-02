@@ -529,7 +529,8 @@ class GRPOLoss(LossModule):
             return sample_mean.mean(dim=0, keepdim=False)
 
         # token_mean (global masked mean)
-        return _reduce(value, reduction="mean", mask=mask).squeeze(-1)
+        mask_exp = expand_as_right(mask, value)
+        return _reduce(value, reduction="mean", mask=mask_exp).squeeze(-1)
 
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size

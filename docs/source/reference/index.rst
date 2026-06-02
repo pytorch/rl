@@ -16,3 +16,4 @@ API Reference
     utils
     config
     profiling
+    glossary
