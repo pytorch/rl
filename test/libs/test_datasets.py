@@ -1118,6 +1118,28 @@ class TestOpenX:
 )
 @pytest.mark.slow
 class TestOpenML:
+    @pytest.fixture(autouse=True)
+    def _patch_openml_data(self, monkeypatch, tmp_path):
+        """Use deterministic local data instead of querying OpenML in CI tests."""
+
+        def _get_data(cls, dataset_name):
+            dataset_seed = sum(map(ord, dataset_name))
+            generator = torch.Generator().manual_seed(dataset_seed)
+            num_rows = 5000
+            num_features = 8
+            num_classes = 3
+            x = torch.randn(
+                num_rows, num_features, dtype=torch.float64, generator=generator
+            )
+            y = torch.randint(num_classes, (num_rows,), generator=generator)
+            return TensorDict({"X": x, "y": y}, [num_rows])
+
+        monkeypatch.setattr(OpenMLExperienceReplay, "_get_data", classmethod(_get_data))
+        monkeypatch.setattr(
+            "torchrl.data.datasets.openml._get_root_dir",
+            lambda name: tmp_path / name,
+        )
+
     @pytest.mark.parametrize("batch_size", [(), (2,), (2, 3)])
     def test_env(self, dataset, batch_size):
         env = OpenMLEnv(dataset, batch_size=batch_size)

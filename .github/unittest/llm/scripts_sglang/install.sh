@@ -47,15 +47,15 @@ uv pip install \
 printf "* Installing PyTorch with %s\n" "${CU_VERSION}"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
     if [ "${CU_VERSION:-}" == cpu ]; then
-        uv pip install --upgrade --pre torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu
+        uv pip install --upgrade --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/cpu
     else
-        uv pip install --upgrade --pre torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/${CU_VERSION}
+        uv pip install --upgrade --pre torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/nightly/${CU_VERSION}
     fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ]; then
-        uv pip install --upgrade torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
+        uv pip install --upgrade torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/cpu
     else
-        uv pip install --upgrade torch torchvision "numpy<2.0.0" --index-url https://download.pytorch.org/whl/${CU_VERSION}
+        uv pip install --upgrade torch "numpy<2.0.0" --index-url https://download.pytorch.org/whl/${CU_VERSION}
     fi
 else
     printf "Failed to install pytorch\n"
@@ -94,24 +94,28 @@ python -c "import torchrl"
 # ============================================================================================ #
 
 printf "* Installing SGLang dependencies\n"
-uv pip install transformers accelerate datasets huggingface_hub
+uv pip install transformers accelerate datasets
 
 # Install system dependencies required by SGLang
-# libnuma is required by sgl_kernel
+# libnuma is required by sglang-kernel
 printf "* Installing system dependencies for SGLang\n"
 apt-get update && apt-get install -y libnuma-dev
 
 # Install SGLang with all extras
 # Note: We do NOT install vLLM here to avoid Triton version conflicts
 printf "* Installing SGLang\n"
-uv pip install "sglang[all]==0.5.12.post1" "kernels>=0.12,<0.13"
+uv pip install "sglang[all]" "kernels>=0.12,<0.13"
 
-# SGLang 0.5.12.post1 resolves torch 2.11.0, while the base docker image
-# carries an older torchvision built against its preinstalled torch. Reinstall
-# the matching torchvision wheel after the backend resolves torch so SGLang can
-# import torchvision.io when launching the server.
-printf "* Installing torchvision matching the SGLang torch wheel\n"
-uv pip install --force-reinstall --no-deps "torchvision==0.26.0"
+# SGLang pins torch 2.11.0, whose PyPI wheel carries CUDA 13.0. Install
+# the exact PyPI torchvision build after SGLang resolves torch so the
+# initial PyTorch cu129 wheel cannot satisfy the version constraint.
+printf "* Installing torchvision matching SGLang's torch wheel\n"
+uv pip install --reinstall --index-url https://pypi.org/simple "torchvision===0.26.0"
+
+# Keep secondary dependencies inside the ranges required by the latest SGLang
+# dependency set so uv pip check catches real breakage instead of resolver drift.
+printf "* Constraining secondary dependencies for SGLang\n"
+uv pip install "pillow>=9.2,<12" "numpy>=1.25,<2.4" "fsspec[http]<=2026.2.0"
 
 # Install MCP dependencies for tool execution tests
 printf "* Installing MCP dependencies (uvx, Deno)\n"
@@ -145,11 +149,22 @@ printf "* SGLang installation complete\n"
 
 # Show installed versions for debugging
 printf "* Installed versions:\n"
-python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-python -c "import torchvision; print(f'TorchVision: {torchvision.__version__}')"
-python -c "import sglang; print(f'SGLang: {sglang.__version__}')" || echo "SGLang version check failed"
-python -c "import transformers; print(f'Transformers: {transformers.__version__}')" || echo "Transformers version check failed"
-python -c "import kernels; print(f'Kernels: {kernels.__version__}')" || echo "Kernels version check failed"
-python -c "import triton; print(f'Triton: {triton.__version__}')" || echo "Triton version check failed"
+python - <<'PY'
+from importlib.metadata import PackageNotFoundError, version
+
+for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "triton", "numpy", "pillow", "fsspec"):
+    try:
+        print(f"{package}: {version(package)}")
+    except PackageNotFoundError:
+        print(f"{package}: not installed")
+PY
+
+printf "* Verifying torch/torchvision CUDA compatibility\n"
+python - <<'PY'
+import torch
+import torchvision
+
+print(f"torch CUDA: {torch.version.cuda}; torchvision: {torchvision.__version__}")
+PY
 
 uv pip check

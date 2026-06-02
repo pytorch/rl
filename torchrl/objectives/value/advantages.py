@@ -507,7 +507,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         as produced by
         :class:`~torchrl.envs.transforms.NextStateReconstructor` at trajectory
         ends in conjunction with
-        :class:`~torchrl.collectors.SyncDataCollector` configured with
+        :class:`~torchrl.collectors.Collector` configured with
         ``compact_obs=True``. Without this step, ``V(NaN) = NaN`` propagates
         through the TD / GAE kernels (the multiplication by ``(1 - done)``
         does not zero NaN out because ``0 * NaN = NaN`` in IEEE 754).

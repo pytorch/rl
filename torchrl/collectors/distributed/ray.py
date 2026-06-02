@@ -246,7 +246,7 @@ class RayCollector(BaseCollector):
             This is equivalent to `max_weight_update_interval=0`.
             Defaults to ``False``, i.e. updates have to be executed manually
             through
-            :meth:`torchrl.collectors.DataCollector.update_policy_weights_`
+            :meth:`torchrl.collectors.Collector.update_policy_weights_`
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -274,7 +274,7 @@ class RayCollector(BaseCollector):
 
             .. note:: Weight synchronization is lazily initialized. When using ``policy_factory``
                 without a central ``policy``, weight sync is deferred until the first call to
-                :meth:`~torchrl.collectors.DataCollector.update_policy_weights_` with actual weights.
+                :meth:`~torchrl.collectors.Collector.update_policy_weights_` with actual weights.
                 This allows sub-collectors to each have their own independent policies created via
                 the factory. If you have a central policy and want to sync its weights to remote
                 collectors, call ``update_policy_weights_(policy)`` before starting iteration.

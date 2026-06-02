@@ -60,10 +60,8 @@ class NoisyLinear(nn.Linear):
             Defaults to ``0.5`` as per the original paper.
         use_exploration_type (bool or None, optional): if ``True``, noise is controlled by
             :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled
-            by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy
-            behavior but emits a ``FutureWarning`` that the default will change to ``True``
-            in v0.13. Pass ``True`` to opt into the new behavior, or ``False`` to silence
-            the warning and keep the legacy behavior.
+            by ``self.training`` (legacy behavior). If ``None``, it is treated as ``True``.
+            Defaults to ``True``.
 
     """
 
@@ -75,28 +73,16 @@ class NoisyLinear(nn.Linear):
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
         std_init: float = 0.5,
-        use_exploration_type: bool | None = None,
+        use_exploration_type: bool | None = True,
     ):
         nn.Module.__init__(self)
         self.in_features = int(in_features)
         self.out_features = int(out_features)
         self.std_init = std_init
 
-        # Handle use_exploration_type deprecation
-        if use_exploration_type is None:
-            warnings.warn(
-                "NoisyLinear currently uses `self.training` to control noise. "
-                "In v0.13, this will change to use `exploration_type()` from "
-                "torchrl.envs.utils for consistency with other exploration modules. "
-                "To opt into the new behavior now, pass `use_exploration_type=True`. "
-                "To silence this warning and keep the legacy behavior, pass "
-                "`use_exploration_type=False`.",
-                FutureWarning,
-                stacklevel=2,
-            )
-            self._use_exploration_type = False
-        else:
-            self._use_exploration_type = use_exploration_type
+        self._use_exploration_type = (
+            True if use_exploration_type is None else use_exploration_type
+        )
 
         self.weight_mu = nn.Parameter(
             torch.empty(
@@ -212,8 +198,8 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
             Defaults to ``0.5`` as per the original paper.
         use_exploration_type (bool or None, optional): if ``True``, noise is controlled by
             :func:`~torchrl.envs.utils.exploration_type`. If ``False``, noise is controlled
-            by ``self.training`` (legacy behavior). If ``None`` (default), uses the legacy
-            behavior but emits a ``FutureWarning``. See :class:`NoisyLinear` for details.
+            by ``self.training`` (legacy behavior). If ``None``, it is treated as ``True``.
+            Defaults to ``True``.
 
     """
 
@@ -226,25 +212,13 @@ class NoisyLazyLinear(LazyModuleMixin, NoisyLinear):
         device: DEVICE_TYPING | None = None,
         dtype: torch.dtype | None = None,
         std_init: float = 0.5,
-        use_exploration_type: bool | None = None,
+        use_exploration_type: bool | None = True,
     ):
-        # Handle use_exploration_type deprecation
-        if use_exploration_type is None:
-            warnings.warn(
-                "NoisyLazyLinear currently uses `self.training` to control noise. "
-                "In v0.13, this will change to use `exploration_type()` from "
-                "torchrl.envs.utils for consistency with other exploration modules. "
-                "To opt into the new behavior now, pass `use_exploration_type=True`. "
-                "To silence this warning and keep the legacy behavior, pass "
-                "`use_exploration_type=False`.",
-                FutureWarning,
-                stacklevel=2,
-            )
-            _use_exploration_type = False
-        else:
-            _use_exploration_type = use_exploration_type
+        _use_exploration_type = (
+            True if use_exploration_type is None else use_exploration_type
+        )
 
-        # Call super().__init__ with use_exploration_type to avoid duplicate warning
+        # Call super().__init__ with the resolved exploration-type behavior.
         # This goes through LazyModuleMixin.__init__ which registers the forward pre-hook
         factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__(

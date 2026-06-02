@@ -109,7 +109,7 @@ class DistributedWeightSyncScheme(WeightSyncScheme):
             weights_buffer = self._get_weights_buffer_from_model(model)
 
         # Get base tcp_port from context if available to avoid port conflicts.
-        # The DistributedDataCollector uses tcp_port for init and tcp_port+1 for its store,
+        # The DistributedCollector uses tcp_port for init and tcp_port+1 for its store,
         # so we use tcp_port+2 for the weight sync scheme's store.
         base_tcp_port = (
             getattr(context, "tcp_port", None) if context is not None else None

@@ -2080,11 +2080,19 @@ class TestLogProbsComparison:
             backend_selected, transformers_selected, atol=3e-1, rtol=1e-1
         )
         delta = backend_selected - transformers_selected
+        abs_delta = delta.abs()
+        mse = delta.square().mean().item()
+        max_abs = abs_delta.max().item()
+        mean_abs = abs_delta.mean().item()
         importance_weights = torch.exp(delta.double())
         ess = importance_weights.sum().square() / (
             importance_weights.square().sum() * importance_weights.numel()
         )
-        assert ess > 0.99
+        ess = ess.item()
+        assert ess > 0.99, (
+            "Backend and Transformers log-probs diverged: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -2136,6 +2144,7 @@ class TestLogProbsComparison:
             input_key=input_key,
             generate=True,
             pad_output=pad_output,
+            return_log_probs=False,
             generate_kwargs={
                 "max_tokens": 5,
                 "temperature": 0.0,

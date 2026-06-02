@@ -83,6 +83,7 @@ def sglang_service():
         dp_size=1,
         mem_fraction_static=0.3,  # Low memory for testing
         disable_cuda_graph=True,  # Skip CUDA graph compilation for faster startup
+        disable_piecewise_cuda_graph=True,  # Avoid latest SGLang PCG compile overhead
         timeout=SGLANG_STARTUP_TIMEOUT,
     )
     startup_time = time.time() - start_time

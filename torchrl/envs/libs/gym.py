@@ -75,6 +75,28 @@ For more information, please refer to discussion https://github.com/pytorch/rl/d
 """
 
 
+def _gymnasium_reward_space(env):
+    reward_space = getattr(env, "__dict__", {}).get("reward_space", None)
+    if reward_space is not None:
+        return reward_space
+
+    get_wrapper_attr = getattr(env, "get_wrapper_attr", None)
+    if get_wrapper_attr is not None:
+        try:
+            reward_space = get_wrapper_attr("reward_space")
+        except AttributeError:
+            pass
+        else:
+            if reward_space is not None:
+                return reward_space
+
+    unwrapped = getattr(env, "unwrapped", None)
+    if unwrapped is not None and unwrapped is not env:
+        reward_space = getattr(unwrapped, "__dict__", {}).get("reward_space", None)
+        if reward_space is not None:
+            return reward_space
+
+
 def _minigrid_lib():
     assert _has_minigrid, "minigrid not found"
     import minigrid
@@ -1400,21 +1422,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
     @implement_for("gymnasium", None, "1.0.0")
     def _reward_space(self, env):  # noqa: F811
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            return env.reward_space
-        env = env.unwrapped
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            rs = env.reward_space
-            return rs
+        return _gymnasium_reward_space(env)
 
     @implement_for("gymnasium", "1.1.0")
     def _reward_space(self, env):  # noqa: F811
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            return env.reward_space
-        env = env.unwrapped
-        if hasattr(env, "reward_space") and env.reward_space is not None:
-            rs = env.reward_space
-            return rs
+        return _gymnasium_reward_space(env)
 
     def _make_specs(self, env: gym.Env, batch_size=None) -> None:  # noqa: F821
         # If batch_size is provided, we set it to tell what batch size must be used

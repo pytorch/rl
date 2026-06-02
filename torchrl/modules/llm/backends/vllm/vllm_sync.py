@@ -113,7 +113,16 @@ class _LLMOnDevice(LLM):
 
     def update_weights_native(self, update_request):
         """Update weights using the native weight transfer engine."""
-        return self.llm_engine.update_weights(update_request)
+        start_weight_update = getattr(self.llm_engine, "start_weight_update", None)
+        finish_weight_update = getattr(self.llm_engine, "finish_weight_update", None)
+        if start_weight_update is None:
+            return self.llm_engine.update_weights(update_request)
+        start_weight_update(is_checkpoint_format=True)
+        try:
+            return self.llm_engine.update_weights(update_request)
+        finally:
+            if finish_weight_update is not None:
+                finish_weight_update()
 
     def sleep(self, level: int = 0):
         """Put the vLLM engine to sleep to prepare for weight updates."""
