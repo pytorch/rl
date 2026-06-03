@@ -15,6 +15,7 @@ from __future__ import annotations
 import atexit
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from collections.abc import Iterator
@@ -158,7 +159,7 @@ class AsyncSGLang(RLSGLangEngine):
 
         # Build command line arguments
         cmd = [
-            "python3",
+            sys.executable,
             "-m",
             "sglang.launch_server",
             "--model-path",
@@ -200,6 +201,8 @@ class AsyncSGLang(RLSGLangEngine):
         # trainer worker while this server sees all GPUs. The topology mismatch
         # causes NCCL P2P/IPC channel setup to fail with "invalid argument".
         env = os.environ.copy()
+        python_bin_dir = os.path.dirname(sys.executable)
+        env["PATH"] = python_bin_dir + os.pathsep + env.get("PATH", "")
         env["NCCL_P2P_DISABLE"] = "1"
         env["NCCL_SHM_DISABLE"] = "1"
         grpc_port = env.get("SGLANG_GRPC_PORT")

@@ -355,6 +355,18 @@ def _get_sglang_inference_model(
         ),
     }
 
+    # GRPO consumes inference-time token log-probs as fixed behavior-policy
+    # scores. Expose SGLang's fp32 LM-head option for model/backend
+    # combinations that produce unstable bf16 output log-probs.
+    enable_fp32_lm_head = getattr(
+        cfg.inference_model,
+        "enable_fp32_lm_head",
+        getattr(cfg.inference_model, "enable_fp32_output", False),
+    )
+    if enable_fp32_lm_head:
+        torchrl_logger.info("Enabled FP32 LM head for SGLang inference")
+    inference_params["enable_fp32_lm_head"] = enable_fp32_lm_head
+
     # Handle torch_dtype
     if hasattr(cfg.inference_model, "torch_dtype"):
         dtype_str = cfg.inference_model.torch_dtype
@@ -368,6 +380,8 @@ def _get_sglang_inference_model(
     optional_sglang_params = [
         "trust_remote_code",
         "dp_size",
+        "disable_cuda_graph",
+        "disable_piecewise_cuda_graph",
     ]
 
     for param in optional_sglang_params:

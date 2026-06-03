@@ -579,9 +579,10 @@ class SGLangWrapper(LLMWrapperBase):
 
         for result in results:
             response_texts.append(result.get("text", ""))
-            response_token_ids.append(
-                torch.tensor(result.get("output_ids", []), dtype=torch.long)
+            response_tokens = torch.tensor(
+                result.get("output_ids", []), dtype=torch.long
             )
+            response_token_ids.append(response_tokens)
             # Extract log probs if available
             # SGLang can return logprobs in different locations depending on version:
             # - "meta_info.output_token_logprobs" (common location)
@@ -605,7 +606,16 @@ class SGLangWrapper(LLMWrapperBase):
                             lp[0] if isinstance(lp, (list, tuple)) else lp
                             for lp in logprobs
                         ]
-                log_probs_list.append(torch.tensor(logprobs, dtype=torch.float32))
+                log_probs = torch.tensor(logprobs, dtype=torch.float32)
+                if log_probs.numel() != response_tokens.numel():
+                    raise ValueError(
+                        "SGLang returned a different number of output token "
+                        f"log-probs ({log_probs.numel()}) and output ids "
+                        f"({response_tokens.numel()})."
+                    )
+                if not torch.isfinite(log_probs).all():
+                    raise ValueError("SGLang returned non-finite output log-probs.")
+                log_probs_list.append(log_probs)
             else:
                 log_probs_list.append(None)
 

@@ -53,6 +53,9 @@ inference_model:
     enabled: false
   attn_implementation: flash_attention_2
   torch_dtype: bfloat16
+  enable_fp32_lm_head: false
+  disable_cuda_graph: false
+  disable_piecewise_cuda_graph: false
   gpu_memory_utilization: 0.9
   temperature: 1.0
   top_p: 1.0
@@ -74,6 +77,7 @@ ref_model:
 optimizer:
   name: AdamW
   lr: 5e-6
+  eps: 1e-5
   clip_grad_norm: 1.0
   weight_decay: 0.01
 

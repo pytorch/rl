@@ -143,6 +143,7 @@ def train(
         policy_training.parameters(),
         lr=cfg.optimizer.lr,
         weight_decay=cfg.optimizer.weight_decay,
+        eps=getattr(cfg.optimizer, "eps", 1e-8),
         fused=False,
     )
     scaler = GradScaler(enabled=cfg.train.mixed_precision)
