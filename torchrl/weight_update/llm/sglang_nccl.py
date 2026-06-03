@@ -92,6 +92,8 @@ from torchrl.weight_update.weight_sync_schemes import (
     WeightSyncScheme,
 )
 
+_SGLANG_CACHE_FLUSH_TIMEOUT = 1.0
+
 
 @implement_for("torch", None, "2.6")
 def _process_group_options_kwargs() -> dict[str, None]:
@@ -221,10 +223,10 @@ class SGLangCollectiveTransport:
         SGLang's distributed weight-update endpoint flushes synchronously by
         default. That path asserts if requests are pending, which kills the
         server during continuous collection. Defer the flush through the public
-        endpoint instead; it can wait for an idle gap and returns a normal HTTP
-        failure when the gap does not arrive.
+        endpoint instead; it can wait briefly for an idle gap and returns a
+        normal HTTP failure when the gap does not arrive.
         """
-        flush_timeout = min(30.0, self.timeout)
+        flush_timeout = min(_SGLANG_CACHE_FLUSH_TIMEOUT, self.timeout)
         request_timeout = max(self.timeout, flush_timeout + 5.0)
         try:
             response = requests.post(
