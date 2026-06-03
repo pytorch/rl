@@ -87,6 +87,7 @@ from tensordict.nn import TensorDictModuleBase
 
 from torchrl.envs import EnvBase
 from torchrl.envs.utils import ExplorationType, set_exploration_type
+from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
 _has_ray = importlib.util.find_spec("ray") is not None
 
@@ -1166,15 +1167,18 @@ class _ThreadEvalBackend(_EvalBackend):
                 # Multi-process: use scheme-based sync via the collector
                 self._collector.update_policy_weights_(weights_dict=weights_dict)
             else:
-                # Same process: apply weights directly
+                # Same process: copy weights into the registered parameters and
+                # buffers. Calling TensorDict.to_module() with plain tensors would
+                # replace nn.Parameters with tensors and make state_dict() empty.
+                strategy = WeightStrategy(extract_as="tensordict")
                 for model_id, w in weights_dict.items():
                     if model_id == "policy":
-                        w.to(self._device).to_module(self._policy)
+                        strategy.apply_weights(self._policy, w.to(self._device))
                     else:
                         from torchrl.weight_update.utils import _resolve_model
 
                         target = _resolve_model(self._collector, model_id)
-                        w.to(self._device).to_module(target)
+                        strategy.apply_weights(target, w.to(self._device))
 
         if not self._use_multi_collector and isinstance(self._policy, nn.Module):
             self._policy.eval()
