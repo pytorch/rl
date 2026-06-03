@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Literal
+from typing import ClassVar, Literal
 
 import torch
 from tensordict import TensorDictBase
@@ -38,7 +38,9 @@ from torchrl.envs.custom.mujoco._math import (
     quat_mul,
     random_unit_quat,
 )
+from torchrl.envs.custom.mujoco._satellite_primitives import SatelliteAttitudeTransform
 from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.transforms._base import Transform
 
 
 class SatelliteEnv(MujocoEnv):
@@ -86,6 +88,35 @@ class SatelliteEnv(MujocoEnv):
     ROTOR_SPEED_4 = 100.0
     ROTOR_SPEED_6 = 200.0
     RENDER_BACKGROUND = (0.0, 0.0, 0.05)
+    _SATELLITE_GEOM_ALPHA: ClassVar[float] = 0.55
+    _TARGET_FRAME_BODY: ClassVar[str] = "target_attitude_frame"
+    _TARGET_FRAME_POS: ClassVar[tuple[float, float, float]] = (0.0, 0.0, 0.0)
+    _BODY_FRAME_XML: ClassVar[
+        str
+    ] = """
+      <site name="satellite_body_x_axis" type="capsule"
+            fromto="0 0 0 0.75 0 0" size="0.018" rgba="1 0.1 0.1 0.55"/>
+      <site name="satellite_body_y_axis" type="capsule"
+            fromto="0 0 0 0 0.75 0" size="0.018" rgba="0.1 1 0.1 0.55"/>
+      <site name="satellite_body_z_axis" type="capsule"
+            fromto="0 0 0 0 0 0.75" size="0.018" rgba="0.2 0.4 1 0.55"/>"""
+    _TARGET_FRAME_XML: ClassVar[
+        str
+    ] = """
+  <body name="target_attitude_frame" pos="0 0 0" quat="1 0 0 0">
+    <site name="target_x_axis" type="capsule"
+          fromto="0 0 0 1.1 0 0" size="0.026" rgba="1 0.1 0.1 0.85"/>
+    <site name="target_y_axis" type="capsule"
+          fromto="0 0 0 0 1.1 0" size="0.026" rgba="0.1 1 0.1 0.85"/>
+    <site name="target_z_axis" type="capsule"
+          fromto="0 0 0 0 0 1.1" size="0.026" rgba="0.2 0.4 1 0.85"/>
+    <site name="target_x_tip" type="sphere"
+          pos="1.1 0 0" size="0.055" rgba="1 0.1 0.1 0.9"/>
+    <site name="target_y_tip" type="sphere"
+          pos="0 1.1 0" size="0.055" rgba="0.1 1 0.1 0.9"/>
+    <site name="target_z_tip" type="sphere"
+          pos="0 0 1.1" size="0.055" rgba="0.2 0.4 1 0.9"/>
+  </body>"""
 
     def __init__(
         self,
@@ -188,23 +219,63 @@ class SatelliteEnv(MujocoEnv):
             f"bad_rows={row_list}, sample={sample}."
         )
 
+    def _normalize_quat_or_identity(self, quat: torch.Tensor) -> torch.Tensor:
+        norm = quat.norm(dim=-1, keepdim=True)
+        normalized = quat / norm.clamp_min(1e-12)
+        identity = torch.zeros_like(quat)
+        identity[..., 0] = 1.0
+        return torch.where(norm > 1e-12, normalized, identity)
+
     # ------------------------------------------------------------------
     # XML patching: no ground floor in space.
     # ------------------------------------------------------------------
 
     @classmethod
+    def _transparent_satellite_geom(cls, match: re.Match[str]) -> str:
+        rgba = match.group(2).split()
+        if len(rgba) != 4:
+            return match.group(0)
+        rgba[-1] = f"{cls._SATELLITE_GEOM_ALPHA:.2f}"
+        return f"{match.group(1)}{' '.join(rgba)}{match.group(3)}"
+
+    @classmethod
     def _patch_xml(cls, xml: str) -> str:
         xml = re.sub(r"<camera\b[^/]*/>\s*", "", xml)
         xml = re.sub(r"<light\b[^/]*/>\s*", "", xml)
+        xml = re.sub(
+            r'(<geom\b[^>]*\brgba=")([^"]+)(")',
+            cls._transparent_satellite_geom,
+            xml,
+        )
         camera = (
-            '<camera name="side" pos="3 -3 2" '
+            '<camera name="side" pos="6 -6 4" '
             'xyaxes="0.707 0.707 0 -0.302 0.302 0.905" fovy="60"/>'
         )
         light = (
             '<light name="top" pos="0 0 4" dir="0 0 -1" '
             'diffuse="0.8 0.8 0.8" ambient="0.3 0.3 0.3" directional="true"/>'
         )
-        return xml.replace("<worldbody>", f"<worldbody>\n  {camera}\n  {light}")
+        xml = xml.replace(
+            '<freejoint name="root"/>',
+            f'<freejoint name="root"/>\n{cls._BODY_FRAME_XML}',
+            1,
+        )
+        return xml.replace(
+            "<worldbody>",
+            f"<worldbody>\n  {camera}\n  {light}{cls._TARGET_FRAME_XML}",
+        )
+
+    def _sync_target_frame(self) -> None:
+        position = torch.as_tensor(
+            self._TARGET_FRAME_POS,
+            dtype=self.dtype,
+            device=self.device,
+        ).expand(self.num_envs, 3)
+        self._backend.set_static_body_pose(
+            self._TARGET_FRAME_BODY,
+            position,
+            self._target_quat,
+        )
 
     # ------------------------------------------------------------------
     # Specs
@@ -218,6 +289,9 @@ class SatelliteEnv(MujocoEnv):
         # into the policy.
         n = self.N_GIMBALS
         return Composite(
+            bus_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
             quat_err=Unbounded(
                 shape=(self.num_envs, 3), dtype=self.dtype, device=self.device
             ),
@@ -247,6 +321,17 @@ class SatelliteEnv(MujocoEnv):
             dtype=self.dtype,
             device=self.device,
         )
+        self.state_spec = Composite(
+            target_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
+            init_bus_quat=Unbounded(
+                shape=(self.num_envs, 4), dtype=self.dtype, device=self.device
+            ),
+            shape=(self.num_envs,),
+            device=self.device,
+            step_mdp_static=True,
+        )
 
     # ------------------------------------------------------------------
     # State plumbing
@@ -270,9 +355,21 @@ class SatelliteEnv(MujocoEnv):
         # actually resets, so we can write through without masking.
         if tensordict is not None and "init_bus_quat" in tensordict.keys():
             init_q = tensordict.get("init_bus_quat").to(qpos.dtype).to(qpos.device)
-            init_q = init_q / init_q.norm(dim=-1, keepdim=True).clamp_min(1e-12)
-            qpos[..., 3:7] = init_q
+            qpos[..., 3:7] = self._normalize_quat_or_identity(init_q)
         return qpos, qvel
+
+    def _reset(
+        self,
+        tensordict: TensorDictBase | None = None,
+        **kwargs,
+    ) -> TensorDictBase:
+        out = super()._reset(tensordict, **kwargs)
+        out.set("target_quat", self._target_quat.clone())
+        out.set(
+            "init_bus_quat",
+            self._backend.qpos[..., 3:7].to(self.dtype).clone(),
+        )
+        return out
 
     def _prepare_ctrl(self, action: torch.Tensor) -> torch.Tensor:
         # Scale the agent's [-1, 1] command up to ``[-action_scale,
@@ -294,7 +391,7 @@ class SatelliteEnv(MujocoEnv):
     def _on_reset_all(self, tensordict: TensorDictBase | None = None) -> None:
         if tensordict is not None and "target_quat" in tensordict.keys():
             t = tensordict.get("target_quat").to(self.dtype).to(self.device)
-            self._target_quat = t / t.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            self._target_quat = self._normalize_quat_or_identity(t)
         else:
             self._target_quat = random_unit_quat(
                 (self.num_envs,),
@@ -308,6 +405,7 @@ class SatelliteEnv(MujocoEnv):
         self._last_manip = self._compute_manip_from_qpos(
             self._backend.qpos.to(self.dtype)
         )
+        self._sync_target_frame()
 
     def _on_reset_mask(
         self,
@@ -321,7 +419,7 @@ class SatelliteEnv(MujocoEnv):
         # boolean indexing).
         if tensordict is not None and "target_quat" in tensordict.keys():
             t = tensordict.get("target_quat").to(self.dtype).to(self.device)
-            t = t / t.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            t = self._normalize_quat_or_identity(t)
         else:
             t = random_unit_quat(
                 (self.num_envs,),
@@ -333,6 +431,7 @@ class SatelliteEnv(MujocoEnv):
         self._target_quat = torch.where(m, t, self._target_quat)
         new_manip = self._compute_manip_from_qpos(self._backend.qpos.to(self.dtype))
         self._last_manip = torch.where(m, new_manip, self._last_manip)
+        self._sync_target_frame()
 
     # ------------------------------------------------------------------
     # Observation, reward, done
@@ -375,7 +474,9 @@ class SatelliteEnv(MujocoEnv):
         n = self.N_GIMBALS
         gimbal_idx = [7 + 2 * i for i in range(n)]
         gimbal_rate_idx = [6 + 2 * i for i in range(n)]
+        bus_quat = qpos[..., 3:7].clone()
         return {
+            "bus_quat": bus_quat,
             "quat_err": self._attitude_error(qpos),
             "bus_omega": qvel[..., 3:6].clone(),
             "gimbal_angles": torch.cat(
@@ -386,9 +487,43 @@ class SatelliteEnv(MujocoEnv):
             "manipulability": self._last_manip,
         }
 
+    def make_attitude_transform(
+        self,
+        *,
+        execute: bool = True,
+        multi_action_dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
+        macro_steps: int = 36,
+        settle_steps: int = 8,
+        attitude_gain: float = 5.0,
+        angular_rate_gain: float = 8.0,
+        jacobian_rotor_h: float = 1.0,
+    ) -> Transform:
+        """Build the transform that expands target attitudes into CMG actions.
+
+        Examples:
+            >>> from torchrl.envs import SatelliteEnv  # doctest: +SKIP
+            >>> env = SatelliteEnv(num_cmgs=4)  # doctest: +SKIP
+            >>> transform = env.make_attitude_transform(execute=True)  # doctest: +SKIP
+        """
+        return SatelliteAttitudeTransform(
+            num_cmgs=self.num_cmgs,
+            action_scale=self.action_scale,
+            execute=execute,
+            multi_action_dim=multi_action_dim,
+            stack_rewards=stack_rewards,
+            stack_observations=stack_observations,
+            macro_steps=macro_steps,
+            settle_steps=settle_steps,
+            attitude_gain=attitude_gain,
+            angular_rate_gain=angular_rate_gain,
+            jacobian_rotor_h=jacobian_rotor_h,
+        )
+
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         out: dict[str, torch.Tensor] = {}
-        if not self.pixel_only:
+        if not self.pixels_only:
             out.update(self._make_obs_split(state))
         if self.from_pixels:
             out["pixels"] = self._backend.render(

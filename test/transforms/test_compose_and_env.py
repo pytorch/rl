@@ -115,6 +115,19 @@ def test_added_transforms_are_in_eval_mode():
     assert t.transform[1].training
 
 
+def test_append_compose_resets_flattened_child_parents():
+    env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+    transforms = Compose(RewardScaling(0, 1), StepCounter())
+
+    env.append_transform(transforms)
+
+    assert len(env.transform) == 3
+    assert env.transform[1].__dict__["_container"]() is env.transform
+    assert env.transform[2].__dict__["_container"]() is env.transform
+    assert env.transform[1].parent is not None
+    assert env.transform[2].parent is not None
+
+
 class TestTransformedEnv:
     class DummyCompositeEnv(EnvBase):  # type: ignore[misc]
         """A dummy environment with a composite action set."""

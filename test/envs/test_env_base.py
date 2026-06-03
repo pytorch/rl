@@ -892,3 +892,29 @@ class TestRollout:
         else:
             assert r_outplace.shape[-1:] == (40,)
         assert_allclose_td(r_inplace, r_outplace)
+
+
+class TestRolloutActions:
+    def test_actions_drive_rollout(self):
+        env = CountingEnv(max_steps=100)
+        actions = [torch.ones(1) for _ in range(5)]
+        r = env.rollout(max_steps=50, actions=actions, break_when_any_done=False)
+        # A sized actions iterable caps max_steps to its length.
+        assert r.shape[-1] == 5
+        assert (r["action"] == 1).all()
+
+    def test_actions_generator(self):
+        env = CountingEnv(max_steps=100)
+
+        def gen():
+            for _ in range(4):
+                yield torch.ones(1)
+
+        r = env.rollout(max_steps=4, actions=gen(), break_when_any_done=False)
+        assert r.shape[-1] == 4
+        assert (r["action"] == 1).all()
+
+    def test_actions_and_policy_mutually_exclusive(self):
+        env = CountingEnv(max_steps=10)
+        with pytest.raises(ValueError, match="both"):
+            env.rollout(3, policy=lambda td: td, actions=[torch.ones(1)])

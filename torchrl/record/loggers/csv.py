@@ -57,11 +57,10 @@ class CSVExperiment:
         - `"pt"`: uses :func:`~torch.save` to save the video tensor);
         - `"memmap"`: saved the file as memory-mapped array (reading this file will require
           the dtype and shape to be known at read time);
-        - `"mp4"`: saves the file as an `.mp4` file. For torchvision < 0.22, this uses
-          :func:`~torchvision.io.write_video`; for torchvision >= 0.22, this uses
-          :class:`~torchcodec.encoders.VideoEncoder` since ``write_video`` was deprecated and
-          later removed. Any ``kwargs`` passed to ``add_video`` will be transmitted to the
-          underlying writer. These include ``video_codec``, ``options``
+        - `"mp4"`: saves the file as an `.mp4` file using
+          :class:`~torchcodec.encoders.VideoEncoder`. Any ``kwargs``
+          passed to ``add_video`` will be transmitted to the underlying
+          writer. These include ``video_codec``, ``options``
           (a dict, e.g. ``{"crf": "23", "preset": "medium"}``), and others.
           See ffmpeg's doc (https://trac.ffmpeg.org/wiki/Encode/H.264) for some more information of the video format options.
 
@@ -139,7 +138,7 @@ class CSVLogger(Logger):
         video_format (str, optional): how videos should be saved when calling :meth:`~torchrl.record.loggers.csv.CSVExperiment.add_video`. Must be one of
             ``"pt"`` (video saved as a `video_<tag>_<step>.pt` file with torch.save),
             ``"memmap"`` (video saved as a `video_<tag>_<step>.memmap` file with :class:`~tensordict.MemoryMappedTensor`),
-            ``"mp4"`` (video saved as a `video_<tag>_<step>.mp4` file, requires torchvision to be installed).
+            ``"mp4"`` (video saved as a `video_<tag>_<step>.mp4` file, requires torchcodec to be installed).
             Defaults to ``"pt"``.
         video_fps (int, optional): the video frames-per-seconds if `video_format="mp4"`. Defaults to 30.
 

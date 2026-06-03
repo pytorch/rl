@@ -9,6 +9,8 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDictBase
 from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.transforms._base import Transform
+from torchrl.envs.transforms._primitive import MacroPrimitiveTransform
 
 
 class HumanoidEnv(MujocoEnv):
@@ -37,6 +39,33 @@ class HumanoidEnv(MujocoEnv):
     HEALTHY_Z_HIGH = 2.0
     HEALTHY_REWARD = 5.0
     CTRL_COST_WEIGHT = 0.1
+
+    def make_control_transform(
+        self,
+        *,
+        execute: bool = True,
+        multi_action_dim: int = 1,
+        stack_rewards: bool = True,
+        stack_observations: bool = False,
+        macro_steps: int = 16,
+        settle_steps: int = 0,
+    ) -> Transform:
+        """Build the transform that expands actuator targets into sequences.
+
+        Examples:
+            >>> from torchrl.envs import HumanoidEnv  # doctest: +SKIP
+            >>> env = HumanoidEnv()  # doctest: +SKIP
+            >>> transform = env.make_control_transform(execute=True)  # doctest: +SKIP
+        """
+        return MacroPrimitiveTransform(
+            action_dim=self.action_spec.shape[-1],
+            execute=execute,
+            multi_action_dim=multi_action_dim,
+            stack_rewards=stack_rewards,
+            stack_observations=stack_observations,
+            macro_steps=macro_steps,
+            settle_steps=settle_steps,
+        )
 
     def _make_obs(self, state: TensorDictBase) -> torch.Tensor:
         qpos = state["qpos"].to(self.dtype)

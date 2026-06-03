@@ -307,9 +307,9 @@ A family of MuJoCo-backed envs sharing one base class
 (:class:`~torchrl.envs.MujocoEnv`) with a swappable physics backend
 (``"mujoco-torch"`` -- the default and ``torch.compile``-friendly
 native-torch engine, ``"mjx"`` -- JAX-vectorized, or ``"mujoco"`` --
-official C-bindings). The XML asset can be a local path or an
-``http(s)`` URL, so users can point at remote models without vendoring
-them. Subclasses describe the *task* by overriding
+official C-bindings). For envs with a standalone XML asset, the XML can be a
+local path or an ``http(s)`` URL, so users can point at remote models without
+vendoring them. Subclasses describe the *task* by overriding
 :meth:`~torchrl.envs.MujocoEnv._compute_reward` and
 :meth:`~torchrl.envs.MujocoEnv._compute_done`.
 
@@ -318,6 +318,9 @@ termination semantics. :class:`~torchrl.envs.SatelliteEnv` is an
 attitude-control task with a 4- or 6-CMG cluster and a
 manipulability-based singularity penalty driving the policy away from
 internal singular configurations of the gimbal Jacobian.
+:class:`~torchrl.envs.CubeBowlEnv` is a compact
+manipulation task for scripted MuJoCo macro-control examples. It composes a
+local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
 
 .. autosummary::
     :toctree: generated/
@@ -325,6 +328,7 @@ internal singular configurations of the gimbal Jacobian.
 
     MujocoEnv
     AntEnv
+    CubeBowlEnv
     HopperEnv
     HumanoidEnv
     SatelliteEnv

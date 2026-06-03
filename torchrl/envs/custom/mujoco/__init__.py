@@ -4,8 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 """MuJoCo-backed custom envs with selectable physics backend.
 
-The base class :class:`MujocoEnv` accepts an XML asset (path or URL)
-and dispatches the simulation to one of three engines:
+Most subclasses accept an XML asset (path or URL) through
+:class:`MujocoEnv`, which dispatches the simulation to one of three engines:
 
 * ``mujoco-torch`` (default) -- native torch, batched, ``torch.compile``-friendly.
 * ``mjx`` -- JAX-vectorized via :func:`jax.vmap` + :func:`jax.jit`,
@@ -17,11 +17,18 @@ observation map. The locomotion subclasses (:class:`HumanoidEnv`,
 :class:`AntEnv`, :class:`Walker2dEnv`, :class:`HopperEnv`) mirror the
 Gymnasium ``-v4`` reward / termination spec. :class:`SatelliteEnv`
 implements an attitude-control task with 4- or 6-CMG clusters and a
-manipulability-based singularity penalty.
+manipulability-based singularity penalty. :class:`CubeBowlEnv` is a
+compact Menagerie-backed manipulation task for macro-control examples.
 """
 
+from torchrl.envs.custom.mujoco._humanoid_primitives import HumanoidMacroAction
+from torchrl.envs.custom.mujoco._satellite_primitives import (
+    SatelliteAttitudeTransform,
+    SatelliteMacroAction,
+)
 from torchrl.envs.custom.mujoco.ant import AntEnv
 from torchrl.envs.custom.mujoco.base import MujocoEnv
+from torchrl.envs.custom.mujoco.cube_bowl import CubeBowlEnv
 from torchrl.envs.custom.mujoco.hopper import HopperEnv
 from torchrl.envs.custom.mujoco.humanoid import HumanoidEnv
 from torchrl.envs.custom.mujoco.satellite import SatelliteEnv
@@ -29,9 +36,13 @@ from torchrl.envs.custom.mujoco.walker import Walker2dEnv
 
 __all__ = [
     "AntEnv",
+    "CubeBowlEnv",
     "HopperEnv",
+    "HumanoidMacroAction",
     "HumanoidEnv",
     "MujocoEnv",
+    "SatelliteMacroAction",
+    "SatelliteAttitudeTransform",
     "SatelliteEnv",
     "Walker2dEnv",
 ]
