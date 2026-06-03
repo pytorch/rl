@@ -173,7 +173,7 @@ td.set("_reset", reset_mask)
 env.reset(td)
 
 # Snapshot and branch from a deterministic state (manager-based envs only).
-snapshot = env.base_env.get_state()
+snapshot = env.get_state()
 # ... evolve env from `snapshot` to explore one branch ...
 env.reset(td, isaac_reset_state=snapshot)  # rewind to snapshot
 
