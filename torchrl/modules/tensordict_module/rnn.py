@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextvars
 import importlib.metadata
+import importlib.util
 import typing
 from typing import Any
 
@@ -28,17 +29,34 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.tensordict_module._rnn_precision import _validate_user_precision
 
-# ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. hoptorch
-# wraps it and owns the scan backward health check / temporary compatibility
-# patching needed by older PyTorch versions.
-from hoptorch import scan as _torch_scan
-from hoptorch.scan import ensure_scan_backward as _ensure_scan_backward
+_has_hoptorch = importlib.util.find_spec("hoptorch") is not None
+_hoptorch_scan = None
+_ensure_scan_backward = None
+
+
+def _get_hoptorch_scan() -> tuple[Any, Any]:
+    global _hoptorch_scan, _ensure_scan_backward
+    if not _has_hoptorch:
+        raise NotImplementedError(
+            "recurrent_backend='scan' requires hoptorch. Install it with "
+            "`pip install hoptorch>=0.1.1`."
+        )
+    if _hoptorch_scan is None or _ensure_scan_backward is None:
+        # Optional dependency: keep the import lazy because CI jobs install
+        # TorchRL with --no-deps, even though hoptorch is a core dependency.
+        from hoptorch import scan
+        from hoptorch.scan import ensure_scan_backward
+
+        _hoptorch_scan = scan
+        _ensure_scan_backward = ensure_scan_backward
+    return _hoptorch_scan, _ensure_scan_backward
 
 
 def _maybe_warm_scan_backward(device: torch.device | str | int | None) -> None:
     device = torch.device("cpu") if device is None else torch.device(device)
     if device.type != "meta":
-        _ensure_scan_backward(device)
+        _, ensure_scan_backward = _get_hoptorch_scan()
+        ensure_scan_backward(device)
 
 
 def _check_triton_available() -> bool:
@@ -93,7 +111,8 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
 
 @implement_for("torch", "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
-    return _torch_scan(*args, **kwargs)
+    scan, _ = _get_hoptorch_scan()
+    return scan(*args, **kwargs)
 
 
 def _place_at_traj_end(

@@ -122,6 +122,9 @@ print('successfully imported tensordict')
 echo "=== Setting up CUDA environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
+printf "* Installing hoptorch\n"
+python -m pip install "hoptorch>=0.1.1"
+
 printf "* Installing torchrl\n"
 python -m pip install -e . --no-build-isolation --no-deps
 

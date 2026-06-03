@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib.util
 import sys
 import threading
 
@@ -65,6 +66,8 @@ from torchrl.testing.mocking_classes import (
     CountingEnvCountPolicy,
     DiscreteActionVecMockEnv,
 )
+
+_has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 
 if _has_functorch:
     try:
@@ -1258,6 +1261,7 @@ class TestLSTMModule:
         TORCH_VERSION < version.parse("2.7.0"),
         reason="hoptorch requires torch >= 2.7.0",
     )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
     def test_scan_backend_backward_matches_pad(self, rnn_type):
         torch.manual_seed(0)
         B, T, F, H, L = 3, 5, 4, 8, 1
