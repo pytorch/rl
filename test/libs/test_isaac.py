@@ -807,6 +807,7 @@ class TestIsaacLab:
             half = num_envs // 2
             reset_mask = torch.zeros(num_envs, 1, dtype=torch.bool, device=td.device)
             reset_mask[:half] = True
+            td.set("_reset", reset_mask)
 
             td_after = env.reset(
                 td,

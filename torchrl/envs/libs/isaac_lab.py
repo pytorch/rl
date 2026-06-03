@@ -469,7 +469,7 @@ class IsaacLabWrapper(GymWrapper):
         **kwargs,
     ) -> tuple[Any, dict | None]:
         """Reset the listed sub-envs without touching the rest."""
-        from isaaclab.envs import DirectRLEnv, ManagerBasedEnv
+        from isaaclab.envs import DirectMARLEnv, DirectRLEnv, ManagerBasedEnv
 
         unwrapped = self._isaac_unwrapped
         if isinstance(unwrapped, ManagerBasedEnv):
@@ -480,10 +480,10 @@ class IsaacLabWrapper(GymWrapper):
                 reset_kwargs["options"] = options
             return unwrapped.reset(**reset_kwargs)
 
-        if isinstance(unwrapped, DirectRLEnv):
+        if isinstance(unwrapped, (DirectRLEnv, DirectMARLEnv)):
             # DirectRLEnv.reset() does not accept env_ids -- fall back to the
             # internal _reset_idx primitive and replay the post-reset bookkeeping
-            # that DirectRLEnv.reset() would normally do.
+            # that DirectRLEnv / DirectMARLEnv reset() would normally do.
             if seed is not None:
                 unwrapped.seed(seed)
             unwrapped._reset_idx(env_ids)
@@ -494,11 +494,12 @@ class IsaacLabWrapper(GymWrapper):
         raise TypeError(
             f"Per-index reset is not supported for Isaac Lab env of type "
             f"{type(unwrapped).__name__}. Supported bases are ManagerBasedEnv "
-            "(and subclasses) and DirectRLEnv."
+            "(and subclasses), DirectRLEnv and DirectMARLEnv."
         )
 
     def _build_reset_tensordict(self, obs: Any, info: dict | None) -> TensorDictBase:
         """Rebuild a torchrl-style reset tensordict from Isaac's (obs, info)."""
+        obs = self._add_tiled_camera_pixels(obs)
         source = self.read_obs(obs)
         tensordict_out = TensorDict(source=source, batch_size=self.batch_size)
         if self.info_dict_reader and info is not None:
@@ -557,12 +558,11 @@ class IsaacLabWrapper(GymWrapper):
             A reset tensordict in torchrl's standard shape.
 
         .. note::
-            To make the env's transform stack (``RewardSum``,
-            ``InitTracker``, primers, ``VecNormV2``, ...) fire on the
-            restored rows, call this method on the **top-level**
-            :class:`~torchrl.envs.TransformedEnv` (it forwards through
-            ``__getattr__`` to the wrapper); for full transform support on
-            the reset call itself, the equivalent invocation is::
+            ``reset_to_state`` calls the wrapper's reset path directly. If the
+            env is wrapped in a :class:`~torchrl.envs.TransformedEnv` and the
+            transform stack (``RewardSum``, ``InitTracker``, primers,
+            ``VecNormV2``, ...) must fire on the restored rows, call reset on
+            the top-level env instead::
 
                 env.reset(td, isaac_reset_state=state, isaac_is_relative=False)
 
