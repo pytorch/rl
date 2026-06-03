@@ -29,6 +29,13 @@ SKIP_TUTORIALS = {
     "export.py",  # Requires PyTorch 2.6+ for aoti_compile_and_package
 }
 
+OPTIONAL_ENV_TUTORIALS = {
+    "mujoco_cube_bowl_macros.py": (
+        "TORCHRL_MUJOCO_MENAGERIE_PATH",
+        "MuJoCo Menagerie assets",
+    ),
+}
+
 # Tutorials that require GPU
 GPU_TUTORIALS = {
     "coding_ddpg.py",
@@ -84,6 +91,12 @@ def test_tutorial(tutorial_path: Path):
     # Skip GPU tutorials if no GPU available
     if tutorial_name in GPU_TUTORIALS and not HAS_GPU:
         pytest.skip(f"Skipping {tutorial_name}: requires GPU")
+
+    if tutorial_name in OPTIONAL_ENV_TUTORIALS:
+        env_var, reason = OPTIONAL_ENV_TUTORIALS[tutorial_name]
+        env_path = os.environ.get(env_var)
+        if env_path is None or not Path(env_path).exists():
+            pytest.skip(f"Skipping {tutorial_name}: requires {reason} ({env_var})")
 
     # Set environment variables for the tutorial
     env = os.environ.copy()
