@@ -162,9 +162,14 @@ def get_train_model(
         compile=cfg.model.compile,
     )
 
-    # Force all model parameters to the same dtype
-    for param in train_model.parameters():
-        param.data = param.data.to(model_dtype)
+    # Keep the base model in the requested low-precision dtype, but keep
+    # trainable LoRA adapters in fp32. Adam keeps optimizer state in the
+    # parameter dtype, so bf16 LoRA parameters can destabilize GRPO updates.
+    for name, param in train_model.named_parameters():
+        if "lora_" in name and param.requires_grad:
+            param.data = param.data.to(torch.float32)
+        else:
+            param.data = param.data.to(model_dtype)
 
     policy_training = TransformersWrapper(
         train_model,
@@ -625,7 +630,7 @@ def get_hf_model(
                 lora_dropout=0.0,  # Disable dropout for RL training
                 bias="none",
                 task_type="CAUSAL_LM",
-                inference_mode=True,  # Force inference mode for consistent behavior
+                inference_mode=not requires_grad,
                 init_lora_weights=True,  # This ensures weights are initialized
             )
 
@@ -633,17 +638,20 @@ def get_hf_model(
             model = get_peft_model(
                 model,
                 lora_config,
-                autocast_adapter_dtype=False,  # Prevent automatic casting of adapter layers
+                autocast_adapter_dtype=requires_grad,
             )
 
-            # Force LoRA layers to correct dtype and eval mode
+            # Keep trainable adapters in fp32 for optimizer-state stability.
             for n, p in model.named_parameters():
-                if "lora_" in n:  # Only convert LoRA parameters
-                    p.data = p.data.to(torch_dtype)
+                if "lora_" in n:
+                    p.data = p.data.to(torch.float32 if requires_grad else torch_dtype)
+                    p.requires_grad_(requires_grad)
 
         model.eval()  # Ensure model is in eval mode
-        if requires_grad:
+        if requires_grad and not lora:
             model.requires_grad_(True)
+        elif not requires_grad:
+            model.requires_grad_(False)
 
         return model, tokenizer
 

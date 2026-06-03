@@ -107,7 +107,11 @@ import torch.distributed
 from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    _merged_lora_state_dict,
+    WeightStrategy,
+    WeightSyncScheme,
+)
 
 # ============================================================================
 # vLLM Transport using Collective Communication
@@ -772,8 +776,7 @@ def get_model_metadata(model) -> dict[str, tuple[torch.dtype, torch.Size]]:
     # This ensures keys match what extract_weights() will produce
     if hasattr(model, "state_dict"):
         if hasattr(model, "merge_and_unload"):
-            # LoRA model
-            sd = model.merge_and_unload().state_dict()
+            sd = _merged_lora_state_dict(model)
         else:
             sd = model.state_dict()
     else:

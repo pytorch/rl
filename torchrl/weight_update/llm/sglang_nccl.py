@@ -83,7 +83,11 @@ from torchrl.modules.llm.backends.sglang.sglang_utils import (
     get_local_ip_address,
     get_open_port,
 )
-from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    _merged_lora_state_dict,
+    WeightStrategy,
+    WeightSyncScheme,
+)
 
 
 @implement_for("torch", None, "2.6")
@@ -154,8 +158,7 @@ def get_model_metadata(model: Any) -> dict[str, tuple[torch.dtype, torch.Size]]:
         dict: Mapping of parameter names to (dtype, shape) tuples.
     """
     if hasattr(model, "merge_and_unload"):
-        # LoRA model - merge first
-        sd = model.merge_and_unload().state_dict()
+        sd = _merged_lora_state_dict(model)
     else:
         sd = model.state_dict()
 
