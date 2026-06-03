@@ -75,7 +75,18 @@ For more information, please refer to discussion https://github.com/pytorch/rl/d
 """
 
 
+@implement_for("gym", None, "0.20.0")
 def _patch_legacy_ale_py_gym_env(env_name: str) -> None:
+    return
+
+
+@implement_for("gym", "0.21.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    return
+
+
+@implement_for("gymnasium")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
     return
 
 

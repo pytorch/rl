@@ -325,12 +325,22 @@ class IsaacLabWrapper(GymWrapper):
 
     def _add_tiled_camera_pixels(self, observations):
         if not self.from_tiled_camera:
-            return observations
+            return self._normalize_observation_keys(observations)
         if isinstance(observations, Mapping):
             observations = dict(observations)
         else:
             observations = {"observation": observations}
         observations[self.pixels_key] = self._read_tiled_camera_pixels()
+        return self._normalize_observation_keys(observations)
+
+    def _normalize_observation_keys(self, observations):
+        if not isinstance(observations, Mapping):
+            return observations
+        spec_keys = set(self.observation_spec.keys(True, True))
+        if "policy" in observations and "policy" not in spec_keys:
+            if "observation" in spec_keys:
+                observations = dict(observations)
+                observations["observation"] = observations.pop("policy")
         return observations
 
     def _reset_output_transform(self, reset_data):  # noqa: F811
@@ -602,6 +612,7 @@ class IsaacLabWrapper(GymWrapper):
             )
         else:
             env_ids = self._reset_mask_to_env_ids(reset)
+            state = self._index_state_for_env_ids(state, env_ids)
         reset_to_kwargs: dict[str, Any] = {
             "env_ids": env_ids,
             "is_relative": is_relative,
@@ -610,3 +621,20 @@ class IsaacLabWrapper(GymWrapper):
             reset_to_kwargs["seed"] = seed
         obs, info = unwrapped.reset_to(state, **reset_to_kwargs)
         return self._build_reset_tensordict(obs, info)
+
+    def _index_state_for_env_ids(self, state: Any, env_ids: torch.Tensor) -> Any:
+        num_envs = self.batch_size.numel()
+        if isinstance(state, torch.Tensor):
+            if state.shape[:1] == (num_envs,):
+                return state.index_select(0, env_ids.to(state.device))
+            return state
+        if isinstance(state, Mapping):
+            return {
+                key: self._index_state_for_env_ids(value, env_ids)
+                for key, value in state.items()
+            }
+        if isinstance(state, tuple):
+            return tuple(self._index_state_for_env_ids(item, env_ids) for item in state)
+        if isinstance(state, list):
+            return [self._index_state_for_env_ids(item, env_ids) for item in state]
+        return state
