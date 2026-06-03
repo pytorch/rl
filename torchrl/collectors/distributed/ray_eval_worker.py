@@ -297,12 +297,15 @@ class _EvalActor:
         import torch
 
         from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+        from torchrl.weight_update.weight_sync_schemes import WeightStrategy
 
         # Load weights into the eval policy (move to policy device first).
         # ``weights`` can legitimately be None when the caller asks for an
         # evaluation of the current policy (no fresh weights to inject).
         if weights is not None:
-            weights.to(self._device).to_module(self.policy)
+            WeightStrategy(extract_as="tensordict").apply_weights(
+                self.policy, weights.to(self._device)
+            )
 
         frames = []
         total_reward = 0.0
