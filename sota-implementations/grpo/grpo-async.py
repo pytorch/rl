@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import os
 import time
@@ -53,6 +54,17 @@ from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
+
+
+def _finish_wandb_logger(
+    wandb_logger: WandbLogger | None, exit_code: int
+) -> None:
+    """Finish a wandb run if one was created."""
+    if wandb_logger is None:
+        return
+    finish = getattr(wandb_logger.experiment, "finish", None)
+    if finish is not None:
+        finish(exit_code=exit_code)
 
 
 def setup_environment() -> None:
@@ -199,118 +211,131 @@ def train(
     data_read_count = 0
     optim_steps = 0  # Track optimizer steps for weight update scheduling
     start_time = time.time()
+    exit_code = 1
+    try:
+        for step in range(total_steps):
+            if not any(collector.is_running() for collector in collectors):
+                torchrl_logger.info("Collectors stopped, stopping training")
+                break
+            pbar.update(1)
+            pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 
-    for step in range(total_steps):
-        if not any(collector.is_running() for collector in collectors):
-            torchrl_logger.info("Collectors stopped, stopping training")
-            break
-        pbar.update(1)
-        pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
-
-        with timeit("sampling"):
-            # Sample the correct batch size for gradient accumulation
-            # The replay buffer is configured with batch_size = optim_batch_size // gradient_accumulation_steps
-            # So we should sample that amount per step, not the full optim_batch_size
-            batch_size_per_step = (
-                cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
-            )
-            batch = replay_buffer.sample(batch_size_per_step).to(train_device)
-            history: History = batch.view(-1)[0]["history", "full"]
-            history_str: list[str] | str = history.apply_chat_template(
-                tokenizer=train_tokenizer
-            )
-            while not isinstance(history_str, str):
-                history_str = "\n".join(history_str)
-
-            data_read_count += batch.numel()
-
-        with timeit("forward_pass"):
-            # Use the model's dtype for autocast to avoid bf16→fp16 downcast
-            # (fp16 range ±65504 can overflow with bf16 activations ±3.4e38)
-            autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
-            with autocast(
-                "cuda",
-                enabled=cfg.train.mixed_precision,
-                dtype=autocast_dtype,
-            ):
-                loss = loss_fn(batch)
-                loss_val = (
-                    loss.mean(reduce=True) / cfg.train.gradient_accumulation_steps
+            with timeit("sampling"):
+                # Sample the correct batch size for gradient accumulation
+                # The replay buffer is configured with batch_size = optim_batch_size // gradient_accumulation_steps
+                # So we should sample that amount per step, not the full optim_batch_size
+                batch_size_per_step = (
+                    cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
                 )
-
-        with timeit("backward_pass"):
-            if cfg.train.mixed_precision and cfg.train_model.torch_dtype == "float16":
-                scaler = GradScaler(enabled=True)
-                scaler.scale(loss_val).backward()
-            else:
-                loss_val.backward()
-
-        if (step + 1) % cfg.train.gradient_accumulation_steps == 0:
-            with timeit("optim_step"):
-                if (
-                    cfg.train.mixed_precision
-                    and cfg.train_model.torch_dtype == "float16"
-                ):
-                    scaler.unscale_(optimizer)
-
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    policy_training.parameters(),
-                    cfg.optimizer.clip_grad_norm,
+                batch = replay_buffer.sample(batch_size_per_step).to(train_device)
+                history: History = batch.view(-1)[0]["history", "full"]
+                history_str: list[str] | str = history.apply_chat_template(
+                    tokenizer=train_tokenizer
                 )
+                while not isinstance(history_str, str):
+                    history_str = "\n".join(history_str)
 
-                if (
-                    cfg.train.mixed_precision
-                    and cfg.train_model.torch_dtype == "float16"
+                data_read_count += batch.numel()
+
+            with timeit("forward_pass"):
+                # Use the model's dtype for autocast to avoid bf16→fp16 downcast
+                # (fp16 range ±65504 can overflow with bf16 activations ±3.4e38)
+                autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
+                with autocast(
+                    "cuda",
+                    enabled=cfg.train.mixed_precision,
+                    dtype=autocast_dtype,
                 ):
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
-
-            optim_steps += 1
-
-            # Weight sync is tied to optimizer steps, not gradient steps.
-            # This ensures the training model diverges from the inference model
-            # between syncs, which is essential for meaningful importance sampling
-            # in GRPO (otherwise ESS stays at 1.0 and GRPO degenerates to REINFORCE).
-            if optim_steps % cfg.train.weight_update_frequency == 0:
-                with timeit("update_policy_weights"):
-                    torchrl_logger.info(
-                        f"Updating policy weights (optim step {optim_steps})..."
+                    loss = loss_fn(batch)
+                    loss_val = (
+                        loss.mean(reduce=True) / cfg.train.gradient_accumulation_steps
                     )
-                    sender.update_weights()
-                    gc.collect()
 
-                timeit.print(prefix="timeit")
-                wandb_logger.log_metrics(
-                    {f"timeit/{key}": val for key, val in timeit.todict().items()}
+            with timeit("backward_pass"):
+                if (
+                    cfg.train.mixed_precision
+                    and cfg.train_model.torch_dtype == "float16"
+                ):
+                    scaler = GradScaler(enabled=True)
+                    scaler.scale(loss_val).backward()
+                else:
+                    loss_val.backward()
+
+            if (step + 1) % cfg.train.gradient_accumulation_steps == 0:
+                with timeit("optim_step"):
+                    if (
+                        cfg.train.mixed_precision
+                        and cfg.train_model.torch_dtype == "float16"
+                    ):
+                        scaler.unscale_(optimizer)
+
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        policy_training.parameters(),
+                        cfg.optimizer.clip_grad_norm,
+                    )
+
+                    if (
+                        cfg.train.mixed_precision
+                        and cfg.train_model.torch_dtype == "float16"
+                    ):
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
+
+                optim_steps += 1
+
+                # Weight sync is tied to optimizer steps, not gradient steps.
+                # This ensures the training model diverges from the inference model
+                # between syncs, which is essential for meaningful importance sampling
+                # in GRPO (otherwise ESS stays at 1.0 and GRPO degenerates to REINFORCE).
+                if optim_steps % cfg.train.weight_update_frequency == 0:
+                    with timeit("update_policy_weights"):
+                        torchrl_logger.info(
+                            f"Updating policy weights (optim step {optim_steps})..."
+                        )
+                        sender.update_weights()
+                        gc.collect()
+
+                    timeit.print(prefix="timeit")
+                    wandb_logger.log_metrics(
+                        {f"timeit/{key}": val for key, val in timeit.todict().items()}
+                    )
+                    timeit.reset()
+
+            if (step % cfg.train.logging_frequency) == 0:
+                log_training_metrics(
+                    wandb_logger=wandb_logger,
+                    replay_buffer=replay_buffer,
+                    batch=batch,
+                    loss=loss,
+                    grad_norm=grad_norm,
+                    global_step=step,
+                    data_read_count=data_read_count,
+                    collector=collectors[0],
+                    start_time=start_time,
+                    gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
+                    history_str=history_str,
+                    use_kl_to_ref=cfg.train.use_kl_to_ref,
                 )
-                timeit.reset()
 
-        if (step % cfg.train.logging_frequency) == 0:
-            log_training_metrics(
-                wandb_logger=wandb_logger,
-                replay_buffer=replay_buffer,
-                batch=batch,
-                loss=loss,
-                grad_norm=grad_norm,
-                global_step=step,
-                data_read_count=data_read_count,
-                collector=collectors[0],
-                start_time=start_time,
-                gradient_accumulation_steps=cfg.train.gradient_accumulation_steps,
-                history_str=history_str,
-                use_kl_to_ref=cfg.train.use_kl_to_ref,
-            )
-
-        del loss_val
-        # TODO: do we need this? Does it interfere with other processes?
-        # torch.cuda.empty_cache()
-        gc.collect()
-
-    pbar.close()
-    collector.shutdown()
+            del loss_val
+            # TODO: do we need this? Does it interfere with other processes?
+            # torch.cuda.empty_cache()
+            gc.collect()
+        exit_code = 0
+    finally:
+        pbar.close()
+        with contextlib.suppress(Exception):
+            _finish_wandb_logger(wandb_logger, exit_code)
+        for collector in collectors:
+            with contextlib.suppress(Exception):
+                collector.shutdown()
+        shutdown = getattr(sender, "shutdown", None)
+        if shutdown is not None:
+            with contextlib.suppress(Exception):
+                shutdown()
 
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
@@ -436,15 +461,19 @@ def main(cfg):
     )(train)
 
     # launch training
-    ray.get(
-        train_handler.remote(
-            rb,
-            cfg,
-            collectors,
-            inference_policy,
-            devices=device_config["train_model_devices"],
+    try:
+        ray.get(
+            train_handler.remote(
+                rb,
+                cfg,
+                collectors,
+                inference_policy,
+                devices=device_config["train_model_devices"],
+            )
         )
-    )
+    finally:
+        if ray.is_initialized():
+            ray.shutdown()
 
 
 if __name__ == "__main__":

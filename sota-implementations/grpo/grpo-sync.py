@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import os
 from functools import partial
@@ -53,6 +54,17 @@ from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
+
+
+def _finish_wandb_logger(
+    wandb_logger: WandbLogger | None, exit_code: int
+) -> None:
+    """Finish a wandb run if one was created."""
+    if wandb_logger is None:
+        return
+    finish = getattr(wandb_logger.experiment, "finish", None)
+    if finish is not None:
+        finish(exit_code=exit_code)
 
 
 def setup_environment() -> None:
@@ -306,7 +318,14 @@ def train(
             replay_buffer.empty(empty_write_count=False)
 
     pbar.close()
-    collector.shutdown()
+    with contextlib.suppress(Exception):
+        _finish_wandb_logger(wandb_logger, 0)
+    with contextlib.suppress(Exception):
+        collector.shutdown()
+    shutdown = getattr(sender, "shutdown", None)
+    if shutdown is not None:
+        with contextlib.suppress(Exception):
+            shutdown()
 
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
@@ -425,15 +444,19 @@ def main(cfg):
     )(train)
 
     # launch training
-    ray.get(
-        train_handler.remote(
-            rb,
-            cfg,
-            collector,
-            inference_policy,
-            devices=device_config["train_model_devices"],
+    try:
+        ray.get(
+            train_handler.remote(
+                rb,
+                cfg,
+                collector,
+                inference_policy,
+                devices=device_config["train_model_devices"],
+            )
         )
-    )
+    finally:
+        if ray.is_initialized():
+            ray.shutdown()
 
 
 if __name__ == "__main__":

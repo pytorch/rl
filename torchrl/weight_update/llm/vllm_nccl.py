@@ -387,6 +387,11 @@ class VLLMCollectiveTransport:
         """Check if the communication group is initialized."""
         return self._initialized
 
+    def shutdown(self) -> None:
+        """Release trainer-side resources used for weight synchronization."""
+        self._trainer_nccl_group = None
+        self._initialized = False
+
 
 # ============================================================================
 # vLLM Weight Synchronization Components
@@ -658,6 +663,16 @@ class VLLMWeightSender:
         # Run post-hooks (e.g. increment policy version on collectors)
         for hook in self._post_hooks:
             hook()
+
+    def shutdown(self) -> None:
+        """Release resources held by the sender."""
+        if self._transport is not None:
+            shutdown = getattr(self._transport, "shutdown", None)
+            if shutdown is not None:
+                shutdown()
+            self._transport = None
+        self._collectors.clear()
+        self._post_hooks.clear()
 
 
 class VLLMWeightReceiver:

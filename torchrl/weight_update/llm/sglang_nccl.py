@@ -424,6 +424,13 @@ class SGLangCollectiveTransport:
         """Check if the communication group is initialized."""
         return self._comm_group is not None
 
+    def shutdown(self) -> None:
+        """Release trainer-side resources used for weight synchronization."""
+        if self._comm_group is not None:
+            torch.distributed.destroy_process_group(self._comm_group)
+            self._comm_group = None
+        self._http_executor.shutdown(wait=False, cancel_futures=True)
+
 
 class SGLangWeightSyncScheme(WeightSyncScheme):
     """Weight synchronization scheme for SGLang servers.
@@ -607,3 +614,13 @@ class SGLangWeightSender:
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
+
+    def shutdown(self) -> None:
+        """Release resources held by the sender."""
+        if self._transport is not None:
+            shutdown = getattr(self._transport, "shutdown", None)
+            if shutdown is not None:
+                shutdown()
+            self._transport = None
+        self._collectors.clear()
+        self._post_hooks.clear()
