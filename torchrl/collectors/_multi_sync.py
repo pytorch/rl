@@ -18,9 +18,8 @@ from torchrl._utils import (
     accept_remote_rref_udf_invocation,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
-from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
+from torchrl.collectors._multi_base import MultiCollector
 from torchrl.collectors.utils import split_trajectories
 
 
@@ -455,12 +454,3 @@ class MultiSyncCollector(MultiCollector):
     # for RPC
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
-
-
-_LegacyMultiSyncMeta = _make_legacy_metaclass(_MultiCollectorMeta)
-
-
-class MultiSyncDataCollector(MultiSyncCollector, metaclass=_LegacyMultiSyncMeta):
-    """Deprecated version of :class:`~torchrl.collectors.MultiSyncCollector`."""
-
-    ...

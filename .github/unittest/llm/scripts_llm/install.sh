@@ -79,7 +79,18 @@ deno --version || echo "Warning: Deno not installed"
 
 # Pre-download models for LLM tests to avoid timeout during test execution
 printf "* Pre-downloading models for LLM tests\n"
-python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('Qwen/Qwen2.5-0.5B'); AutoModelForCausalLM.from_pretrained('Qwen/Qwen2.5-0.5B')"
+python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2.5-0.5B')"
+
+printf "* Installed LLM backend versions:\n"
+python - <<'PY'
+from importlib.metadata import PackageNotFoundError, version
+
+for package in ("vllm", "transformers", "torch", "triton"):
+    try:
+        print(f"{package}: {version(package)}")
+    except PackageNotFoundError:
+        print(f"{package}: not installed")
+PY
 
 # Note: SGLang tests are run in a separate workflow (test-linux-llm-sglang.yml)
 # due to Triton version conflicts between vLLM and SGLang.

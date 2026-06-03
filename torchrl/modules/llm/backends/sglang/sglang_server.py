@@ -202,6 +202,13 @@ class AsyncSGLang(RLSGLangEngine):
         env = os.environ.copy()
         env["NCCL_P2P_DISABLE"] = "1"
         env["NCCL_SHM_DISABLE"] = "1"
+        grpc_port = env.get("SGLANG_GRPC_PORT")
+        try:
+            valid_grpc_port = grpc_port is not None and 0 < int(grpc_port) <= 65535
+        except ValueError:
+            valid_grpc_port = False
+        if not valid_grpc_port:
+            env["SGLANG_GRPC_PORT"] = str(get_open_port())
 
         # Launch subprocess with output going to the log file
         self._managed_process = subprocess.Popen(

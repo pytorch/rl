@@ -15,6 +15,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
+from inspect import getattr_static
 from multiprocessing import connection
 from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
@@ -724,7 +725,10 @@ class BatchedEnvBase(EnvBase):
         worker raise here so the user gets immediate feedback rather than
         silently-wrong runtime behavior.
         """
-        transform = getattr(env, "transform", None)
+        if getattr_static(env, "transform", None) is None:
+            transform = None
+        else:
+            transform = getattr(env, "transform", None)
         if transform is not None:
             transform._check_batched_worker_compat()
 

@@ -24,7 +24,7 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.utils import assert_close
 from torch import nn
 
-from torchrl.collectors import Collector, SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import (
@@ -3053,7 +3053,7 @@ def test_env_policy_argument_adds_recurrent_transforms():
 def test_collector_adds_recurrent_env_transforms():
     """Collectors prepare bare envs from recurrent policies before rollout."""
     policy = _make_recurrent_counting_policy()
-    collector = SyncDataCollector(
+    collector = Collector(
         CountingEnv(max_steps=3),
         policy,
         frames_per_batch=3,
@@ -3074,7 +3074,7 @@ def test_collector_adds_recurrent_env_transforms():
 def test_collector_does_not_duplicate_recurrent_env_transforms():
     """Collector auto-setup is idempotent with env policy=... setup."""
     policy = _make_recurrent_counting_policy()
-    collector = SyncDataCollector(
+    collector = Collector(
         CountingEnv(max_steps=3, policy=policy),
         policy,
         frames_per_batch=3,

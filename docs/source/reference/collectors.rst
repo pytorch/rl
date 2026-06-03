@@ -116,15 +116,12 @@ Quick Example
     
     collector.shutdown()
 
-Legacy names
-------------
+Removed legacy names
+--------------------
 
-The following names are kept for backward compatibility:
-
-- ``SyncDataCollector`` → ``Collector``
-- ``MultiSyncDataCollector`` → ``MultiCollector(sync=True)``
-- ``MultiaSyncDataCollector`` → ``MultiCollector(sync=False)``
-- ``DataCollectorBase`` → ``BaseCollector``
+The deprecated collector aliases were removed in v0.13. Use the canonical
+collector classes directly: ``Collector``, ``MultiCollector``,
+``MultiSyncCollector``, ``MultiAsyncCollector``, and ``BaseCollector``.
 
 Documentation Sections
 ----------------------

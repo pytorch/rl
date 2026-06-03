@@ -53,18 +53,13 @@ node or across multiple nodes.
     DistributedCollector
     RPCCollector
     DistributedSyncCollector
-    DistributedDataCollector
-    RPCDataCollector
-    DistributedSyncDataCollector
     submitit_delayed_launcher
     RayCollector
     RayEvalWorker
 
-Legacy names
-------------
+Removed legacy names
+--------------------
 
-The following names are kept for backward compatibility:
-
-- ``DistributedDataCollector`` → ``DistributedCollector``
-- ``RPCDataCollector`` → ``RPCCollector``
-- ``DistributedSyncDataCollector`` → ``DistributedSyncCollector``
+The deprecated distributed collector aliases were removed in v0.13. Use
+``DistributedCollector``, ``RPCCollector``, and ``DistributedSyncCollector``
+directly.

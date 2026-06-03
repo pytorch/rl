@@ -32,7 +32,7 @@ from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs import RewardSum, TransformedEnv
@@ -155,7 +155,7 @@ def main(args: argparse.Namespace) -> None:
         terminated=("agents", "terminated"),
     )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         actor,
         device=device,
