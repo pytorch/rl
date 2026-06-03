@@ -2001,7 +2001,11 @@ class Collector(BaseCollector):
                 # Stop the background thread if one is running (from .start())
                 # before tearing down the env it may still be using.
                 self._stop = True
-                if hasattr(self, "_thread") and self._thread.is_alive():
+                if (
+                    hasattr(self, "_thread")
+                    and self._thread.is_alive()
+                    and threading.current_thread() is not self._thread
+                ):
                     self._thread.join(timeout=timeout)
                 self.closed = True
                 del self._carrier

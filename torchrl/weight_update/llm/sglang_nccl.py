@@ -384,41 +384,64 @@ class SGLangCollectiveTransport:
 
         torchrl_logger.info(f"Broadcasting {len(names)} weights for model '{model_id}'")
 
-        # Step 1: Send a single HTTP request with all weight metadata.
-        # The server will enter a broadcast-receive loop for each parameter.
-        update_data = {
-            "names": names,
-            "dtypes": dtypes,
-            "shapes": shapes,
-            "group_name": self._group_name,
-            "flush_cache": True,
-        }
-        update_future = self._http_executor.submit(
-            requests.post,
-            f"{self.server_url}/update_weights_from_distributed",
-            json=update_data,
+        # SGLang's cache flush after an online weight update is destructive.
+        # If generation is active, flushing can fail or drop in-flight HTTP
+        # requests. Retract active requests before the update; SGLang will
+        # recompute their KV cache when generation is resumed.
+        pause_response = requests.post(
+            f"{self.server_url}/pause_generation",
+            json={"mode": "retract"},
             timeout=self.timeout,
         )
-
-        # Step 2: Broadcast each weight tensor via NCCL in the same order.
-        # The server is concurrently receiving via broadcast on its side.
-        for name in names:
-            tensor = weights[name].to(f"cuda:{self.device}")
-            torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
-            del tensor
-
-        torch.cuda.synchronize()
-
-        # Step 3: Wait for the HTTP response confirming server received all weights
-        response = update_future.result(timeout=self.timeout + 5.0)
-        response.raise_for_status()
-        result = response.json()
-        if not result.get("success", False):
-            raise RuntimeError(
-                f"SGLang weight update failed: {result.get('message', 'Unknown error')}"
+        pause_response.raise_for_status()
+        try:
+            # Step 1: Send a single HTTP request with all weight metadata.
+            # The server will enter a broadcast-receive loop for each parameter.
+            update_data = {
+                "names": names,
+                "dtypes": dtypes,
+                "shapes": shapes,
+                "group_name": self._group_name,
+                "flush_cache": True,
+            }
+            update_future = self._http_executor.submit(
+                requests.post,
+                f"{self.server_url}/update_weights_from_distributed",
+                json=update_data,
+                timeout=self.timeout,
             )
 
-        torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
+            # Step 2: Broadcast each weight tensor via NCCL in the same order.
+            # The server is concurrently receiving via broadcast on its side.
+            for name in names:
+                tensor = weights[name].to(f"cuda:{self.device}")
+                torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
+                del tensor
+
+            torch.cuda.synchronize()
+
+            # Step 3: Wait for the HTTP response confirming server received all weights
+            response = update_future.result(timeout=self.timeout + 5.0)
+            response.raise_for_status()
+            result = response.json()
+            if not result.get("success", False):
+                raise RuntimeError(
+                    f"SGLang weight update failed: {result.get('message', 'Unknown error')}"
+                )
+
+            torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
+        finally:
+            try:
+                continue_response = requests.post(
+                    f"{self.server_url}/continue_generation",
+                    json={"torch_empty_cache": True},
+                    timeout=self.timeout,
+                )
+                continue_response.raise_for_status()
+            except requests.exceptions.RequestException as err:
+                torchrl_logger.warning(
+                    f"Failed to resume SGLang generation after weight update: {err}"
+                )
 
     def check_connection(self) -> bool:
         """Check if the communication group is initialized."""

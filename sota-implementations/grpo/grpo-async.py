@@ -215,8 +215,9 @@ def train(
     try:
         for step in range(total_steps):
             if not any(collector.is_running() for collector in collectors):
-                torchrl_logger.info("Collectors stopped, stopping training")
-                break
+                raise RuntimeError(
+                    f"Collectors stopped before training completed at step {step}/{total_steps}."
+                )
             pbar.update(1)
             pbar.set_description(f"Step {step}, writes: {replay_buffer.write_count}")
 

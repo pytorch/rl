@@ -102,6 +102,7 @@ class AsyncSGLang(RLSGLangEngine):
 
         self._managed_process: subprocess.Popen | None = None
         self._log_file_path: str | None = None
+        self._preserve_log_file: bool = False
         self._server_info: dict[str, Any] | None = None
         self._model_info: dict[str, Any] | None = None
 
@@ -679,8 +680,23 @@ class AsyncSGLang(RLSGLangEngine):
 
     def shutdown(self) -> None:
         """Shutdown the managed SGLang server if running."""
+        preserve_log = False
         if self._managed_process is not None:
             torchrl_logger.info("Shutting down managed SGLang server...")
+            poll_result = self._managed_process.poll()
+            if poll_result is not None and poll_result != 0:
+                preserve_log = True
+                self._preserve_log_file = True
+                if self._log_file_path is not None and os.path.exists(
+                    self._log_file_path
+                ):
+                    with open(self._log_file_path) as f:
+                        output = f.read()
+                    torchrl_logger.error(
+                        f"SGLang server exited with code {poll_result}. "
+                        f"Output log preserved at {self._log_file_path}; "
+                        f"last 20000 chars:\n{output[-20000:]}"
+                    )
             self._managed_process.terminate()
             try:
                 self._managed_process.wait(timeout=10)
@@ -690,7 +706,12 @@ class AsyncSGLang(RLSGLangEngine):
             torchrl_logger.info("SGLang server shutdown complete")
 
         # Clean up the log file
-        if self._log_file_path is not None and os.path.exists(self._log_file_path):
+        if (
+            not preserve_log
+            and not self._preserve_log_file
+            and self._log_file_path is not None
+            and os.path.exists(self._log_file_path)
+        ):
             try:
                 os.unlink(self._log_file_path)
             except OSError:
