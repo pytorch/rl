@@ -142,6 +142,9 @@ else
   pip3 install --no-deps tensordict
 fi
 
+printf "* Installing hoptorch\n"
+python -m pip install "hoptorch>=0.1.1"
+
 printf "* Installing torchrl\n"
 python -m pip install -e . --no-build-isolation --no-deps
 

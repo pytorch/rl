@@ -240,6 +240,9 @@ else
   uv_pip_install --no-deps tensordict
 fi
 
+printf "* Installing hoptorch\n"
+uv_pip_install "hoptorch>=0.1.1"
+
 printf "* Installing torchrl\n"
 if [[ "$RELEASE" == 0 ]]; then
   uv_pip_install -e . --no-build-isolation --no-deps
