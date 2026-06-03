@@ -60,8 +60,11 @@ Example:
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 import uuid
+import weakref
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Literal
@@ -212,6 +215,36 @@ class SGLangCollectiveTransport:
         else:
             self.device = device
 
+    def _flush_cache_after_update(self, model_id: str) -> None:
+        """Ask SGLang to flush its cache after a completed weight update.
+
+        SGLang's distributed weight-update endpoint flushes synchronously by
+        default. That path asserts if requests are pending, which kills the
+        server during continuous collection. Defer the flush through the public
+        endpoint instead; it can wait for an idle gap and returns a normal HTTP
+        failure when the gap does not arrive.
+        """
+        flush_timeout = min(30.0, self.timeout)
+        request_timeout = max(self.timeout, flush_timeout + 5.0)
+        try:
+            response = requests.post(
+                f"{self.server_url}/flush_cache",
+                params={"timeout": flush_timeout},
+                timeout=request_timeout,
+            )
+        except requests.exceptions.RequestException as err:
+            torchrl_logger.warning(
+                f"Failed to request SGLang cache flush after updating "
+                f"model '{model_id}': {err}"
+            )
+            return
+
+        if response.status_code >= 400:
+            torchrl_logger.warning(
+                f"SGLang cache flush after updating model '{model_id}' did not "
+                f"complete: {response.text.strip()}"
+            )
+
     def init_all_workers_group(
         self, model_metadata: dict[str, tuple[torch.dtype, torch.Size]]
     ) -> None:
@@ -243,8 +276,6 @@ class SGLangCollectiveTransport:
         # 'invalid argument'" during NCCL P2P/IPC channel setup. Disabling P2P
         # forces NCCL to use SHM/network transport which works with any device
         # visibility configuration.
-        import os
-
         os.environ["NCCL_P2P_DISABLE"] = "1"
         os.environ["NCCL_SHM_DISABLE"] = "1"
 
@@ -280,8 +311,6 @@ class SGLangCollectiveTransport:
                 pg_result[0] = pg
             except Exception as e:
                 pg_error[0] = e
-
-        import threading
 
         pg_thread = threading.Thread(target=_trainer_pg_init, daemon=True)
         pg_thread.start()
@@ -384,64 +413,45 @@ class SGLangCollectiveTransport:
 
         torchrl_logger.info(f"Broadcasting {len(names)} weights for model '{model_id}'")
 
-        # SGLang's cache flush after an online weight update is destructive.
-        # If generation is active, flushing can fail or drop in-flight HTTP
-        # requests. Retract active requests before the update; SGLang will
-        # recompute their KV cache when generation is resumed.
-        pause_response = requests.post(
-            f"{self.server_url}/pause_generation",
-            json={"mode": "retract"},
+        # Step 1: Send a single HTTP request with all weight metadata.
+        # The server will enter a broadcast-receive loop for each parameter.
+        # Do not ask SGLang to flush inside this endpoint: if there are pending
+        # requests, SGLang asserts in the scheduler and terminates the server.
+        update_data = {
+            "names": names,
+            "dtypes": dtypes,
+            "shapes": shapes,
+            "group_name": self._group_name,
+            "flush_cache": False,
+            "abort_all_requests": False,
+        }
+        update_future = self._http_executor.submit(
+            requests.post,
+            f"{self.server_url}/update_weights_from_distributed",
+            json=update_data,
             timeout=self.timeout,
         )
-        pause_response.raise_for_status()
-        try:
-            # Step 1: Send a single HTTP request with all weight metadata.
-            # The server will enter a broadcast-receive loop for each parameter.
-            update_data = {
-                "names": names,
-                "dtypes": dtypes,
-                "shapes": shapes,
-                "group_name": self._group_name,
-                "flush_cache": True,
-            }
-            update_future = self._http_executor.submit(
-                requests.post,
-                f"{self.server_url}/update_weights_from_distributed",
-                json=update_data,
-                timeout=self.timeout,
+
+        # Step 2: Broadcast each weight tensor via NCCL in the same order.
+        # The server is concurrently receiving via broadcast on its side.
+        for name in names:
+            tensor = weights[name].to(f"cuda:{self.device}")
+            torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
+            del tensor
+
+        torch.cuda.synchronize()
+
+        # Step 3: Wait for the HTTP response confirming server received all weights
+        response = update_future.result(timeout=self.timeout + 5.0)
+        response.raise_for_status()
+        result = response.json()
+        if not result.get("success", False):
+            raise RuntimeError(
+                f"SGLang weight update failed: {result.get('message', 'Unknown error')}"
             )
 
-            # Step 2: Broadcast each weight tensor via NCCL in the same order.
-            # The server is concurrently receiving via broadcast on its side.
-            for name in names:
-                tensor = weights[name].to(f"cuda:{self.device}")
-                torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
-                del tensor
-
-            torch.cuda.synchronize()
-
-            # Step 3: Wait for the HTTP response confirming server received all weights
-            response = update_future.result(timeout=self.timeout + 5.0)
-            response.raise_for_status()
-            result = response.json()
-            if not result.get("success", False):
-                raise RuntimeError(
-                    f"SGLang weight update failed: {result.get('message', 'Unknown error')}"
-                )
-
-            torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
-        finally:
-            try:
-                continue_response = requests.post(
-                    f"{self.server_url}/continue_generation",
-                    json={"torch_empty_cache": True},
-                    timeout=self.timeout,
-                )
-                continue_response.raise_for_status()
-            except requests.exceptions.RequestException as err:
-                torchrl_logger.warning(
-                    f"Failed to resume SGLang generation after weight update: {err}"
-                )
+        self._flush_cache_after_update(model_id)
+        torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
 
     def check_connection(self) -> bool:
         """Check if the communication group is initialized."""
@@ -571,8 +581,6 @@ class SGLangWeightSender:
         Args:
             model: The PyTorch model to sync weights from.
         """
-        import weakref
-
         self._model_ref = weakref.ref(model)
 
     def init_all_workers_group(
