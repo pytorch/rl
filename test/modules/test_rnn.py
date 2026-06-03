@@ -1306,14 +1306,15 @@ class TestLSTMModule:
         assert out["obs"].is_contiguous()
         assert out["reward"].data_ptr() == reward_ptr
 
-    def test_lstm_recompute_rejected_for_pad(self):
+    @pytest.mark.parametrize("backend", ["auto", "pad"])
+    def test_lstm_recompute_rejected_for_non_recompute_backend(self, backend):
         with pytest.raises(ValueError, match="recurrent_recompute"):
             LSTMModule(
                 input_size=3,
                 hidden_size=4,
                 in_key="obs",
                 out_key="out",
-                recurrent_backend="pad",
+                recurrent_backend=backend,
                 recurrent_recompute="full",
             )
 
@@ -3057,14 +3058,15 @@ class TestGRUModule:
         assert out["obs" if not nested_in_key else ("obs", "value")].is_contiguous()
         assert out["reward"].data_ptr() == reward_ptr
 
-    def test_gru_recompute_rejected_for_pad(self):
+    @pytest.mark.parametrize("backend", ["auto", "pad"])
+    def test_gru_recompute_rejected_for_non_recompute_backend(self, backend):
         with pytest.raises(ValueError, match="recurrent_recompute"):
             GRUModule(
                 input_size=3,
                 hidden_size=4,
                 in_key="obs",
                 out_key="out",
-                recurrent_backend="pad",
+                recurrent_backend=backend,
                 recurrent_recompute="full",
             )
 

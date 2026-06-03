@@ -634,6 +634,33 @@ class TestCudaMemoryHelpers:
         reset_cuda_peak_stats("cpu")
         reset_cuda_peak_stats()
 
+    def test_int_device_is_normalized_as_cuda_ordinal(self, monkeypatch):
+        calls = []
+
+        def record_call(device):
+            calls.append(device)
+            return _utils._GB
+
+        monkeypatch.setattr(_utils.torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(_utils.torch.cuda, "memory_allocated", record_call)
+        monkeypatch.setattr(_utils.torch.cuda, "memory_reserved", record_call)
+        monkeypatch.setattr(_utils.torch.cuda, "max_memory_allocated", record_call)
+        monkeypatch.setattr(_utils.torch.cuda, "max_memory_reserved", record_call)
+
+        stats = cuda_memory_stats(0)
+
+        assert stats == {key: 1.0 for key in self.EXPECTED_KEYS}
+        assert calls == [torch.device("cuda", 0)] * 4
+
+    def test_reset_peak_accepts_int_device(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(_utils.torch.cuda, "is_available", lambda: True)
+        monkeypatch.setattr(_utils.torch.cuda, "reset_peak_memory_stats", calls.append)
+
+        reset_cuda_peak_stats(1)
+
+        assert calls == [torch.device("cuda", 1)]
+
     def test_profile_populates_stats_attribute(self):
         with cuda_memory_profile("unit-test", log=False) as prof:
             pass

@@ -1355,6 +1355,20 @@ _EMPTY_CUDA_STATS = {
 }
 
 
+def _cuda_memory_device(device: torch.device | int | str | None) -> torch.device | None:
+    """Normalize a user CUDA memory device, or return ``None`` for no-op devices."""
+    if not torch.cuda.is_available():
+        return None
+    if device is None:
+        return _make_ordinal_device(torch.device("cuda"))
+    if isinstance(device, int):
+        return torch.device("cuda", device)
+    device = torch.device(device)
+    if device.type != "cuda":
+        return None
+    return _make_ordinal_device(device)
+
+
 def cuda_memory_stats(
     device: torch.device | int | str | None = None,
 ) -> dict[str, float]:
@@ -1383,11 +1397,9 @@ def cuda_memory_stats(
     .. seealso::
         :func:`reset_cuda_peak_stats`, :class:`cuda_memory_profile`.
     """
-    if not torch.cuda.is_available():
+    dev = _cuda_memory_device(device)
+    if dev is None:
         return dict(_EMPTY_CUDA_STATS)
-    if device is not None and torch.device(device).type != "cuda":
-        return dict(_EMPTY_CUDA_STATS)
-    dev = _make_ordinal_device(torch.device("cuda" if device is None else device))
     return {
         "allocated_gb": torch.cuda.memory_allocated(dev) / _GB,
         "reserved_gb": torch.cuda.memory_reserved(dev) / _GB,
@@ -1415,11 +1427,9 @@ def reset_cuda_peak_stats(
     .. seealso::
         :func:`cuda_memory_stats`, :class:`cuda_memory_profile`.
     """
-    if not torch.cuda.is_available():
+    dev = _cuda_memory_device(device)
+    if dev is None:
         return
-    if device is not None and torch.device(device).type != "cuda":
-        return
-    dev = _make_ordinal_device(torch.device("cuda" if device is None else device))
     torch.cuda.reset_peak_memory_stats(dev)
 
 

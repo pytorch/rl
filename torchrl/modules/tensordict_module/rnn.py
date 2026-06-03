@@ -852,11 +852,12 @@ class LSTMModule(ModuleBase):
                 "recurrent_recompute must be one of 'none' or 'full'. "
                 f"Got {recurrent_recompute}."
             )
-        if recurrent_recompute != "none" and recurrent_backend == "pad":
+        if recurrent_recompute != "none" and recurrent_backend in {"pad", "auto"}:
             raise ValueError(
                 "recurrent_recompute is only supported for recurrent_backend "
-                "'scan' and 'triton' (and 'auto', which selects one of them). "
-                "cuDNN's 'pad' backend manages its own backward workspace."
+                "'scan' and 'triton'. Set recurrent_backend explicitly: "
+                "'auto' may select cuDNN's 'pad' backend, which manages its "
+                "own backward workspace."
             )
         _validate_user_precision(recurrent_matmul_precision)
         if lstm is not None:
@@ -2308,11 +2309,12 @@ class GRUModule(ModuleBase):
                 "recurrent_recompute must be one of 'none' or 'full'. "
                 f"Got {recurrent_recompute}."
             )
-        if recurrent_recompute != "none" and recurrent_backend == "pad":
+        if recurrent_recompute != "none" and recurrent_backend in {"pad", "auto"}:
             raise ValueError(
                 "recurrent_recompute is only supported for recurrent_backend "
-                "'scan' and 'triton' (and 'auto', which selects one of them). "
-                "cuDNN's 'pad' backend manages its own backward workspace."
+                "'scan' and 'triton'. Set recurrent_backend explicitly: "
+                "'auto' may select cuDNN's 'pad' backend, which manages its "
+                "own backward workspace."
             )
         _validate_user_precision(recurrent_matmul_precision)
         if gru is not None:
