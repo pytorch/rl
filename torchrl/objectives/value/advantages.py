@@ -2414,7 +2414,6 @@ class MultiAgentGAE(GAE):
         return (adv - loc) / scale
 
 
-
 @register_value_estimator(
     ValueEstimators.VTrace,
     default_kwargs={"gamma": 0.99, "differentiable": True},
@@ -2531,10 +2530,14 @@ class VTrace(ValueEstimatorBase):
         a stateless template — we deep-copy it and bake the current params
         in, since V-Trace doesn't support a functional actor call.
         """
-        value_network = getattr(loss_module, "critic_network", None)
+        value_network = hyperparams.pop("value_network", None)
         if value_network is None:
-            value_network = getattr(loss_module, "value_network", None)
-        actor_network = loss_module.actor_network
+            value_network = getattr(loss_module, "critic_network", None)
+            if value_network is None:
+                value_network = getattr(loss_module, "value_network", None)
+        actor_network = hyperparams.pop("actor_network", None)
+        if actor_network is None:
+            actor_network = loss_module.actor_network
         if getattr(loss_module, "functional", False):
             actor_network = deepcopy(actor_network)
             loss_module.actor_network_params.to_module(actor_network)

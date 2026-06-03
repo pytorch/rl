@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import functools
+import importlib
 import re
 import warnings
 from collections.abc import Callable, Iterable
@@ -64,6 +65,20 @@ class ValueEstimators(Enum):
     VTrace = "V-trace"
 
 
+_BUILTIN_VALUE_ESTIMATOR_DEFAULTS: dict[ValueEstimators, dict[str, Any]] = {
+    ValueEstimators.TD0: {"gamma": 0.99, "differentiable": True},
+    ValueEstimators.TD1: {"gamma": 0.99, "differentiable": True},
+    ValueEstimators.TDLambda: {
+        "gamma": 0.99,
+        "lmbda": 0.95,
+        "differentiable": True,
+    },
+    ValueEstimators.GAE: {"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+    ValueEstimators.MAGAE: {"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+    ValueEstimators.VTrace: {"gamma": 0.99, "differentiable": True},
+}
+
+
 # ---------------------------------------------------------------------------
 # Value-estimator registry
 # ---------------------------------------------------------------------------
@@ -98,12 +113,10 @@ class _ValueEstimatorRegistryEntry:
         self.default_kwargs = dict(default_kwargs)
 
 
-_VALUE_ESTIMATOR_REGISTRY: dict[ValueEstimators, _ValueEstimatorRegistryEntry] = {}
+_VALUE_ESTIMATOR_REGISTRY: dict[Any, _ValueEstimatorRegistryEntry] = {}
 
 
-def register_value_estimator(
-    value_type: ValueEstimators, *, default_kwargs: dict | None = None
-):
+def register_value_estimator(value_type: Any, *, default_kwargs: dict | None = None):
     """Decorator: register an estimator class against a :class:`ValueEstimators` entry.
 
     Args:
@@ -129,23 +142,56 @@ def register_value_estimator(
     return _decorator
 
 
-def _coerce_value_type(value_type) -> ValueEstimators:
-    """Allow string aliases like ``"gae"`` alongside the enum values."""
+def _value_estimator_aliases() -> list[str]:
+    aliases = [member.name.lower() for member in ValueEstimators]
+    aliases.extend(
+        key.name.lower()
+        for key in _VALUE_ESTIMATOR_REGISTRY
+        if isinstance(key, Enum) and key.name.lower() not in aliases
+    )
+    return aliases
+
+
+def _registered_value_type(value_type) -> bool:
+    try:
+        return value_type in _VALUE_ESTIMATOR_REGISTRY
+    except TypeError:
+        return False
+
+
+def _ensure_builtin_value_estimators_registered() -> None:
+    if all(value_type in _VALUE_ESTIMATOR_REGISTRY for value_type in ValueEstimators):
+        return
+    # Importing the module triggers the registration decorators on the built-in
+    # estimator classes. This keeps direct uses of torchrl.objectives.utils
+    # independent of import order while avoiding a module-top circular import.
+    importlib.import_module("torchrl.objectives.value.advantages")
+
+
+def _coerce_value_type(value_type):
+    """Allow string aliases like ``"gae"`` alongside registered keys."""
     if isinstance(value_type, ValueEstimators):
         return value_type
     if isinstance(value_type, str):
+        if _registered_value_type(value_type):
+            return value_type
         # Accept both the enum *member* name ("GAE") and a lowercase alias
         # ("gae") for ergonomics with hydra / yaml configs.
         key = value_type.lower()
         for member in ValueEstimators:
             if member.name.lower() == key:
                 return member
+        for registered_key in _VALUE_ESTIMATOR_REGISTRY:
+            if isinstance(registered_key, Enum) and registered_key.name.lower() == key:
+                return registered_key
         raise KeyError(
             f"Unknown value estimator alias {value_type!r}. "
-            f"Known aliases: {[m.name.lower() for m in ValueEstimators]}."
+            f"Known aliases: {_value_estimator_aliases()}."
         )
+    if _registered_value_type(value_type) or isinstance(value_type, Enum):
+        return value_type
     raise TypeError(
-        f"value_type must be a ValueEstimators enum value or a string alias, "
+        f"value_type must be a registered enum value or a string alias, "
         f"got {type(value_type).__name__}."
     )
 
@@ -153,6 +199,8 @@ def _coerce_value_type(value_type) -> ValueEstimators:
 def get_value_estimator_entry(value_type) -> _ValueEstimatorRegistryEntry:
     """Look up the registry entry for ``value_type`` (enum or string alias)."""
     coerced = _coerce_value_type(value_type)
+    if isinstance(coerced, ValueEstimators):
+        _ensure_builtin_value_estimators_registered()
     try:
         return _VALUE_ESTIMATOR_REGISTRY[coerced]
     except KeyError as exc:
@@ -180,7 +228,7 @@ def dispatch_value_estimator(
     loss_module,
     value_type,
     *,
-    supported: Iterable[ValueEstimators],
+    supported: Iterable[Any],
     tensor_keys: dict[str, NestedKey] | None = None,
     **hyperparams,
 ):
@@ -213,10 +261,13 @@ def dispatch_value_estimator(
     supported_set = set(supported)
     coerced = _coerce_value_type(value_type)
     if coerced not in supported_set:
+        supported_names = sorted(
+            getattr(value_type, "name", str(value_type)) for value_type in supported_set
+        )
         raise NotImplementedError(
             f"Value type {coerced!r} is not implemented for loss "
             f"{type(loss_module).__name__}. Supported value types: "
-            f"{sorted(m.name for m in supported_set)}."
+            f"{supported_names}."
         )
     loss_module.value_type = coerced
     hp = dict(hyperparams)
@@ -245,7 +296,18 @@ def default_value_kwargs(value_type: ValueEstimators):
         >>> kwargs = default_value_kwargs(ValueEstimators.TDLambda)
         {"gamma": 0.99, "lmbda": 0.95, "differentiable": True}
     """
-    return dict(get_value_estimator_entry(value_type).default_kwargs)
+    coerced = _coerce_value_type(value_type)
+    if isinstance(coerced, ValueEstimators):
+        _ensure_builtin_value_estimators_registered()
+        if coerced not in _VALUE_ESTIMATOR_REGISTRY:
+            return dict(_BUILTIN_VALUE_ESTIMATOR_DEFAULTS[coerced])
+    try:
+        return dict(_VALUE_ESTIMATOR_REGISTRY[coerced].default_kwargs)
+    except KeyError as exc:
+        raise NotImplementedError(
+            f"No value estimator registered for {coerced!r}. "
+            "Register one with @register_value_estimator(...) at class definition time."
+        ) from exc
 
 
 class _context_manager:
