@@ -272,6 +272,10 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             0, indices, True
         )
 
+    # ``_reset`` can honor a board state (fen/pgn) passed through the reset
+    # tensordict, so this env supports ``reset(td, set_state=True)``.
+    _supports_set_state = True
+
     def __init__(
         self,
         *,
@@ -365,19 +369,24 @@ class ChessEnv(EnvBase, metaclass=_ChessMeta):
             )
         return super().all_actions(tensordict)
 
-    def _reset(self, tensordict=None):
+    def _reset(self, tensordict=None, **kwargs):
+        # ``set_state`` is resolved by ``EnvBase.reset``: when truthy, honor the
+        # board state (fen/pgn) found in the input tensordict; otherwise ignore
+        # it and start from the standard initial position.
+        set_state = bool(kwargs.get("set_state"))
         fen = None
         pgn = None
         if tensordict is not None:
             dest = tensordict.empty()
-            if self.include_fen:
-                fen = tensordict.get("fen", None)
-                if fen is not None:
-                    fen = fen.data
-            elif self.include_pgn:
-                pgn = tensordict.get("pgn", None)
-                if pgn is not None:
-                    pgn = pgn.data
+            if set_state:
+                if self.include_fen:
+                    fen = tensordict.get("fen", None)
+                    if fen is not None:
+                        fen = fen.data
+                elif self.include_pgn:
+                    pgn = tensordict.get("pgn", None)
+                    if pgn is not None:
+                        pgn = pgn.data
         else:
             dest = TensorDict()
 

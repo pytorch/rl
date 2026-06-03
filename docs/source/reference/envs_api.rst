@@ -191,6 +191,19 @@ With these, the following methods are implemented:
   a :class:`tensordict.TensorDict` input. It return the first tensordict of a rollout, usually
   containing a ``"done"`` state and a set of observations. If not present,
   a ``"reward"`` key will be instantiated with 0s and the appropriate shape.
+
+  To reset *deterministically* to a state contained in the input tensordict
+  (e.g. branch a rollout from a saved state, or replay a fixed initial
+  condition), pass ``set_state=True``: ``env.reset(td, set_state=True)``. For
+  stateless environments such as :class:`~torchrl.envs.PendulumEnv` this honors
+  the state entries found in ``td``; for stateful environments that support it,
+  the underlying set-state API is used; envs that cannot honor a provided state
+  raise ``NotImplementedError``. ``set_state`` is a keyword argument (not a
+  tensordict key) so it never stacks/pads across a rollout. When ``set_state`` is
+  left unspecified but the tensordict carries state, the state is honored for
+  backwards compatibility and a :class:`FutureWarning` is emitted: from v0.15 an
+  unspecified ``set_state`` will be treated as ``False`` (state ignored, fresh
+  reset).
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).

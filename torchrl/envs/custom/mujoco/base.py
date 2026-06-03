@@ -163,6 +163,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
     batch_locked = True
+    # ``_reset`` can honor ``qpos``/``qvel`` passed through the reset tensordict
+    # (deterministic snapshot/branch), so this env supports
+    # ``reset(td, set_state=True)``. This is purely additive: by default the env
+    # samples a fresh state, so no historical behavior changes.
+    _supports_set_state = True
 
     def __init__(
         self,
@@ -479,17 +484,35 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     # ------------------------------------------------------------------
 
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
+        # ``set_state`` is resolved by ``EnvBase.reset``: when truthy and the
+        # input tensordict carries ``qpos``/``qvel``, reset deterministically to
+        # that snapshot instead of sampling. Composes with a partial ``_reset``
+        # mask (the backend muxes the masked rows).
+        set_state = bool(kwargs.get("set_state"))
         reset_mask = None
         if tensordict is not None and "_reset" in tensordict.keys():
             reset_mask = tensordict["_reset"]
             if reset_mask.ndim > 1:
                 reset_mask = reset_mask.squeeze(-1)
 
-        # Always sample full-batch (num_envs, *) initial states; the
-        # backend's ``reset_mask`` muxes the masked rows internally with
-        # ``torch.where`` so this path is free of data-dependent shapes
-        # (no ``.item()`` syncs, friendly to ``torch.compile``).
-        qpos, qvel = self._sample_initial_state(self.num_envs, tensordict)
+        if (
+            set_state
+            and tensordict is not None
+            and "qpos" in tensordict.keys()
+            and "qvel" in tensordict.keys()
+        ):
+            qpos = tensordict.get("qpos").to(
+                device=self.device, dtype=self._backend.qpos0.dtype
+            )
+            qvel = tensordict.get("qvel").to(
+                device=self.device, dtype=self._backend.qvel0.dtype
+            )
+        else:
+            # Always sample full-batch (num_envs, *) initial states; the
+            # backend's ``reset_mask`` muxes the masked rows internally with
+            # ``torch.where`` so this path is free of data-dependent shapes
+            # (no ``.item()`` syncs, friendly to ``torch.compile``).
+            qpos, qvel = self._sample_initial_state(self.num_envs, tensordict)
         if reset_mask is None:
             self._backend.reset(qpos, qvel)
             self._step_count.zero_()
