@@ -117,7 +117,9 @@ class TestMujoco:
         sequence = transform.action_sequence(
             td, MacroPrimitive.MOVE, target_qpos=target
         )
-        assert sequence.shape == torch.Size([2, 4, env.action_spec.shape[-1]])
+        assert sequence.shape == td.batch_size + torch.Size(
+            [4, env.action_spec.shape[-1]]
+        )
         env.close()
 
     def test_humanoid_generic_macro_sequence(self):

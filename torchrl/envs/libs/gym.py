@@ -75,6 +75,26 @@ For more information, please refer to discussion https://github.com/pytorch/rl/d
 """
 
 
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:
+    return
+
+
+@implement_for("gym", "0.20.0", "0.21.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    """Expose the legacy ALE entry point used by gym 0.20 Atari specs."""
+    del env_name
+    try:
+        ale_gym = importlib.import_module("ale_py.gym")
+    except ImportError:
+        return
+    if hasattr(ale_gym, "ALGymEnv"):
+        return
+    try:
+        ale_gym.ALGymEnv = gym_backend("envs.atari").AtariEnv
+    except (AttributeError, ImportError):
+        return
+
+
 def _gymnasium_reward_space(env):
     reward_space = getattr(env, "__dict__", {}).get("reward_space", None)
     if reward_space is not None:
@@ -1986,6 +2006,7 @@ class GymEnv(GymWrapper):
                             torchrl_logger.warning(
                                 f"ale_py not found, this may cause issues with ALE environments: {err}"
                             )
+                    _patch_legacy_ale_py_gym_env(env_name)
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
                     if len(w) and "frameskip" in str(w[-1].message):
