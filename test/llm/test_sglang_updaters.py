@@ -31,9 +31,7 @@ def test_process_group_options_kwargs_match_torch_signature():
     kwargs = _process_group_options_kwargs()
 
     assert len(kwargs) == 1
-    assert next(iter(kwargs)) in inspect.signature(
-        _new_process_group_helper
-    ).parameters
+    assert next(iter(kwargs)) in inspect.signature(_new_process_group_helper).parameters
     assert next(iter(kwargs.values())) is None
 
 
