@@ -8,14 +8,14 @@ from torchrl.modules.tensordict_module.exploration import RandomPolicy
 
 from ._async_batched import AsyncBatchedCollector
 
-from ._base import BaseCollector, DataCollectorBase, ProfileConfig
+from ._base import BaseCollector, ProfileConfig
 from ._evaluator import Evaluator
 
-from ._multi_async import MultiAsyncCollector, MultiaSyncDataCollector
-from ._multi_base import MultiCollector, MultiCollector as _MultiDataCollector
-from ._multi_sync import MultiSyncCollector, MultiSyncDataCollector
-from ._single import Collector, SyncDataCollector
-from ._single_async import AsyncCollector, aSyncDataCollector
+from ._multi_async import MultiAsyncCollector
+from ._multi_base import MultiCollector
+from ._multi_sync import MultiSyncCollector
+from ._single import Collector
+from ._single_async import AsyncCollector
 from .weight_update import (
     MultiProcessedWeightUpdater,
     RayWeightUpdater,
@@ -35,13 +35,6 @@ __all__ = [
     "Evaluator",
     "MultiAsyncCollector",
     "ProfileConfig",
-    # Legacy names (backward-compatible aliases)
-    "DataCollectorBase",
-    "SyncDataCollector",
-    "aSyncDataCollector",
-    "_MultiDataCollector",
-    "MultiSyncDataCollector",
-    "MultiaSyncDataCollector",
     # Other exports
     "WeightUpdaterBase",
     "VanillaWeightUpdater",

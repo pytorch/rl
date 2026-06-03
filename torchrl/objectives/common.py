@@ -22,7 +22,7 @@ from torch.nn import Parameter
 from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import _reduce, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -261,6 +261,35 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
                 )
 
+    @staticmethod
+    def _expand_loss_mask(mask: torch.Tensor, loss: torch.Tensor) -> torch.Tensor:
+        if mask.ndim < loss.ndim:
+            mask = mask.reshape(mask.shape + (1,) * (loss.ndim - mask.ndim))
+        return mask.expand_as(loss)
+
+    def _reduce_loss(
+        self,
+        loss: torch.Tensor,
+        tensordict: TensorDictBase | None = None,
+        *,
+        mask: torch.Tensor | None = None,
+        reduction: str | None = None,
+        weights: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if reduction is None:
+            reduction = self.reduction
+        if mask is None and tensordict is not None:
+            mask = tensordict.get("shifted_valid", default=None)
+        if mask is not None:
+            mask = self._expand_loss_mask(mask, loss)
+            if weights is not None and weights.shape != loss.shape:
+                weights = self._expand_loss_mask(weights, loss)
+            if weights is None and reduction == "mean":
+                return (loss * mask.to(loss.dtype)).sum() / mask.sum().clamp_min(1)
+            if weights is None and reduction == "sum":
+                return (loss * mask.to(loss.dtype)).sum()
+        return _reduce(loss, reduction=reduction, mask=mask, weights=weights)
+
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names.
 
@@ -356,14 +385,20 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
+        # Walk the MRO so subclasses don't have to redeclare annotations
+        # introduced by their parents — ``cls.__annotations__`` is *not*
+        # inherited automatically in Python.
+        inherited_annotations: set[str] = set()
+        for base in type(self).__mro__:
+            inherited_annotations.update(getattr(base, "__annotations__", {}).keys())
         for name in (
             module_name,
             module_name + "_params",
             "target_" + module_name + "_params",
         ):
-            if name not in self.__class__.__annotations__.keys():
+            if name not in inherited_annotations:
                 warnings.warn(
-                    f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
+                    f"The name {name} wasn't part of the annotations ({sorted(inherited_annotations)}). Make sure it is present in the definition class."
                 )
 
         if kwargs:

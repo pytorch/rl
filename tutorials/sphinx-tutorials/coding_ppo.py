@@ -152,10 +152,6 @@ from tqdm import tqdm
 # We set the hyperparameters for our algorithm. Depending on the resources
 # available, one may choose to execute the policy on GPU or on another
 # device.
-# The ``frame_skip`` will control how for how many frames is a single
-# action being executed. The rest of the arguments that count frames
-# must be corrected for this value (since one environment step will
-# actually return ``frame_skip`` frames).
 #
 
 is_fork = multiprocessing.get_start_method() == "fork"

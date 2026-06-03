@@ -341,7 +341,9 @@ def _version_with_local_sha(base_version: str) -> str:
 def set_version():
     # Prefer explicit build version if provided by build tooling.
     if "SETUPTOOLS_SCM_PRETEND_VERSION" not in os.environ:
-        override = os.environ.get("TORCHRL_BUILD_VERSION")
+        override = os.environ.get("TORCHRL_BUILD_VERSION") or os.environ.get(
+            "BUILD_VERSION"
+        )
         if override:
             os.environ["SETUPTOOLS_SCM_PRETEND_VERSION"] = override.strip()
         else:

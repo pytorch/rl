@@ -227,7 +227,7 @@ class MultiStepTransform(Transform):
 class NextStateReconstructor(Transform):
     """Re-hydrate ``("next", obs)`` keys at sampling time by shifting along the batch.
 
-    Pairs with :class:`~torchrl.collectors.SyncDataCollector` configured with
+    Pairs with :class:`~torchrl.collectors.Collector` configured with
     ``compact_obs=True`` (and the analogous flag on the multi-process collectors):
     the collector drops the observation and state keys from the
     ``("next", ...)`` sub-tensordict before stacking because those values are
@@ -245,7 +245,7 @@ class NextStateReconstructor(Transform):
 
     "Same trajectory" is decided from a trajectory id key in the sample,
     by default ``("collector", "traj_ids")`` — the key that
-    :class:`~torchrl.collectors.SyncDataCollector` populates when
+    :class:`~torchrl.collectors.Collector` populates when
     ``track_traj_ids=True`` (the default). The semantics fall out cleanly for
     every common sampler:
 

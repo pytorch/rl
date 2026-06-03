@@ -1840,19 +1840,6 @@ class SliceSampler(Sampler):
         has_collector = ("collector", "traj_ids") in keys
         has_episode = "episode" in keys
         if has_collector:
-            if has_episode:
-                # BC change: pre-0.13 the default was traj_key="episode" so a
-                # storage carrying both keys would have used "episode". From
-                # 0.13 onwards we prefer ("collector", "traj_ids"). Warn so
-                # users who relied on the old default can pin it explicitly.
-                warnings.warn(
-                    "SliceSampler auto-detected both ('collector', 'traj_ids') "
-                    "and 'episode' in the storage and is now using the former. "
-                    "Prior to v0.13 the default was 'episode'. To silence this "
-                    "warning, pass traj_key=... explicitly.",
-                    FutureWarning,
-                    stacklevel=2,
-                )
             self.traj_key = ("collector", "traj_ids")
             self._fetch_traj = True
             return

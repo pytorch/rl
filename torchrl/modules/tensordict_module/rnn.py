@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextvars
 import importlib.metadata
+import importlib.util
 import typing
 from typing import Any
 
@@ -26,16 +27,36 @@ from torchrl._utils import (
     is_compiling,
 )
 from torchrl.data.tensor_specs import Unbounded
+from torchrl.modules.tensordict_module._rnn_precision import _validate_user_precision
 
-# ``torch._higher_order_ops.scan`` was introduced in PyTorch 2.6. Gate the
-# import on the runtime torch version: probing via ``importlib.util.find_spec``
-# would eagerly import the (missing) ``torch._higher_order_ops`` parent on
-# older builds and crash this module at load time.
-_has_torch_scan = version.parse(torch.__version__) >= version.parse("2.6.0")
-if _has_torch_scan:
-    from torch._higher_order_ops import scan as _torch_scan
-else:
-    _torch_scan = None
+_has_hoptorch = importlib.util.find_spec("hoptorch") is not None
+_hoptorch_scan = None
+_ensure_scan_backward = None
+
+
+def _get_hoptorch_scan() -> tuple[Any, Any]:
+    global _hoptorch_scan, _ensure_scan_backward
+    if not _has_hoptorch:
+        raise NotImplementedError(
+            "recurrent_backend='scan' requires hoptorch. Install it with "
+            "`pip install hoptorch>=0.1.1`."
+        )
+    if _hoptorch_scan is None or _ensure_scan_backward is None:
+        # Optional dependency: keep the import lazy because CI jobs install
+        # TorchRL with --no-deps, even though hoptorch is a core dependency.
+        from hoptorch import scan
+        from hoptorch.scan import ensure_scan_backward
+
+        _hoptorch_scan = scan
+        _ensure_scan_backward = ensure_scan_backward
+    return _hoptorch_scan, _ensure_scan_backward
+
+
+def _maybe_warm_scan_backward(device: torch.device | str | int | None) -> None:
+    device = torch.device("cpu") if device is None else torch.device(device)
+    if device.type != "meta":
+        _, ensure_scan_backward = _get_hoptorch_scan()
+        ensure_scan_backward(device)
 
 
 def _check_triton_available() -> bool:
@@ -90,12 +111,8 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
 
 @implement_for("torch", "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
-    if _torch_scan is None:
-        raise NotImplementedError(
-            "torch._higher_order_ops.scan is required for the scan recurrent "
-            "backend but is not available in this PyTorch build."
-        )
-    return _torch_scan(*args, **kwargs)
+    scan, _ = _get_hoptorch_scan()
+    return scan(*args, **kwargs)
 
 
 def _place_at_traj_end(
@@ -328,6 +345,8 @@ class LSTM(LSTMBase):
         # to capture the scan; eager use will fail. Dropout is not supported
         # on this path. See :meth:`_lstm_scan`.
         self.use_scan = use_scan
+        if use_scan:
+            _maybe_warm_scan_backward(device)
 
     @staticmethod
     def _lstm_cell(x, hx, cx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -348,7 +367,30 @@ class LSTM(LSTMBase):
         return hy, cy
 
     def _lstm(self, x, hx, mask=None):
+        """Python LSTM rollout over the time dimension.
 
+        Shapes:
+            x: ``(B, T, input_size)`` when ``batch_first=True``, otherwise
+              ``(T, B, input_size)``. ``T`` is the time/step dim.
+            hx: tuple ``(h, c)`` each of shape
+              ``(num_layers, B, hidden_size)``.
+            mask: optional ``(B, T)`` (or ``(T, B)``) boolean tensor. Where
+              ``mask`` is False the hidden/cell carry is frozen (the cell is
+              still evaluated but its output is discarded). Used to mask out
+              padded time steps in batches with mixed trajectory lengths.
+
+        Returns:
+            outputs: ``(B, T, hidden_size)`` (matches ``batch_first``).
+            (h_T, c_T): final hidden / cell state, each ``(num_layers, B, hidden_size)``.
+
+        Why the unbind/stack-by-layer pattern:
+            We iterate cells per layer because :class:`LSTMCell` is vmap- and
+            ``torch.compile``-friendly while :class:`nn.LSTM` is not. Unbinding
+            ``h``/``c`` along dim 0 (num_layers) gives a list of per-layer
+            states; the outer loop walks the time dim, the inner loop walks
+            layers and feeds layer ``L``'s output as layer ``L+1``'s input
+            (with dropout in between for training).
+        """
         if self.use_scan:
             return self._lstm_scan(x, hx, mask)
 
@@ -549,7 +591,8 @@ class LSTMModule(ModuleBase):
         recurrent_backend: backend used in recurrent mode when trajectories reset
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
-            avoids materializing padded trajectory chunks. ``"triton"``
+            avoids materializing padded trajectory chunks via ``hoptorch``.
+            ``"triton"``
             (prototype, CUDA only) uses Triton kernels where available and
             otherwise preserves pad-backend recurrent semantics for dropout,
             projections and bidirectional layers. ``"auto"`` uses ``"pad"``
@@ -559,6 +602,20 @@ class LSTMModule(ModuleBase):
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
             Ignored by the other backends. Default: ``torch.float32``.
+        recurrent_matmul_precision: precision used by ``tl.dot`` inside the
+            ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
+            calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
+            IEEE FP32, off tensor cores), ``"tf32"`` (matches cuDNN's
+            default, fastest on Ampere+), ``"tf32x3"`` (three-product
+            compensated TF32, ~22 bits of mantissa on tensor cores).
+            GPU-aware presets: ``"fast"`` (Ampere+ → ``"tf32"``, else
+            ``"ieee"``) and ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else
+            ``"ieee"``). Or ``"auto"`` to derive from
+            :func:`torch.get_float32_matmul_precision` and the
+            ``TORCHRL_RNN_PRECISION`` env var (``"highest"`` → ``"ieee"``,
+            ``"high"`` → ``"high-prec"``, ``"medium"`` → ``"fast"``). See
+            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored
+            by the other backends. Default: ``"auto"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -656,6 +713,9 @@ class LSTMModule(ModuleBase):
         python_based=False,
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
+        recurrent_matmul_precision: typing.Literal[
+            "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
+        ] = "auto",
         *,
         in_key=None,
         in_keys=None,
@@ -676,6 +736,7 @@ class LSTMModule(ModuleBase):
                 "recurrent_backend='triton' requires the triton package. "
                 "Install it with `pip install triton`."
             )
+        _validate_user_precision(recurrent_matmul_precision)
         if lstm is not None:
             if not lstm.batch_first:
                 raise ValueError("The input lstm must have batch_first=True.")
@@ -750,6 +811,10 @@ class LSTMModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
+        self.recurrent_matmul_precision = recurrent_matmul_precision
+        if recurrent_backend == "scan":
+            param = next(lstm.parameters(), None)
+            _maybe_warm_scan_backward(device if param is None else param.device)
 
     def make_python_based(self) -> LSTMModule:
         """Transforms the LSTM layer in its python-based version.
@@ -907,6 +972,29 @@ class LSTMModule(ModuleBase):
 
     @dispatch
     def forward(self, tensordict: TensorDictBase):
+        """Run the LSTM on a tensordict, honouring ``is_init`` for hidden-state resets.
+
+        Two execution paths, picked by :attr:`recurrent_mode`:
+
+        - **Sequential** (``recurrent_mode=False``): one step at a time, called
+          inside a collector rollout. Batch is flattened, a synthetic time dim
+          of size 1 is added, and ``is_init`` *zeros the incoming hidden* so
+          a fresh trajectory does not inherit the previous one's state
+          (see the ``torch.where`` block below).
+
+        - **Recurrent** (``recurrent_mode=True``): a full ``(B, T, ...)``
+          batch is processed at once, called inside loss / GAE / training
+          code. If any ``is_init[..., 1:]`` is set we have multiple
+          trajectories packed into the time dim; we split-and-pad along
+          trajectory boundaries (via ``_split_and_pad_sequence``) so each
+          chunk has a single trajectory, run the LSTM, then unpad. This is
+          what prevents hidden state from leaking *across* trajectories
+          within a single training batch.
+
+        ``is_init`` is sourced from :class:`~torchrl.envs.InitTracker` on the
+        env side; without that transform there is no signal for boundary
+        resets and hidden state will silently leak across episodes.
+        """
         from torchrl.objectives.value.functional import (
             _inv_pad_sequence,
             _split_and_pad_sequence,
@@ -1024,7 +1112,43 @@ class LSTMModule(ModuleBase):
         is_init: torch.Tensor | None = None,
         backend: str = "pad",
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Drive ``self.lstm`` for one or more steps and shape its outputs for TensorDict.
 
+        Shapes:
+            input: ``(batch, steps, input_size)``.
+            hidden{0,1}_in: ``(batch, steps, num_layers, hidden_size)`` — the
+                tensordict-native layout, with a time dim. May be ``None``
+                (zero-initialised below).
+
+        Returns ``(y, h, c)``:
+            y: ``(batch, steps, hidden_size)``.
+            h, c: ``(batch, steps, num_layers, hidden_size)``, padded with
+                zeros at steps ``0..steps-2`` and the true final state at
+                step ``steps-1`` (see "Why we pad" below).
+
+        Why ``[..., 0, :, :]`` + transpose:
+            TensorDict stores hidden state with a time dim because every step
+            in a trajectory carries one. ``nn.LSTM`` does not: it wants a
+            single input hidden of shape ``(num_layers, batch, hidden_size)``.
+            So we pick the *first* step's hidden (``[..., 0, :, :]`` →
+            ``(batch, num_layers, hidden)``), then transpose ``(-3, -2)`` to
+            put num_layers first. The mirror happens after the LSTM call:
+            transpose ``(0, 1)`` to move num_layers back behind batch.
+
+        Why we pad with zeros at intermediate steps:
+            ``nn.LSTM`` returns only the *final* hidden across the whole
+            sequence, but tensordict expects a hidden value at every step.
+            We zero-pad steps ``0..steps-2`` and place the true final
+            hidden at ``steps-1``. Those padded values are not real
+            per-step hiddens — they are placeholders to keep shapes aligned.
+            This is why the class docstring warns that "final hidden values
+            should not be trusted" for multi-trajectory inputs: under
+            recurrent_mode the splitter (see :meth:`forward`) breaks the
+            input into per-trajectory chunks before reaching here, so the
+            "final" hidden is meaningful per-trajectory; in raw recurrent
+            calls without that split, the final hidden may correspond to a
+            padded slot.
+        """
         if not self.recurrent_mode and steps != 1:
             raise ValueError("Expected a single step")
 
@@ -1051,7 +1175,8 @@ class LSTMModule(ModuleBase):
                 f"got type(hidden0)={type(hidden0_in)} and type(hidden1)={type(hidden1_in)}"
             )
 
-        # we only need the first hidden state
+        # Pick the first step's hidden and move num_layers to the front for
+        # nn.LSTM. See the docstring for the shape reasoning.
         _hidden0_in = hidden0_in[..., 0, :, :]
         _hidden1_in = hidden1_in[..., 0, :, :]
         hidden = (
@@ -1157,6 +1282,7 @@ class LSTMModule(ModuleBase):
                 b_hh,
                 is_init,
                 compute_dtype=self.recurrent_compute_dtype,
+                input_precision=self.recurrent_matmul_precision,
             )
             hidden0_layers.append(h_steps)
             hidden1_layers.append(c_steps)
@@ -1535,6 +1661,8 @@ class GRU(GRUBase):
         )
         # Opt-in prototype: see :meth:`_gru_scan` and :class:`LSTM`.
         self.use_scan = use_scan
+        if use_scan:
+            _maybe_warm_scan_backward(device)
 
     @staticmethod
     def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
@@ -1738,7 +1866,8 @@ class GRUModule(ModuleBase):
         recurrent_backend: backend used in recurrent mode when trajectories reset
             in the middle of a batch. ``"pad"`` keeps the existing split/pad
             strategy. ``"scan"`` uses a scan loop over the time dimension and
-            avoids materializing padded trajectory chunks. ``"triton"``
+            avoids materializing padded trajectory chunks via ``hoptorch``.
+            ``"triton"``
             (prototype, CUDA only) uses Triton kernels where available and
             otherwise preserves pad-backend recurrent semantics for dropout
             and bidirectional layers.
@@ -1748,6 +1877,20 @@ class GRUModule(ModuleBase):
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
             Ignored by the other backends. Default: ``torch.float32``.
+        recurrent_matmul_precision: precision used by ``tl.dot`` inside the
+            ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
+            calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
+            IEEE FP32, off tensor cores), ``"tf32"`` (matches cuDNN's
+            default, fastest on Ampere+), ``"tf32x3"`` (three-product
+            compensated TF32, ~22 bits of mantissa on tensor cores).
+            GPU-aware presets: ``"fast"`` (Ampere+ → ``"tf32"``, else
+            ``"ieee"``) and ``"high-prec"`` (Ampere+ → ``"tf32x3"``, else
+            ``"ieee"``). Or ``"auto"`` to derive from
+            :func:`torch.get_float32_matmul_precision` and the
+            ``TORCHRL_RNN_PRECISION`` env var (``"highest"`` → ``"ieee"``,
+            ``"high"`` → ``"high-prec"``, ``"medium"`` → ``"fast"``). See
+            :func:`torchrl.modules.set_recurrent_matmul_precision`. Ignored
+            by the other backends. Default: ``"auto"``.
 
     Keyword Args:
         in_key (str or tuple of str): the input key of the module. Exclusive use
@@ -1870,6 +2013,9 @@ class GRUModule(ModuleBase):
         python_based=False,
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
+        recurrent_matmul_precision: typing.Literal[
+            "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
+        ] = "auto",
         *,
         in_key=None,
         in_keys=None,
@@ -1890,6 +2036,7 @@ class GRUModule(ModuleBase):
                 "recurrent_backend='triton' requires the triton package. "
                 "Install it with `pip install triton`."
             )
+        _validate_user_precision(recurrent_matmul_precision)
         if gru is not None:
             if not gru.batch_first:
                 raise ValueError("The input gru must have batch_first=True.")
@@ -1961,6 +2108,10 @@ class GRUModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
+        self.recurrent_matmul_precision = recurrent_matmul_precision
+        if recurrent_backend == "scan":
+            param = next(gru.parameters(), None)
+            _maybe_warm_scan_backward(device if param is None else param.device)
 
     def make_python_based(self) -> GRUModule:
         """Transforms the GRU layer in its python-based version.
@@ -2304,6 +2455,7 @@ class GRUModule(ModuleBase):
                 b_hh,
                 is_init,
                 compute_dtype=self.recurrent_compute_dtype,
+                input_precision=self.recurrent_matmul_precision,
             )
             hidden_layers.append(h_steps)
             if layer < self.gru.num_layers - 1 and self.gru.dropout:
@@ -2449,6 +2601,16 @@ class GRUModule(ModuleBase):
 
 
 # Recurrent mode manager
+#
+# Process-wide flag toggled by :class:`set_recurrent_mode`. RNN modules
+# (:class:`LSTMModule`, :class:`GRUModule`) read this via :func:`recurrent_mode`
+# inside their ``forward`` to decide between sequential (one-step) and
+# recurrent (full-sequence) execution. Keeping it as a context manager rather
+# than per-module state means a single block can flip every RNN in a composed
+# policy without touching submodule references. The custom subclass below
+# exists to keep this working under ``torch.compile``: Dynamo cannot trace
+# ``ContextVar.get``, so we mirror the mode into a plain attribute and read
+# from it during compilation.
 class _RecurrentModeContextManager(_ContextManager):
     def __init__(self):
         super().__init__()
@@ -2494,6 +2656,18 @@ class set_recurrent_mode(_DecoratorContextManager):
 
     .. note:: All of TorchRL methods are decorated with ``set_recurrent_mode(True)`` by default.
 
+    When to use which mode:
+        - **Sequential** (default, ``mode=False``): inside collectors, where
+          the policy is called step-by-step and the hidden state from the
+          previous step is fed back through the tensordict.
+        - **Recurrent** (``mode=True``): inside loss / advantage computation
+          (e.g. GAE) where a full ``(B, T, ...)`` batch is replayed and you
+          want the RNN to process the time dim in a single call. This is the
+          mode that activates the multi-trajectory split inside
+          :meth:`LSTMModule.forward`.
+
+        See the :ref:`Recurrent state lifecycle <ref_recurrent_state_lifecycle>`
+        guide for a full walkthrough of when each mode fires.
     """
 
     def __init__(

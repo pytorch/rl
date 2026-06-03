@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import inspect
 import warnings
 
 import torch
@@ -15,10 +16,18 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from tensordict.utils import NestedKey
+
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+
+# Older stable-release versions of ``tensordict`` predate the ``generator``
+# kwarg on ``ProbabilisticTensorDictModule.__init__``. We probe the signature
+# once at import time and forward the kwarg only when it is supported.
+_PTDM_HAS_GENERATOR = (
+    "generator" in inspect.signature(ProbabilisticTensorDictModule.__init__).parameters
+)
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
@@ -208,6 +217,10 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         num_samples: int | torch.Size | None = None,
         generator: torch.Generator | int | NestedKey | None = None,
     ):
+        # ``generator`` was added to ``ProbabilisticTensorDictModule`` after
+        # the current stable-release tensordict; forward it only when the
+        # underlying class accepts it.
+        extra_kwargs = {"generator": generator} if _PTDM_HAS_GENERATOR else {}
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -220,7 +233,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             log_prob_keys=log_prob_keys,
             log_prob_key=log_prob_key,
             num_samples=num_samples,
-            generator=generator,
+            **extra_kwargs,
         )
         if spec is not None:
             spec = spec.clone()

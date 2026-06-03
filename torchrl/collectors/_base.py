@@ -264,7 +264,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             :class:`~torchrl.collectors.MultiSyncCollector`,
             :class:`~torchrl.collectors.MultiAsyncCollector`,
             :class:`~torchrl.collectors.distributed.RayCollector`, and
-            :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+            :class:`~torchrl.collectors.distributed.RPCCollector`.
             Trajectory assembly is delegated to each worker's inner collector,
             which calls :meth:`_iter_by_trajectories` independently and writes
             complete trajectories to the shared replay buffer.  Both the
@@ -1430,44 +1430,3 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         if self.weight_updater is not None:
             self.weight_updater.init(*args, **kwargs)
-
-
-def _make_legacy_metaclass(parent_metaclass):
-    """Create a legacy metaclass for deprecated collector names.
-
-    This factory creates a metaclass that inherits from the given parent metaclass
-    to avoid metaclass conflicts.
-    """
-
-    class _LegacyMeta(parent_metaclass):
-        """Metaclass for deprecated collector class names.
-
-        Raises a deprecation warning when the old class name is instantiated,
-        and ensures isinstance() checks work for both old and new names.
-        """
-
-        def __call__(cls, *args, **kwargs):
-            warnings.warn(
-                f"{cls.__name__} has been deprecated and will be removed in v0.13. "
-                f"Please use {cls.__bases__[0].__name__} instead.",
-                category=DeprecationWarning,
-            )
-            return super().__call__(*args, **kwargs)
-
-        def __instancecheck__(cls, instance):
-            if super().__instancecheck__(instance):
-                return True
-            parent_cls = cls.__bases__[0]
-            return isinstance(instance, parent_cls)
-
-    return _LegacyMeta
-
-
-# Default legacy metaclass for classes with abc.ABCMeta
-_LegacyCollectorMeta = _make_legacy_metaclass(abc.ABCMeta)
-
-
-class DataCollectorBase(BaseCollector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.BaseCollector`."""
-
-    ...

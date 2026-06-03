@@ -32,7 +32,7 @@ Two main patterns coexist in TorchRL:
   trajectory structure (recurrent modules under
   :func:`~torchrl.modules.set_recurrent_mode`,
   :class:`~torchrl.data.SliceSampler`, value estimators in
-  ``single_call=True`` mode) consumes this layout natively.
+  ``shifted=True`` value estimators) consumes this layout natively.
 
 The rest of this page walks through the building blocks.
 
@@ -425,3 +425,5 @@ See also
   :class:`~torchrl.modules.GRUModule`,
   :func:`~torchrl.modules.set_recurrent_mode` — the recurrent modules
   that consume the contiguous-trajectory layout natively.
+* :doc:`modules_rnn` — recurrent execution modes, backend selection, and
+  Triton precision controls.

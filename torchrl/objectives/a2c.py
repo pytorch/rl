@@ -33,13 +33,13 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
-    _reduce,
     default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
 from torchrl.objectives.value import (
     GAE,
+    MultiAgentGAE,
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
@@ -587,8 +587,9 @@ class A2CLoss(LossModule):
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -631,6 +632,10 @@ class A2CLoss(LossModule):
             )
         elif value_type == ValueEstimators.GAE:
             self._value_estimator = GAE(value_network=self.critic_network, **hp)
+        elif value_type == ValueEstimators.MAGAE:
+            self._value_estimator = MultiAgentGAE(
+                value_network=self.critic_network, **hp
+            )
         elif value_type == ValueEstimators.TDLambda:
             self._value_estimator = TDLambdaEstimator(
                 value_network=self.critic_network, **hp

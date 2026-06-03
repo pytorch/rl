@@ -15,6 +15,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
+from inspect import getattr_static
 from multiprocessing import connection
 from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
@@ -714,13 +715,32 @@ class BatchedEnvBase(EnvBase):
     def _has_dynamic_specs(self):
         return not self._use_buffers
 
+    @staticmethod
+    def _validate_worker_env(env) -> None:
+        """Check that each transform on a worker env is batched-env compatible.
+
+        Walks ``env.transform`` and invokes
+        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`
+        on each entry. Transforms that should not live inside a batched-env
+        worker raise here so the user gets immediate feedback rather than
+        silently-wrong runtime behavior.
+        """
+        if getattr_static(env, "transform", None) is None:
+            transform = None
+        else:
+            transform = getattr(env, "transform", None)
+        if transform is not None:
+            transform._check_batched_worker_compat()
+
     def _get_metadata(
         self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
             meta_data: EnvMetaData = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
+                create_env_fn[0],
+                create_env_kwargs[0],
+                env_validator=self._validate_worker_env,
             )
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
@@ -740,7 +760,11 @@ class BatchedEnvBase(EnvBase):
             self.meta_data: list[EnvMetaData] = []
             for i in range(n_tasks):
                 self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
+                    get_env_metadata(
+                        create_env_fn[i],
+                        create_env_kwargs[i],
+                        env_validator=self._validate_worker_env,
+                    ).clone()
                 )
             if self.share_individual_td is not True:
                 share_individual_td = not _stackable(

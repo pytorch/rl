@@ -63,14 +63,9 @@ with multi-process collectors where fixed-frame batches can silently mix
 episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
 
 .. note::
-    The following legacy names are also available for backward compatibility:
-
-    - ``DataCollectorBase`` → ``BaseCollector``
-    - ``SyncDataCollector`` → ``Collector``
-    - ``aSyncDataCollector`` → ``AsyncCollector``
-    - ``_MultiDataCollector`` → ``MultiCollector``
-    - ``MultiSyncDataCollector`` → ``MultiSyncCollector``
-    - ``MultiaSyncDataCollector`` → ``MultiAsyncCollector``
+    The deprecated collector aliases were removed in v0.13. Use the canonical
+    classes directly: ``BaseCollector``, ``Collector``, ``AsyncCollector``,
+    ``MultiCollector``, ``MultiSyncCollector``, and ``MultiAsyncCollector``.
 
 Using AsyncBatchedCollector
 ---------------------------

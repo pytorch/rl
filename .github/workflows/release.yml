@@ -167,8 +167,9 @@ jobs:
 
           # Read all 3 version files
           ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
-          SCRIPT_SH_VERSION=$(grep -E '^export TORCHRL_BUILD_VERSION=' .github/scripts/td_script.sh | cut -d'=' -f2)
-          SCRIPT_BAT_VERSION=$(grep -E '^set TORCHRL_BUILD_VERSION=' .github/scripts/version_script.bat | cut -d'=' -f2)
+          SCRIPT_SH_LINE=$(grep -E '^export TORCHRL_BUILD_VERSION=' .github/scripts/td_script.sh | head -1)
+          SCRIPT_SH_VERSION=$(echo "$SCRIPT_SH_LINE" | sed -E 's/^export TORCHRL_BUILD_VERSION=//; s/^"//; s/"$//; s/^\$\{BUILD_VERSION:-([^}]+)\}$/\1/')
+          SCRIPT_BAT_VERSION=$(grep -Ei '^[[:space:]]*set TORCHRL_BUILD_VERSION=' .github/scripts/version_script.bat | head -1 | sed -E 's/^[[:space:]]*set TORCHRL_BUILD_VERSION=//')
 
           echo ""
           echo "Version file contents:"

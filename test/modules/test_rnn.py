@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import functools
+import importlib.util
 import sys
 import threading
 
@@ -24,7 +25,9 @@ from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.utils import assert_close
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
+from torchrl.data import LazyTensorStorage, ReplayBuffer
+from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import (
     Compose,
     EnvCreator,
@@ -37,6 +40,7 @@ from torchrl.envs import (
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
     ConsistentDropoutModule,
+    get_recurrent_matmul_precision,
     GRU,
     GRUCell,
     GRUModule,
@@ -45,6 +49,7 @@ from torchrl.modules import (
     LSTMModule,
     MLP,
     ProbabilisticActor,
+    set_recurrent_matmul_precision,
     set_recurrent_mode,
     ValueOperator,
 )
@@ -56,7 +61,13 @@ from torchrl.modules.utils.utils import _compute_missing_env_transforms
 from torchrl.objectives.value.advantages import GAE
 
 from torchrl.testing import get_default_devices
-from torchrl.testing.mocking_classes import CountingEnv, DiscreteActionVecMockEnv
+from torchrl.testing.mocking_classes import (
+    CountingEnv,
+    CountingEnvCountPolicy,
+    DiscreteActionVecMockEnv,
+)
+
+_has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 
 if _has_functorch:
     try:
@@ -870,6 +881,7 @@ class TestLSTMModule:
             scan_out["next", "hidden1"], auto_scan_out["next", "hidden1"]
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
     @pytest.mark.parametrize("H", [16, 64])
@@ -931,6 +943,7 @@ class TestLSTMModule:
             rtol=atol,
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs,training",
@@ -1017,6 +1030,7 @@ class TestLSTMModule:
                 rtol=5e-3,
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_lstm_module_triton_backward(self):
         """Backward path: gradients match pad backend within tolerance."""
@@ -1076,6 +1090,7 @@ class TestLSTMModule:
                 grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
@@ -1184,6 +1199,7 @@ class TestLSTMModule:
                 recurrent_backend="triton",
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("num_layers", [1, 2])
     @pytest.mark.skipif(
@@ -1240,6 +1256,88 @@ class TestLSTMModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.parametrize("rnn_type", ["lstm", "gru"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.7.0"),
+        reason="hoptorch requires torch >= 2.7.0",
+    )
+    @pytest.mark.skipif(not _has_hoptorch, reason="hoptorch is not installed")
+    def test_scan_backend_backward_matches_pad(self, rnn_type):
+        torch.manual_seed(0)
+        B, T, F, H, L = 3, 5, 4, 8, 1
+        if rnn_type == "lstm":
+            kwargs = {
+                "input_size": F,
+                "hidden_size": H,
+                "num_layers": L,
+                "in_keys": ["obs", "hidden0", "hidden1"],
+                "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            }
+            pad_module = LSTMModule(**kwargs)
+            scan_module = LSTMModule(**kwargs, recurrent_backend="scan")
+        else:
+            kwargs = {
+                "input_size": F,
+                "hidden_size": H,
+                "num_layers": L,
+                "in_keys": ["obs", "hidden"],
+                "out_keys": ["feat", ("next", "hidden")],
+            }
+            pad_module = GRUModule(**kwargs)
+            scan_module = GRUModule(**kwargs, recurrent_backend="scan")
+        scan_module.load_state_dict(pad_module.state_dict())
+
+        obs_source = torch.randn(B, T, F)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        is_init[1, 3] = True
+        is_init[2, 2] = True
+
+        def make_data():
+            obs = obs_source.detach().clone().requires_grad_()
+            if rnn_type == "lstm":
+                hidden0 = torch.zeros(B, T, L, H)
+                hidden1 = torch.zeros(B, T, L, H)
+                data = TensorDict(
+                    {
+                        "obs": obs,
+                        "hidden0": hidden0,
+                        "hidden1": hidden1,
+                        "is_init": is_init.clone(),
+                    },
+                    [B, T],
+                )
+            else:
+                hidden = torch.zeros(B, T, L, H)
+                data = TensorDict(
+                    {"obs": obs, "hidden": hidden, "is_init": is_init.clone()},
+                    [B, T],
+                )
+            return data, obs
+
+        def grads(module):
+            data, obs = make_data()
+            with set_recurrent_mode(True):
+                out = module(data)
+                loss = out["feat"].square().mean()
+            loss.backward()
+            param_grads = [
+                (name, param.grad.detach().clone())
+                for name, param in module.named_parameters()
+            ]
+            return obs.grad.detach().clone(), param_grads
+
+        pad_obs_grad, pad_param_grads = grads(pad_module)
+        scan_obs_grad, scan_param_grads = grads(scan_module)
+
+        torch.testing.assert_close(pad_obs_grad, scan_obs_grad, atol=5e-3, rtol=5e-3)
+        for (pad_name, pad_grad), (scan_name, scan_grad) in zip(
+            pad_param_grads, scan_param_grads
+        ):
+            assert pad_name == scan_name
+            torch.testing.assert_close(pad_grad, scan_grad, atol=5e-3, rtol=5e-3)
+
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
     @pytest.mark.skipif(
@@ -1603,6 +1701,171 @@ class TestLSTMModule:
         )
         torch.testing.assert_close(
             pad_out["next", "hidden1"], scan_out["next", "hidden1"]
+        )
+
+
+LSTM_LIFECYCLE_MAX_STEPS = 2  # episode runs 3 transitions before done -> very short
+LSTM_LIFECYCLE_HIDDEN_SIZE = 8
+LSTM_LIFECYCLE_FRAMES_PER_BATCH = 16  # >> episode length, so mid-batch dones occur
+
+
+def _build_lstm_lifecycle_env_and_policy():
+    """Set up the deterministic CountingEnv + LSTM policy used by the test.
+
+    The LSTM rides along the rollout so its hidden state propagates and
+    resets at trajectory boundaries; the actual action is driven by
+    :class:`CountingEnvCountPolicy` so the env terminates on a known
+    schedule and we get reliable mid-batch ``done`` events.
+    """
+    base_env = CountingEnv(max_steps=LSTM_LIFECYCLE_MAX_STEPS)
+    obs_size = base_env.observation_spec["observation"].shape[-1]
+
+    lstm_module = LSTMModule(
+        input_size=obs_size,
+        hidden_size=LSTM_LIFECYCLE_HIDDEN_SIZE,
+        in_keys=["obs_float", "rs_h", "rs_c"],
+        out_keys=["intermediate", ("next", "rs_h"), ("next", "rs_c")],
+        python_based=True,
+        dropout=0,
+    )
+    lstm_module.eval()  # deterministic: no dropout or train-only behavior
+
+    env = TransformedEnv(base_env, InitTracker())
+    env = env.append_transform(lstm_module.make_tensordict_primer())
+    env.set_seed(0)
+
+    # Cast int32 observation to float so the LSTM can consume it. Kept as a
+    # tiny TensorDictModule rather than an env transform so we don't conflate
+    # the recurrent-state lifecycle test with transform plumbing.
+    def _to_float(obs: torch.Tensor) -> torch.Tensor:
+        return obs.to(torch.float32)
+
+    cast_obs = TensorDictModule(
+        _to_float, in_keys=["observation"], out_keys=["obs_float"]
+    )
+    action_module = CountingEnvCountPolicy(action_spec=base_env.action_spec)
+
+    policy = TensorDictSequential(cast_obs, lstm_module, action_module)
+    return env, policy, lstm_module
+
+
+class TestLSTMRecurrentStateLifecycle:
+    """End-to-end integration test for the recurrent-state lifecycle."""
+
+    def test_lstm_collector_replay_mid_batch_done_resets_hidden_state(self):
+        torch.manual_seed(0)
+        env, policy, lstm_module = _build_lstm_lifecycle_env_and_policy()
+
+        # --- Phase 1: collect a batch through Collector -----------------
+        collector = Collector(
+            env,
+            policy=policy,
+            frames_per_batch=LSTM_LIFECYCLE_FRAMES_PER_BATCH,
+            total_frames=LSTM_LIFECYCLE_FRAMES_PER_BATCH,
+            reset_at_each_iter=False,
+        )
+        try:
+            data = next(iter(collector))
+        finally:
+            collector.shutdown()
+
+        # Structural assertions: lifecycle keys are present, mid-batch
+        # trajectory boundaries actually occurred.
+        assert "is_init" in data.keys(), "InitTracker did not emit is_init"
+        assert "rs_h" in data.keys(), "primer did not surface recurrent state h"
+        assert "rs_c" in data.keys(), "primer did not surface recurrent state c"
+
+        is_init = data["is_init"].squeeze(-1)
+        assert bool(is_init[0].item()), "is_init must be True at the first step"
+        n_resets = int(is_init.sum().item())
+        assert n_resets >= 2, (
+            f"expected at least 2 trajectory boundaries in "
+            f"{LSTM_LIFECYCLE_FRAMES_PER_BATCH} frames with "
+            f"max_steps={LSTM_LIFECYCLE_MAX_STEPS}, got {n_resets}"
+        )
+
+        # Recurrent state at every is_init=True position must be the primer zero:
+        # this is the per-step reset invariant. Without it the LSTM's
+        # sequential-mode reset block is broken.
+        rs_h_at_inits = data["rs_h"][is_init]
+        rs_c_at_inits = data["rs_c"][is_init]
+        assert torch.equal(rs_h_at_inits, torch.zeros_like(rs_h_at_inits)), (
+            "incoming recurrent_state_h at is_init=True positions should be "
+            "the primer zero; found non-zero values, suggesting hidden state "
+            "leaked across a trajectory boundary in the collector"
+        )
+        assert torch.equal(rs_c_at_inits, torch.zeros_like(rs_c_at_inits)), (
+            "incoming recurrent_state_c at is_init=True positions should be "
+            "the primer zero; see above"
+        )
+
+        # --- Phase 2: round-trip through ReplayBuffer + SliceSampler ----
+        # slice_len matches one full episode (max_steps + 1 transitions), so
+        # each sampled slice should be exactly one trajectory.
+        slice_len = LSTM_LIFECYCLE_MAX_STEPS + 1
+        num_slices = 2
+        buffer = ReplayBuffer(
+            storage=LazyTensorStorage(LSTM_LIFECYCLE_FRAMES_PER_BATCH),
+            sampler=SliceSampler(
+                slice_len=slice_len,
+                end_key=("next", "done"),
+                strict_length=True,
+            ),
+        )
+        buffer.extend(data)
+        sampled = buffer.sample(num_slices * slice_len)
+        sampled = sampled.reshape(num_slices, slice_len)
+
+        sampled_is_init = sampled["is_init"].squeeze(-1)
+        assert sampled_is_init[:, 0].all(), (
+            "every SliceSampler-returned slice should begin at a trajectory "
+            "boundary (is_init=True at slice index 0)"
+        )
+        assert not sampled_is_init[:, 1:].any(), (
+            "sliced trajectories should contain no interior is_init=True; "
+            "the sampler must respect end_key=('next', 'done')"
+        )
+
+        # --- Phase 3: no-leakage check ---------------------------------
+        # Build two adjacent trajectories from the flat rollout. Lengths are
+        # computed from is_init: a new trajectory starts at every is_init=True,
+        # so lengths are the gaps between consecutive trues.
+        init_positions = is_init.nonzero(as_tuple=False).squeeze(-1).tolist()
+        assert len(init_positions) >= 3, (
+            f"need at least 3 is_init boundaries to extract 2 complete "
+            f"trajectories; got positions={init_positions}"
+        )
+        len_a = init_positions[1] - init_positions[0]
+        len_b = init_positions[2] - init_positions[1]
+        packed_t = len_a + len_b
+        packed = data[:packed_t].reshape(1, packed_t).clone()
+        b_alone = data[len_a : len_a + len_b].reshape(1, len_b).clone()
+
+        # Seed packed's incoming hidden with non-zero noise to make any leakage
+        # detectable: if recurrent-mode forward fails to zero B's hidden at its
+        # is_init=True boundary, B's outputs will pick up this noise. b_alone
+        # gets the same noise; the split-and-pad path inside LSTMModule.forward
+        # must override both.
+        noise_h = torch.randn_like(packed["rs_h"])
+        noise_c = torch.randn_like(packed["rs_c"])
+        packed["rs_h"] = noise_h
+        packed["rs_c"] = noise_c
+        b_alone["rs_h"] = noise_h[:, len_a:].clone()
+        b_alone["rs_c"] = noise_c[:, len_a:].clone()
+
+        with set_recurrent_mode(True):
+            packed_out = lstm_module(packed)
+            b_alone_out = lstm_module(b_alone)
+
+        # Trajectory B's LSTM outputs inside the packed batch must match the
+        # standalone run. Hidden-state leakage from A through the is_init
+        # boundary would make these diverge.
+        torch.testing.assert_close(
+            packed_out["intermediate"][:, len_a:],
+            b_alone_out["intermediate"],
+            rtol=1e-5,
+            atol=1e-6,
+            msg="hidden state leaked across is_init trajectory boundary",
         )
 
 
@@ -2183,6 +2446,7 @@ class TestGRUModule:
             scan_out["next", "hidden"], auto_scan_out["next", "hidden"]
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
     @pytest.mark.parametrize("H", [16, 64])
@@ -2237,6 +2501,7 @@ class TestGRUModule:
             rtol=atol,
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs,training",
@@ -2308,6 +2573,7 @@ class TestGRUModule:
                 rtol=5e-3,
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_gru_module_triton_backward(self):
         """Backward path: gradients match pad backend within tolerance."""
@@ -2363,6 +2629,7 @@ class TestGRUModule:
                 grads_pad[k], grads_triton[k], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize(
         "module_kwargs",
@@ -2446,6 +2713,7 @@ class TestGRUModule:
                 recurrent_backend="triton",
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("num_layers", [1, 2])
     @pytest.mark.skipif(
@@ -2501,6 +2769,7 @@ class TestGRUModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
     @pytest.mark.skipif(
@@ -2788,7 +3057,7 @@ def test_env_policy_argument_adds_recurrent_transforms():
 def test_collector_adds_recurrent_env_transforms():
     """Collectors prepare bare envs from recurrent policies before rollout."""
     policy = _make_recurrent_counting_policy()
-    collector = SyncDataCollector(
+    collector = Collector(
         CountingEnv(max_steps=3),
         policy,
         frames_per_batch=3,
@@ -2809,7 +3078,7 @@ def test_collector_adds_recurrent_env_transforms():
 def test_collector_does_not_duplicate_recurrent_env_transforms():
     """Collector auto-setup is idempotent with env policy=... setup."""
     policy = _make_recurrent_counting_policy()
-    collector = SyncDataCollector(
+    collector = Collector(
         CountingEnv(max_steps=3, policy=policy),
         policy,
         frames_per_batch=3,
@@ -2822,6 +3091,474 @@ def test_collector_does_not_duplicate_recurrent_env_transforms():
         assert sum(isinstance(t, TensorDictPrimer) for t in transforms) == 1
     finally:
         collector.shutdown()
+
+
+class TestRecurrentMatmulPrecision:
+    """Tests for the global precision control plumbed into the triton RNN backend.
+
+    Covers (a) the global setter/getter, (b) the env var, (c) per-module
+    override, (d) the cuBLAS flip helpers, (e) the GPU-aware presets
+    (``"fast"`` / ``"high-prec"``) with monkey-patched device capability,
+    and (f) grad-parity for each precision against the pad backend. CPU-only
+    tests live first; GPU tests are guarded with the standard ``_has_triton``
+    skip.
+    """
+
+    def _restore_precision(self):
+        # Tests mutate the process-global override; restore to "auto" at exit.
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        _rnn_precision._GLOBAL_OVERRIDE = _rnn_precision._read_env_default()
+        # Clear the lru_cache so per-test monkeypatching takes effect.
+        _rnn_precision._is_tensor_core_capable.cache_clear()
+
+    def _patch_device_capability(
+        self, monkeypatch, *, has_cuda, major, minor=0, hip=False
+    ):
+        """Pretend we're on a specific GPU for preset resolution.
+
+        Clears the ``_is_tensor_core_capable`` lru_cache so the patch takes
+        effect even after a previous resolution.
+        """
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: has_cuda)
+        if has_cuda:
+            monkeypatch.setattr(
+                torch.cuda, "get_device_capability", lambda *args, **kw: (major, minor)
+            )
+            monkeypatch.setattr(torch.cuda, "current_device", lambda: 0)
+        monkeypatch.setattr(torch.version, "hip", "rocm-x.y" if hip else None)
+        _rnn_precision._is_tensor_core_capable.cache_clear()
+
+    def test_set_get_global_roundtrip(self):
+        try:
+            for mode in ("ieee", "tf32", "tf32x3"):
+                set_recurrent_matmul_precision(mode)
+                assert get_recurrent_matmul_precision() == mode
+        finally:
+            self._restore_precision()
+
+    def test_set_auto_clears_override(self, monkeypatch):
+        # Pin to a known GPU regime so the "auto" resolution is deterministic
+        # regardless of what the host actually has.
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=9)
+        try:
+            set_recurrent_matmul_precision("ieee")
+            assert get_recurrent_matmul_precision() == "ieee"
+            set_recurrent_matmul_precision("auto")
+            # falls back to torch.get_float32_matmul_precision mapping →
+            # preset → concrete value at the patched compute capability.
+            preset = {"highest": "ieee", "high": "high-prec", "medium": "fast"}[
+                torch.get_float32_matmul_precision()
+            ]
+            preset_concrete = {"ieee": "ieee", "high-prec": "tf32x3", "fast": "tf32"}[
+                preset
+            ]
+            assert get_recurrent_matmul_precision() == preset_concrete
+            set_recurrent_matmul_precision("tf32")
+            assert get_recurrent_matmul_precision() == "tf32"
+            set_recurrent_matmul_precision(None)
+            assert get_recurrent_matmul_precision() == preset_concrete
+        finally:
+            self._restore_precision()
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError, match="recurrent matmul precision"):
+            set_recurrent_matmul_precision("fp16")
+        with pytest.raises(ValueError, match="recurrent_matmul_precision"):
+            LSTMModule(
+                input_size=3,
+                hidden_size=8,
+                num_layers=1,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_matmul_precision="fp16",
+            )
+        with pytest.raises(ValueError, match="recurrent_matmul_precision"):
+            GRUModule(
+                input_size=3,
+                hidden_size=8,
+                num_layers=1,
+                in_keys=["obs", "hidden"],
+                out_keys=["feat", ("next", "hidden")],
+                recurrent_matmul_precision="fp16",
+            )
+
+    def test_torch_precision_drives_auto_ampere(self, monkeypatch):
+        """``torch.set_float32_matmul_precision`` maps via presets on Ampere+."""
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=8)
+        try:
+            set_recurrent_matmul_precision(None)
+            prev = torch.get_float32_matmul_precision()
+            try:
+                torch.set_float32_matmul_precision("highest")
+                assert get_recurrent_matmul_precision() == "ieee"
+                torch.set_float32_matmul_precision("high")
+                # "high" → "high-prec" preset → tf32x3 on Ampere+
+                assert get_recurrent_matmul_precision() == "tf32x3"
+                torch.set_float32_matmul_precision("medium")
+                # "medium" → "fast" preset → tf32 on Ampere+
+                assert get_recurrent_matmul_precision() == "tf32"
+            finally:
+                torch.set_float32_matmul_precision(prev)
+        finally:
+            self._restore_precision()
+
+    def test_torch_precision_drives_auto_volta(self, monkeypatch):
+        """On pre-Ampere GPUs ``"high"`` / ``"medium"`` fall back to IEEE.
+
+        Pre-presets, ``"high"`` would have resolved to ``"tf32x3"`` even on
+        V100/T4 — a software-emulated path that doesn't help when there are
+        no tensor cores for ``tl.dot(..., input_precision="tf32")`` to use.
+        """
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=7)
+        try:
+            set_recurrent_matmul_precision(None)
+            prev = torch.get_float32_matmul_precision()
+            try:
+                torch.set_float32_matmul_precision("highest")
+                assert get_recurrent_matmul_precision() == "ieee"
+                torch.set_float32_matmul_precision("high")
+                # Volta has no TF32 tensor cores → preset falls back to IEEE.
+                assert get_recurrent_matmul_precision() == "ieee"
+                torch.set_float32_matmul_precision("medium")
+                assert get_recurrent_matmul_precision() == "ieee"
+            finally:
+                torch.set_float32_matmul_precision(prev)
+        finally:
+            self._restore_precision()
+
+    def test_env_var_default(self, monkeypatch):
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        monkeypatch.setenv("TORCHRL_RNN_PRECISION", "tf32x3")
+        # ``_read_env_default`` re-reads the env var; ``set(None)`` rebinds the
+        # global override from that read.
+        try:
+            set_recurrent_matmul_precision(None)
+            assert _rnn_precision._GLOBAL_OVERRIDE == "tf32x3"
+            assert get_recurrent_matmul_precision() == "tf32x3"
+        finally:
+            self._restore_precision()
+
+    def test_env_var_accepts_preset(self, monkeypatch):
+        """``TORCHRL_RNN_PRECISION=fast`` resolves per-GPU at call time."""
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        monkeypatch.setenv("TORCHRL_RNN_PRECISION", "high-prec")
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=10)
+        try:
+            set_recurrent_matmul_precision(None)
+            assert _rnn_precision._GLOBAL_OVERRIDE == "high-prec"
+            assert get_recurrent_matmul_precision() == "tf32x3"
+        finally:
+            self._restore_precision()
+
+    def test_env_var_invalid_raises(self, monkeypatch):
+        from torchrl.modules.tensordict_module import _rnn_precision
+
+        monkeypatch.setenv("TORCHRL_RNN_PRECISION", "fp16")
+        with pytest.raises(ValueError, match="TORCHRL_RNN_PRECISION"):
+            _rnn_precision._read_env_default()
+
+    def test_resolve_kwarg_overrides_global(self, monkeypatch):
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_precision
+
+        # Force a deterministic preset resolution.
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=9)
+        try:
+            set_recurrent_matmul_precision("ieee")
+            assert _resolve_precision("tf32") == "tf32"
+            assert _resolve_precision("auto") == "ieee"
+            assert _resolve_precision(None) == "ieee"
+            set_recurrent_matmul_precision("high-prec")
+            assert _resolve_precision("tf32") == "tf32"
+            # Per-call presets resolve via the patched GPU capability.
+            assert _resolve_precision("auto") == "tf32x3"
+            assert _resolve_precision("fast") == "tf32"
+            assert _resolve_precision("high-prec") == "tf32x3"
+        finally:
+            self._restore_precision()
+
+    @pytest.mark.parametrize(
+        "major,fast_expected,high_prec_expected",
+        [
+            (10, "tf32", "tf32x3"),  # Blackwell
+            (9, "tf32", "tf32x3"),  # Hopper
+            (8, "tf32", "tf32x3"),  # Ampere
+            (7, "ieee", "ieee"),  # Turing
+            (6, "ieee", "ieee"),  # Pascal
+        ],
+    )
+    def test_preset_resolution_per_compute_capability(
+        self, monkeypatch, major, fast_expected, high_prec_expected
+    ):
+        """``"fast"`` / ``"high-prec"`` map per-architecture as documented."""
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_gpu_preset
+
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=major)
+        try:
+            assert _resolve_gpu_preset("fast") == fast_expected
+            assert _resolve_gpu_preset("high-prec") == high_prec_expected
+        finally:
+            self._restore_precision()
+
+    def test_preset_resolution_no_cuda(self, monkeypatch):
+        """Presets fall back to IEEE when CUDA is unavailable."""
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_gpu_preset
+
+        self._patch_device_capability(monkeypatch, has_cuda=False, major=0)
+        try:
+            assert _resolve_gpu_preset("fast") == "ieee"
+            assert _resolve_gpu_preset("high-prec") == "ieee"
+        finally:
+            self._restore_precision()
+
+    def test_preset_resolution_hip(self, monkeypatch):
+        """ROCm/HIP devices fall back to IEEE (no TF32 in triton's ``tl.dot``)."""
+        from torchrl.modules.tensordict_module._rnn_precision import _resolve_gpu_preset
+
+        # Even with major>=8 reported, the HIP flag forces the fallback.
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=9, hip=True)
+        try:
+            assert _resolve_gpu_preset("fast") == "ieee"
+            assert _resolve_gpu_preset("high-prec") == "ieee"
+        finally:
+            self._restore_precision()
+
+    def test_set_preset_globally(self, monkeypatch):
+        """``set_recurrent_matmul_precision("fast")`` is honored as preset."""
+        self._patch_device_capability(monkeypatch, has_cuda=True, major=8)
+        try:
+            set_recurrent_matmul_precision("fast")
+            assert get_recurrent_matmul_precision() == "tf32"
+            # Switch to a pre-Ampere card and re-resolve.
+            self._patch_device_capability(monkeypatch, has_cuda=True, major=7)
+            assert get_recurrent_matmul_precision() == "ieee"
+        finally:
+            self._restore_precision()
+
+    def test_maybe_enable_tf32_flips_and_restores(self):
+        """Replacement for the old context-manager helper. Plain flip + restore.
+
+        compiled_autograd handles a couple of conditional ``allow_tf32``
+        writes much better than the ``@contextmanager`` generator that used
+        to wrap the cuBLAS calls. This test pins the contract.
+        """
+        from torchrl.modules.tensordict_module._rnn_precision import (
+            _maybe_enable_tf32,
+            _restore_tf32,
+        )
+
+        prev_outer = torch.backends.cuda.matmul.allow_tf32
+        try:
+            # tf32 wants True. With prev=False the helper flips and returns False.
+            torch.backends.cuda.matmul.allow_tf32 = False
+            prev = _maybe_enable_tf32("tf32")
+            assert torch.backends.cuda.matmul.allow_tf32 is True
+            assert prev is False
+            _restore_tf32(prev)
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+
+            # ieee wants False. Already False → no-op (returns None).
+            prev = _maybe_enable_tf32("ieee")
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+            assert prev is None
+            _restore_tf32(prev)
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+
+            # tf32x3 also wants cuBLAS at IEEE → no-op.
+            prev = _maybe_enable_tf32("tf32x3")
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+            assert prev is None
+
+            # When global is True and we want ieee, the helper flips.
+            torch.backends.cuda.matmul.allow_tf32 = True
+            prev = _maybe_enable_tf32("ieee")
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+            assert prev is True
+            _restore_tf32(prev)
+            assert torch.backends.cuda.matmul.allow_tf32 is True
+        finally:
+            torch.backends.cuda.matmul.allow_tf32 = prev_outer
+
+    def test_restore_tf32_with_none_is_noop(self):
+        """``_restore_tf32(None)`` must leave the flag untouched."""
+        from torchrl.modules.tensordict_module._rnn_precision import _restore_tf32
+
+        prev = torch.backends.cuda.matmul.allow_tf32
+        try:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            _restore_tf32(None)
+            assert torch.backends.cuda.matmul.allow_tf32 is True
+            torch.backends.cuda.matmul.allow_tf32 = False
+            _restore_tf32(None)
+            assert torch.backends.cuda.matmul.allow_tf32 is False
+        finally:
+            torch.backends.cuda.matmul.allow_tf32 = prev
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("precision", ["ieee", "tf32", "tf32x3"])
+    def test_lstm_triton_precision_grad_parity(self, precision):
+        """Each precision produces finite, pad-comparable gradients.
+
+        ``ieee`` should match pad/cuDNN very closely; ``tf32`` and ``tf32x3``
+        get slightly looser tolerances. The test scale (B=4, T=7, H=64) is
+        small enough that all three precisions agree at ``5e-3``.
+        """
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 64
+        pad_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            device=device,
+        )
+        triton_module = LSTMModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden0", "hidden1"],
+            out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+            recurrent_backend="triton",
+            recurrent_matmul_precision=precision,
+            device=device,
+        )
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden0 = torch.zeros(B, T, 1, H, device=device)
+        hidden1 = torch.zeros(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[1, 3] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        def loss_for(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            out = mod(data.clone())
+            return out["feat"].pow(2).sum()
+
+        with set_recurrent_mode(True):
+            loss_pad = loss_for(pad_module)
+            loss_pad.backward()
+            grads_pad = {
+                k: p.grad.detach().clone() for k, p in pad_module.named_parameters()
+            }
+            loss_triton = loss_for(triton_module)
+            loss_triton.backward()
+            grads_triton = {
+                k: p.grad.detach().clone() for k, p in triton_module.named_parameters()
+            }
+
+        atol = 5e-3
+        for k in grads_pad:
+            assert torch.isfinite(
+                grads_triton[k]
+            ).all(), f"precision={precision} produced non-finite grad for {k}"
+            torch.testing.assert_close(
+                grads_pad[k], grads_triton[k], atol=atol, rtol=atol
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    @pytest.mark.parametrize("precision", ["ieee", "tf32", "tf32x3"])
+    def test_gru_triton_precision_grad_parity(self, precision):
+        """GRU counterpart of ``test_lstm_triton_precision_grad_parity``."""
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 64
+        pad_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            device=device,
+        )
+        triton_module = GRUModule(
+            input_size=F,
+            hidden_size=H,
+            num_layers=1,
+            in_keys=["obs", "hidden"],
+            out_keys=["feat", ("next", "hidden")],
+            recurrent_backend="triton",
+            recurrent_matmul_precision=precision,
+            device=device,
+        )
+        triton_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden = torch.zeros(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[1, 3] = True
+        data = TensorDict(
+            {"obs": obs, "hidden": hidden, "is_init": is_init},
+            [B, T],
+        )
+
+        def loss_for(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            out = mod(data.clone())
+            return out["feat"].pow(2).sum()
+
+        with set_recurrent_mode(True):
+            loss_pad = loss_for(pad_module)
+            loss_pad.backward()
+            grads_pad = {
+                k: p.grad.detach().clone() for k, p in pad_module.named_parameters()
+            }
+            loss_triton = loss_for(triton_module)
+            loss_triton.backward()
+            grads_triton = {
+                k: p.grad.detach().clone() for k, p in triton_module.named_parameters()
+            }
+
+        atol = 5e-3
+        for k in grads_pad:
+            assert torch.isfinite(
+                grads_triton[k]
+            ).all(), f"precision={precision} produced non-finite grad for {k}"
+            torch.testing.assert_close(
+                grads_pad[k], grads_triton[k], atol=atol, rtol=atol
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    def test_lstm_module_precision_kwarg_takes_effect(self):
+        """Per-module kwarg beats the process-global override.
+
+        Uses the global setter to force ``tf32`` everywhere, then constructs
+        a module pinned to ``ieee`` and asserts its stored attribute is the
+        explicit override rather than the global value.
+        """
+        try:
+            set_recurrent_matmul_precision("tf32")
+            device = torch.device("cuda")
+            module = LSTMModule(
+                input_size=3,
+                hidden_size=16,
+                num_layers=1,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="triton",
+                recurrent_matmul_precision="ieee",
+                device=device,
+            )
+            assert module.recurrent_matmul_precision == "ieee"
+        finally:
+            self._restore_precision()
 
 
 if __name__ == "__main__":
