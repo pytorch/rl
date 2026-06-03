@@ -70,7 +70,7 @@ class TestMujoco:
     def _cube_bowl_kwargs() -> dict[str, str]:
         menagerie_path = os.environ.get(CubeBowlEnv.MENAGERIE_ENV_VAR)
         if menagerie_path is None or not Path(menagerie_path).exists():
-            pytest.skip(
+            pytest.xfail(
                 f"CubeBowlEnv requires {CubeBowlEnv.MENAGERIE_ENV_VAR} for Menagerie assets."
             )
         return {"menagerie_path": menagerie_path}
@@ -123,7 +123,7 @@ class TestMujoco:
     def test_humanoid_generic_macro_sequence(self):
         backend = _AVAILABLE_BACKENDS[0]
         env = HumanoidEnv(num_envs=1, seed=0, backend=backend)
-        transform = env.make_control_transform(macro_steps=2)
+        transform = env.make_control_transform(macro_steps=2, execute=False)
         td = env.reset()
         target = env.action_spec.zero()
         sequence = transform.action_sequence(
