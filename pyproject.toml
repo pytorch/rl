@@ -55,6 +55,7 @@ dev = [
     "imageio",
     "mujoco",
     "mujoco-torch",
+    "pre-commit",
     "pytest",
     "tensorboard",
     "tqdm",
@@ -104,6 +105,9 @@ utils = [
     "tqdm",
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
+    "pre-commit",
+    "autoflake",
+    "autopep8",
 ]
 checkpointing = ["torchsnapshot"]
 offline-data = [

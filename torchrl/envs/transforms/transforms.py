@@ -50,6 +50,7 @@ from torchrl.envs.transforms._env import (
     RandomTruncationTransform,
     StepCounter,
     TensorDictPrimer,
+    TerminateTransform,
     TrajCounter,
 )
 from torchrl.envs.transforms._keys import (
@@ -163,6 +164,7 @@ __all__ = [
     "StepCounter",
     "TargetReturn",
     "TensorDictPrimer",
+    "TerminateTransform",
     "TimeMaxPool",
     "Timer",
     "ToTensorImage",

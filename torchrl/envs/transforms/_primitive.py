@@ -2,469 +2,256 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Generic action transforms for macro-control primitives."""
+"""Generic action transforms for macro-control primitives.
+
+This module owns the robot-agnostic machinery shared by every macro transform:
+
+* :class:`MacroPrimitive` -- the minimal primitive vocabulary (``WAIT`` and
+  ``MOVE``);
+* :class:`MacroAction` / :class:`TargetMacroAction` -- structured, human-writable
+  action objects placed under the environment action key;
+* :class:`MacroPrimitiveTransform` -- the inverse-action plumbing that turns one
+  macro action into a fixed-length low-level action sequence and (optionally)
+  executes it through :class:`~torchrl.envs.transforms.MultiAction`.
+
+Domain specializations (a robot arm, a satellite, ...) subclass
+:class:`MacroPrimitiveTransform` and override three small hooks --
+:meth:`~MacroPrimitiveTransform._resolve`,
+:meth:`~MacroPrimitiveTransform.current_action` and
+:meth:`~MacroPrimitiveTransform.transform_input_spec` -- instead of plugging in
+adapter/solver/library objects. See
+:doc:`../reference/macro_primitives` for the design guide.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from enum import IntEnum
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any
 
 import torch
 from tensordict import TensorDictBase
+from tensordict.tensorclass import TensorClass
 from tensordict.utils import NestedKey, unravel_key
-from torchrl.data.tensor_specs import Bounded, Composite, Unbounded
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
 from torchrl.envs.transforms._action import MultiAction
 from torchrl.envs.transforms._base import Compose, Transform
 
 __all__ = [
-    "CartesianSolver",
     "MacroPrimitive",
+    "MacroAction",
+    "TargetMacroAction",
     "MacroPrimitiveTransform",
 ]
-
-PrimitiveLibraryName = Literal["basic"]
-MacroAdapterName = Literal["tensordict"]
-MacroSolverName = Literal["joint_interpolation", "mujoco_dls_ik"]
-CartesianSolver = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 
 class MacroPrimitive(IntEnum):
     r"""Generic primitive ids understood by :class:`MacroPrimitiveTransform`.
 
-    The base primitive set is intentionally small and robot-agnostic: wait,
-    interpolate toward a low-level action target, or ask a solver to map a pose
-    target to a low-level action target. Domain-specific libraries can extend
-    this enum in their own modules.
+    The base vocabulary is intentionally tiny and robot-agnostic: either hold
+    the current low-level action (``WAIT``) or interpolate toward a low-level
+    action target (``MOVE``). Domain-specific transforms can extend this enum in
+    their own modules (e.g. adding gripper or inverse-kinematics primitives).
 
     Examples:
         >>> from torchrl.envs.transforms import MacroPrimitive
-        >>> int(MacroPrimitive.MOVEJ)
+        >>> int(MacroPrimitive.MOVE)
         1
     """
 
     WAIT = 0
-    MOVEJ = 1
-    MOVEL = 2
+    MOVE = 1
 
     def __str__(self) -> str:
         return self.name.lower()
 
 
-@runtime_checkable
-class PrimitiveLibrary(Protocol):
-    """Protocol for primitive id containers used by the generic transform."""
-
-    WAIT: int | IntEnum
-    MOVEJ: int | IntEnum
-    MOVEL: int | IntEnum
-
-
-@runtime_checkable
-class MacroPrimitiveAdapter(Protocol):
-    """Protocol for env-specific low-level action adapters."""
-
-    action_key: NestedKey
-    primitive_id_key: NestedKey
-    target_qpos_key: NestedKey
-    target_pose_key: NestedKey
-    action_dim: int | None
-
-    def primitive_id(self, tensordict: TensorDictBase) -> torch.Tensor:
-        """Read primitive ids from a TensorDict."""
-
-    def current_action(
-        self,
-        tensordict: TensorDictBase,
-        batch_shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        """Return the low-level action used as interpolation start."""
-
-    def target_qpos(
-        self,
-        tensordict: TensorDictBase,
-        start: torch.Tensor,
-        batch_shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        """Return the low-level action target for ``MOVEJ``."""
-
-    def target_pose(
-        self,
-        tensordict: TensorDictBase,
-        batch_shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        """Return the pose target for ``MOVEL``."""
-
-    def action_dtype(self, tensordict: TensorDictBase) -> torch.dtype:
-        """Infer the dtype to use for low-level actions."""
-
-    def transform_input_spec(
-        self, input_spec: Composite, primitive_library: PrimitiveLibrary
-    ) -> Composite:
-        """Expose policy-facing macro-action specs."""
+def _ensure_batched(value: torch.Tensor) -> torch.Tensor:
+    """Return ``value`` with at least one leading batch dimension."""
+    if value.ndim == 0:
+        raise ValueError("target must have a non-empty trailing feature dimension.")
+    if value.ndim == 1:
+        return value.unsqueeze(0)
+    return value
 
 
-class _BasicPrimitiveLibrary:
-    WAIT = MacroPrimitive.WAIT
-    MOVEJ = MacroPrimitive.MOVEJ
-    MOVEL = MacroPrimitive.MOVEL
-    NUM_PRIMITIVES = len(MacroPrimitive)
+class MacroAction(TensorClass["nocast"]):
+    r"""Base structured macro action: a primitive id plus a duration.
 
+    Every macro action stores a primitive ``mode`` and the number of low-level
+    ``steps`` (and trailing ``settle_steps``) used to expand it. Domain actions
+    subclass this base and add their own target fields; see
+    :class:`TargetMacroAction` for the common single-target case and
+    :class:`~torchrl.envs.RobotMacroAction` for a richer example.
 
-class _TensorDictActionAdapter:
-    """Default adapter for action-space macro interpolation.
-
-    The adapter has no robot or gripper assumptions. It reads a primitive id and
-    a low-level target action from configurable TensorDict keys, inferring the
-    current action from ``action_key`` when present or from zeros otherwise.
+    Examples:
+        >>> import torch
+        >>> from torchrl.envs.transforms import MacroAction
+        >>> action = MacroAction(
+        ...     mode=torch.zeros(1, 1, dtype=torch.long),
+        ...     steps=torch.full((1, 1), 4, dtype=torch.long),
+        ...     settle_steps=torch.zeros(1, 1, dtype=torch.long),
+        ...     batch_size=[1],
+        ... )
+        >>> int(action.steps.reshape(-1)[0])
+        4
     """
 
-    def __init__(
-        self,
+    mode: torch.Tensor
+    steps: torch.Tensor
+    settle_steps: torch.Tensor
+
+    @classmethod
+    def _duration_fields(
+        cls,
         *,
-        action_key: NestedKey = "action",
-        primitive_id_key: NestedKey = "primitive_id",
-        target_qpos_key: NestedKey = "target_qpos",
-        target_pose_key: NestedKey = "target_pose",
-        action_dim: int | None = None,
-    ) -> None:
-        if action_dim is not None and action_dim <= 0:
-            raise ValueError("action_dim must be strictly positive.")
-        self.action_key = action_key
-        self.primitive_id_key = primitive_id_key
-        self.target_qpos_key = target_qpos_key
-        self.target_pose_key = target_pose_key
-        self.action_dim = int(action_dim) if action_dim is not None else None
-
-    def primitive_id(self, tensordict: TensorDictBase) -> torch.Tensor:
-        return tensordict.get(self.primitive_id_key).to(torch.long).squeeze(-1)
-
-    def current_action(
-        self,
-        tensordict: TensorDictBase,
-        batch_shape: torch.Size,
+        mode: int | IntEnum,
+        steps: int,
+        settle_steps: int,
+        batch_size: torch.Size,
         device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        if self.action_key in tensordict.keys(True, True):
-            action = tensordict.get(self.action_key)
-            if isinstance(action, torch.Tensor):
-                action = action.to(dtype=dtype, device=device)
-                return action.reshape(batch_shape + (action.shape[-1],))
-        if self.target_qpos_key in tensordict.keys(True, True):
-            target = tensordict.get(self.target_qpos_key)
-            action_dim = target.shape[-1]
-        elif self.action_dim is not None:
-            action_dim = self.action_dim
-        else:
-            raise RuntimeError(
-                "MacroPrimitiveTransform could not infer action_dim. Pass "
-                "action_dim=... or provide an action/target tensor."
-            )
-        return torch.zeros(batch_shape + (action_dim,), dtype=dtype, device=device)
+    ) -> dict[str, torch.Tensor]:
+        """Build the shared ``mode``/``steps``/``settle_steps`` field tensors."""
+        if steps <= 0:
+            raise ValueError("steps must be strictly positive.")
+        if settle_steps < 0:
+            raise ValueError("settle_steps must be non-negative.")
+        return {
+            "mode": torch.full(
+                batch_size + (1,), int(mode), dtype=torch.long, device=device
+            ),
+            "steps": torch.full(
+                batch_size + (1,), int(steps), dtype=torch.long, device=device
+            ),
+            "settle_steps": torch.full(
+                batch_size + (1,), int(settle_steps), dtype=torch.long, device=device
+            ),
+        }
 
-    def target_qpos(
-        self,
-        tensordict: TensorDictBase,
-        start: torch.Tensor,
-        batch_shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        return self._get_or_default(
-            tensordict,
-            self.target_qpos_key,
-            start,
-            batch_shape,
-            device,
-            dtype,
-            start.shape[-1],
-        )
 
-    def target_pose(
-        self,
-        tensordict: TensorDictBase,
-        batch_shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-    ) -> torch.Tensor:
-        return self._get_or_default(
-            tensordict,
-            self.target_pose_key,
-            torch.zeros(batch_shape + (7,), dtype=dtype, device=device),
-            batch_shape,
-            device,
-            dtype,
-            7,
-        )
+class TargetMacroAction(MacroAction):
+    r"""Macro action carrying a single ``target`` interpreted by the transform.
 
-    def action_dtype(self, tensordict: TensorDictBase) -> torch.dtype:
-        for key in (self.target_qpos_key, self.action_key):
-            if key in tensordict.keys(True, True):
-                value = tensordict.get(key)
-                if isinstance(value, torch.Tensor):
-                    return value.dtype
-        return torch.get_default_dtype()
+    The ``target`` is whatever a :class:`MacroPrimitiveTransform` subclass knows
+    how to map to a low-level action destination. For the generic transform the
+    target lives directly in low-level action coordinates; for a domain preset it
+    can be a semantic quantity such as a target attitude quaternion.
 
-    def transform_input_spec(
-        self, input_spec: Composite, primitive_library: PrimitiveLibrary
-    ) -> Composite:
-        input_spec = input_spec.clone()
-        batch_size = input_spec.shape
-        device = input_spec.device
-        dtype = self._spec_dtype(input_spec)
-        action_dim = self._spec_action_dim(input_spec)
-        if action_dim is None:
-            raise RuntimeError(
-                "MacroPrimitiveTransform needs action_dim to transform input specs."
-            )
-        full_action_spec = Composite(shape=batch_size, device=device)
-        full_action_spec.set(
-            self.primitive_id_key,
-            Bounded(
-                low=0,
-                high=_num_primitives(primitive_library) - 1,
-                shape=(*batch_size, 1),
-                dtype=torch.long,
-                device=device,
+    Examples:
+        >>> import torch
+        >>> from torchrl.envs.transforms import TargetMacroAction
+        >>> action = TargetMacroAction.move(torch.ones(1, 4), steps=2)
+        >>> action.target.shape
+        torch.Size([1, 4])
+    """
+
+    target: torch.Tensor
+
+    @classmethod
+    def move(
+        cls,
+        target: torch.Tensor,
+        *,
+        steps: int = 16,
+        settle_steps: int = 0,
+        mode: int | IntEnum = MacroPrimitive.MOVE,
+    ) -> TargetMacroAction:
+        """Interpolate toward ``target`` over ``steps`` low-level actions."""
+        target = _ensure_batched(target)
+        batch_size = target.shape[:-1]
+        return cls(
+            target=target,
+            batch_size=batch_size,
+            **cls._duration_fields(
+                mode=mode,
+                steps=steps,
+                settle_steps=settle_steps,
+                batch_size=batch_size,
+                device=target.device,
             ),
         )
-        full_action_spec.set(
-            self.target_qpos_key,
-            Unbounded(shape=(*batch_size, action_dim), dtype=dtype, device=device),
-        )
-        full_action_spec.set(
-            self.target_pose_key,
-            Unbounded(shape=(*batch_size, 7), dtype=dtype, device=device),
-        )
-        input_spec["full_action_spec"] = full_action_spec
-        return input_spec
 
-    def _spec_dtype(self, input_spec: Composite) -> torch.dtype:
-        action_spec = input_spec.get("full_action_spec", None)
-        key = unravel_key(self.action_key)
-        if isinstance(action_spec, Composite) and key in action_spec.keys(True, True):
-            return action_spec[key].dtype
-        return torch.get_default_dtype()
-
-    def _spec_action_dim(self, input_spec: Composite) -> int | None:
-        if self.action_dim is not None:
-            return self.action_dim
-        action_spec = input_spec.get("full_action_spec", None)
-        key = unravel_key(self.action_key)
-        if isinstance(action_spec, Composite) and key in action_spec.keys(True, True):
-            shape = action_spec[key].shape
-            if shape:
-                return int(shape[-1])
-        return None
-
-    @staticmethod
-    def _get_or_default(
-        tensordict: TensorDictBase,
-        key: NestedKey,
-        default: torch.Tensor,
-        batch_shape: torch.Size,
-        device: torch.device,
-        dtype: torch.dtype,
-        last_dim: int,
-    ) -> torch.Tensor:
-        if key not in tensordict.keys(True, True):
-            return default
-        value = tensordict.get(key).to(dtype=dtype, device=device)
-        return value.reshape(batch_shape + (last_dim,))
-
-
-class _JointInterpolationSolver:
-    """Solver that treats action targets as already solved low-level actions."""
-
-    def movej(
-        self,
-        target_qpos: torch.Tensor,
-        start: torch.Tensor,
+    @classmethod
+    def wait(
+        cls,
         *,
-        transform: MacroPrimitiveTransform,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        del start, transform, tensordict
-        return target_qpos
-
-    def movel(
-        self,
-        target_pose: torch.Tensor,
-        start: torch.Tensor,
-        fallback: torch.Tensor,
-        *,
-        transform: MacroPrimitiveTransform,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        del target_pose, start, transform, tensordict
-        return fallback
-
-
-class _MujocoDampedLeastSquaresIK(_JointInterpolationSolver):
-    """Optional MuJoCo ``movel`` bridge backed by an env-provided IK method."""
-
-    def __init__(self, cartesian_solver: CartesianSolver | None = None) -> None:
-        self.cartesian_solver = cartesian_solver
-
-    def movel(
-        self,
-        target_pose: torch.Tensor,
-        start: torch.Tensor,
-        fallback: torch.Tensor,
-        *,
-        transform: MacroPrimitiveTransform,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        del tensordict
-        if self.cartesian_solver is not None:
-            return self.cartesian_solver(target_pose, start)
-        env = transform._find_parent_env_with("_cartesian_pose_to_joint_target")
-        if env is None:
-            return fallback
-        return env._cartesian_pose_to_joint_target(target_pose, start)
-
-
-class _CallableMoveLSolver(_JointInterpolationSolver):
-    """Adapter for callables with signature ``(target_pose, start_action)``."""
-
-    def __init__(self, solver: CartesianSolver) -> None:
-        self.solver = solver
-
-    def movel(
-        self,
-        target_pose: torch.Tensor,
-        start: torch.Tensor,
-        fallback: torch.Tensor,
-        *,
-        transform: MacroPrimitiveTransform,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        del fallback, transform, tensordict
-        return self.solver(target_pose, start)
-
-
-def _num_primitives(primitive_library: PrimitiveLibrary) -> int:
-    if hasattr(primitive_library, "NUM_PRIMITIVES"):
-        return int(primitive_library.NUM_PRIMITIVES)
-    if hasattr(primitive_library, "num_primitives"):
-        return int(primitive_library.num_primitives)
-    return len(MacroPrimitive)
-
-
-def _resolve_primitive_library(
-    primitive_library: PrimitiveLibraryName | PrimitiveLibrary | None,
-) -> PrimitiveLibrary:
-    if primitive_library is None or primitive_library == "basic":
-        return _BasicPrimitiveLibrary()
-    if isinstance(primitive_library, str):
-        raise ValueError(f"Unknown primitive_library: {primitive_library}")
-    return primitive_library
-
-
-def _resolve_adapter(
-    adapter: MacroAdapterName | MacroPrimitiveAdapter | None,
-    *,
-    action_key: NestedKey,
-    primitive_id_key: NestedKey,
-    target_qpos_key: NestedKey,
-    target_pose_key: NestedKey,
-    action_dim: int | None,
-) -> MacroPrimitiveAdapter:
-    if adapter is None or adapter == "tensordict":
-        return _TensorDictActionAdapter(
-            action_key=action_key,
-            primitive_id_key=primitive_id_key,
-            target_qpos_key=target_qpos_key,
-            target_pose_key=target_pose_key,
-            action_dim=action_dim,
+        action_dim: int,
+        steps: int = 1,
+        settle_steps: int = 0,
+        batch_size: torch.Size | tuple[int, ...] | None = None,
+        dtype: torch.dtype | None = None,
+        device: torch.device | None = None,
+    ) -> TargetMacroAction:
+        """Hold the current low-level action for ``steps`` simulator steps."""
+        if action_dim <= 0:
+            raise ValueError("action_dim must be strictly positive.")
+        dtype = torch.get_default_dtype() if dtype is None else dtype
+        device = torch.device("cpu") if device is None else device
+        batch_size = torch.Size([1]) if batch_size is None else torch.Size(batch_size)
+        target = torch.zeros(batch_size + (action_dim,), dtype=dtype, device=device)
+        return cls.move(
+            target,
+            steps=steps,
+            settle_steps=settle_steps,
+            mode=MacroPrimitive.WAIT,
         )
-    if isinstance(adapter, str):
-        raise ValueError(f"Unknown adapter: {adapter}")
-    return adapter
-
-
-def _resolve_solver(
-    solver: MacroSolverName | CartesianSolver | object | None,
-    *,
-    cartesian_solver: CartesianSolver | None,
-) -> object:
-    if solver is None or solver == "joint_interpolation":
-        if cartesian_solver is not None:
-            raise ValueError(
-                "cartesian_solver can only be used with solver='mujoco_dls_ik'."
-            )
-        return _JointInterpolationSolver()
-    if solver == "mujoco_dls_ik":
-        return _MujocoDampedLeastSquaresIK(cartesian_solver=cartesian_solver)
-    if isinstance(solver, str):
-        raise ValueError(f"Unknown solver: {solver}")
-    if cartesian_solver is not None:
-        raise ValueError(
-            "cartesian_solver cannot be passed together with a custom solver."
-        )
-    if callable(solver) and not hasattr(solver, "movel"):
-        return _CallableMoveLSolver(solver)
-    return solver
 
 
 class MacroPrimitiveTransform(Transform):
-    r"""Expand high-level macro primitives into low-level action sequences.
+    r"""Expand a high-level macro action into a low-level action sequence.
 
-    The base transform is deliberately agnostic to robots, grippers, and MuJoCo
-    models. It handles TensorDict plumbing, fixed-length interpolation, optional
-    execution through :class:`~torchrl.envs.transforms.MultiAction`, and delegates
-    domain details to an action adapter, primitive library, and solver.
+    The base transform is deliberately agnostic to robots, grippers and MuJoCo
+    models. Its inverse-action path reads one macro action from ``action_key``,
+    resolves a ``(start, target)`` pair of low-level actions, linearly
+    interpolates between them over ``macro_steps`` (plus ``settle_steps`` held
+    repeats), and writes the resulting ``(..., T, action_dim)`` sequence back
+    under ``action_key``. When ``execute=True`` the constructor returns
+    ``Compose(MultiAction(...), self)`` so the sequence is executed by the parent
+    environment in a single high-level step.
+
+    The policy-facing action accepted under ``action_key`` may be:
+
+    * a :class:`MacroAction` / :class:`TargetMacroAction` (or a plain
+      :class:`~tensordict.TensorDict` with the same ``mode`` / ``target`` /
+      ``steps`` / ``settle_steps`` schema); or
+    * a raw tensor, treated as a direct low-level action target (``MOVE``).
+
+    Domain specializations override three hooks rather than configuring adapter,
+    solver and library objects:
+
+    * :meth:`_resolve` -- map a macro action to ``(start, target, steps,
+      settle_steps)`` low-level tensors;
+    * :meth:`current_action` -- read the low-level action used as the
+      interpolation start (defaults to zeros or a tensor already at
+      ``action_key``);
+    * :meth:`transform_input_spec` -- advertise the policy-facing action spec.
 
     Args:
-        primitive_library: primitive id library. ``None`` and ``"basic"`` use
-            :class:`MacroPrimitive`; custom objects may expose ``WAIT``,
-            ``MOVEJ``, ``MOVEL`` and optionally ``NUM_PRIMITIVES``.
-        adapter: env-specific adapter. ``None`` and ``"tensordict"`` use a
-            robot-agnostic adapter that reads low-level action targets directly
-            from TensorDict keys.
-        solver: macro solver backend. ``None`` and ``"joint_interpolation"``
-            interpolate to the provided target action. ``"mujoco_dls_ik"`` uses
-            an explicit ``cartesian_solver`` or a parent env's
-            ``_cartesian_pose_to_joint_target`` hook for ``MOVEL``.
-        execute: if ``True``, return ``Compose(MultiAction(...), transform)`` so
-            emitted action sequences are executed by the parent environment.
-        action_key: low-level action key consumed by the inner environment.
-        primitive_id_key: key containing primitive ids.
-        target_qpos_key: key containing low-level action targets.
-        target_pose_key: key containing pose targets for solvers.
+        action_key: low-level action key consumed by the inner environment and
+            also the key carrying the macro action on the way in.
         macro_steps: number of interpolated low-level actions per primitive.
         settle_steps: number of repeated final actions appended after each
             primitive.
         action_dim: low-level action dimension. Required when it cannot be
-            inferred from specs or TensorDict values.
-        cartesian_solver: optional callable mapping ``(target_pose,
-            start_action)`` to a low-level action target.
+            inferred from specs or from the macro action target.
+        execute: if ``True``, return ``Compose(MultiAction(...), transform)`` so
+            emitted action sequences are executed by the parent environment.
+        multi_action_dim: stack dimension consumed by ``MultiAction`` when
+            ``execute=True``.
+        stack_rewards: whether ``MultiAction`` returns each low-level reward.
+        stack_observations: whether ``MultiAction`` returns each low-level
+            observation.
 
     Examples:
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.envs.transforms import MacroPrimitiveTransform
-        >>> td = TensorDict({
-        ...     "primitive_id": torch.tensor([[1]]),
-        ...     "target_qpos": torch.ones(1, 3),
-        ... }, batch_size=[1])
+        >>> td = TensorDict({"action": torch.ones(1, 3)}, batch_size=[1])
         >>> transform = MacroPrimitiveTransform(macro_steps=2, action_dim=3)
         >>> transform.inv(td)["action"].shape
         torch.Size([1, 2, 3])
     """
 
-    WAIT = _BasicPrimitiveLibrary.WAIT
-    MOVEJ = _BasicPrimitiveLibrary.MOVEJ
-    MOVEL = _BasicPrimitiveLibrary.MOVEL
-    NUM_PRIMITIVES = _BasicPrimitiveLibrary.NUM_PRIMITIVES
+    primitive_enum = MacroPrimitive
 
     def __new__(
         cls,
@@ -490,21 +277,14 @@ class MacroPrimitiveTransform(Transform):
     def __init__(
         self,
         *,
-        primitive_library: PrimitiveLibraryName | PrimitiveLibrary | None = None,
-        adapter: MacroAdapterName | MacroPrimitiveAdapter | None = None,
-        solver: MacroSolverName | CartesianSolver | object | None = None,
+        action_key: NestedKey = "action",
+        macro_steps: int = 16,
+        settle_steps: int = 0,
+        action_dim: int | None = None,
         execute: bool = False,
         multi_action_dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,
-        action_key: NestedKey = "action",
-        primitive_id_key: NestedKey = "primitive_id",
-        target_qpos_key: NestedKey = "target_qpos",
-        target_pose_key: NestedKey = "target_pose",
-        macro_steps: int = 16,
-        settle_steps: int = 0,
-        action_dim: int | None = None,
-        cartesian_solver: CartesianSolver | None = None,
     ) -> None:
         del execute, multi_action_dim, stack_rewards, stack_observations
         super().__init__(in_keys_inv=[], out_keys_inv=[])
@@ -512,140 +292,151 @@ class MacroPrimitiveTransform(Transform):
             raise ValueError("macro_steps must be strictly positive.")
         if settle_steps < 0:
             raise ValueError("settle_steps must be non-negative.")
-        self.primitive_library = _resolve_primitive_library(primitive_library)
-        self.adapter = _resolve_adapter(
-            adapter,
-            action_key=action_key,
-            primitive_id_key=primitive_id_key,
-            target_qpos_key=target_qpos_key,
-            target_pose_key=target_pose_key,
-            action_dim=action_dim,
-        )
-        self.solver = _resolve_solver(solver, cartesian_solver=cartesian_solver)
-        self.action_key = self.adapter.action_key
-        self.primitive_id_key = self.adapter.primitive_id_key
-        self.target_qpos_key = self.adapter.target_qpos_key
-        self.target_pose_key = self.adapter.target_pose_key
+        if action_dim is not None and action_dim <= 0:
+            raise ValueError("action_dim must be strictly positive.")
+        self.action_key = unravel_key(action_key)
         self.macro_steps = int(macro_steps)
         self.settle_steps = int(settle_steps)
-        self.action_dim = self.adapter.action_dim
+        self.action_dim = int(action_dim) if action_dim is not None else None
 
+    # ------------------------------------------------------------------ #
+    # Inverse-action path
+    # ------------------------------------------------------------------ #
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = tensordict.get(self.action_key, default=None)
+        start, target, steps, settle_steps = self._resolve(tensordict, action)
+        sequence = self._interpolate_sequence(start, target, steps, settle_steps)
+        return tensordict.set(self.action_key, sequence)
+
+    def _resolve(
+        self, tensordict: TensorDictBase, action: Any
+    ) -> tuple[torch.Tensor, torch.Tensor, int, int]:
+        """Map ``action`` to ``(start, target, steps, settle_steps)``.
+
+        The default implementation handles a :class:`MacroAction` (or a plain
+        TensorDict with the same schema) and a raw low-level action tensor.
+        Subclasses override this hook to interpret domain-specific targets.
+        """
+        if action is None:
+            raise RuntimeError(
+                f"{type(self).__name__} found no action under "
+                f"{self.action_key!r} to expand."
+            )
+        batch_shape = tensordict.batch_size
+        device = self._device(tensordict, action)
+        dtype = self._action_dtype(tensordict, action)
+
+        if isinstance(action, torch.Tensor):
+            action_dim = action.shape[-1]
+            target = action.to(dtype=dtype, device=device).reshape(
+                batch_shape + (action_dim,)
+            )
+            start = torch.zeros(batch_shape + (action_dim,), dtype=dtype, device=device)
+            return start, target, self.macro_steps, self.settle_steps
+
+        if isinstance(action, (TensorDictBase, MacroAction)):
+            keys = action.keys(True, True)
+            if "target" not in keys:
+                raise RuntimeError(
+                    f"{type(self).__name__} expected a macro action with a "
+                    f"'target' field under {self.action_key!r}; got keys "
+                    f"{tuple(keys)}."
+                )
+            target = action.get("target").to(dtype=dtype, device=device)
+            action_dim = target.shape[-1]
+            target = target.reshape(batch_shape + (action_dim,))
+            start = self.current_action(
+                tensordict, batch_shape, device, dtype, action_dim
+            )
+            if "mode" in keys:
+                mode = action.get("mode").to(torch.long).reshape(batch_shape + (1,))
+                target = torch.where(mode == int(MacroPrimitive.WAIT), start, target)
+            steps = self._field_int(action, "steps", self.macro_steps)
+            settle_steps = self._field_int(action, "settle_steps", self.settle_steps)
+            return start, target, steps, settle_steps
+
+        raise TypeError(
+            f"{type(self).__name__} cannot expand an action of type "
+            f"{type(action).__name__}; pass a MacroAction, a TensorDict or a "
+            "low-level action tensor."
+        )
+
+    def current_action(
+        self,
+        tensordict: TensorDictBase,
+        batch_shape: torch.Size,
+        device: torch.device,
+        dtype: torch.dtype,
+        action_dim: int,
+    ) -> torch.Tensor:
+        """Return the low-level action used as the interpolation start.
+
+        The base implementation starts every macro from the zero action: in the
+        inverse path ``action_key`` carries the incoming macro action (the
+        *target*), so it must not be read back here as the start. Subclasses that
+        can read the controlled state from observations (e.g. joint positions)
+        override this hook.
+        """
+        dim = self.action_dim if self.action_dim is not None else action_dim
+        return torch.zeros(batch_shape + (dim,), dtype=dtype, device=device)
+
+    # ------------------------------------------------------------------ #
+    # Convenience constructors (inspection / scripting helpers)
+    # ------------------------------------------------------------------ #
     def make_primitive(
         self,
         tensordict: TensorDictBase,
-        primitive_id: int | IntEnum | torch.Tensor,
+        mode: int | IntEnum = MacroPrimitive.MOVE,
         *,
-        target_pose: torch.Tensor | None = None,
+        target: torch.Tensor | None = None,
         target_qpos: torch.Tensor | None = None,
+        steps: int | None = None,
+        settle_steps: int | None = None,
     ) -> TensorDictBase:
-        """Return a cloned TensorDict containing one macro primitive action."""
-        batch_shape = tensordict.batch_size
-        device = self._primitive_device(tensordict, target_pose, target_qpos)
-        dtype = self.adapter.action_dtype(tensordict)
-        start = self.adapter.current_action(tensordict, batch_shape, device, dtype)
-        out = tensordict.clone()
-        out.set(
-            self.primitive_id_key,
-            self._expand_value(
-                primitive_id,
-                batch_shape=batch_shape,
-                last_dim=1,
-                dtype=torch.long,
-                device=device,
-            ),
+        """Return a copy of ``tensordict`` carrying one macro action.
+
+        This is a small scripting helper: it builds a
+        :class:`TargetMacroAction` and stores it under ``action_key`` so the
+        result can be passed to :meth:`action_sequence` or executed.
+        """
+        target = target if target is not None else target_qpos
+        if target is None:
+            raise ValueError("make_primitive requires a target tensor.")
+        steps = self.macro_steps if steps is None else steps
+        settle_steps = self.settle_steps if settle_steps is None else settle_steps
+        action = TargetMacroAction.move(
+            target, steps=steps, settle_steps=settle_steps, mode=mode
         )
-        if target_qpos is None:
-            target_qpos = start
-        else:
-            target_qpos = target_qpos.to(dtype=dtype, device=device)
-            target_qpos = target_qpos.reshape(batch_shape + (start.shape[-1],))
-        out.set(self.target_qpos_key, target_qpos)
-        if target_pose is None:
-            target_pose = torch.zeros(batch_shape + (7,), dtype=dtype, device=device)
-        else:
-            target_pose = target_pose.to(dtype=dtype, device=device)
-            target_pose = target_pose.reshape(batch_shape + (7,))
-        out.set(self.target_pose_key, target_pose)
+        out = tensordict.copy()
+        out.set(self.action_key, action)
         return out
 
     def action_sequence(
         self,
         tensordict: TensorDictBase,
-        primitive_id: int | IntEnum | torch.Tensor | None = None,
+        mode: int | IntEnum | None = None,
         *,
-        target_pose: torch.Tensor | None = None,
+        target: torch.Tensor | None = None,
         target_qpos: torch.Tensor | None = None,
+        steps: int | None = None,
+        settle_steps: int | None = None,
     ) -> torch.Tensor:
-        """Expand a primitive action and return its low-level sequence."""
-        if primitive_id is not None:
+        """Expand a macro action into its low-level sequence without executing.
+
+        When ``mode``/``target`` are given, a primitive is built first;
+        otherwise ``tensordict`` is expected to already carry a macro action
+        under ``action_key``.
+        """
+        if mode is not None or target is not None or target_qpos is not None:
             tensordict = self.make_primitive(
                 tensordict,
-                primitive_id,
-                target_pose=target_pose,
+                MacroPrimitive.MOVE if mode is None else mode,
+                target=target,
                 target_qpos=target_qpos,
-            )
-        elif target_pose is not None or target_qpos is not None:
-            raise ValueError(
-                "target_pose and target_qpos can only be passed when "
-                "primitive_id is provided."
+                steps=steps,
+                settle_steps=settle_steps,
             )
         return self.inv(tensordict).get(self.action_key)
-
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        macro_steps = self.macro_steps
-        settle_steps = self.settle_steps
-        if self._has_structured_action(tensordict):
-            tensordict, macro_steps, settle_steps = self._unpack_structured_action(
-                tensordict
-            )
-        primitive_id = self.adapter.primitive_id(tensordict)
-        batch_shape = primitive_id.shape
-        device = primitive_id.device
-        dtype = self.adapter.action_dtype(tensordict)
-        start = self.adapter.current_action(tensordict, batch_shape, device, dtype)
-        target_qpos = self.adapter.target_qpos(
-            tensordict, start, batch_shape, device, dtype
-        )
-        target_pose = self.adapter.target_pose(tensordict, batch_shape, device, dtype)
-        movej_target = self._movej_target(target_qpos, start, tensordict)
-        movel_target = self._movel_target(target_pose, start, target_qpos, tensordict)
-        target = self._primitive_target(
-            primitive_id, start, movej_target, movel_target, tensordict
-        )
-        sequence_start = self._sequence_start(primitive_id, start, target, tensordict)
-        sequence = self._interpolate_sequence(
-            sequence_start, target, macro_steps, settle_steps
-        )
-        return tensordict.set(self.action_key, sequence)
-
-    def _primitive_target(
-        self,
-        primitive_id: torch.Tensor,
-        start: torch.Tensor,
-        movej_target: torch.Tensor,
-        movel_target: torch.Tensor,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        del tensordict
-        library = self.primitive_library
-        target = start.clone()
-        target = torch.where(
-            (primitive_id == int(library.MOVEJ)).unsqueeze(-1), movej_target, target
-        )
-        target = torch.where(
-            (primitive_id == int(library.MOVEL)).unsqueeze(-1), movel_target, target
-        )
-        return target
-
-    def _sequence_start(
-        self,
-        primitive_id: torch.Tensor,
-        start: torch.Tensor,
-        target: torch.Tensor,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        del primitive_id, target, tensordict
-        return start
 
     @staticmethod
     def _interpolate_sequence(
@@ -654,6 +445,7 @@ class MacroPrimitiveTransform(Transform):
         macro_steps: int,
         settle_steps: int,
     ) -> torch.Tensor:
+        """Linearly interpolate ``start`` -> ``target`` then hold for settle."""
         batch_shape = start.shape[:-1]
         dtype = start.dtype
         device = start.device
@@ -672,35 +464,77 @@ class MacroPrimitiveTransform(Transform):
             sequence = torch.cat([sequence, settle], dim=-2)
         return sequence
 
+    # ------------------------------------------------------------------ #
+    # Specs
+    # ------------------------------------------------------------------ #
     def transform_input_spec(self, input_spec: Composite) -> Composite:
-        return self.adapter.transform_input_spec(input_spec, self.primitive_library)
-
-    def _movej_target(
-        self,
-        target_qpos: torch.Tensor,
-        start: torch.Tensor,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        if hasattr(self.solver, "movej"):
-            return self.solver.movej(
-                target_qpos, start, transform=self, tensordict=tensordict
+        input_spec = input_spec.clone()
+        batch_size = input_spec.shape
+        device = input_spec.device
+        dtype = self._spec_dtype(input_spec)
+        action_dim = self._spec_action_dim(input_spec)
+        if action_dim is None:
+            raise RuntimeError(
+                f"{type(self).__name__} needs action_dim to transform input "
+                "specs. Pass action_dim=... at construction time."
             )
-        return target_qpos
+        full_action_spec = Composite(shape=batch_size, device=device)
+        full_action_spec[self.action_key] = self._macro_action_spec(
+            batch_size, device, dtype, action_dim
+        )
+        input_spec["full_action_spec"] = full_action_spec
+        return input_spec
 
-    def _movel_target(
+    def _macro_action_spec(
         self,
-        target_pose: torch.Tensor,
-        start: torch.Tensor,
-        fallback: torch.Tensor,
-        tensordict: TensorDictBase,
-    ) -> torch.Tensor:
-        if not hasattr(self.solver, "movel"):
-            return fallback
-        return self.solver.movel(
-            target_pose, start, fallback, transform=self, tensordict=tensordict
+        batch_size: torch.Size,
+        device: torch.device,
+        dtype: torch.dtype,
+        action_dim: int,
+    ) -> Composite:
+        """Build the policy-facing macro action spec (``mode`` + ``target``)."""
+        return Composite(
+            mode=Categorical(
+                n=len(self.primitive_enum),
+                shape=(*batch_size, 1),
+                dtype=torch.long,
+                device=device,
+            ),
+            target=Unbounded(
+                shape=(*batch_size, action_dim), dtype=dtype, device=device
+            ),
+            shape=batch_size,
+            device=device,
         )
 
+    def _spec_dtype(self, input_spec: Composite) -> torch.dtype:
+        action_spec = input_spec.get("full_action_spec", None)
+        if isinstance(action_spec, Composite) and self.action_key in action_spec.keys(
+            True, True
+        ):
+            leaf = action_spec[self.action_key]
+            dtype = getattr(leaf, "dtype", None)
+            if dtype is not None:
+                return dtype
+        return torch.get_default_dtype()
+
+    def _spec_action_dim(self, input_spec: Composite) -> int | None:
+        if self.action_dim is not None:
+            return self.action_dim
+        action_spec = input_spec.get("full_action_spec", None)
+        if isinstance(action_spec, Composite) and self.action_key in action_spec.keys(
+            True, True
+        ):
+            shape = action_spec[self.action_key].shape
+            if shape:
+                return int(shape[-1])
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Helpers
+    # ------------------------------------------------------------------ #
     def _find_parent_env_with(self, attr: str) -> Any | None:
+        """Walk the parent chain looking for an env exposing ``attr``."""
         try:
             env = self.parent
         except AttributeError:
@@ -713,63 +547,28 @@ class MacroPrimitiveTransform(Transform):
             env = getattr(env, "base_env", None)
         return None
 
-    def _has_structured_action(self, tensordict: TensorDictBase) -> bool:
-        if self.action_key not in tensordict.keys(True, True):
-            return False
-        action = tensordict.get(self.action_key)
+    def _device(self, tensordict: TensorDictBase, action: Any) -> torch.device:
+        device = getattr(action, "device", None)
+        if device is not None:
+            return device
+        if tensordict.device is not None:
+            return tensordict.device
+        return torch.device("cpu")
+
+    def _action_dtype(self, tensordict: TensorDictBase, action: Any) -> torch.dtype:
+        target = None
         if isinstance(action, torch.Tensor):
-            return False
-        if not hasattr(action, "keys") or not hasattr(action, "get"):
-            return False
-        keys = action.keys(True, True)
-        return (
-            "primitive_id" in keys
-            or ("mode" in keys and "target" in keys)
-            or "target_qpos" in keys
-            or "target_pose" in keys
-        )
-
-    def _unpack_structured_action(
-        self, tensordict: TensorDictBase
-    ) -> tuple[TensorDictBase, int, int]:
-        action = tensordict.get(self.action_key)
-        out = tensordict.clone()
-
-        keys = action.keys(True, True)
-        if "primitive_id" in keys:
-            primitive_id = action.get("primitive_id").to(torch.long)
-        else:
-            primitive_id = action.get("mode").to(torch.long)
-        if primitive_id.shape[-1:] != torch.Size([1]):
-            primitive_id = primitive_id.unsqueeze(-1)
-        out.set(self.primitive_id_key, primitive_id)
-
-        if "target_qpos" in keys:
-            out.set(self.target_qpos_key, action.get("target_qpos"))
-        if "target_pose" in keys:
-            out.set(self.target_pose_key, action.get("target_pose"))
-        if "target" in keys:
+            target = action
+        elif isinstance(action, (TensorDictBase, MacroAction)) and "target" in (
+            action.keys(True, True)
+        ):
             target = action.get("target")
-            if (primitive_id == int(MacroPrimitive.MOVEL)).all():
-                out.set(self.target_pose_key, target)
-            elif (primitive_id == int(MacroPrimitive.MOVEJ)).all() or (
-                primitive_id == int(MacroPrimitive.WAIT)
-            ).all():
-                out.set(self.target_qpos_key, target)
-            else:
-                raise RuntimeError(
-                    "Batched structured macro actions must all use the same "
-                    "target kind. Use TensorDict primitive keys directly for "
-                    "mixed macro batches."
-                )
-        return (
-            out,
-            self._structured_action_int(action, "steps", self.macro_steps),
-            self._structured_action_int(action, "settle_steps", self.settle_steps),
-        )
+        if isinstance(target, torch.Tensor) and target.is_floating_point():
+            return target.dtype
+        return torch.get_default_dtype()
 
     @staticmethod
-    def _structured_action_int(action: Any, key: str, default: int) -> int:
+    def _field_int(action: TensorDictBase, key: str, default: int) -> int:
         if key not in action.keys(True, True):
             return int(default)
         value = int(action.get(key).reshape(-1)[0].item())
@@ -779,43 +578,8 @@ class MacroPrimitiveTransform(Transform):
             raise ValueError("steps must be strictly positive.")
         return value
 
-    def _primitive_device(
-        self,
-        tensordict: TensorDictBase,
-        *values: torch.Tensor | float | None,
-    ) -> torch.device:
-        for value in values:
-            if isinstance(value, torch.Tensor):
-                return value.device
-        for key in (self.action_key, self.target_qpos_key, self.target_pose_key):
-            if key in tensordict.keys(True, True):
-                value = tensordict.get(key)
-                device = getattr(value, "device", None)
-                if device is not None:
-                    return device
-        if tensordict.device is not None:
-            return tensordict.device
-        return torch.device("cpu")
-
-    @staticmethod
-    def _expand_value(
-        value: int | IntEnum | float | torch.Tensor,
-        *,
-        batch_shape: torch.Size,
-        last_dim: int,
-        dtype: torch.dtype,
-        device: torch.device,
-    ) -> torch.Tensor:
-        value = torch.as_tensor(value, dtype=dtype, device=device)
-        shape = batch_shape + (last_dim,)
-        if value.numel() == 1:
-            return value.reshape(()).expand(shape).clone()
-        return value.reshape(shape)
-
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}(macro_steps={self.macro_steps}, "
-            f"settle_steps={self.settle_steps}, action_key={self.action_key!r}, "
-            f"adapter={type(self.adapter).__name__}, "
-            f"solver={type(self.solver).__name__})"
+            f"settle_steps={self.settle_steps}, action_key={self.action_key!r})"
         )

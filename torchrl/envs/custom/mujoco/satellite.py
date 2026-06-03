@@ -490,7 +490,7 @@ class SatelliteEnv(MujocoEnv):
     def make_attitude_transform(
         self,
         *,
-        execute: bool = False,
+        execute: bool = True,
         multi_action_dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,

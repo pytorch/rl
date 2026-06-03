@@ -52,9 +52,7 @@ class _MujocoMeta(_EnvPostInit):
         parallel: bool | None = None,
         **kwargs,
     ):
-        backend = kwargs.get(
-            "backend", getattr(cls, "DEFAULT_BACKEND", "mujoco-torch")
-        )
+        backend = kwargs.get("backend", getattr(cls, "DEFAULT_BACKEND", "mujoco-torch"))
         num_envs = int(kwargs.get("num_envs", 1))
         num_workers = int(num_workers)
 

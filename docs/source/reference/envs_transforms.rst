@@ -277,8 +277,10 @@ Available Transforms
     HumanoidMacroAction
     InitTracker
     LineariseRewards
+    MacroAction
     MacroPrimitive
     MacroPrimitiveTransform
+    TargetMacroAction
     RobotMacroAction
     RobotMacroActionMode
     SatelliteMacroAction
@@ -311,6 +313,7 @@ Available Transforms
     StepCounter
     TargetReturn
     TensorDictPrimer
+    TerminateTransform
     TimeMaxPool
     Timer
     Tokenizer

@@ -9,7 +9,7 @@ import abc
 import re
 import warnings
 import weakref
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from copy import deepcopy
 from functools import partial, wraps
 from typing import Any
@@ -3308,6 +3308,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         policy: Callable[[TensorDictBase], TensorDictBase] | None = None,
         callback: Callable[[TensorDictBase, ...], Any] | None = None,
         *,
+        actions: Iterable[Any] | None = None,
         auto_reset: bool = True,
         auto_cast_to_device: bool = False,
         break_when_any_done: bool | None = None,
@@ -3338,6 +3339,15 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                 the call to ``rollout``.
 
         Keyword Args:
+            actions (iterable, optional): an iterable of pre-computed actions to
+                drive the rollout instead of a ``policy``. Each item is written
+                under the environment's (top-level) action key before stepping,
+                making open-loop replay a one-liner
+                (``env.rollout(max_steps, actions=[...])``). Mutually exclusive
+                with ``policy``. When the iterable is sized, ``max_steps`` is
+                capped to its length. To stop early on a goal condition, combine
+                with :class:`~torchrl.envs.transforms.TerminateTransform` and
+                ``break_when_any_done=True``. Defaults to ``None``.
             auto_reset (bool, optional): if ``True``, the contained environments will be reset before starting the
                 rollout. If ``False``, then the rollout will continue from a previous state, which requires the
                 ``tensordict`` argument to be passed with the previous rollout. Default is ``True``.
@@ -3572,6 +3582,25 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
             )
         if return_contiguous is None:
             return_contiguous = not self._has_dynamic_specs
+        if actions is not None:
+            if policy is not None:
+                raise ValueError(
+                    "Cannot pass both `policy` and `actions` to rollout()."
+                )
+            # The macro action is a single (possibly structured) object written
+            # under the top-level action key, e.g. "action".
+            action_key = next(iter(self.full_action_spec.keys()))
+            action_iterator = iter(actions)
+
+            def policy(tensordict, _it=action_iterator, _key=action_key):
+                tensordict.set(_key, next(_it))
+                return tensordict
+
+            # A sized iterable bounds the rollout length.
+            if hasattr(actions, "__len__"):
+                max_steps = min(max_steps, len(actions))
+            # The action-iterator policy ignores observations; don't wrap it.
+            trust_policy = True
         if policy is not None:
             policy = _make_compatible_policy(
                 policy,

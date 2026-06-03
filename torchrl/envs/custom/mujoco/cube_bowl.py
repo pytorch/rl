@@ -878,10 +878,6 @@ class CubeBowlEnv(MujocoEnv):
         stack_rewards: bool = True,
         stack_observations: bool = False,
         action_key: NestedKey = "action",
-        primitive_id_key: NestedKey = "primitive_id",
-        target_qpos_key: NestedKey = "target_qpos",
-        target_pose_key: NestedKey = "target_pose",
-        gripper_key: NestedKey = "gripper",
         robot_qpos_key: NestedKey = "robot_qpos",
         gripper_qpos_key: NestedKey = "gripper_qpos",
         ik_kwargs: dict[str, float | int] | None = None,
@@ -906,11 +902,8 @@ class CubeBowlEnv(MujocoEnv):
                 reward when ``execute=True``.
             stack_observations: whether ``MultiAction`` should return each
                 low-level observation when ``execute=True``.
-            action_key: low-level action key consumed by the environment.
-            primitive_id_key: primitive id key.
-            target_qpos_key: joint target key for ``movej``.
-            target_pose_key: Cartesian pose target key for ``movel``.
-            gripper_key: optional gripper command key.
+            action_key: key carrying the macro action and the expanded
+                low-level sequence.
             robot_qpos_key: observation key for robot joints.
             gripper_qpos_key: observation key for gripper joints.
             ik_kwargs: optional keyword arguments forwarded to the MuJoCo DLS
@@ -951,10 +944,6 @@ class CubeBowlEnv(MujocoEnv):
             stack_rewards=stack_rewards,
             stack_observations=stack_observations,
             action_key=action_key,
-            primitive_id_key=primitive_id_key,
-            target_qpos_key=target_qpos_key,
-            target_pose_key=target_pose_key,
-            gripper_key=gripper_key,
             robot_qpos_key=robot_qpos_key,
             gripper_qpos_key=gripper_qpos_key,
             cartesian_solver=cartesian_solver,

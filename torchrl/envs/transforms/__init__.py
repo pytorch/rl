@@ -5,7 +5,12 @@
 
 import importlib
 
-from ._primitive import MacroPrimitive, MacroPrimitiveTransform
+from ._primitive import (
+    MacroAction,
+    MacroPrimitive,
+    MacroPrimitiveTransform,
+    TargetMacroAction,
+)
 from .gym_transforms import EndOfLifeTransform
 from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
@@ -67,6 +72,7 @@ from .transforms import (
     StepCounter,
     TargetReturn,
     TensorDictPrimer,
+    TerminateTransform,
     TimeMaxPool,
     Timer,
     Tokenizer,
@@ -149,8 +155,10 @@ __all__ = [
     "HumanoidMacroAction",
     "InitTracker",
     "LineariseRewards",
+    "MacroAction",
     "MacroPrimitive",
     "MacroPrimitiveTransform",
+    "TargetMacroAction",
     "RobotMacroAction",
     "RobotMacroActionMode",
     "SatelliteMacroAction",
@@ -184,6 +192,7 @@ __all__ = [
     "StepCounter",
     "TargetReturn",
     "TensorDictPrimer",
+    "TerminateTransform",
     "TimeMaxPool",
     "Timer",
     "ToTensorImage",

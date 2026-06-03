@@ -60,6 +60,9 @@ def _run_macro(
     # call to ``step_and_maybe_reset`` runs a complete high-level command. We do
     # not manually unbind or step through the low-level sequence here: the
     # transform expands ``RobotMacroAction`` and ``MultiAction`` executes it.
+    # Unlike the humanoid/satellite examples (open-loop ``rollout(actions=...)``),
+    # the cube-bowl policy is closed-loop -- each command depends on the latest
+    # observation -- so we step one action at a time.
     tensordict.set("action", action)
     _, tensordict = env.step_and_maybe_reset(tensordict)
     return tensordict

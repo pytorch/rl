@@ -19,7 +19,6 @@ from _viewer import (
     MujocoViewerLoop,
     ViewerClosed,
 )
-from tensordict import TensorDictBase
 from torchrl.data import TensorSpec
 from torchrl.envs import HumanoidEnv, HumanoidMacroAction
 
@@ -43,42 +42,36 @@ def _target(action_spec: TensorSpec, values: list[float]) -> torch.Tensor:
     return action_spec.project(target)
 
 
-class HumanoidPosePolicy:
-    """Scripted policy that emits one macro action per requested pose."""
+def pose_macros(action_spec: TensorSpec) -> list[HumanoidMacroAction]:
+    """Return a short scripted sequence of macro control-pose destinations.
 
-    def __init__(self, action_spec: TensorSpec) -> None:
-        # These values are low-level control destinations, not pre-expanded
-        # action sequences. ``MacroPrimitiveTransform(execute=True)``
-        # interpolates toward each destination and ``MultiAction`` executes the
-        # resulting sequence through the env.
-        self.actions = [
-            HumanoidMacroAction.reach_control(
-                _target(action_spec, [0.16, -0.14, 0.10, -0.10, 0.08, -0.08]),
-                steps=24,
-                settle_steps=8,
-            ),
-            HumanoidMacroAction.reach_control(
-                _target(action_spec, [-0.14, 0.16, -0.10, 0.10, -0.08, 0.08]),
-                steps=24,
-                settle_steps=8,
-            ),
-            HumanoidMacroAction.reach_control(
-                _target(action_spec, [0.08, 0.08, -0.14, -0.14, 0.10, 0.10]),
-                steps=24,
-                settle_steps=8,
-            ),
-            HumanoidMacroAction.reach_control(
-                _target(action_spec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-                steps=28,
-                settle_steps=10,
-            ),
-        ]
-        self.index = 0
-
-    def __call__(self, tensordict: TensorDictBase) -> TensorDictBase:
-        tensordict.set("action", self.actions[self.index])
-        self.index += 1
-        return tensordict
+    Each entry is a low-level actuator-control destination, not a pre-expanded
+    action sequence. ``HumanoidEnv.make_control_transform(execute=True)``
+    interpolates toward each destination and ``MultiAction`` executes the
+    resulting sequence through the env.
+    """
+    return [
+        HumanoidMacroAction.reach_control(
+            _target(action_spec, [0.16, -0.14, 0.10, -0.10, 0.08, -0.08]),
+            steps=24,
+            settle_steps=8,
+        ),
+        HumanoidMacroAction.reach_control(
+            _target(action_spec, [-0.14, 0.16, -0.10, 0.10, -0.08, 0.08]),
+            steps=24,
+            settle_steps=8,
+        ),
+        HumanoidMacroAction.reach_control(
+            _target(action_spec, [0.08, 0.08, -0.14, -0.14, 0.10, 0.10]),
+            steps=24,
+            settle_steps=8,
+        ),
+        HumanoidMacroAction.reach_control(
+            _target(action_spec, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            steps=28,
+            settle_steps=10,
+        ),
+    ]
 
 
 def main() -> None:
@@ -100,16 +93,19 @@ def main() -> None:
     env, recorder, logger = maybe_add_video_recorder(env, args, tag=_VIDEO_TAG)
 
     # Loop forever: reset the humanoid, execute a short sequence of macro
-    # control-pose destinations through ``rollout``, pause, and reset again.
+    # control-pose destinations, pause, and reset again. The macros are an
+    # open-loop list of ``HumanoidMacroAction`` objects, so we hand them straight
+    # to ``env.rollout(actions=...)`` -- no bespoke stepping loop needed.
     rollout_count = 0
     with MujocoViewerLoop(base_env, speed=args.speed) as viewer:
         while viewer.is_running() and (
             args.max_rollouts is None or rollout_count < args.max_rollouts
         ):
+            actions = pose_macros(low_level_action_spec)
             try:
                 env.rollout(
-                    max_steps=4,
-                    policy=HumanoidPosePolicy(low_level_action_spec),
+                    max_steps=len(actions),
+                    actions=actions,
                     break_when_any_done=False,
                 )
             except ViewerClosed:

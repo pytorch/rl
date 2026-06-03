@@ -49,6 +49,22 @@ base :class:`MacroPrimitiveTransform` therefore owns interpolation, fixed-length
 sequence construction and optional :class:`MultiAction` execution, while
 specialized actions/transforms own target interpretation.
 
+Concretely, the policy-facing command is a structured action object that
+subclasses :class:`MacroAction` (a small ``mode`` + ``steps`` + ``settle_steps``
+base). The single-target case adds one ``target`` field via
+:class:`TargetMacroAction`; richer domains (a gripper arm) add their own fields.
+A specialization is then just a :class:`MacroPrimitiveTransform` subclass that
+overrides three hooks instead of plugging in adapter/solver/library objects:
+
+* ``_resolve(td, action)`` -- map the macro action to a ``(start, target,
+  steps, settle_steps)`` tuple of low-level tensors;
+* ``current_action(td, ...)`` -- read the low-level action used as the
+  interpolation start;
+* ``transform_input_spec(...)`` -- advertise the policy-facing action spec.
+
+The generic base implements all three for the in-action-space case, so an
+environment whose action *is* the macro target needs no subclass at all.
+
 What does "reach" mean?
 -----------------------
 
@@ -94,9 +110,10 @@ The policy-facing code should remain ordinary TorchRL code:
 
 Random actions are still defined by the transformed ``full_action_spec``. That
 spec is a :class:`~torchrl.data.Composite` of the policy-facing macro fields.
-For the generic transform those fields are primitive ids and low-level targets;
-for a domain preset they can be semantic quantities such as
-``("action", "attitude")`` for the satellite. A random macro is valid by shape,
+For the generic transform those fields are a primitive ``mode`` and a low-level
+``target``; a domain preset keeps the same ``("action", "target")`` layout but
+gives the target a semantic meaning (a target attitude quaternion for the
+satellite). A random macro is valid by shape,
 dtype and bounds, but it is not guaranteed to be meaningful for the task.
 
 Example 1: humanoid actuator-control macros
@@ -155,14 +172,15 @@ The satellite target is a desired attitude frame represented by a unit
 quaternion. ``SatelliteEnv`` stores reset-time target attitudes under
 ``td["target_quat"]`` with shape ``(..., 4)``. After appending
 :class:`SatelliteAttitudeTransform`, the policy-facing action spec contains
-``("action", "attitude")`` with the same shape, dtype and device:
+``("action", "target")`` with the same shape, dtype and device. The readable way
+to set it is the domain action object, exactly like the other two examples:
 
 .. code-block:: python
 
    # ``target_quat`` is part of SatelliteEnv.state_spec and is copied to the
    # reset TensorDict. It is the desired attitude in (w, x, y, z) quaternion
    # convention.
-   td.set(("action", "attitude"), td["target_quat"])
+   td.set("action", SatelliteMacroAction.slew_attitude(td["target_quat"]))
 
 That is the whole policy-side command: "make the satellite attitude match this
 target frame". The :class:`SatelliteAttitudeTransform` maps this semantic target
@@ -179,10 +197,11 @@ acceleration through the instantaneous CMG Jacobian, clamps the result to the
 normalized ``[-1, 1]`` satellite action space, and lets
 :class:`MacroPrimitiveTransform` interpolate the command sequence.
 
-The transform also accepts ``td["action"] = td["target_quat"]`` as a shorthand,
-and :meth:`SatelliteMacroAction.slew_attitude
-<SatelliteMacroAction.slew_attitude>` remains available when a script needs to
-override ``steps`` or ``settle_steps`` for a single action.
+For quick experiments the transform also accepts a raw quaternion tensor
+(``td["action"] = td["target_quat"]``) or a nested ``("action", "target")``
+entry. :meth:`SatelliteMacroAction.slew_attitude
+<SatelliteMacroAction.slew_attitude>` is the readable form and additionally lets
+a script set ``steps`` or ``settle_steps`` per action.
 
 The transform can be built through the env convenience method, which passes the
 CMG count and action scale:
@@ -283,11 +302,14 @@ For a new environment, design from the specs outward:
    can compute a low-level target directly; a task family should expose a
    target-shaped action spec and transform that readers can reuse.
 
-A custom preset usually supplies three pieces:
+A custom preset usually supplies three pieces, matching the three transform
+hooks:
 
-* a policy-facing action spec whose fields look like desired states, such as
-  ``("action", "attitude")``;
-* code that maps this desired state to a low-level action target;
+* a policy-facing action spec whose fields look like desired states (e.g. a
+  ``("action", "target")`` quaternion for the satellite), via
+  ``transform_input_spec``;
+* code that maps this desired state to a low-level action target, via
+  ``_resolve`` (and ``current_action`` for the interpolation start);
 * the base macro sequence expansion, inherited from
   :class:`MacroPrimitiveTransform`.
 
@@ -310,15 +332,14 @@ Comparison
      - A low-level MuJoCo actuator-control destination
      - ``base_env.action_spec``
    * - Satellite
-     - ``("action", "attitude")`` target quaternion;
-       :meth:`SatelliteMacroAction.slew_attitude <SatelliteMacroAction.slew_attitude>`
-       for per-action durations
+     - :meth:`SatelliteMacroAction.slew_attitude <SatelliteMacroAction.slew_attitude>`
+       (a ``("action", "target")`` quaternion)
      - :meth:`SatelliteEnv.make_attitude_transform <SatelliteEnv.make_attitude_transform>`
        / :class:`SatelliteAttitudeTransform`
      - A desired target attitude quaternion; the transform computes the
        normalized CMG gimbal-rate command
      - ``state_spec["target_quat"]`` and transformed
-       ``full_action_spec[("action", "attitude")]`` for the target;
+       ``full_action_spec[("action", "target")]`` for the target;
        ``observation_spec`` for current attitude and CMG state; base
        ``action_spec`` for final commands
    * - Cube bowl

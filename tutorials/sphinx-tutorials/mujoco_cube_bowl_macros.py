@@ -568,7 +568,7 @@ assert reset_td["robot_qpos"].shape == td["robot_qpos"].shape
 #    - :class:`~torchrl.envs.RobotMacroAction` for the structured action object used
 #      by the scripted policy.
 #    - :class:`~torchrl.envs.MacroPrimitiveTransform` for robot-agnostic macro
-#      expansion with custom adapters and solvers.
+#      expansion that domain transforms specialize via ``_resolve`` hooks.
 #    - :class:`~torchrl.envs.URScriptPrimitiveTransform` for the URScript-style
 #      preset used in this tutorial.
 #    - :class:`~torchrl.envs.MultiAction` for executing batched low-level action

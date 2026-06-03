@@ -115,7 +115,7 @@ class TestMujoco:
         target = env.action_spec.zero()
         target[..., 0] = 0.2
         sequence = transform.action_sequence(
-            td, MacroPrimitive.MOVEJ, target_qpos=target
+            td, MacroPrimitive.MOVE, target_qpos=target
         )
         assert sequence.shape == torch.Size([2, 4, env.action_spec.shape[-1]])
         env.close()
@@ -127,7 +127,7 @@ class TestMujoco:
         td = env.reset()
         target = env.action_spec.zero()
         sequence = transform.action_sequence(
-            td, MacroPrimitive.MOVEJ, target_qpos=target
+            td, MacroPrimitive.MOVE, target_qpos=target
         )
         assert sequence.shape == torch.Size([1, 2, env.action_spec.shape[-1]])
         env.close()
@@ -1142,18 +1142,6 @@ class TestMujoco:
             action[..., -1] = float(gripper)
             return action
 
-        def primitive_td(observation, primitive_id, target_pose=None, gripper=0.0):
-            if target_pose is None:
-                target_pose = torch.zeros(*observation.batch_size, 7)
-            td = observation.clone()
-            td["primitive_id"] = torch.full((1, 1), primitive_id, dtype=torch.long)
-            td["target_pose"] = target_pose
-            td["target_qpos"] = action_from_robot_qpos(
-                observation["robot_qpos"], gripper
-            )
-            td["gripper"] = torch.full((1, 1), float(gripper))
-            return td
-
         def gripper_cube_distance(observation):
             cube_pos = observation["cube_pos"]
             half_size = torch.full_like(cube_pos, CubeBowlEnv.OBJECT_HALF_SIZE)
@@ -1169,14 +1157,27 @@ class TestMujoco:
                 pad_to_cube(observation["gripper_right_pad_pos"]),
             ).clamp_min(0.0)
 
-        def run_primitive(observation, transform, primitive):
-            primitive.update(observation.select(*env.observation_keys))
-            expanded = transform.inv(primitive)
+        def run_primitive(
+            observation,
+            transform,
+            primitive_id,
+            *,
+            target_pose=None,
+            target_qpos=None,
+            gripper=0.0,
+        ):
+            expanded = transform.action_sequence(
+                observation,
+                primitive_id,
+                target_pose=target_pose,
+                target_qpos=target_qpos,
+                gripper=gripper,
+            )
             start_cube = observation["cube_pos"].clone()
             min_gripper_distance = torch.full_like(start_cube[..., :1], float("inf"))
             max_reward = torch.zeros_like(start_cube[..., :1])
             last_reward = torch.zeros_like(start_cube[..., :1])
-            for action in expanded["action"][0]:
+            for action in expanded[0]:
                 transition = env.step(
                     observation.clone().set("action", action.view(1, 7))
                 )
@@ -1248,11 +1249,8 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             open_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.OPEN_GRIPPER,
-                gripper=gripper_open,
-            ),
+            URScriptPrimitiveTransform.OPEN_GRIPPER,
+            gripper=gripper_open,
         )
         max_reward = torch.maximum(max_reward, reward)
 
@@ -1265,12 +1263,9 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             approach_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.MOVEL,
-                target_pose=above_cube,
-                gripper=gripper_open,
-            ),
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=above_cube,
+            gripper=gripper_open,
         )
         max_reward = torch.maximum(max_reward, reward)
 
@@ -1281,23 +1276,17 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             approach_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.MOVEL,
-                target_pose=grasp_cube,
-                gripper=gripper_open,
-            ),
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=grasp_cube,
+            gripper=gripper_open,
         )
         max_reward = torch.maximum(max_reward, reward)
 
         observation, distance, reward, last_reward = run_primitive(
             observation,
             close_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.CLOSE_GRIPPER,
-                gripper=gripper_close,
-            ),
+            URScriptPrimitiveTransform.CLOSE_GRIPPER,
+            gripper=gripper_close,
         )
         grasp_distance = torch.minimum(grasp_distance, distance)
         max_reward = torch.maximum(max_reward, reward)
@@ -1313,12 +1302,9 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             lift_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.MOVEL,
-                target_pose=lift_cube,
-                gripper=gripper_close,
-            ),
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=lift_cube,
+            gripper=gripper_close,
         )
         max_reward = torch.maximum(max_reward, reward)
         update_closed_motion(closed_reference_cube)
@@ -1340,14 +1326,9 @@ class TestMujoco:
             observation, _, reward, last_reward = run_primitive(
                 observation,
                 carry_transform,
-                primitive_td(
-                    observation,
-                    URScriptPrimitiveTransform.MOVEL,
-                    target_pose=pose_with_quat(
-                        desired_cube + pinch_to_cube, gripper_quat
-                    ),
-                    gripper=gripper_close,
-                ),
+                URScriptPrimitiveTransform.MOVEL,
+                target_pose=pose_with_quat(desired_cube + pinch_to_cube, gripper_quat),
+                gripper=gripper_close,
             )
             max_reward = torch.maximum(max_reward, reward)
             update_closed_motion(closed_reference_cube)
@@ -1365,12 +1346,9 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             drop_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.MOVEL,
-                target_pose=pose_with_quat(drop_cube + pinch_to_cube, gripper_quat),
-                gripper=gripper_close,
-            ),
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=pose_with_quat(drop_cube + pinch_to_cube, gripper_quat),
+            gripper=gripper_close,
         )
         max_reward = torch.maximum(max_reward, reward)
         update_closed_motion(closed_reference_cube)
@@ -1378,11 +1356,8 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             open_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.OPEN_GRIPPER,
-                gripper=gripper_open,
-            ),
+            URScriptPrimitiveTransform.OPEN_GRIPPER,
+            gripper=gripper_open,
         )
         max_reward = torch.maximum(max_reward, reward)
 
@@ -1400,11 +1375,9 @@ class TestMujoco:
         observation, _, reward, last_reward = run_primitive(
             observation,
             home_transform,
-            primitive_td(
-                observation,
-                URScriptPrimitiveTransform.MOVEJ,
-                gripper=gripper_open,
-            ).set("target_qpos", home_target),
+            URScriptPrimitiveTransform.MOVEJ,
+            target_qpos=home_target,
+            gripper=gripper_open,
         )
         max_reward = torch.maximum(max_reward, reward)
         for _ in range(800):
