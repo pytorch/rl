@@ -93,6 +93,7 @@ from torchrl.weight_update.weight_sync_schemes import (
 )
 
 _SGLANG_PAUSE_GENERATION_MODE = "retract"
+_SGLANG_PAUSE_POLL_INTERVAL = 0.05
 
 
 @implement_for("torch", None, "2.6")
@@ -225,6 +226,10 @@ class SGLangCollectiveTransport:
         collectors observe connection failures. ``retract`` pauses scheduling
         and moves active requests back to the waiting queue so they can be
         recomputed after the new weights are installed.
+
+        The pause endpoint can return before a just-dispatched scheduler step
+        has drained. Poll load metrics until no request is still running before
+        starting the collective weight update.
         """
         try:
             response = requests.post(
@@ -243,6 +248,53 @@ class SGLangCollectiveTransport:
                 f"SGLang generation pause before updating model '{model_id}' "
                 f"failed: {response.text.strip()}"
             )
+
+        self._wait_for_generation_pause(model_id)
+
+    def _running_generation_requests(self, model_id: str) -> int:
+        """Return the number of SGLang requests still running on the scheduler."""
+        try:
+            response = requests.get(
+                f"{self.server_url}/get_load",
+                timeout=min(self.timeout, 10.0),
+            )
+        except requests.exceptions.RequestException as err:
+            raise RuntimeError(
+                f"Failed to query SGLang load while pausing generation before "
+                f"updating model '{model_id}': {err}"
+            ) from err
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"SGLang load query while pausing generation before updating "
+                f"model '{model_id}' failed: {response.text.strip()}"
+            )
+
+        running = 0
+        for load in response.json():
+            if "num_running_reqs" in load:
+                running += int(load["num_running_reqs"])
+            else:
+                running += max(
+                    0,
+                    int(load.get("num_reqs", 0))
+                    - int(load.get("num_waiting_reqs", 0)),
+                )
+        return running
+
+    def _wait_for_generation_pause(self, model_id: str) -> None:
+        """Wait until SGLang has no active scheduler requests."""
+        deadline = time.monotonic() + self.timeout
+        while True:
+            running = self._running_generation_requests(model_id)
+            if running == 0:
+                return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"Timed out waiting for SGLang generation to pause before "
+                    f"updating model '{model_id}' ({running} requests still running)"
+                )
+            time.sleep(_SGLANG_PAUSE_POLL_INTERVAL)
 
     def _continue_generation_after_update(self, model_id: str) -> None:
         """Resume SGLang generation after a live weight update."""
