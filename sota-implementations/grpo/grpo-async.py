@@ -56,6 +56,56 @@ from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 
+_GRPO_DEBUG_FINITE_ENV = "TORCHRL_GRPO_DEBUG_FINITE"
+
+
+def _debug_finite_enabled() -> bool:
+    value = os.environ.get(_GRPO_DEBUG_FINITE_ENV)
+    return value is not None and value.lower() in {"1", "true", "yes", "on"}
+
+
+def _assert_finite_tensor(name: str, tensor, step: int) -> None:
+    if not _debug_finite_enabled():
+        return
+    tensor = torch.as_tensor(tensor).detach()
+    if not bool(torch.isfinite(tensor).all().item()):
+        raise RuntimeError(f"Non-finite {name} at GRPO training step {step}.")
+
+
+def _validate_train_model_finite(model, step: int, optim_steps: int) -> None:
+    if not _debug_finite_enabled():
+        return
+
+    max_abs = 0.0
+    max_abs_name = ""
+    for name, param in model.named_parameters():
+        tensor = param.detach()
+        if not tensor.is_floating_point() and not tensor.is_complex():
+            continue
+        finite = torch.isfinite(tensor)
+        if not bool(finite.all().item()):
+            nan_count = int(torch.isnan(tensor).sum().item())
+            posinf_count = int(torch.isposinf(tensor).sum().item())
+            neginf_count = int(torch.isneginf(tensor).sum().item())
+            raise RuntimeError(
+                f"Non-finite train parameter at GRPO training step {step} "
+                f"(optim step {optim_steps}): {name} has nan={nan_count}, "
+                f"+inf={posinf_count}, -inf={neginf_count}, "
+                f"dtype={tensor.dtype}, shape={tuple(tensor.shape)}."
+            )
+        if tensor.numel():
+            tensor_max_abs = float(tensor.abs().max().item())
+            if tensor_max_abs > max_abs:
+                max_abs = tensor_max_abs
+                max_abs_name = name
+
+    torchrl_logger.info(
+        f"GRPO finite-parameter check passed at training step {step} "
+        f"(optim step {optim_steps}, max_abs={max_abs:.6g}, "
+        f"max_abs_name={max_abs_name})."
+    )
+
+
 def _finish_wandb_logger(
     wandb_logger: WandbLogger | None, exit_code: int
 ) -> None:
@@ -251,6 +301,7 @@ def train(
                     loss_val = (
                         loss.mean(reduce=True) / cfg.train.gradient_accumulation_steps
                     )
+                    _assert_finite_tensor("loss", loss_val, step)
 
             with timeit("backward_pass"):
                 if (
@@ -274,6 +325,7 @@ def train(
                         policy_training.parameters(),
                         cfg.optimizer.clip_grad_norm,
                     )
+                    _assert_finite_tensor("gradient norm", grad_norm, step)
 
                     if (
                         cfg.train.mixed_precision
@@ -284,6 +336,9 @@ def train(
                     else:
                         optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
+                    _validate_train_model_finite(
+                        policy_training.model, step, optim_steps + 1
+                    )
 
                 optim_steps += 1
 

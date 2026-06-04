@@ -93,7 +93,33 @@ from torchrl.weight_update.weight_sync_schemes import (
 )
 
 _SGLANG_PAUSE_GENERATION_MODE = "retract"
+_SGLANG_PAUSE_GENERATION_MODE_ENV = "TORCHRL_SGLANG_PAUSE_GENERATION_MODE"
 _SGLANG_PAUSE_POLL_INTERVAL = 0.05
+_SGLANG_VALIDATE_WEIGHT_SYNC_ENV = "TORCHRL_SGLANG_VALIDATE_WEIGHT_SYNC"
+_SGLANG_FLUSH_CACHE_ENV = "TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE"
+
+
+def _truthy_env(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _pause_generation_mode() -> Literal["abort", "retract", "in_place"]:
+    mode = os.environ.get(
+        _SGLANG_PAUSE_GENERATION_MODE_ENV, _SGLANG_PAUSE_GENERATION_MODE
+    )
+    if mode not in {"abort", "retract", "in_place"}:
+        raise ValueError(
+            f"{_SGLANG_PAUSE_GENERATION_MODE_ENV} must be one of "
+            f"'abort', 'retract' or 'in_place', got {mode!r}."
+        )
+    return mode
+
+
+def _validate_weight_sync_enabled() -> bool:
+    return _truthy_env(_SGLANG_VALIDATE_WEIGHT_SYNC_ENV)
 
 
 @implement_for("torch", None, "2.6")
@@ -231,10 +257,11 @@ class SGLangCollectiveTransport:
         has drained. Poll load metrics until no request is still running before
         starting the collective weight update.
         """
+        mode = _pause_generation_mode()
         try:
             response = requests.post(
                 f"{self.server_url}/pause_generation",
-                json={"mode": _SGLANG_PAUSE_GENERATION_MODE},
+                json={"mode": mode},
                 timeout=self.timeout,
             )
         except requests.exceptions.RequestException as err:
@@ -478,9 +505,18 @@ class SGLangCollectiveTransport:
                     f"Weight '{name}' not found in weights. "
                     f"Available keys: {list(weights.keys())[:10]}..."
                 )
+            weight = weights[name]
+            if weight.dtype != dtype or weight.shape != shape:
+                raise ValueError(
+                    f"Weight '{name}' metadata changed before SGLang sync: "
+                    f"expected dtype={dtype}, shape={tuple(shape)}, got "
+                    f"dtype={weight.dtype}, shape={tuple(weight.shape)}."
+                )
             names.append(name)
             dtypes.append(dtype_to_str(dtype))
             shapes.append(list(shape))
+
+        self._validate_weights(model_id, names, weights)
 
         torchrl_logger.info(f"Broadcasting {len(names)} weights for model '{model_id}'")
 
@@ -503,7 +539,7 @@ class SGLangCollectiveTransport:
                 "dtypes": dtypes,
                 "shapes": shapes,
                 "group_name": self._group_name,
-                "flush_cache": False,
+                "flush_cache": _truthy_env(_SGLANG_FLUSH_CACHE_ENV),
                 "abort_all_requests": False,
             }
             update_future = self._http_executor.submit(
@@ -547,6 +583,42 @@ class SGLangCollectiveTransport:
                     )
 
         torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
+
+    def _validate_weights(
+        self, model_id: str, names: list[str], weights: dict[str, torch.Tensor]
+    ) -> None:
+        """Optionally validate weights before broadcasting them to SGLang."""
+        if not _validate_weight_sync_enabled():
+            return
+
+        max_abs = 0.0
+        max_abs_name = ""
+        for name in names:
+            tensor = weights[name].detach()
+            if not tensor.is_floating_point() and not tensor.is_complex():
+                continue
+            finite = torch.isfinite(tensor)
+            if not bool(finite.all().item()):
+                nan_count = int(torch.isnan(tensor).sum().item())
+                posinf_count = int(torch.isposinf(tensor).sum().item())
+                neginf_count = int(torch.isneginf(tensor).sum().item())
+                raise RuntimeError(
+                    f"Non-finite SGLang weight before broadcast for model "
+                    f"'{model_id}': {name} has nan={nan_count}, "
+                    f"+inf={posinf_count}, -inf={neginf_count}, "
+                    f"dtype={tensor.dtype}, shape={tuple(tensor.shape)}."
+                )
+            if tensor.numel():
+                tensor_max_abs = float(tensor.abs().max().item())
+                if tensor_max_abs > max_abs:
+                    max_abs = tensor_max_abs
+                    max_abs_name = name
+
+        torchrl_logger.info(
+            f"SGLang weight sync validation passed for model '{model_id}' "
+            f"({len(names)} tensors, max_abs={max_abs:.6g}, "
+            f"max_abs_name={max_abs_name})."
+        )
 
     def check_connection(self) -> bool:
         """Check if the communication group is initialized."""

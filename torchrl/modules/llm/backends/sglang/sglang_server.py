@@ -39,6 +39,38 @@ from .sglang_utils import (
 )
 
 
+_SGLANG_GENERATE_RETRIES_ENV = "TORCHRL_SGLANG_GENERATE_RETRIES"
+_SGLANG_GENERATE_RETRY_DELAY_ENV = "TORCHRL_SGLANG_GENERATE_RETRY_DELAY"
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        torchrl_logger.warning(
+            f"Ignoring invalid integer value for {name}: {value!r}; "
+            f"using {default}."
+        )
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        torchrl_logger.warning(
+            f"Ignoring invalid float value for {name}: {value!r}; "
+            f"using {default}."
+        )
+        return default
+
+
 class AsyncSGLang(RLSGLangEngine):
     """Server-based SGLang inference service for TorchRL.
 
@@ -458,13 +490,26 @@ class AsyncSGLang(RLSGLangEngine):
                     **top_level_params,
                 }
 
-            response = requests.post(
-                f"{self.server_url}/generate",
-                json=data,
-                timeout=timeout,
-            )
-            response.raise_for_status()
-            results.append(response.json())
+            retries = max(0, _env_int(_SGLANG_GENERATE_RETRIES_ENV, 0))
+            retry_delay = max(0.0, _env_float(_SGLANG_GENERATE_RETRY_DELAY_ENV, 1.0))
+            for attempt in range(retries + 1):
+                try:
+                    response = requests.post(
+                        f"{self.server_url}/generate",
+                        json=data,
+                        timeout=timeout,
+                    )
+                    response.raise_for_status()
+                    results.append(response.json())
+                    break
+                except requests.exceptions.RequestException as err:
+                    if attempt >= retries:
+                        raise
+                    torchrl_logger.warning(
+                        f"SGLang generate request failed ({err}); retrying "
+                        f"attempt {attempt + 1}/{retries}."
+                    )
+                    time.sleep(retry_delay)
 
         return results[0] if single_input else results
 
