@@ -92,7 +92,7 @@ from torchrl.weight_update.weight_sync_schemes import (
     WeightSyncScheme,
 )
 
-_SGLANG_CACHE_FLUSH_TIMEOUT = 1.0
+_SGLANG_PAUSE_GENERATION_MODE = "retract"
 
 
 @implement_for("torch", None, "2.6")
@@ -217,34 +217,51 @@ class SGLangCollectiveTransport:
         else:
             self.device = device
 
-    def _flush_cache_after_update(self, model_id: str) -> None:
-        """Ask SGLang to flush its cache after a completed weight update.
+    def _pause_generation_for_update(self, model_id: str) -> None:
+        """Pause SGLang generation before a live weight update.
 
-        SGLang's distributed weight-update endpoint flushes synchronously by
-        default. That path asserts if requests are pending, which kills the
-        server during continuous collection. Defer the flush through the public
-        endpoint instead; it can wait briefly for an idle gap and returns a
-        normal HTTP failure when the gap does not arrive.
+        Use ``retract`` mode rather than the endpoint default. The default is
+        ``abort``, which tears down in-flight HTTP generation requests and makes
+        collectors observe connection failures. ``retract`` pauses scheduling
+        and moves active requests back to the waiting queue so they can be
+        recomputed after the new weights are installed.
         """
-        flush_timeout = min(_SGLANG_CACHE_FLUSH_TIMEOUT, self.timeout)
-        request_timeout = max(self.timeout, flush_timeout + 5.0)
         try:
             response = requests.post(
-                f"{self.server_url}/flush_cache",
-                params={"timeout": flush_timeout},
-                timeout=request_timeout,
+                f"{self.server_url}/pause_generation",
+                json={"mode": _SGLANG_PAUSE_GENERATION_MODE},
+                timeout=self.timeout,
             )
         except requests.exceptions.RequestException as err:
-            torchrl_logger.warning(
-                f"Failed to request SGLang cache flush after updating "
+            raise RuntimeError(
+                f"Failed to pause SGLang generation before updating "
                 f"model '{model_id}': {err}"
-            )
-            return
+            ) from err
 
         if response.status_code >= 400:
-            torchrl_logger.warning(
-                f"SGLang cache flush after updating model '{model_id}' did not "
-                f"complete: {response.text.strip()}"
+            raise RuntimeError(
+                f"SGLang generation pause before updating model '{model_id}' "
+                f"failed: {response.text.strip()}"
+            )
+
+    def _continue_generation_after_update(self, model_id: str) -> None:
+        """Resume SGLang generation after a live weight update."""
+        try:
+            response = requests.post(
+                f"{self.server_url}/continue_generation",
+                json={"torch_empty_cache": True},
+                timeout=self.timeout,
+            )
+        except requests.exceptions.RequestException as err:
+            raise RuntimeError(
+                f"Failed to resume SGLang generation after updating "
+                f"model '{model_id}': {err}"
+            ) from err
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"SGLang generation resume after updating model '{model_id}' "
+                f"failed: {response.text.strip()}"
             )
 
     def init_all_workers_group(
@@ -415,44 +432,68 @@ class SGLangCollectiveTransport:
 
         torchrl_logger.info(f"Broadcasting {len(names)} weights for model '{model_id}'")
 
-        # Step 1: Send a single HTTP request with all weight metadata.
-        # The server will enter a broadcast-receive loop for each parameter.
-        # Do not ask SGLang to flush inside this endpoint: if there are pending
-        # requests, SGLang asserts in the scheduler and terminates the server.
-        update_data = {
-            "names": names,
-            "dtypes": dtypes,
-            "shapes": shapes,
-            "group_name": self._group_name,
-            "flush_cache": False,
-            "abort_all_requests": False,
-        }
-        update_future = self._http_executor.submit(
-            requests.post,
-            f"{self.server_url}/update_weights_from_distributed",
-            json=update_data,
-            timeout=self.timeout,
-        )
+        paused = False
+        update_error = None
+        try:
+            self._pause_generation_for_update(model_id)
+            paused = True
 
-        # Step 2: Broadcast each weight tensor via NCCL in the same order.
-        # The server is concurrently receiving via broadcast on its side.
-        for name in names:
-            tensor = weights[name].to(f"cuda:{self.device}")
-            torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
-            del tensor
-
-        torch.cuda.synchronize()
-
-        # Step 3: Wait for the HTTP response confirming server received all weights
-        response = update_future.result(timeout=self.timeout + 5.0)
-        response.raise_for_status()
-        result = response.json()
-        if not result.get("success", False):
-            raise RuntimeError(
-                f"SGLang weight update failed: {result.get('message', 'Unknown error')}"
+            # Step 1: Send a single HTTP request with all weight metadata.
+            # The server will enter a broadcast-receive loop for each parameter.
+            # Keep SGLang's endpoint-level abort disabled: the explicit
+            # pause_generation(retract) call above is the non-destructive
+            # barrier. Keep endpoint-level flush disabled as well because
+            # retracted requests can sit in SGLang's waiting queue while paused;
+            # SGLang's synchronous flush path asserts unless the engine is
+            # fully idle.
+            update_data = {
+                "names": names,
+                "dtypes": dtypes,
+                "shapes": shapes,
+                "group_name": self._group_name,
+                "flush_cache": False,
+                "abort_all_requests": False,
+            }
+            update_future = self._http_executor.submit(
+                requests.post,
+                f"{self.server_url}/update_weights_from_distributed",
+                json=update_data,
+                timeout=self.timeout,
             )
 
-        self._flush_cache_after_update(model_id)
+            # Step 2: Broadcast each weight tensor via NCCL in the same order.
+            # The server is concurrently receiving via broadcast on its side.
+            for name in names:
+                tensor = weights[name].to(f"cuda:{self.device}")
+                torch.distributed.broadcast(tensor, src=0, group=self._comm_group)
+                del tensor
+
+            torch.cuda.synchronize()
+
+            # Step 3: Wait for the HTTP response confirming server received all weights
+            response = update_future.result(timeout=self.timeout + 5.0)
+            response.raise_for_status()
+            result = response.json()
+            if not result.get("success", False):
+                raise RuntimeError(
+                    f"SGLang weight update failed: "
+                    f"{result.get('message', 'Unknown error')}"
+                )
+        except BaseException as err:
+            update_error = err
+            raise
+        finally:
+            if paused:
+                try:
+                    self._continue_generation_after_update(model_id)
+                except Exception as err:
+                    if update_error is None:
+                        raise
+                    torchrl_logger.warning(
+                        f"Failed to resume SGLang generation after a failed "
+                        f"weight update for model '{model_id}': {err}"
+                    )
+
         torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
 
     def check_connection(self) -> bool:
