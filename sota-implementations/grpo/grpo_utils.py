@@ -387,6 +387,7 @@ def _get_sglang_inference_model(
         "dp_size",
         "disable_cuda_graph",
         "disable_piecewise_cuda_graph",
+        "disable_overlap_schedule",
     ]
 
     for param in optional_sglang_params:
