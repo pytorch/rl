@@ -839,8 +839,7 @@ def check_env_specs(
 
             fake = fake.apply(expand, real, named=True, nested_keys=True)
             if (
-                _zeros_like_on_common_device(real)
-                != _zeros_like_on_common_device(fake)
+                _zeros_like_on_common_device(real) != _zeros_like_on_common_device(fake)
             ).any():
                 raise AssertionError(zeroing_err_msg())
 
