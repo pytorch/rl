@@ -811,8 +811,9 @@ class TestIsaacLab:
 
             td_after = env.reset(
                 td,
-                isaac_reset_state=snapshot,
-                isaac_is_relative=False,
+                set_state=True,
+                scene_state=snapshot,
+                is_relative=False,
             )
 
             # Verify the masked envs have ``episode_length_buf`` zeroed.

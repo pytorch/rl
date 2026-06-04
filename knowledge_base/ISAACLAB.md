@@ -175,7 +175,8 @@ env.reset(td)
 # Snapshot and branch from a deterministic state (manager-based envs only).
 snapshot = env.get_state()
 # ... evolve env from `snapshot` to explore one branch ...
-env.reset(td, isaac_reset_state=snapshot)  # rewind to snapshot
+# Rewind to the snapshot via the unified deterministic-reset path:
+env.reset(td, set_state=True, scene_state=snapshot)
 
 # Convenience method (equivalent to the call above):
 env.reset_to_state(snapshot, td)
@@ -194,8 +195,10 @@ Gotchas:
 
 ## In-place tensor modification
 
-IsaacLab modifies `terminated` and `truncated` tensors in-place. Downstream code
-should clone these tensors to prevent data corruption.
+IsaacLab modifies the `terminated` and `truncated` tensors in-place.
+`IsaacLabWrapper` defensively clones `terminated`, `truncated` and `done` in its
+output transform, so the TensorDict returned by `step` is already safe from this
+aliasing; no extra handling is needed downstream.
 
 ### Headless EGL/Vulkan dependencies
 

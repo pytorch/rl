@@ -29,12 +29,6 @@ _has_isaaclab = importlib.util.find_spec("isaaclab") is not None
 _has_isaaclab_newton = importlib.util.find_spec("isaaclab_newton") is not None
 _has_isaaclab_ov = importlib.util.find_spec("isaaclab_ov") is not None
 
-# Reserved kwarg names that ``_reset`` looks for on the per-index
-# ``reset_to`` path. They live in the call kwargs (rather than in the
-# tensordict) because they carry simulator state, not tensordict state.
-_ISAAC_RESET_STATE_KWARG = "isaac_reset_state"
-_ISAAC_IS_RELATIVE_KWARG = "isaac_is_relative"
-
 
 class IsaacLabWrapper(GymWrapper):
     """A wrapper for IsaacLab environments.
@@ -101,8 +95,10 @@ class IsaacLabWrapper(GymWrapper):
     State-based reset
     -----------------
 
-    For deterministic branching from a snapshot, see :meth:`get_state` /
-    :meth:`reset_to_state` (manager-based envs only). Both work in
+    For deterministic branching from a snapshot, snapshot the scene with
+    :meth:`get_state` and restore it with ``env.reset(td, set_state=True,
+    scene_state=snapshot)`` (or the :meth:`reset_to_state` convenience, which
+    routes through the same path). Manager-based envs only; both work in
     conjunction with the partial ``"_reset"`` mask.
 
     Example:
@@ -125,6 +121,11 @@ class IsaacLabWrapper(GymWrapper):
         >>> env = IsaacLabWrapper(env)
 
     """
+
+    # Supports deterministic resets via ``reset(td, set_state=True,
+    # scene_state=...)`` (manager-based envs). The snapshot is honored through
+    # Isaac's ``reset_to`` rather than from tensordict state entries.
+    _supports_set_state = True
 
     def __init__(
         self,
@@ -407,22 +408,38 @@ class IsaacLabWrapper(GymWrapper):
     def _reset(
         self, tensordict: TensorDictBase | None = None, **kwargs
     ) -> TensorDictBase:
-        # State-based reset overrides the regular reset path entirely
-        # (it calls Isaac Lab's reset_to instead of reset).
-        state = kwargs.pop(_ISAAC_RESET_STATE_KWARG, None)
-        is_relative = kwargs.pop(_ISAAC_IS_RELATIVE_KWARG, False)
+        # Deterministic state-based reset is the single ``set_state=True`` path
+        # (``set_state`` is resolved by ``EnvBase.reset``). The snapshot is passed
+        # as the ``scene_state`` kwarg (from :meth:`get_state`) rather than via
+        # the tensordict, since it carries opaque simulator state. When set, it
+        # overrides the regular reset path entirely (Isaac Lab's ``reset_to``).
+        set_state = kwargs.pop("set_state", None)
+        scene_state = kwargs.pop("scene_state", None)
+        is_relative = kwargs.pop("is_relative", False)
 
-        if not self._is_batched:
-            return super()._reset(tensordict, **kwargs)
+        if scene_state is not None and not set_state:
+            raise ValueError(
+                "A `scene_state` snapshot was passed to reset() without "
+                "`set_state=True`. Pass `set_state=True` to deterministically "
+                "reset to the snapshot."
+            )
 
         reset = None
         if tensordict is not None:
             reset = tensordict.get("_reset", None)
 
-        if state is not None:
+        if set_state:
+            if scene_state is None:
+                raise ValueError(
+                    "reset(set_state=True) on an Isaac Lab env requires a "
+                    "`scene_state` snapshot (obtained from `env.get_state()`)."
+                )
             return self._reset_to_state_at(
-                state, reset=reset, is_relative=is_relative, **kwargs
+                scene_state, reset=reset, is_relative=is_relative, **kwargs
             )
+
+        if not self._is_batched:
+            return super()._reset(tensordict, **kwargs)
 
         if reset is None or reset.all():
             # Full reset: defer to GymWrapper / GymLikeEnv.
@@ -450,6 +467,12 @@ class IsaacLabWrapper(GymWrapper):
         env_ids = self._reset_mask_to_env_ids(reset)
         obs, info = self._partial_reset(env_ids=env_ids, **kwargs)
         return self._build_reset_tensordict(obs, info)
+
+    def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
+        # Isaac Lab honors a ``scene_state`` snapshot passed as a reset kwarg,
+        # never tensordict state entries, so a reset tensordict carrying
+        # observations must not trigger the implicit-state transition warning.
+        return False
 
     @property
     def _native_autoreset_enabled(self) -> bool:
@@ -529,9 +552,10 @@ class IsaacLabWrapper(GymWrapper):
         """Return the current Isaac Lab scene state.
 
         This is exactly what ``InteractiveScene.get_state()`` returns on the
-        underlying env. It can later be passed back to :meth:`reset_to_state`
-        (or to ``env.reset(td, isaac_reset_state=...)``) to deterministically
-        branch back to this checkpoint.
+        underlying env. It can later be passed back via
+        ``env.reset(td, set_state=True, scene_state=...)`` (or the
+        :meth:`reset_to_state` convenience) to deterministically branch back to
+        this checkpoint.
 
         Returns:
             The scene-state dict (as defined by Isaac Lab; not converted).
@@ -568,24 +592,22 @@ class IsaacLabWrapper(GymWrapper):
             A reset tensordict in torchrl's standard shape.
 
         .. note::
-            ``reset_to_state`` calls the wrapper's reset path directly. If the
-            env is wrapped in a :class:`~torchrl.envs.TransformedEnv` and the
-            transform stack (``RewardSum``, ``InitTracker``, primers,
-            ``VecNormV2``, ...) must fire on the restored rows, call reset on
-            the top-level env instead::
+            This is a thin convenience around the unified deterministic-reset
+            path; it is exactly equivalent to::
 
-                env.reset(td, isaac_reset_state=state, isaac_is_relative=False)
+                env.reset(td, set_state=True, scene_state=state, is_relative=...)
 
-            which routes through :meth:`TransformedEnv._reset` and therefore
-            triggers every transform on the way down.
+            If the env is wrapped in a :class:`~torchrl.envs.TransformedEnv` and
+            the transform stack (``RewardSum``, ``InitTracker``, primers,
+            ``VecNormV2``, ...) must fire on the restored rows, call that
+            ``reset(...)`` form on the top-level env so it routes through
+            :meth:`TransformedEnv._reset` and triggers every transform on the
+            way down.
         """
-        kwargs: dict[str, Any] = {
-            _ISAAC_RESET_STATE_KWARG: state,
-            _ISAAC_IS_RELATIVE_KWARG: is_relative,
-        }
+        kwargs: dict[str, Any] = {"scene_state": state, "is_relative": is_relative}
         if seed is not None:
             kwargs["seed"] = seed
-        return self.reset(tensordict, **kwargs)
+        return self.reset(tensordict, set_state=True, **kwargs)
 
     def _reset_to_state_at(
         self,
