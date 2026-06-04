@@ -397,11 +397,13 @@ def _get_sglang_inference_model(
                 inference_params[param] = value
 
     if hasattr(cfg.inference_model, "disable_radix_cache"):
-        inference_params["disable_radix_cache"] = cfg.inference_model.disable_radix_cache
+        inference_params[
+            "disable_radix_cache"
+        ] = cfg.inference_model.disable_radix_cache
     elif hasattr(cfg.inference_model, "enable_prefix_caching"):
-        inference_params["disable_radix_cache"] = (
-            not cfg.inference_model.enable_prefix_caching
-        )
+        inference_params[
+            "disable_radix_cache"
+        ] = not cfg.inference_model.enable_prefix_caching
 
     # Pin SGLang server to allocated GPUs via CUDA_VISIBLE_DEVICES
     if sglang_devices is not None:

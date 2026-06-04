@@ -299,8 +299,7 @@ class SGLangCollectiveTransport:
             else:
                 running += max(
                     0,
-                    int(load.get("num_reqs", 0))
-                    - int(load.get("num_waiting_reqs", 0)),
+                    int(load.get("num_reqs", 0)) - int(load.get("num_waiting_reqs", 0)),
                 )
         return running
 

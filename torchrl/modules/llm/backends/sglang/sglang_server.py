@@ -65,8 +65,7 @@ def _env_float(name: str, default: float) -> float:
         return float(value)
     except ValueError:
         torchrl_logger.warning(
-            f"Ignoring invalid float value for {name}: {value!r}; "
-            f"using {default}."
+            f"Ignoring invalid float value for {name}: {value!r}; " f"using {default}."
         )
         return default
 

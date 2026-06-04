@@ -56,9 +56,7 @@ from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 
-def _finish_wandb_logger(
-    wandb_logger: WandbLogger | None, exit_code: int
-) -> None:
+def _finish_wandb_logger(wandb_logger: WandbLogger | None, exit_code: int) -> None:
     """Finish a wandb run if one was created."""
     if wandb_logger is None:
         return
