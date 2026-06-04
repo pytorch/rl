@@ -1665,14 +1665,20 @@ class GRU(GRUBase):
             _maybe_warm_scan_backward(device)
 
     @staticmethod
-    def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
+    def _gru_cell(
+        x, hx, weight_ih, bias_ih, weight_hh, bias_hh, hidden_size: int | None = None
+    ):
         x = x.view(-1, x.size(1))
 
         gate_x = F.linear(x, weight_ih, bias_ih)
         gate_h = F.linear(hx, weight_hh, bias_hh)
 
-        i_r, i_i, i_n = gate_x.chunk(3, 1)
-        h_r, h_i, h_n = gate_h.chunk(3, 1)
+        if hidden_size is None:
+            i_r, i_i, i_n = gate_x.chunk(3, 1)
+            h_r, h_i, h_n = gate_h.chunk(3, 1)
+        else:
+            i_r, i_i, i_n = gate_x.split(hidden_size, 1)
+            h_r, h_i, h_n = gate_h.split(hidden_size, 1)
 
         resetgate = (i_r + h_r).sigmoid()
         inputgate = (i_i + h_i).sigmoid()
@@ -1728,6 +1734,7 @@ class GRU(GRUBase):
                     bias_ih[layer],
                     weight_hh[layer],
                     bias_hh[layer],
+                    self.hidden_size,
                 )
                 if m_t is not None:
                     # Freeze hidden state for batch entries whose trajectory
@@ -1774,6 +1781,7 @@ class GRU(GRUBase):
             mask = torch.ones(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
 
         num_layers = self.num_layers
+        hidden_size = self.hidden_size
 
         def step(carry, inputs):
             h_layers = carry  # [num_layers, B, H]
@@ -1790,6 +1798,7 @@ class GRU(GRUBase):
                     bias_ihs[layer],
                     weight_hhs[layer],
                     bias_hhs[layer],
+                    hidden_size,
                 )
                 h_new = torch.where(m_t, h_new, h_prev)
                 new_h.append(h_new)
@@ -2554,6 +2563,7 @@ class GRUModule(ModuleBase):
         is_init = _canonical_contiguous(is_init.transpose(0, 1))
         reset_hidden = _canonical_contiguous(hidden_in.permute(1, 2, 0, 3))
         num_layers = self.gru.num_layers
+        hidden_size = self.gru.hidden_size
 
         def step(carry, inputs):
             h_layers = carry
@@ -2570,6 +2580,7 @@ class GRUModule(ModuleBase):
                     bias_ihs[layer],
                     weight_hhs[layer],
                     bias_hhs[layer],
+                    hidden_size,
                 )
                 new_h.append(h_new)
                 x_t = h_new
