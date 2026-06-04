@@ -3148,7 +3148,9 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
         state_keys = list(self.state_spec.keys(True, True))
         if not state_keys:
             return False
-        td_keys = set(tensordict.keys(include_nested=True, leaves_only=True))
+        # ``leaves_only=False`` so that NonTensor state entries (e.g. ChessEnv's
+        # ``fen``/``pgn``) are detected too -- ``leaves_only=True`` filters them out.
+        td_keys = set(tensordict.keys(include_nested=True, leaves_only=False))
         return any(key in td_keys for key in state_keys)
 
     def _resolve_set_state(
