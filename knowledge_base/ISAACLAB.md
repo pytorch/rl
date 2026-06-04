@@ -192,6 +192,13 @@ Gotchas:
   `ManagerBasedRLEnv`). Direct envs do not expose `reset_to`.
 - `is_relative=True` interprets the snapshot pose relative to the env origin,
   which is useful for terrain-relative pose reuse.
+- The snapshot is passed as the `scene_state` keyword argument rather than
+  inside the tensordict. A stateless env's reset state is torch-native
+  (tensordict / `torch.Tensor` entries in `state_spec`) and so lives in the
+  tensordict, but Isaac Lab's scene state is an opaque, non-torch-native object;
+  carrying it in the tensordict would require a `NonTensor` `state_spec` entry
+  threaded through the transform/step-MDP machinery, whereas a kwarg is simpler
+  and keeps simulator state out of the data path.
 
 ## In-place tensor modification
 

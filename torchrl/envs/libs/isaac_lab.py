@@ -101,6 +101,15 @@ class IsaacLabWrapper(GymWrapper):
     routes through the same path). Manager-based envs only; both work in
     conjunction with the partial ``"_reset"`` mask.
 
+    .. note:: The snapshot is passed as the ``scene_state`` *keyword argument*
+        rather than inside the tensordict. For a stateless env the reset state is
+        torch-native (tensordict / ``torch.Tensor`` entries declared in
+        ``state_spec``), so it lives naturally in the tensordict. Isaac Lab's
+        scene state is an opaque, non-torch-native object: carrying it in the
+        tensordict would mean wrapping it as a ``NonTensor`` ``state_spec`` entry
+        and threading it through the transform and step-MDP machinery, whereas a
+        kwarg is simpler and keeps simulator state out of the data path.
+
     Example:
         >>> # This code block ensures that the Isaac app is started in headless mode
         >>> from scripts_isaaclab.app import AppLauncher
@@ -410,8 +419,13 @@ class IsaacLabWrapper(GymWrapper):
     ) -> TensorDictBase:
         # Deterministic state-based reset is the single ``set_state=True`` path
         # (``set_state`` is resolved by ``EnvBase.reset``). The snapshot is passed
-        # as the ``scene_state`` kwarg (from :meth:`get_state`) rather than via
-        # the tensordict, since it carries opaque simulator state. When set, it
+        # as the ``scene_state`` kwarg (from :meth:`get_state`) rather than inside
+        # the tensordict: unlike a stateless env's state (plain tensordict /
+        # ``torch.Tensor`` entries that live in ``state_spec``), Isaac Lab's scene
+        # state is an opaque, non-torch-native object. Forcing it into the
+        # tensordict would require wrapping it as a ``NonTensor`` ``state_spec``
+        # entry (polluting the input spec and the transform/step-MDP machinery);
+        # a kwarg is simpler and keeps it out of the data path. When set, it
         # overrides the regular reset path entirely (Isaac Lab's ``reset_to``).
         set_state = kwargs.pop("set_state", None)
         scene_state = kwargs.pop("scene_state", None)
