@@ -95,7 +95,6 @@ from torchrl.weight_update.weight_sync_schemes import (
 _SGLANG_PAUSE_GENERATION_MODE = "retract"
 _SGLANG_PAUSE_GENERATION_MODE_ENV = "TORCHRL_SGLANG_PAUSE_GENERATION_MODE"
 _SGLANG_PAUSE_POLL_INTERVAL = 0.05
-_SGLANG_VALIDATE_WEIGHT_SYNC_ENV = "TORCHRL_SGLANG_VALIDATE_WEIGHT_SYNC"
 _SGLANG_FLUSH_CACHE_ENV = "TORCHRL_SGLANG_WEIGHT_SYNC_FLUSH_CACHE"
 
 
@@ -116,10 +115,6 @@ def _pause_generation_mode() -> Literal["abort", "retract", "in_place"]:
             f"'abort', 'retract' or 'in_place', got {mode!r}."
         )
     return mode
-
-
-def _validate_weight_sync_enabled() -> bool:
-    return _truthy_env(_SGLANG_VALIDATE_WEIGHT_SYNC_ENV)
 
 
 @implement_for("torch", None, "2.6")
@@ -247,11 +242,11 @@ class SGLangCollectiveTransport:
     def _pause_generation_for_update(self, model_id: str) -> None:
         """Pause SGLang generation before a live weight update.
 
-        Use ``retract`` mode rather than the endpoint default. The default is
-        ``abort``, which tears down in-flight HTTP generation requests and makes
-        collectors observe connection failures. ``retract`` pauses scheduling
-        and moves active requests back to the waiting queue so they can be
-        recomputed after the new weights are installed.
+        The pause mode can be selected through
+        ``TORCHRL_SGLANG_PAUSE_GENERATION_MODE``. ``retract`` pauses scheduling
+        and moves active requests back to the waiting queue; ``abort`` cancels
+        in-flight requests before the update and requires callers to tolerate
+        transient generation failures.
 
         The pause endpoint can return before a just-dispatched scheduler step
         has drained. Poll load metrics until no request is still running before
@@ -516,8 +511,6 @@ class SGLangCollectiveTransport:
             dtypes.append(dtype_to_str(dtype))
             shapes.append(list(shape))
 
-        self._validate_weights(model_id, names, weights)
-
         torchrl_logger.info(f"Broadcasting {len(names)} weights for model '{model_id}'")
 
         paused = False
@@ -529,11 +522,9 @@ class SGLangCollectiveTransport:
             # Step 1: Send a single HTTP request with all weight metadata.
             # The server will enter a broadcast-receive loop for each parameter.
             # Keep SGLang's endpoint-level abort disabled: the explicit
-            # pause_generation(retract) call above is the non-destructive
-            # barrier. Keep endpoint-level flush disabled as well because
-            # retracted requests can sit in SGLang's waiting queue while paused;
-            # SGLang's synchronous flush path asserts unless the engine is
-            # fully idle.
+            # pause_generation call above provides the scheduling barrier.
+            # Cache flushing remains opt-in because retracted requests can sit
+            # in SGLang's waiting queue while paused.
             update_data = {
                 "names": names,
                 "dtypes": dtypes,
@@ -583,42 +574,6 @@ class SGLangCollectiveTransport:
                     )
 
         torchrl_logger.info(f"Broadcast complete for model '{model_id}'")
-
-    def _validate_weights(
-        self, model_id: str, names: list[str], weights: dict[str, torch.Tensor]
-    ) -> None:
-        """Optionally validate weights before broadcasting them to SGLang."""
-        if not _validate_weight_sync_enabled():
-            return
-
-        max_abs = 0.0
-        max_abs_name = ""
-        for name in names:
-            tensor = weights[name].detach()
-            if not tensor.is_floating_point() and not tensor.is_complex():
-                continue
-            finite = torch.isfinite(tensor)
-            if not bool(finite.all().item()):
-                nan_count = int(torch.isnan(tensor).sum().item())
-                posinf_count = int(torch.isposinf(tensor).sum().item())
-                neginf_count = int(torch.isneginf(tensor).sum().item())
-                raise RuntimeError(
-                    f"Non-finite SGLang weight before broadcast for model "
-                    f"'{model_id}': {name} has nan={nan_count}, "
-                    f"+inf={posinf_count}, -inf={neginf_count}, "
-                    f"dtype={tensor.dtype}, shape={tuple(tensor.shape)}."
-                )
-            if tensor.numel():
-                tensor_max_abs = float(tensor.abs().max().item())
-                if tensor_max_abs > max_abs:
-                    max_abs = tensor_max_abs
-                    max_abs_name = name
-
-        torchrl_logger.info(
-            f"SGLang weight sync validation passed for model '{model_id}' "
-            f"({len(names)} tensors, max_abs={max_abs:.6g}, "
-            f"max_abs_name={max_abs_name})."
-        )
 
     def check_connection(self) -> bool:
         """Check if the communication group is initialized."""

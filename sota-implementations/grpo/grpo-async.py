@@ -56,75 +56,9 @@ from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
 
 
-_GRPO_DEBUG_FINITE_ENV = "TORCHRL_GRPO_DEBUG_FINITE"
-
-
-def _debug_finite_enabled() -> bool:
-    value = os.environ.get(_GRPO_DEBUG_FINITE_ENV)
-    return value is not None and value.lower() in {"1", "true", "yes", "on"}
-
-
 def _tensor_is_finite(tensor) -> bool:
     tensor = torch.as_tensor(tensor).detach()
     return bool(torch.isfinite(tensor).all().item())
-
-
-def _summarize_nonfinite_gradients(model, max_entries: int = 8) -> str:
-    entries = []
-    for name, param in model.named_parameters():
-        grad = param.grad
-        if grad is None:
-            continue
-        if not grad.is_floating_point() and not grad.is_complex():
-            continue
-        finite = torch.isfinite(grad)
-        if bool(finite.all().item()):
-            continue
-        entries.append(
-            f"{name}: nan={int(torch.isnan(grad).sum().item())}, "
-            f"+inf={int(torch.isposinf(grad).sum().item())}, "
-            f"-inf={int(torch.isneginf(grad).sum().item())}, "
-            f"dtype={grad.dtype}, shape={tuple(grad.shape)}"
-        )
-        if len(entries) >= max_entries:
-            break
-    if not entries:
-        return "no individual non-finite gradient tensor found"
-    return "; ".join(entries)
-
-
-def _validate_train_model_finite(model, step: int, optim_steps: int) -> None:
-    if not _debug_finite_enabled():
-        return
-
-    max_abs = 0.0
-    max_abs_name = ""
-    for name, param in model.named_parameters():
-        tensor = param.detach()
-        if not tensor.is_floating_point() and not tensor.is_complex():
-            continue
-        finite = torch.isfinite(tensor)
-        if not bool(finite.all().item()):
-            nan_count = int(torch.isnan(tensor).sum().item())
-            posinf_count = int(torch.isposinf(tensor).sum().item())
-            neginf_count = int(torch.isneginf(tensor).sum().item())
-            raise RuntimeError(
-                f"Non-finite train parameter at GRPO training step {step} "
-                f"(optim step {optim_steps}): {name} has nan={nan_count}, "
-                f"+inf={posinf_count}, -inf={neginf_count}, "
-                f"dtype={tensor.dtype}, shape={tuple(tensor.shape)}."
-            )
-        if tensor.numel():
-            tensor_max_abs = float(tensor.abs().max().item())
-            if tensor_max_abs > max_abs:
-                max_abs = tensor_max_abs
-                max_abs_name = name
-
-    torchrl_logger.info(
-        f"GRPO finite-parameter check passed at training step {step} "
-        f"(optim step {optim_steps}, max_abs={max_abs:.6g}, "
-        f"max_abs_name={max_abs_name})."
-    )
 
 
 def _finish_wandb_logger(
@@ -360,8 +294,7 @@ def train(
                             f"Skipping optimizer step at GRPO training step {step} "
                             f"because gradient norm is non-finite: {grad_norm}. "
                             f"Skipped non-finite updates: "
-                            f"{skipped_nonfinite_updates}. Bad gradients: "
-                            f"{_summarize_nonfinite_gradients(policy_training.model)}"
+                            f"{skipped_nonfinite_updates}."
                         )
                         optimizer.zero_grad(set_to_none=True)
                         grad_norm = torch.zeros((), device=train_device)
@@ -376,9 +309,6 @@ def train(
 
                     if did_optim_step:
                         optimizer.zero_grad(set_to_none=True)
-                        _validate_train_model_finite(
-                            policy_training.model, step, optim_steps + 1
-                        )
 
                 if did_optim_step:
                     optim_steps += 1
