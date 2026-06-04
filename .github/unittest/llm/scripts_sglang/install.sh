@@ -136,6 +136,8 @@ if [[ "$RELEASE" == 0 ]]; then
 else
     uv pip install --reinstall --no-deps tensordict
 fi
+printf "* Installing hoptorch\n"
+uv pip install "hoptorch>=0.1.1"
 uv pip install --reinstall -e . --no-build-isolation --no-deps
 
 # Verify installations
@@ -152,7 +154,7 @@ printf "* Installed versions:\n"
 python - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 
-for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "triton", "numpy", "pillow", "fsspec"):
+for package in ("sglang", "transformers", "kernels", "torch", "torchvision", "triton", "hoptorch", "numpy", "pillow", "fsspec"):
     try:
         print(f"{package}: {version(package)}")
     except PackageNotFoundError:
