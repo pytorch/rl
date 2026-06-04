@@ -44,7 +44,11 @@ else
 fi
 
 # install tensordict
-pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
+if [[ "$RELEASE" == 0 ]]; then
+  pip install git+https://github.com/pytorch/tensordict.git --progress-bar off
+else
+  pip install tensordict --progress-bar off
+fi
 
 # smoke test
 python -c "import functorch;import tensordict"
