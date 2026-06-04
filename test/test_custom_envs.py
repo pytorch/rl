@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 import random
 
 import pytest
@@ -132,6 +133,51 @@ class TestPendulum:
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
+    def test_pendulum_set_state(self):
+        env = PendulumEnv()
+        torch.manual_seed(0)
+        state = env.reset()
+        th_target = state["th"].clone()
+        thdot_target = state["thdot"].clone()
+
+        # set_state=True honors the provided state (deterministic reset)
+        out = env.reset(state.clone(), set_state=True)
+        assert torch.allclose(out["th"], th_target)
+        assert torch.allclose(out["thdot"], thdot_target)
+        # the returned tensordict must be a distinct object from the input
+        assert out is not state
+
+        # set_state=False ignores the provided state (fresh random reset)
+        torch.manual_seed(1)
+        out_false = env.reset(state.clone(), set_state=False)
+        assert not torch.allclose(out_false["th"], th_target)
+
+        # set_state=True + select_reset_only is contradictory
+        with pytest.raises(ValueError, match="select_reset_only"):
+            env.reset(state.clone(), set_state=True, select_reset_only=True)
+
+        # rollout threads set_state to the initial reset
+        r = env.rollout(4, tensordict=state.clone(), set_state=True)
+        assert torch.allclose(r["th"][0], th_target)
+
+    def test_pendulum_set_state_transition_warning(self):
+        env = PendulumEnv()
+        state = env.reset()
+        th_target = state["th"].clone()
+        # unspecified set_state with state in the tensordict -> FutureWarning,
+        # but the state is still honored (backwards-compatible behavior).
+        with pytest.warns(FutureWarning, match="set_state"):
+            out = env.reset(state.clone())
+        assert torch.allclose(out["th"], th_target)
+
+        # an empty tensordict (batch-size only) must not trigger the warning.
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            env.reset(TensorDict(batch_size=[4]))
+            env.rollout(3, tensordict=TensorDict(batch_size=[2]))
+
     def test_llm_hashing_env(self):
         vocab_size = 5
 
@@ -154,3 +200,8 @@ class TestPendulum:
         td = env.make_tensordict("some sentence")
         assert isinstance(td, TensorDict)
         env.check_env_specs(tensordict=td)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

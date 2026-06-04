@@ -1211,6 +1211,13 @@ but got an object of type {type(transform)}."""
         raise RuntimeError("batch_locked is a read-only property")
 
     @property
+    def _supports_set_state(self) -> bool:
+        # Deterministic resets (``reset(td, set_state=True)``) are delegated to
+        # the wrapped env; the transform stack forwards the kwarg through
+        # ``_reset`` and preserves the state keys.
+        return self.base_env._supports_set_state
+
+    @property
     def run_type_checks(self) -> bool:
         return self.base_env.run_type_checks
 
