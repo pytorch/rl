@@ -1,3 +1,4 @@
 include torchrl/version.py
 include version.txt
 recursive-include torchrl/csrc *.cpp *.cu *.h
+recursive-include torchrl/envs/custom/mujoco/assets *.xml NOTICE

@@ -14,9 +14,12 @@ from typing import Any
 from tensordict import TensorDictBase
 from torch import Tensor
 
-from torchrl.record.loggers.common import _make_metrics_safe, _write_video, Logger
-
-_has_tv = importlib.util.find_spec("torchvision") is not None
+from torchrl.record.loggers.common import (
+    _has_torchcodec,
+    _make_metrics_safe,
+    _write_video,
+    Logger,
+)
 
 _has_mlflow = importlib.util.find_spec("mlflow") is not None
 _has_omegaconf = importlib.util.find_spec("omegaconf") is not None
@@ -112,9 +115,10 @@ class MLFlowLogger(Logger):
         """
         import mlflow
 
-        if not _has_tv:
+        if not _has_torchcodec:
             raise ImportError(
-                "Logging a video with MLFlow requires torchvision to be installed."
+                "Logging a video with MLFlow requires torchcodec >= 0.10.0 to "
+                "be installed."
             )
         mlflow.set_experiment(experiment_id=self.id)
         if video.ndim == 5:

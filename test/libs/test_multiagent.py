@@ -62,26 +62,43 @@ class TestPettingZoo:
     def test_dead_agents_done(self, seed=0):
         scenario_args = {"n_walkers": 3, "terminate_on_fall": False}
 
-        env = PettingZooEnv(
-            task="multiwalker_v9",
-            parallel=True,
-            seed=seed,
-            use_mask=False,
-            done_on_any=False,
-            **scenario_args,
-        )
-        td_reset = env.reset(seed=seed)
-        with pytest.raises(
-            ValueError,
-            match="Dead agents found in the environment, "
-            "you need to set use_mask=True to allow this.",
-        ):
-            env.rollout(
-                max_steps=500,
-                break_when_any_done=True,  # This looks at root done set with done_on_any
-                auto_reset=False,
-                tensordict=td_reset,
+        # With use_mask=False, a walker that falls (and is removed from
+        # env.agents) before *all* walkers are done must raise a ValueError.
+        # pettingzoo and its physics deps are pinned (pettingzoo[all]==1.24.3 ->
+        # box2d-py==2.3.5, pymunk==6.2.0), so this is not a pettingzoo API change;
+        # but the multiwalker trajectory still depends on numpy (unpinned) and
+        # torch (installed as nightly), so whether a walker falls within a fixed
+        # step budget drifts across CI runs. Sweep a few seeds with a larger
+        # budget so a fall (and the error) is reliably triggered.
+        raised = False
+        for trial_seed in range(seed, seed + 5):
+            env = PettingZooEnv(
+                task="multiwalker_v9",
+                parallel=True,
+                seed=trial_seed,
+                use_mask=False,
+                done_on_any=False,
+                **scenario_args,
             )
+            td_reset = env.reset(seed=trial_seed)
+            try:
+                env.rollout(
+                    max_steps=2000,
+                    break_when_any_done=True,  # root done uses done_on_any
+                    auto_reset=False,
+                    tensordict=td_reset,
+                )
+            except ValueError as err:
+                assert (
+                    "Dead agents found in the environment, "
+                    "you need to set use_mask=True to allow this." in str(err)
+                )
+                raised = True
+                break
+        assert raised, (
+            "Expected a dead agent (use_mask=False) to raise ValueError within "
+            "the step budget for at least one seed."
+        )
 
         for done_on_any in [True, False]:
             env = PettingZooEnv(
@@ -94,7 +111,7 @@ class TestPettingZoo:
             )
             td_reset = env.reset(seed=seed)
             td = env.rollout(
-                max_steps=500,
+                max_steps=2000,
                 break_when_any_done=True,  # This looks at root done set with done_on_any
                 auto_reset=False,
                 tensordict=td_reset,

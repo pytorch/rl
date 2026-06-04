@@ -75,6 +75,37 @@ For more information, please refer to discussion https://github.com/pytorch/rl/d
 """
 
 
+@implement_for("gym", None, "0.20.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:
+    return
+
+
+@implement_for("gym", "0.21.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    return
+
+
+@implement_for("gymnasium")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    return
+
+
+@implement_for("gym", "0.20.0", "0.21.0")
+def _patch_legacy_ale_py_gym_env(env_name: str) -> None:  # noqa: F811
+    """Expose the legacy ALE entry point used by gym 0.20 Atari specs."""
+    del env_name
+    try:
+        ale_gym = importlib.import_module("ale_py.gym")
+    except ImportError:
+        return
+    if hasattr(ale_gym, "ALGymEnv"):
+        return
+    try:
+        ale_gym.ALGymEnv = gym_backend("envs.atari").AtariEnv
+    except (AttributeError, ImportError):
+        return
+
+
 def _gymnasium_reward_space(env):
     reward_space = getattr(env, "__dict__", {}).get("reward_space", None)
     if reward_space is not None:
@@ -863,17 +894,25 @@ class _GymAsyncMeta(_EnvPostInit):
             )
 
             if _has_isaaclab:
-                from isaaclab.envs import ManagerBasedRLEnv
+                # IsaacLabWrapper owns the single source of truth for which
+                # Isaac Lab envs we know how to bridge (manager-based and
+                # direct alike). Importing it lazily here avoids a circular
+                # import at module load time.
+                from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
                 kwargs = {}
                 if missing_obs_value is not None:
                     kwargs["missing_obs_value"] = missing_obs_value
-                if isinstance(instance._env.unwrapped, ManagerBasedRLEnv):
+                if IsaacLabWrapper._supports_native_autoreset(instance._env.unwrapped):
                     env = TransformedEnv(
                         instance,
                         VecGymEnvTransform(**kwargs, native_autoreset=native_autoreset),
                     )
                     env._torchrl_native_autoreset = native_autoreset
+                    # Mirror the flag on the inner wrapper so it can gate
+                    # the per-index ``_reset`` bridge on it (see
+                    # IsaacLabWrapper._reset).
+                    instance._torchrl_native_autoreset = native_autoreset
                     return env
 
             if _has_sb3:
@@ -1162,9 +1201,11 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
 
             tuple_of_classes = tuple_of_classes + (VecEnv,)
         if _has_isaaclab:
-            from isaaclab.envs import ManagerBasedRLEnv
+            from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-            tuple_of_classes = tuple_of_classes + (ManagerBasedRLEnv,)
+            tuple_of_classes = (
+                tuple_of_classes + IsaacLabWrapper._supported_isaac_env_classes()
+            )
         return isinstance(
             self._env.unwrapped, tuple_of_classes + (gym_backend("vector").VectorEnv,)
         )
@@ -1986,6 +2027,7 @@ class GymEnv(GymWrapper):
                             torchrl_logger.warning(
                                 f"ale_py not found, this may cause issues with ALE environments: {err}"
                             )
+                    _patch_legacy_ale_py_gym_env(env_name)
                     # we catch warnings as they may cause silent bugs
                     env = self.lib.make(env_name, **kwargs)
                     if len(w) and "frameskip" in str(w[-1].message):

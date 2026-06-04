@@ -39,6 +39,20 @@ env_dir="${root_dir}/venv"
 
 cd "${root_dir}"
 
+# The MuJoCo cube-bowl macro tutorial uses the UR5e and Robotiq assets from
+# MuJoCo Menagerie. Fetch only the required subtrees so tutorial CI runs the
+# example instead of requiring users to pre-populate the runner image.
+if [[ -z "${TORCHRL_MUJOCO_MENAGERIE_PATH:-}" ]]; then
+  menagerie_dir="${root_dir}/.mujoco_menagerie"
+  rm -rf "${menagerie_dir}"
+  git clone --depth=1 --filter=blob:none --sparse \
+    https://github.com/google-deepmind/mujoco_menagerie.git \
+    "${menagerie_dir}"
+  git -C "${menagerie_dir}" sparse-checkout set \
+    universal_robots_ur5e robotiq_2f85
+  export TORCHRL_MUJOCO_MENAGERIE_PATH="${menagerie_dir}"
+fi
+
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"

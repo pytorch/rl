@@ -191,6 +191,19 @@ With these, the following methods are implemented:
   a :class:`tensordict.TensorDict` input. It return the first tensordict of a rollout, usually
   containing a ``"done"`` state and a set of observations. If not present,
   a ``"reward"`` key will be instantiated with 0s and the appropriate shape.
+
+  To reset *deterministically* to a state contained in the input tensordict
+  (e.g. branch a rollout from a saved state, or replay a fixed initial
+  condition), pass ``set_state=True``: ``env.reset(td, set_state=True)``. For
+  stateless environments such as :class:`~torchrl.envs.PendulumEnv` this honors
+  the state entries found in ``td``; for stateful environments that support it,
+  the underlying set-state API is used; envs that cannot honor a provided state
+  raise ``NotImplementedError``. ``set_state`` is a keyword argument (not a
+  tensordict key) so it never stacks/pads across a rollout. When ``set_state`` is
+  left unspecified but the tensordict carries state, the state is honored for
+  backwards compatibility and a :class:`FutureWarning` is emitted: from v0.15 an
+  unspecified ``set_state`` will be treated as ``False`` (state ignored, fresh
+  reset).
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
@@ -307,9 +320,9 @@ A family of MuJoCo-backed envs sharing one base class
 (:class:`~torchrl.envs.MujocoEnv`) with a swappable physics backend
 (``"mujoco-torch"`` -- the default and ``torch.compile``-friendly
 native-torch engine, ``"mjx"`` -- JAX-vectorized, or ``"mujoco"`` --
-official C-bindings). The XML asset can be a local path or an
-``http(s)`` URL, so users can point at remote models without vendoring
-them. Subclasses describe the *task* by overriding
+official C-bindings). For envs with a standalone XML asset, the XML can be a
+local path or an ``http(s)`` URL, so users can point at remote models without
+vendoring them. Subclasses describe the *task* by overriding
 :meth:`~torchrl.envs.MujocoEnv._compute_reward` and
 :meth:`~torchrl.envs.MujocoEnv._compute_done`.
 
@@ -318,6 +331,9 @@ termination semantics. :class:`~torchrl.envs.SatelliteEnv` is an
 attitude-control task with a 4- or 6-CMG cluster and a
 manipulability-based singularity penalty driving the policy away from
 internal singular configurations of the gimbal Jacobian.
+:class:`~torchrl.envs.CubeBowlEnv` is a compact
+manipulation task for scripted MuJoCo macro-control examples. It composes a
+local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
 
 .. autosummary::
     :toctree: generated/
@@ -325,6 +341,7 @@ internal singular configurations of the gimbal Jacobian.
 
     MujocoEnv
     AntEnv
+    CubeBowlEnv
     HopperEnv
     HumanoidEnv
     SatelliteEnv

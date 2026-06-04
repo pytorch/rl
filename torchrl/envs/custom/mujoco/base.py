@@ -52,7 +52,7 @@ class _MujocoMeta(_EnvPostInit):
         parallel: bool | None = None,
         **kwargs,
     ):
-        backend = kwargs.get("backend", "mujoco-torch")
+        backend = kwargs.get("backend", getattr(cls, "DEFAULT_BACKEND", "mujoco-torch"))
         num_envs = int(kwargs.get("num_envs", 1))
         num_workers = int(num_workers)
 
@@ -132,6 +132,14 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         compile_step: when ``backend="mujoco-torch"``, wrap the per-env
             physics step in :func:`torch.compile`. Ignored otherwise.
         compile_kwargs: forwarded to :func:`torch.compile` when applicable.
+        from_pixels: if ``True``, include a ``"pixels"`` observation rendered
+            from MuJoCo at reset and after every step.
+        pixels_only: if ``True``, return only the ``"pixels"`` observation.
+            Requires ``from_pixels=True``.
+        render_width: pixel observation width used when ``from_pixels=True``.
+        render_height: pixel observation height used when ``from_pixels=True``.
+        camera_id: MuJoCo camera id used for pixel observations and by
+            :meth:`render` when no camera override is provided.
 
     Example:
         >>> from torchrl.envs import HumanoidEnv  # doctest: +SKIP
@@ -142,6 +150,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         :class:`~torchrl.envs.custom.mujoco._backends._PhysicsBackend`.
     """
 
+    DEFAULT_BACKEND: ClassVar[BackendName] = "mujoco-torch"
     XML_PATH: ClassVar[str | Path | None] = None
     XML_URL: ClassVar[str | None] = None
     FRAME_SKIP: ClassVar[int] = 5
@@ -154,6 +163,11 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
     batch_locked = True
+    # ``_reset`` can honor ``qpos``/``qvel`` passed through the reset tensordict
+    # (deterministic snapshot/branch), so this env supports
+    # ``reset(td, set_state=True)``. This is purely additive: by default the env
+    # samples a fresh state, so no historical behavior changes.
+    _supports_set_state = True
 
     def __init__(
         self,
@@ -170,7 +184,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         compile_step: bool = False,
         compile_kwargs: dict | None = None,
         from_pixels: bool = False,
-        pixel_only: bool = False,
+        pixels_only: bool = False,
         render_width: int = 64,
         render_height: int = 64,
         camera_id: int = 0,
@@ -187,9 +201,9 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         self.max_episode_steps = int(max_episode_steps)
         self.backend_name: BackendName = backend
         self.from_pixels = bool(from_pixels)
-        self.pixel_only = bool(pixel_only)
-        if pixel_only and not from_pixels:
-            raise ValueError("pixel_only=True requires from_pixels=True.")
+        self.pixels_only = bool(pixels_only)
+        if pixels_only and not from_pixels:
+            raise ValueError("pixels_only=True requires from_pixels=True.")
         self.render_width = int(render_width)
         self.render_height = int(render_height)
         self.camera_id = int(camera_id)
@@ -382,7 +396,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     def _build_obs_dict(self, state: TensorDictBase) -> dict[str, torch.Tensor]:
         """Assemble the obs dict, including ``pixels`` when ``from_pixels``."""
         out: dict[str, torch.Tensor] = {}
-        if not self.pixel_only:
+        if not self.pixels_only:
             out["observation"] = self._make_obs(state)
         if self.from_pixels:
             out["pixels"] = self._backend.render(
@@ -397,7 +411,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
         backend = self._backend
         obs_spec = self._make_obs_spec()
         if self.from_pixels:
-            if self.pixel_only:
+            if self.pixels_only:
                 obs_spec = Composite(
                     pixels=self._pixels_spec(),
                     shape=(self.num_envs,),
@@ -470,17 +484,35 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
     # ------------------------------------------------------------------
 
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs):
+        # ``set_state`` is resolved by ``EnvBase.reset``: when truthy and the
+        # input tensordict carries ``qpos``/``qvel``, reset deterministically to
+        # that snapshot instead of sampling. Composes with a partial ``_reset``
+        # mask (the backend muxes the masked rows).
+        set_state = bool(kwargs.get("set_state"))
         reset_mask = None
         if tensordict is not None and "_reset" in tensordict.keys():
             reset_mask = tensordict["_reset"]
             if reset_mask.ndim > 1:
                 reset_mask = reset_mask.squeeze(-1)
 
-        # Always sample full-batch (num_envs, *) initial states; the
-        # backend's ``reset_mask`` muxes the masked rows internally with
-        # ``torch.where`` so this path is free of data-dependent shapes
-        # (no ``.item()`` syncs, friendly to ``torch.compile``).
-        qpos, qvel = self._sample_initial_state(self.num_envs, tensordict)
+        if (
+            set_state
+            and tensordict is not None
+            and "qpos" in tensordict.keys()
+            and "qvel" in tensordict.keys()
+        ):
+            qpos = tensordict.get("qpos").to(
+                device=self.device, dtype=self._backend.qpos0.dtype
+            )
+            qvel = tensordict.get("qvel").to(
+                device=self.device, dtype=self._backend.qvel0.dtype
+            )
+        else:
+            # Always sample full-batch (num_envs, *) initial states; the
+            # backend's ``reset_mask`` muxes the masked rows internally with
+            # ``torch.where`` so this path is free of data-dependent shapes
+            # (no ``.item()`` syncs, friendly to ``torch.compile``).
+            qpos, qvel = self._sample_initial_state(self.num_envs, tensordict)
         if reset_mask is None:
             self._backend.reset(qpos, qvel)
             self._step_count.zero_()

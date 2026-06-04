@@ -7,18 +7,29 @@ satellite) across the three physics backends."""
 
 from __future__ import annotations
 
+import argparse
+import os
+from pathlib import Path
+
 import pytest
 import torch
 
 from tensordict import TensorDict
 from torchrl.envs import (
     AntEnv,
+    Compose,
+    CubeBowlEnv,
     HopperEnv,
     HumanoidEnv,
+    MacroPrimitive,
+    MacroPrimitiveTransform,
     MujocoEnv,
     ParallelEnv,
+    RobotMacroAction,
     SatelliteEnv,
     SerialEnv,
+    TransformedEnv,
+    URScriptPrimitiveTransform,
     Walker2dEnv,
 )
 from torchrl.envs.custom.mujoco._backends import (
@@ -36,7 +47,7 @@ from torchrl.envs.custom.mujoco._math import (
     quat_mul,
     random_unit_quat,
 )
-from torchrl.envs.utils import check_env_specs
+from torchrl.envs.utils import check_env_specs, step_mdp
 
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
@@ -55,6 +66,15 @@ _LOCOMOTION_ENVS = [HumanoidEnv, AntEnv, Walker2dEnv, HopperEnv]
     reason="No MuJoCo backend installed (mujoco-torch / mjx / mujoco).",
 )
 class TestMujoco:
+    @staticmethod
+    def _cube_bowl_kwargs() -> dict[str, str]:
+        menagerie_path = os.environ.get(CubeBowlEnv.MENAGERIE_ENV_VAR)
+        if menagerie_path is None or not Path(menagerie_path).exists():
+            pytest.xfail(
+                f"CubeBowlEnv requires {CubeBowlEnv.MENAGERIE_ENV_VAR} for Menagerie assets."
+            )
+        return {"menagerie_path": menagerie_path}
+
     # ------------------------------------------------------------------
     # Spec / rollout coverage across all available backends.
     # ------------------------------------------------------------------
@@ -85,6 +105,35 @@ class TestMujoco:
     # Satellite: spec, dim sanity, finite singularity reward.
     # ------------------------------------------------------------------
 
+    def test_satellite_generic_macro_sequence(self):
+        backend = _AVAILABLE_BACKENDS[0]
+        env = SatelliteEnv(num_cmgs=4, num_envs=2, seed=0, backend=backend)
+        transform = MacroPrimitiveTransform(
+            action_dim=env.action_spec.shape[-1], macro_steps=3, settle_steps=1
+        )
+        td = env.reset()
+        target = env.action_spec.zero()
+        target[..., 0] = 0.2
+        sequence = transform.action_sequence(
+            td, MacroPrimitive.MOVE, target_qpos=target
+        )
+        assert sequence.shape == td.batch_size + torch.Size(
+            [4, env.action_spec.shape[-1]]
+        )
+        env.close()
+
+    def test_humanoid_generic_macro_sequence(self):
+        backend = _AVAILABLE_BACKENDS[0]
+        env = HumanoidEnv(num_envs=1, seed=0, backend=backend)
+        transform = env.make_control_transform(macro_steps=2, execute=False)
+        td = env.reset()
+        target = env.action_spec.zero()
+        sequence = transform.action_sequence(
+            td, MacroPrimitive.MOVE, target_qpos=target
+        )
+        assert sequence.shape == torch.Size([1, 2, env.action_spec.shape[-1]])
+        env.close()
+
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     @pytest.mark.parametrize("num_cmgs", [4, 6])
     def test_satellite_specs(self, num_cmgs, backend):
@@ -98,11 +147,149 @@ class TestMujoco:
         # a single policy input while keeping ``manipulability``
         # available for logging.
         obs_spec = env.observation_spec
+        assert obs_spec["bus_quat"].shape == torch.Size([n, 4])
         assert obs_spec["quat_err"].shape == torch.Size([n, 3])
         assert obs_spec["bus_omega"].shape == torch.Size([n, 3])
         assert obs_spec["gimbal_angles"].shape == torch.Size([n, 2 * num_cmgs])
         assert obs_spec["gimbal_rates"].shape == torch.Size([n, num_cmgs])
         assert obs_spec["manipulability"].shape == torch.Size([n, 1])
+
+    @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
+    def test_satellite_target_frame_tracks_target_quat(self):
+        env = SatelliteEnv(
+            num_cmgs=4,
+            seed=0,
+            backend="mujoco",
+            reset_noise_scale=0.0,
+        )
+        target = torch.tensor(
+            [[0.70710678, 0.0, 0.0, 0.70710678]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        identity = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        env.reset(
+            TensorDict(
+                {"init_bus_quat": identity, "target_quat": target},
+                batch_size=env.batch_size,
+            )
+        )
+
+        body_id = env._backend._mujoco.mj_name2id(
+            env._backend._m,
+            env._backend._mujoco.mjtObj.mjOBJ_BODY,
+            env._TARGET_FRAME_BODY,
+        )
+        assert body_id >= 0
+        body_quat = torch.as_tensor(
+            env._backend._m.body_quat[body_id],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        torch.testing.assert_close(body_quat, target.squeeze(0), rtol=1e-6, atol=1e-6)
+
+        camera_id = env._backend._mujoco.mj_name2id(
+            env._backend._m,
+            env._backend._mujoco.mjtObj.mjOBJ_CAMERA,
+            "side",
+        )
+        assert camera_id >= 0
+        camera_pos = torch.as_tensor(
+            env._backend._m.cam_pos[camera_id],
+            dtype=env.dtype,
+            device=env.device,
+        )
+        torch.testing.assert_close(
+            camera_pos,
+            torch.tensor([6.0, -6.0, 4.0], dtype=env.dtype, device=env.device),
+        )
+
+        for geom_name in ("bus", "panel_port", "cmg1_disk"):
+            geom_id = env._backend._mujoco.mj_name2id(
+                env._backend._m,
+                env._backend._mujoco.mjtObj.mjOBJ_GEOM,
+                geom_name,
+            )
+            assert geom_id >= 0
+            assert env._backend._m.geom_rgba[geom_id, 3] == pytest.approx(
+                env._SATELLITE_GEOM_ALPHA
+            )
+
+        for site_name in (
+            "satellite_body_x_axis",
+            "satellite_body_y_axis",
+            "satellite_body_z_axis",
+            "target_x_axis",
+            "target_y_axis",
+            "target_z_axis",
+            "target_x_tip",
+            "target_y_tip",
+            "target_z_tip",
+        ):
+            site_id = env._backend._mujoco.mj_name2id(
+                env._backend._m,
+                env._backend._mujoco.mjtObj.mjOBJ_SITE,
+                site_name,
+            )
+            assert site_id >= 0
+        env.close()
+
+    def test_satellite_reset_overrides_survive_transformed_env(self):
+        backend = "mujoco" if _has_mujoco else _AVAILABLE_BACKENDS[0]
+        n = 1 if backend == "mujoco" else 2
+        base_env = SatelliteEnv(
+            num_cmgs=4,
+            num_envs=n,
+            seed=0,
+            backend=backend,
+            reset_noise_scale=0.0,
+        )
+        env = base_env.append_transform(base_env.make_attitude_transform(execute=True))
+        init = torch.tensor(
+            [[1.0, 0.0, 0.0, 0.0]] * n,
+            dtype=base_env.dtype,
+            device=base_env.device,
+        )
+        target = torch.tensor(
+            [[0.70710678, 0.0, 0.0, 0.70710678]] * n,
+            dtype=base_env.dtype,
+            device=base_env.device,
+        )
+        td = env.reset(
+            TensorDict(
+                {"init_bus_quat": init, "target_quat": target},
+                batch_size=base_env.batch_size,
+                device=base_env.device,
+            )
+        )
+
+        torch.testing.assert_close(
+            base_env._target_quat,
+            target,
+            rtol=1e-6,
+            atol=1e-6,
+        )
+        torch.testing.assert_close(
+            td["bus_quat"],
+            init,
+            rtol=1e-5,
+            atol=1e-5,
+        )
+        torch.testing.assert_close(
+            td["quat_err"],
+            torch.tensor(
+                [[0.0, 0.0, torch.pi / 2]] * n,
+                dtype=base_env.dtype,
+                device=base_env.device,
+            ),
+            rtol=1e-5,
+            atol=1e-5,
+        )
+        base_env.close()
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     @pytest.mark.parametrize("num_cmgs", [4, 6])
@@ -758,7 +945,7 @@ class TestMujoco:
         assert pixels.float().std().item() > 0
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
-    def test_pixel_only_drops_observation_key(self, backend):
+    def test_pixels_only_drops_observation_key(self, backend):
         n = 1 if backend == "mujoco" else 2
         env = SatelliteEnv(
             num_cmgs=4,
@@ -766,17 +953,17 @@ class TestMujoco:
             seed=0,
             backend=backend,
             from_pixels=True,
-            pixel_only=True,
+            pixels_only=True,
             render_width=32,
             render_height=32,
         )
         check_env_specs(env)
         keys = set(env.observation_spec.keys())
-        assert keys == {"pixels"}, f"pixel_only must drop 'observation', got {keys}"
+        assert keys == {"pixels"}, f"pixels_only must drop 'observation', got {keys}"
 
-    def test_pixel_only_without_from_pixels_raises(self):
-        with pytest.raises(ValueError, match="pixel_only"):
-            HopperEnv(num_envs=1, seed=0, pixel_only=True)
+    def test_pixels_only_without_from_pixels_raises(self):
+        with pytest.raises(ValueError, match="pixels_only"):
+            HopperEnv(num_envs=1, seed=0, pixels_only=True)
 
     @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
     def test_render_method(self, backend):
@@ -787,6 +974,454 @@ class TestMujoco:
         rgb = env.render(width=24, height=24)
         assert rgb.shape == torch.Size([n, 24, 24, 3])
         assert rgb.dtype == torch.uint8
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_specs_and_rollout(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        check_env_specs(env)
+        assert env.action_spec.shape == torch.Size([1, 7])
+        assert env.observation_spec["robot_qpos"].shape == torch.Size([1, 6])
+        assert env.observation_spec["gripper_qpos"].shape == torch.Size([1, 8])
+        assert env.observation_spec["pinch_quat"].shape == torch.Size([1, 4])
+        assert env.observation_spec["gripper_left_pad_pos"].shape == torch.Size([1, 3])
+        assert env.observation_spec["cube_pos"].shape == torch.Size([1, 3])
+        assert env.observation_spec["bowl_pos"].shape == torch.Size([1, 3])
+
+        td = env.rollout(2)
+        assert torch.isfinite(td.get(("next", "reward"))).all()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_sparse_coordinate_reward(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        observation = env.reset()
+        hold_action = env.low_level_action(observation["robot_qpos"])
+
+        default_transition = env.step(observation.clone().set("action", hold_action))
+        torch.testing.assert_close(
+            default_transition["next", "reward"],
+            torch.zeros(1, 1, dtype=env.dtype),
+        )
+
+        observation = env.reset(
+            TensorDict({"cube_pos": env._target_pos().clone()}, batch_size=[1])
+        )
+        transform = env.make_urscript_transform(macro_steps=1, execute=False)
+        expanded_action = transform.action_sequence(
+            observation,
+            URScriptPrimitiveTransform.WAIT,
+            gripper=env.gripper_open_ctrl,
+        )
+        target_transition = env.step(
+            observation.clone().set("action", expanded_action[:, 0])
+        )
+        torch.testing.assert_close(
+            target_transition["next", "reward"],
+            torch.ones(1, 1, dtype=env.dtype),
+        )
+        assert target_transition["next", "success"].all()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_construction_time_positions(self):
+        cube_position = (0.31, -0.11, 0.035)
+        bowl_position = (0.24, 0.17, 0.01)
+        env = CubeBowlEnv(
+            **self._cube_bowl_kwargs(),
+            cube_position=cube_position,
+            bowl_position=bowl_position,
+            seed=0,
+        )
+        td = env.reset()
+        torch.testing.assert_close(
+            td["cube_pos"],
+            torch.tensor([cube_position], dtype=td["cube_pos"].dtype),
+            atol=1e-6,
+            rtol=0.0,
+        )
+        torch.testing.assert_close(
+            td["bowl_pos"],
+            torch.tensor([[0.24, 0.17, 0.025]], dtype=td["bowl_pos"].dtype),
+            atol=1e-6,
+            rtol=0.0,
+        )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_reset_position_overrides(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        cube_pos = torch.tensor([[0.30, -0.12, 0.035]], dtype=env.dtype)
+        bowl_pos = torch.tensor([[0.24, 0.15, 0.05]], dtype=env.dtype)
+
+        td = env.reset(
+            TensorDict({"cube_pos": cube_pos, "bowl_pos": bowl_pos}, batch_size=[1])
+        )
+        torch.testing.assert_close(td["cube_pos"], cube_pos, atol=1e-6, rtol=0.0)
+        torch.testing.assert_close(td["bowl_pos"], bowl_pos, atol=1e-6, rtol=0.0)
+
+        transformed_env = TransformedEnv(
+            CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3),
+            Compose(),
+        )
+        td = transformed_env.reset(
+            TensorDict({"cube_pos": cube_pos, "bowl_pos": bowl_pos}, batch_size=[1])
+        )
+        torch.testing.assert_close(td["cube_pos"], cube_pos, atol=1e-6, rtol=0.0)
+        torch.testing.assert_close(td["bowl_pos"], bowl_pos, atol=1e-6, rtol=0.0)
+
+        td = env.reset()
+        torch.testing.assert_close(
+            td["bowl_pos"],
+            torch.tensor([[0.45, 0.08, 0.025]], dtype=td["bowl_pos"].dtype),
+            atol=1e-6,
+            rtol=0.0,
+        )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_macro_helper_api(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        observation = env.reset()
+        transform = env.make_urscript_transform(macro_steps=2, execute=False)
+        target_qpos = env.low_level_action(
+            observation["robot_qpos"], gripper=env.gripper_close_ctrl
+        )
+        primitive = transform.make_primitive(
+            observation,
+            URScriptPrimitiveTransform.MOVEJ,
+            target_qpos=target_qpos,
+            gripper=env.gripper_close_ctrl,
+        )
+        action = transform.action_sequence(primitive)
+
+        assert action.shape == torch.Size([1, 2, 7])
+        torch.testing.assert_close(action[:, -1], target_qpos)
+        assert env.gripper_cube_distance(observation).shape == torch.Size([1, 1])
+        assert env.pose_at(observation["cube_pos"]).shape == torch.Size([1, 7])
+        grasp_width = 2 * env.OBJECT_HALF_SIZE - 0.001
+        grasp_ctrl = env.gripper_ctrl_for_width(grasp_width)
+        assert env.gripper_open_ctrl <= grasp_ctrl <= env.gripper_close_ctrl
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_menagerie_ur5e_when_available(self):
+        env = CubeBowlEnv(
+            **self._cube_bowl_kwargs(),
+            seed=0,
+            max_episode_steps=3,
+        )
+        check_env_specs(env)
+        assert env.action_spec.shape == torch.Size([1, 7])
+        assert env.observation_spec["robot_qpos"].shape == torch.Size([1, 6])
+        assert env.observation_spec["gripper_qpos"].shape == torch.Size([1, 8])
+        assert env.observation_spec["pinch_quat"].shape == torch.Size([1, 4])
+        assert env.observation_spec["gripper_left_pad_pos"].shape == torch.Size([1, 3])
+        assert env.observation_spec["gripper_right_pad_pos"].shape == torch.Size([1, 3])
+        assert env._backend.nq == 21
+        assert env._backend.nv == 20
+        assert env._backend.nu == 7
+
+        observation = env.reset(
+            TensorDict({"cube_pos": env._target_pos().clone()}, batch_size=[1])
+        )
+        hold_action = env.action_spec.zero()
+        hold_action[..., :6] = observation["robot_qpos"]
+        transition = env.step(observation.clone().set("action", hold_action))
+        torch.testing.assert_close(
+            transition["next", "reward"],
+            torch.ones(1, 1, dtype=env.dtype),
+        )
+        env.close()
+
+        env = CubeBowlEnv(
+            **self._cube_bowl_kwargs(),
+            seed=0,
+            max_episode_steps=8000,
+        )
+        observation = env.reset()
+
+        def pose_with_quat(xyz, quat):
+            return torch.cat([xyz, quat.expand(*xyz.shape[:-1], 4)], dim=-1)
+
+        def action_from_robot_qpos(robot_qpos, gripper):
+            action = torch.zeros(*robot_qpos.shape[:-1], 7, dtype=robot_qpos.dtype)
+            action[..., :6] = robot_qpos
+            action[..., -1] = float(gripper)
+            return action
+
+        def gripper_cube_distance(observation):
+            cube_pos = observation["cube_pos"]
+            half_size = torch.full_like(cube_pos, CubeBowlEnv.OBJECT_HALF_SIZE)
+
+            def pad_to_cube(pad_pos):
+                q = (pad_pos - cube_pos).abs() - half_size
+                outside = q.clamp_min(0.0).norm(dim=-1, keepdim=True)
+                inside = q.max(dim=-1, keepdim=True).values.clamp_max(0.0)
+                return outside + inside
+
+            return torch.minimum(
+                pad_to_cube(observation["gripper_left_pad_pos"]),
+                pad_to_cube(observation["gripper_right_pad_pos"]),
+            ).clamp_min(0.0)
+
+        def run_primitive(
+            observation,
+            transform,
+            primitive_id,
+            *,
+            target_pose=None,
+            target_qpos=None,
+            gripper=0.0,
+        ):
+            expanded = transform.action_sequence(
+                observation,
+                primitive_id,
+                target_pose=target_pose,
+                target_qpos=target_qpos,
+                gripper=gripper,
+            )
+            start_cube = observation["cube_pos"].clone()
+            min_gripper_distance = torch.full_like(start_cube[..., :1], float("inf"))
+            max_reward = torch.zeros_like(start_cube[..., :1])
+            last_reward = torch.zeros_like(start_cube[..., :1])
+            for action in expanded[0]:
+                transition = env.step(
+                    observation.clone().set("action", action.view(1, 7))
+                )
+                observation = step_mdp(transition)
+                min_gripper_distance = torch.minimum(
+                    min_gripper_distance, gripper_cube_distance(observation)
+                )
+                last_reward = transition["next", "reward"]
+                max_reward = torch.maximum(max_reward, last_reward)
+            return observation, min_gripper_distance, max_reward, last_reward
+
+        def solver(target_pose, start_action):
+            return env._cartesian_pose_to_joint_target(
+                target_pose,
+                start_action,
+                iterations=220,
+                orientation_weight=1.0,
+                step_size=0.7,
+                damping=1e-4,
+            )
+
+        def make_transform(macro_steps, settle_steps=0):
+            return URScriptPrimitiveTransform(
+                macro_steps=macro_steps,
+                settle_steps=settle_steps,
+                cartesian_solver=solver,
+                open_gripper_ctrl=0.0,
+                close_gripper_ctrl=255.0,
+            )
+
+        approach_transform = make_transform(180, settle_steps=60)
+        close_transform = make_transform(160, settle_steps=80)
+        lift_transform = make_transform(120, settle_steps=60)
+        carry_transform = make_transform(80, settle_steps=20)
+        drop_transform = make_transform(100, settle_steps=40)
+        open_transform = make_transform(100, settle_steps=20)
+        home_transform = make_transform(250, settle_steps=800)
+        gripper_open = 0.0
+        gripper_close = 255.0
+        initial_robot_qpos = observation["robot_qpos"].clone()
+        gripper_quat = observation["pinch_quat"].clone()
+        grasp_distance = torch.full_like(observation["cube_pos"][..., :1], float("inf"))
+        cube_motion_while_closed = torch.zeros_like(grasp_distance)
+        cube_lift_while_closed = torch.zeros_like(grasp_distance)
+        max_reward = torch.zeros_like(grasp_distance)
+        last_reward = torch.zeros_like(grasp_distance)
+
+        def update_closed_motion(reference_cube):
+            nonlocal cube_motion_while_closed, cube_lift_while_closed
+            cube_motion_while_closed = torch.maximum(
+                cube_motion_while_closed,
+                (observation["cube_pos"] - reference_cube).norm(dim=-1, keepdim=True),
+            )
+            cube_lift_while_closed = torch.maximum(
+                cube_lift_while_closed,
+                observation["cube_pos"][..., 2:3] - reference_cube[..., 2:3],
+            )
+
+        for _ in range(20):
+            transition = env.step(
+                observation.clone().set(
+                    "action", action_from_robot_qpos(observation["robot_qpos"], 0.0)
+                )
+            )
+            observation = step_mdp(transition)
+            last_reward = transition["next", "reward"]
+            max_reward = torch.maximum(max_reward, last_reward)
+
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            open_transform,
+            URScriptPrimitiveTransform.OPEN_GRIPPER,
+            gripper=gripper_open,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+
+        cube = observation["cube_pos"].clone()
+        bowl = observation["bowl_pos"].clone()
+        above_cube = pose_with_quat(
+            cube + torch.tensor([[0.0, 0.0, 0.18]], dtype=cube.dtype),
+            gripper_quat,
+        )
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            approach_transform,
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=above_cube,
+            gripper=gripper_open,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+
+        grasp_cube = pose_with_quat(
+            cube + torch.tensor([[0.0, 0.0, -0.005]], dtype=cube.dtype),
+            gripper_quat,
+        )
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            approach_transform,
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=grasp_cube,
+            gripper=gripper_open,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+
+        observation, distance, reward, last_reward = run_primitive(
+            observation,
+            close_transform,
+            URScriptPrimitiveTransform.CLOSE_GRIPPER,
+            gripper=gripper_close,
+        )
+        grasp_distance = torch.minimum(grasp_distance, distance)
+        max_reward = torch.maximum(max_reward, reward)
+        closed_reference_cube = observation["cube_pos"].clone()
+        update_closed_motion(closed_reference_cube)
+
+        cube = observation["cube_pos"].clone()
+        pinch_to_cube = observation["pinch_pos"].clone() - cube
+        lift_cube = pose_with_quat(
+            cube + pinch_to_cube + torch.tensor([[0.0, 0.0, 0.20]], dtype=cube.dtype),
+            gripper_quat,
+        )
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            lift_transform,
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=lift_cube,
+            gripper=gripper_close,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+        update_closed_motion(closed_reference_cube)
+
+        start_y = observation["cube_pos"][..., 1:2].clone()
+        target_y = bowl[..., 1:2]
+        for waypoint in range(1, 5):
+            alpha = float(waypoint) / 4.0
+            desired_cube = torch.cat(
+                [
+                    bowl[..., :1],
+                    start_y + alpha * (target_y - start_y),
+                    torch.full_like(bowl[..., 2:3], 0.24),
+                ],
+                dim=-1,
+            )
+            cube = observation["cube_pos"].clone()
+            pinch_to_cube = observation["pinch_pos"].clone() - cube
+            observation, _, reward, last_reward = run_primitive(
+                observation,
+                carry_transform,
+                URScriptPrimitiveTransform.MOVEL,
+                target_pose=pose_with_quat(desired_cube + pinch_to_cube, gripper_quat),
+                gripper=gripper_close,
+            )
+            max_reward = torch.maximum(max_reward, reward)
+            update_closed_motion(closed_reference_cube)
+
+        cube = observation["cube_pos"].clone()
+        pinch_to_cube = observation["pinch_pos"].clone() - cube
+        drop_cube = torch.cat(
+            [
+                bowl[..., :1],
+                bowl[..., 1:2],
+                torch.full_like(bowl[..., 2:3], 0.13),
+            ],
+            dim=-1,
+        )
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            drop_transform,
+            URScriptPrimitiveTransform.MOVEL,
+            target_pose=pose_with_quat(drop_cube + pinch_to_cube, gripper_quat),
+            gripper=gripper_close,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+        update_closed_motion(closed_reference_cube)
+
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            open_transform,
+            URScriptPrimitiveTransform.OPEN_GRIPPER,
+            gripper=gripper_open,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+
+        for _ in range(240):
+            transition = env.step(
+                observation.clone().set(
+                    "action", action_from_robot_qpos(observation["robot_qpos"], 0.0)
+                )
+            )
+            observation = step_mdp(transition)
+            last_reward = transition["next", "reward"]
+            max_reward = torch.maximum(max_reward, last_reward)
+
+        home_target = action_from_robot_qpos(initial_robot_qpos, gripper_open)
+        observation, _, reward, last_reward = run_primitive(
+            observation,
+            home_transform,
+            URScriptPrimitiveTransform.MOVEJ,
+            target_qpos=home_target,
+            gripper=gripper_open,
+        )
+        max_reward = torch.maximum(max_reward, reward)
+        for _ in range(800):
+            transition = env.step(observation.clone().set("action", home_target))
+            observation = step_mdp(transition)
+            last_reward = transition["next", "reward"]
+            max_reward = torch.maximum(max_reward, last_reward)
+
+        robot_home_error = (observation["robot_qpos"] - initial_robot_qpos).norm(
+            dim=-1, keepdim=True
+        )
+        assert grasp_distance.item() <= 0.025
+        assert cube_motion_while_closed.item() >= 0.05
+        assert cube_lift_while_closed.item() >= 0.08
+        assert robot_home_error.item() <= 0.03
+        torch.testing.assert_close(max_reward, torch.ones_like(max_reward))
+        torch.testing.assert_close(last_reward, torch.ones_like(last_reward))
+        assert observation["success"].all()
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_urscript_macro_smoke(self):
+        base = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=20)
+        env = TransformedEnv(
+            base,
+            URScriptPrimitiveTransform(
+                macro_steps=2,
+                execute=True,
+                open_gripper_ctrl=base.gripper_open_ctrl,
+                close_gripper_ctrl=base.gripper_close_ctrl,
+            ),
+        )
+        td = env.reset()
+        td["action"] = RobotMacroAction.reach_pose(
+            position=td["cube_pos"] + torch.tensor([[0.0, 0.0, 0.08]]),
+            quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+            gripper="open",
+            steps=2,
+        )
+
+        out = env.step(td)
+        assert torch.isfinite(out.get(("next", "reward"))).all()
 
     def test_xml_path_kwarg_overrides_class_attr(self, tmp_path):
         """Custom ``xml_path=`` overrides the class-level :attr:`XML_PATH`."""
@@ -819,3 +1454,8 @@ class TestMujoco:
         check_env_specs(env)
         td = env.rollout(3)
         assert td.shape == torch.Size([1, 3])
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

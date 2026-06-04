@@ -16,6 +16,7 @@ from typing import Any, Literal, overload, Protocol
 import torch
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import Buffer
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
 
@@ -101,6 +102,20 @@ class TransportBackend(Protocol):
 # ============================================================================
 # Weight Strategies
 # ============================================================================
+
+
+def _to_module_compatible_tensor(
+    tensor: torch.Tensor,
+    destination_tensor: torch.Tensor,
+) -> torch.Tensor:
+    """Cast a tensor so ``TensorDict.to_module`` preserves module registration."""
+    if isinstance(tensor, (nn.Parameter, Buffer)):
+        return tensor
+    if isinstance(destination_tensor, nn.Parameter):
+        return nn.Parameter(tensor, requires_grad=destination_tensor.requires_grad)
+    if isinstance(destination_tensor, Buffer):
+        return Buffer(tensor)
+    return tensor
 
 
 class WeightStrategy:
@@ -212,16 +227,31 @@ class WeightStrategy:
             if any("." in key for key in weights.keys()):
                 weights = weights.unflatten_keys(".")
 
-        # Pop extra_state before applying parameter weights
+        # Exclude extra_state before applying parameter weights, without mutating
+        # the input weights. Reusing the same weight container for repeated syncs
+        # must be idempotent.
         extra_state = None
         if isinstance(weights, TensorDictBase) and "__extra_state__" in weights.keys():
-            extra_state = weights.pop("__extra_state__").flatten_keys(".").to_dict()
+            extra_state = weights["__extra_state__"].clone().flatten_keys(".").to_dict()
+            weights = weights.exclude("__extra_state__")
+
+        if not isinstance(weights, TensorDictBase):
+            raise ValueError(
+                f"Unsupported weights type: {type(weights)}. "
+                "Must be dict or TensorDictBase."
+            )
 
         destination_module = None
         if isinstance(destination, nn.Module):
             destination_module = destination
             # Do not update in-place
             if not inplace:
+                destination_params = TensorDict.from_module(destination)
+                weights = weights.apply(
+                    _to_module_compatible_tensor,
+                    destination_params,
+                    filter_empty=False,
+                )
                 weights.to_module(destination)
                 if extra_state is not None:
                     destination_module.set_extra_state(extra_state)
@@ -235,10 +265,6 @@ class WeightStrategy:
             if any(isinstance(key, str) and "." in key for key in destination.keys()):
                 destination = destination.unflatten_keys(".")
 
-        if not isinstance(weights, TensorDictBase):
-            raise ValueError(
-                f"Unsupported weights type: {type(weights)}. Must be dict or TensorDictBase."
-            )
         if not isinstance(destination, TensorDictBase):
             if not weights.is_empty():
                 raise ValueError(

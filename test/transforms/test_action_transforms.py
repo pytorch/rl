@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
 import collections
 
 from functools import partial
@@ -49,11 +50,20 @@ from torchrl.envs import (
     EnvBase,
     FlattenAction,
     GymWrapper,
+    HumanoidMacroAction,
+    MacroPrimitive,
+    MacroPrimitiveTransform,
     MultiAction,
     ParallelEnv,
+    RobotMacroAction,
+    SatelliteAttitudeTransform,
+    SatelliteMacroAction,
     SerialEnv,
     StepCounter,
+    TargetMacroAction,
     TransformedEnv,
+    URScriptPrimitive,
+    URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
 from torchrl.envs.transforms.transforms import (
@@ -876,6 +886,369 @@ class TestActionScaling(TransformBase):
         env.step(td)
         # normalized -1 -> env-scale -2 (low)
         assert torch.allclose(base_env.last_action, torch.full((7,), -2.0))
+
+
+class TestMacroPrimitiveTransform:
+    # ------------------------------------------------------------------ #
+    # Generic engine
+    # ------------------------------------------------------------------ #
+    def test_move_expands_to_fixed_length_sequence(self):
+        transform = MacroPrimitiveTransform(action_dim=3, macro_steps=4)
+        target = torch.arange(3, dtype=torch.float32).view(1, 3)
+        td = TensorDict(
+            {"action": TargetMacroAction.move(target, steps=4)}, batch_size=[1]
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 4, 3])
+        torch.testing.assert_close(action[:, -1], target)
+        torch.testing.assert_close(action[:, 0], target / 4)
+
+    def test_raw_tensor_action_is_direct_target(self):
+        transform = MacroPrimitiveTransform(action_dim=4, macro_steps=3)
+        target = torch.arange(8, dtype=torch.float32).view(2, 4)
+        td = TensorDict({"action": target}, batch_size=[2])
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([2, 3, 4])
+        torch.testing.assert_close(action[:, 0], target / 3)
+        torch.testing.assert_close(action[:, -1], target)
+        # A raw tensor target must interpolate from the zero action, not be held
+        # constant (regression guard: current_action must not read the target
+        # back as the start).
+        torch.testing.assert_close(action[:, 0], target / 3)
+
+    def test_settle_steps_repeat_final_action(self):
+        transform = MacroPrimitiveTransform(action_dim=7, macro_steps=3, settle_steps=2)
+        target = torch.arange(7, dtype=torch.float32).view(1, 7)
+        td = TensorDict(
+            {"action": TargetMacroAction.move(target, steps=3, settle_steps=2)},
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 5, 7])
+        for i in (2, 3, 4):
+            torch.testing.assert_close(action[:, i], target)
+
+    def test_wait_holds_current_action(self):
+        transform = MacroPrimitiveTransform(action_dim=3, macro_steps=2)
+        td = TensorDict(
+            {"action": TargetMacroAction.wait(action_dim=3, steps=2, batch_size=[1])},
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action, torch.zeros(1, 2, 3))
+
+    def test_nested_action_key(self):
+        transform = MacroPrimitiveTransform(
+            action_key=("agent", "action"), action_dim=3, macro_steps=2
+        )
+        target = torch.ones(1, 3)
+        td = TensorDict(
+            {("agent", "action"): TargetMacroAction.move(target, steps=2)},
+            batch_size=[1],
+        )
+        action = transform.inv(td)[("agent", "action")]
+        assert action.shape == torch.Size([1, 2, 3])
+        torch.testing.assert_close(action[:, -1], target)
+
+    def test_plain_tensordict_action_schema(self):
+        transform = MacroPrimitiveTransform(action_dim=3, macro_steps=2)
+        td = TensorDict(
+            {
+                "action": TensorDict(
+                    {
+                        "mode": torch.tensor([[int(MacroPrimitive.MOVE)]]),
+                        "target": torch.tensor([[1.0, 2.0, 3.0]]),
+                        "steps": torch.tensor([[3]]),
+                    },
+                    batch_size=[1],
+                )
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 3, 3])
+        torch.testing.assert_close(action[:, -1], torch.tensor([[1.0, 2.0, 3.0]]))
+
+    def test_transform_input_spec_exposes_target(self):
+        transform = MacroPrimitiveTransform(action_dim=5, macro_steps=2)
+        output_spec = transform.transform_input_spec(Composite(shape=(1,)))
+        spec = output_spec["full_action_spec"]
+        assert ("action", "mode") in spec.keys(True, True)
+        assert ("action", "target") in spec.keys(True, True)
+        assert spec["action", "target"].shape == torch.Size([1, 5])
+        assert ("action", "target") in spec.rand().keys(True, True)
+        # ``mode`` must sample the full primitive enum (regression guard against
+        # integer Bounded specs sampling high-exclusively).
+        modes = {int(spec["action", "mode"].rand().reshape(-1)[0]) for _ in range(200)}
+        assert modes == {int(MacroPrimitive.WAIT), int(MacroPrimitive.MOVE)}
+
+    def test_missing_action_raises(self):
+        transform = MacroPrimitiveTransform(action_dim=3, macro_steps=2)
+        with pytest.raises(RuntimeError, match="no action"):
+            transform.inv(TensorDict(batch_size=[1]))
+
+    def test_humanoid_macro_action_uses_generic_transform(self):
+        transform = MacroPrimitiveTransform(action_dim=4, macro_steps=2)
+        target = torch.ones(1, 4)
+        td = TensorDict(
+            {
+                "action": HumanoidMacroAction.reach_control(
+                    target, steps=3, settle_steps=1
+                )
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 4, 4])
+        torch.testing.assert_close(action[:, 2], target)
+        torch.testing.assert_close(action[:, 3], target)
+
+    # ------------------------------------------------------------------ #
+    # UR-style preset
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _ik_solver():
+        def solver(target_pose, start_action):
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        return solver
+
+    def test_urscript_primitive_enum(self):
+        assert int(URScriptPrimitive.MOVEL) == 2
+        assert str(URScriptPrimitive.OPEN_GRIPPER) == "open_gripper"
+
+    def test_reach_joints_expands(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_joints(
+                    joints=torch.ones(1, 6), steps=4
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.full((1, 2), 7.0),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 4, 7])
+        torch.testing.assert_close(action[:, -1, :6], torch.ones(1, 6))
+        # gripper "keep" holds the observed gripper joint
+        torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 7.0))
+
+    def test_reach_pose_uses_cartesian_solver(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=1, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    gripper="closed",
+                    steps=3,
+                    settle_steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 5, 7])
+        torch.testing.assert_close(action[:, 2, :3], torch.tensor([[1.0, 2.0, 3.0]]))
+        torch.testing.assert_close(action[:, -1, -1:], torch.tensor([[255.0]]))
+
+    def test_reach_pose_closed_holds_gripper_command(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=4,
+            cartesian_solver=self._ik_solver(),
+            close_gripper_ctrl=200.0,
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.zeros(1, 3),
+                    gripper="closed",
+                    gripper_command=154.0,
+                    steps=4,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.full((1, 8), 0.62),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[..., -1], torch.full((1, 4), 154.0))
+
+    def test_close_gripper_keeps_arm(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        robot_qpos = torch.arange(6, dtype=torch.float32).view(1, 6)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.close_gripper(steps=4),
+                "robot_qpos": robot_qpos,
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :6], robot_qpos)
+        torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 255.0))
+
+    def test_close_gripper_command_override(self):
+        transform = URScriptPrimitiveTransform(macro_steps=4)
+        robot_qpos = torch.arange(6, dtype=torch.float32).view(1, 6)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.close_gripper(command=154.0, steps=4),
+                "robot_qpos": robot_qpos,
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(action[:, -1, :6], robot_qpos)
+        torch.testing.assert_close(action[:, -1, -1:], torch.full((1, 1), 154.0))
+
+    def test_reset_uses_parent_home_qpos(self):
+        class FakeParent:
+            robot_home_qpos = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+
+        class FakeTransform(URScriptPrimitiveTransform):
+            @property
+            def parent(self):
+                return FakeParent()
+
+        transform = FakeTransform(macro_steps=2)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.RESET,
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        torch.testing.assert_close(
+            action[:, -1, :6], torch.tensor([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]])
+        )
+        torch.testing.assert_close(action[:, -1, -1:], torch.zeros(1, 1))
+
+    def test_nested_action_key_ur(self):
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"), macro_steps=3
+        )
+        td = TensorDict(
+            {
+                ("agent", "action"): RobotMacroAction.close_gripper(steps=3),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)[("agent", "action")]
+        assert action.shape == torch.Size([1, 3, 7])
+        assert action[0, -1, -1] == 255.0
+        assert (action[0, :, -1].diff() > 0).all()
+
+    def test_execute_returns_multi_action_compose(self):
+        transform = URScriptPrimitiveTransform(macro_steps=2, execute=True)
+        assert isinstance(transform, Compose)
+        assert isinstance(transform[0], MultiAction)
+        assert isinstance(transform[1], URScriptPrimitiveTransform)
+
+    def test_low_level_action(self):
+        transform = URScriptPrimitiveTransform(macro_steps=2)
+        action = transform.low_level_action(torch.zeros(2, 6), gripper=0.5)
+        assert action.shape == torch.Size([2, 7])
+        assert (action[..., -1] == 0.5).all()
+
+    # ------------------------------------------------------------------ #
+    # Satellite preset
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _satellite_td(action):
+        target = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+        return TensorDict(
+            {
+                "action": action,
+                "bus_quat": target.clone(),
+                "bus_omega": torch.zeros(1, 3),
+                "gimbal_angles": torch.cat([torch.zeros(1, 4), torch.ones(1, 4)], -1),
+            },
+            batch_size=[1],
+        )
+
+    def test_satellite_macro_action_identity_target_is_zero(self):
+        transform = SatelliteAttitudeTransform(num_cmgs=4, macro_steps=2)
+        target = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+        td = self._satellite_td(
+            SatelliteMacroAction.slew_attitude(target, steps=2, settle_steps=0)
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 2, 4])
+        torch.testing.assert_close(action, torch.zeros_like(action))
+
+    def test_satellite_wait_mode_holds(self):
+        # A non-identity target normally produces a non-zero gimbal command, but
+        # an action carrying mode=WAIT must hold (zero command).
+        transform = SatelliteAttitudeTransform(
+            num_cmgs=4, macro_steps=2, settle_steps=0
+        )
+        target = torch.tensor([[0.70710678, 0.0, 0.0, 0.70710678]])
+        move = transform.inv(self._satellite_td(target.clone()))["action"]
+        assert move.abs().sum() > 0  # MOVE actually steers
+        wait_action = TensorDict(
+            {
+                "mode": torch.tensor([[int(MacroPrimitive.WAIT)]]),
+                "target": target.clone(),
+            },
+            batch_size=[1],
+        )
+        held = transform.inv(self._satellite_td(wait_action))["action"]
+        torch.testing.assert_close(held, torch.zeros_like(held))
+
+    def test_satellite_accepts_raw_tensor_action(self):
+        transform = SatelliteAttitudeTransform(
+            num_cmgs=4, macro_steps=2, settle_steps=0
+        )
+        td = self._satellite_td(torch.tensor([[1.0, 0.0, 0.0, 0.0]]))
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 2, 4])
+        torch.testing.assert_close(action, torch.zeros_like(action))
+
+    def test_satellite_accepts_nested_target_action(self):
+        transform = SatelliteAttitudeTransform(
+            num_cmgs=4, macro_steps=2, settle_steps=0
+        )
+        td = self._satellite_td(
+            TensorDict({"target": torch.tensor([[1.0, 0.0, 0.0, 0.0]])}, batch_size=[1])
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 2, 4])
+        torch.testing.assert_close(action, torch.zeros_like(action))
+
+    def test_satellite_exposes_target_action_spec(self):
+        transform = SatelliteAttitudeTransform(num_cmgs=4)
+        input_spec = Composite(
+            full_action_spec=Composite(
+                action=Bounded(low=-1.0, high=1.0, shape=(1, 4), dtype=torch.float32),
+                shape=(1,),
+            ),
+            full_observation_spec=Composite(
+                bus_quat=Unbounded(shape=(1, 4), dtype=torch.float64),
+                shape=(1,),
+            ),
+            shape=(1,),
+        )
+        output_spec = transform.transform_input_spec(input_spec)
+        action_spec = output_spec["full_action_spec"]
+        assert ("action", "target") in action_spec.keys(True, True)
+        assert action_spec["action", "target"].shape == torch.Size([1, 4])
+        assert action_spec["action", "target"].dtype is torch.float64
+        assert ("action", "target") in action_spec.rand().keys(True, True)
 
 
 class TestMultiAction(TransformBase):
@@ -1769,3 +2142,8 @@ class TestFlattenAction(TransformBase):
         )
         r = env.rollout(4)
         assert r["action"].shape == (4, 15)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

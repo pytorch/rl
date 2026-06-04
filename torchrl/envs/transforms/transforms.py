@@ -1,4 +1,4 @@
-# Copyright (c) Meta Plobs_dictnc. and affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
@@ -50,6 +50,7 @@ from torchrl.envs.transforms._env import (
     RandomTruncationTransform,
     StepCounter,
     TensorDictPrimer,
+    TerminateTransform,
     TrajCounter,
 )
 from torchrl.envs.transforms._keys import (
@@ -87,6 +88,7 @@ from torchrl.envs.transforms._observation import (
     ToTensorImage,
     UnsqueezeTransform,
 )
+from torchrl.envs.transforms._primitive import MacroPrimitive, MacroPrimitiveTransform
 from torchrl.envs.transforms._reward import (
     BinarizeReward,
     LineariseRewards,
@@ -137,6 +139,8 @@ __all__ = [
     "Hash",
     "InitTracker",
     "LineariseRewards",
+    "MacroPrimitive",
+    "MacroPrimitiveTransform",
     "MultiAction",
     "NextObservationDelta",
     "NoopResetEnv",
@@ -160,6 +164,7 @@ __all__ = [
     "StepCounter",
     "TargetReturn",
     "TensorDictPrimer",
+    "TerminateTransform",
     "TimeMaxPool",
     "Timer",
     "ToTensorImage",
