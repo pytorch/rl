@@ -207,7 +207,9 @@ def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
         def __init__(self, **kwargs):
             self.__dict__.update(kwargs)
 
-    fake_vllm = types.SimpleNamespace(AsyncEngineArgs=FakeAsyncEngineArgs)
+    fake_vllm = types.SimpleNamespace(
+        AsyncEngineArgs=FakeAsyncEngineArgs, __version__="0.10.0"
+    )
     captured = {}
 
     def fake_launch(engine_args, num_replicas):
