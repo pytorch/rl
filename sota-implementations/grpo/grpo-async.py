@@ -64,12 +64,33 @@ def _debug_finite_enabled() -> bool:
     return value is not None and value.lower() in {"1", "true", "yes", "on"}
 
 
-def _assert_finite_tensor(name: str, tensor, step: int) -> None:
-    if not _debug_finite_enabled():
-        return
+def _tensor_is_finite(tensor) -> bool:
     tensor = torch.as_tensor(tensor).detach()
-    if not bool(torch.isfinite(tensor).all().item()):
-        raise RuntimeError(f"Non-finite {name} at GRPO training step {step}.")
+    return bool(torch.isfinite(tensor).all().item())
+
+
+def _summarize_nonfinite_gradients(model, max_entries: int = 8) -> str:
+    entries = []
+    for name, param in model.named_parameters():
+        grad = param.grad
+        if grad is None:
+            continue
+        if not grad.is_floating_point() and not grad.is_complex():
+            continue
+        finite = torch.isfinite(grad)
+        if bool(finite.all().item()):
+            continue
+        entries.append(
+            f"{name}: nan={int(torch.isnan(grad).sum().item())}, "
+            f"+inf={int(torch.isposinf(grad).sum().item())}, "
+            f"-inf={int(torch.isneginf(grad).sum().item())}, "
+            f"dtype={grad.dtype}, shape={tuple(grad.shape)}"
+        )
+        if len(entries) >= max_entries:
+            break
+    if not entries:
+        return "no individual non-finite gradient tensor found"
+    return "; ".join(entries)
 
 
 def _validate_train_model_finite(model, step: int, optim_steps: int) -> None:
@@ -260,6 +281,7 @@ def train(
     grad_norm = 0.0  # Initialize grad_norm
     data_read_count = 0
     optim_steps = 0  # Track optimizer steps for weight update scheduling
+    skipped_nonfinite_updates = 0
     start_time = time.time()
     exit_code = 1
     try:
@@ -301,7 +323,13 @@ def train(
                     loss_val = (
                         loss.mean(reduce=True) / cfg.train.gradient_accumulation_steps
                     )
-                    _assert_finite_tensor("loss", loss_val, step)
+                    if not _tensor_is_finite(loss_val):
+                        torchrl_logger.warning(
+                            f"Skipping GRPO training step {step} because loss is "
+                            f"non-finite: {loss_val.detach()}."
+                        )
+                        optimizer.zero_grad(set_to_none=True)
+                        continue
 
             with timeit("backward_pass"):
                 if (
@@ -325,9 +353,19 @@ def train(
                         policy_training.parameters(),
                         cfg.optimizer.clip_grad_norm,
                     )
-                    _assert_finite_tensor("gradient norm", grad_norm, step)
-
-                    if (
+                    did_optim_step = _tensor_is_finite(grad_norm)
+                    if not did_optim_step:
+                        skipped_nonfinite_updates += 1
+                        torchrl_logger.warning(
+                            f"Skipping optimizer step at GRPO training step {step} "
+                            f"because gradient norm is non-finite: {grad_norm}. "
+                            f"Skipped non-finite updates: "
+                            f"{skipped_nonfinite_updates}. Bad gradients: "
+                            f"{_summarize_nonfinite_gradients(policy_training.model)}"
+                        )
+                        optimizer.zero_grad(set_to_none=True)
+                        grad_norm = torch.zeros((), device=train_device)
+                    elif (
                         cfg.train.mixed_precision
                         and cfg.train_model.torch_dtype == "float16"
                     ):
@@ -335,18 +373,24 @@ def train(
                         scaler.update()
                     else:
                         optimizer.step()
-                    optimizer.zero_grad(set_to_none=True)
-                    _validate_train_model_finite(
-                        policy_training.model, step, optim_steps + 1
-                    )
 
-                optim_steps += 1
+                    if did_optim_step:
+                        optimizer.zero_grad(set_to_none=True)
+                        _validate_train_model_finite(
+                            policy_training.model, step, optim_steps + 1
+                        )
+
+                if did_optim_step:
+                    optim_steps += 1
 
                 # Weight sync is tied to optimizer steps, not gradient steps.
                 # This ensures the training model diverges from the inference model
                 # between syncs, which is essential for meaningful importance sampling
                 # in GRPO (otherwise ESS stays at 1.0 and GRPO degenerates to REINFORCE).
-                if optim_steps % cfg.train.weight_update_frequency == 0:
+                if (
+                    did_optim_step
+                    and optim_steps % cfg.train.weight_update_frequency == 0
+                ):
                     with timeit("update_policy_weights"):
                         torchrl_logger.info(
                             f"Updating policy weights (optim step {optim_steps})..."
