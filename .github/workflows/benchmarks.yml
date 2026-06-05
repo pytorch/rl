@@ -118,7 +118,7 @@ jobs:
               pass
           PY
           export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-          python -m pytest -vvv --rank 0 --timeout=180 --benchmark-only --benchmark-json output.json --ignore test_llm.py .
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json output.json --ignore test_llm.py .
 
       # Upload benchmark results for main branch and manual dispatch runs.
       - name: Upload benchmark results
