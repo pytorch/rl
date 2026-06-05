@@ -1032,11 +1032,17 @@ class TestLSTMModule:
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
-    def test_lstm_module_triton_backward(self):
-        """Backward path: gradients match pad backend within tolerance."""
+    @pytest.mark.parametrize("H", [64, 256])
+    def test_lstm_module_triton_backward(self, H):
+        """Backward path: gradients match pad backend within tolerance.
+
+        ``H=256`` crosses ``_FWD_TILED_H_MIN`` so it drives the per-step
+        hidden-tiled forward kernel; the fused single-launch path covers
+        ``H=64``.
+        """
         torch.manual_seed(0)
         device = torch.device("cuda")
-        B, T, F, H = 4, 7, 3, 64
+        B, T, F = 4, 7, 3
         pad_module = LSTMModule(
             input_size=F,
             hidden_size=H,
@@ -2636,11 +2642,17 @@ class TestGRUModule:
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
-    def test_gru_module_triton_backward(self):
-        """Backward path: gradients match pad backend within tolerance."""
+    @pytest.mark.parametrize("H", [64, 256])
+    def test_gru_module_triton_backward(self, H):
+        """Backward path: gradients match pad backend within tolerance.
+
+        ``H=256`` crosses ``_FWD_TILED_H_MIN`` so it drives the per-step
+        hidden-tiled forward kernel; the fused single-launch path covers
+        ``H=64``.
+        """
         torch.manual_seed(0)
         device = torch.device("cuda")
-        B, T, F, H = 4, 7, 3, 64
+        B, T, F = 4, 7, 3
         pad_module = GRUModule(
             input_size=F,
             hidden_size=H,
