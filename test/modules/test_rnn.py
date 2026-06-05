@@ -1462,6 +1462,7 @@ class TestLSTMModule:
             in_keys=["obs", "hidden0", "hidden1"],
             out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
             recurrent_backend="scan",
+            default_recurrent_mode=True,
         )
 
         obs = torch.randn(B, T, F_in)
@@ -1474,19 +1475,8 @@ class TestLSTMModule:
             [B, T],
         )
 
-        prev = torch._dynamo.config.capture_scalar_outputs
-        torch._dynamo.config.capture_scalar_outputs = True
-        try:
-
-            @torch.compile(fullgraph=False)
-            def call(td):
-                with set_recurrent_mode(True):
-                    return scan_module(td)
-
-            with torch.no_grad():
-                out = call(data.clone())
-        finally:
-            torch._dynamo.config.capture_scalar_outputs = prev
+        with torch.no_grad():
+            out = torch.compile(scan_module)(data.clone())
         assert "feat" in out.keys(True, True)
 
     @pytest.mark.skipif(
@@ -1506,6 +1496,7 @@ class TestLSTMModule:
             in_keys=["obs", "hidden"],
             out_keys=["feat", ("next", "hidden")],
             recurrent_backend="scan",
+            default_recurrent_mode=True,
         )
 
         obs = torch.randn(B, T, F_in)
@@ -1517,19 +1508,8 @@ class TestLSTMModule:
             [B, T],
         )
 
-        prev = torch._dynamo.config.capture_scalar_outputs
-        torch._dynamo.config.capture_scalar_outputs = True
-        try:
-
-            @torch.compile(fullgraph=False)
-            def call(td):
-                with set_recurrent_mode(True):
-                    return scan_module(td)
-
-            with torch.no_grad():
-                out = call(data.clone())
-        finally:
-            torch._dynamo.config.capture_scalar_outputs = prev
+        with torch.no_grad():
+            out = torch.compile(scan_module)(data.clone())
         assert "feat" in out.keys(True, True)
 
     @pytest.mark.skipif(

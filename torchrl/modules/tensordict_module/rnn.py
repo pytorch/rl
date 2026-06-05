@@ -146,6 +146,9 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
 @implement_for("torch", "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
     scan, _ = _get_hoptorch_scan()
+    if is_compiling():
+        with torch._dynamo.config.patch(capture_scalar_outputs=True):
+            return scan(*args, **kwargs)
     return scan(*args, **kwargs)
 
 
