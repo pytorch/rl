@@ -23,12 +23,15 @@ Backend = Literal["cudnn", "scan", "triton"]
 RNNShape = tuple[int, int, int, int]
 
 # CI runs this on a 24 GB A10G GPU runner (and on CPU), so the default is a
-# modest regression-guard shape that fits comfortably and stays fast. Large
-# shapes (e.g. batch 8192-65536) are opt-in via
-# ``TORCHRL_RNN_RESET_BENCHMARK_SHAPES`` for manual sweeps on big GPUs -- a
-# 65536 default OOMs the A10G (LSTM gates alone need ~34 GB) and is minutes-slow
-# on CPU.
-_DEFAULT_RNN_SHAPE: RNNShape = (1024, 128, 32, 256)
+# small, deterministic regression-guard shape. H=512 deliberately puts the
+# Triton path on the per-step *tiled* kernels, which are NOT autotuned: a fused
+# (H<=256) default would trigger Triton's autotune sweep, whose cold-cache
+# compile cost exceeds the per-test timeout on the slower A10G. The tiled kernel
+# compiles once (no sweep) and runs in well under a second at this batch, while
+# still exercising cuDNN/scan/Triton end-to-end. Large shapes and the fused path
+# are opt-in via ``TORCHRL_RNN_RESET_BENCHMARK_SHAPES`` for manual sweeps on big
+# GPUs (a 65536 default OOMs the A10G -- LSTM gates alone need ~34 GB).
+_DEFAULT_RNN_SHAPE: RNNShape = (256, 128, 32, 512)
 
 # Eager calls ``compile_with_warmup`` makes before compiling the module.
 _COMPILE_WARMUP = 1
