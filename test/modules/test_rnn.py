@@ -1537,6 +1537,9 @@ class TestLSTMModule:
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch.compile recurrent path requires Torch >= 2.6.0",
     )
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile tests need a C compiler"
+    )
     def test_module_pad_backend_compile_with_resets(self, rnn_type):
         # Regression: the pad (cuDNN) backend cuts multi-trajectory rollouts via
         # the data-dependent _split_and_pad_sequence / _inv_pad_sequence. Under
