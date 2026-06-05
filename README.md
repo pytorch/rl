@@ -59,7 +59,8 @@ improvements that are worth surfacing up front:
 - stronger multi-agent coverage through MAPPO, IPPO, `MultiAgentGAE`,
   value-normalization utilities, and mixer configs;
 - better collector and replay-buffer ergonomics, including async prioritized
-  writes, ordered storage access, compact observations, and HER;
+  writes, ordered storage access, compact observations, HER, and optional CUDA
+  wheels for CUDA-based prioritized replay-buffer kernels;
 - new transforms and value-estimator improvements such as `ActionScaling`,
   `FlattenAction`, `NextObservationDelta`, compact shifted estimators, and
   chunked forwards.
@@ -419,6 +420,21 @@ Install the stable release:
 ```bash
 pip install torchrl
 ```
+
+This standard PyPI wheel is the right default for most users, including CPU
+prioritized replay buffers and workloads that do not use prioritized replay.
+Starting with TorchRL 0.13, Linux CUDA wheels are also published for users who
+want the CUDA-based prioritized replay-buffer implementations. Install the
+CUDA wheel from the PyTorch wheel index that matches your PyTorch CUDA runtime
+(replace `cu128` with the CUDA build you use):
+
+```bash
+pip install "torchrl==0.13.0+cu128" --extra-index-url https://download.pytorch.org/whl/cu128
+```
+
+The CUDA wheel is optional: if you do not need CUDA prioritized replay buffers,
+or if your prioritized replay buffers run on CPU, keep using `pip install
+torchrl`.
 
 Install common optional dependencies:
 
