@@ -37,6 +37,7 @@ Limitations of this prototype:
 from __future__ import annotations
 
 import importlib.metadata
+import os
 
 import torch
 import torch.nn.functional as F
@@ -141,15 +142,32 @@ if _has_triton:
         ]
         return out or [min(configs, key=lambda c: c.kwargs["BLOCK_K"])]
 
-    _FWD_TILED_H_MIN = 256
-    _FWD_TILED_BLOCK_B = 16
-    _FWD_TILED_BLOCK_H = 64
-    _FWD_TILED_BLOCK_K = 64
-    _FWD_TILED_NUM_WARPS = 4
-    # Hidden tiling needs a global synchronization between recurrent time
-    # steps because h[t + 1] depends on every hidden tile of h[t]. Use one
-    # launch per step for large H; keep the fused single-launch path below for
-    # smaller H where full-hidden programs compile quickly.
+    def _env_int(name: str, default: int) -> int:
+        """Read a positive int override from the environment, else ``default``."""
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        return value if value > 0 else default
+
+    # Hidden tiling needs a global synchronization between recurrent time steps
+    # because h[t + 1] depends on every hidden tile of h[t], so the tiled path
+    # issues one launch per step -- correct at any hidden size but launch-bound.
+    # The fused single-launch path keeps the recurrent state in registers across
+    # the whole sequence and is much faster, but a full-hidden program gets
+    # register-heavy as H grows. _FWD_TILED_H_MIN is the crossover: at/above it
+    # we tile. All four knobs are env-overridable so the crossover and the tiled
+    # block shape can be swept on a target GPU without editing the source
+    # (BLOCK_B=16 is the bare tensor-core minimum and is usually far too small
+    # for large batch).
+    _FWD_TILED_H_MIN = _env_int("TORCHRL_RNN_TRITON_TILED_H_MIN", 256)
+    _FWD_TILED_BLOCK_B = _env_int("TORCHRL_RNN_TRITON_TILED_BLOCK_B", 16)
+    _FWD_TILED_BLOCK_H = _env_int("TORCHRL_RNN_TRITON_TILED_BLOCK_H", 64)
+    _FWD_TILED_BLOCK_K = _env_int("TORCHRL_RNN_TRITON_TILED_BLOCK_K", 64)
+    _FWD_TILED_NUM_WARPS = _env_int("TORCHRL_RNN_TRITON_TILED_NUM_WARPS", 4)
 
     # ------------------------------------------------------------------------
     # GRU forward
