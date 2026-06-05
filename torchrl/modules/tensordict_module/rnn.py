@@ -29,6 +29,21 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.tensordict_module._rnn_precision import _validate_user_precision
 
+try:
+    # ``torch.compiler`` was added in torch 2.0; on older builds (exercised by
+    # the olddeps CI job) the module import below would otherwise raise
+    # ``AttributeError: module 'torch' has no attribute 'compiler'``.
+    from torch.compiler import disable as _compiler_disable
+except (ImportError, AttributeError):
+
+    def _compiler_disable(fn=None, *args, **kwargs):
+        # No-op passthrough: on torch builds without ``torch.compiler`` there is
+        # no graph to break out of, and the wrapped helpers run eagerly anyway.
+        if fn is None:
+            return lambda inner: inner
+        return fn
+
+
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _hoptorch_scan = None
 _ensure_scan_backward = None
@@ -149,7 +164,7 @@ def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
     return scan(*args, **kwargs)
 
 
-@torch.compiler.disable
+@_compiler_disable
 def _split_and_pad_for_reset(
     tensordict_shaped: TensorDictBase,
     in_keys: list,
@@ -184,7 +199,7 @@ def _split_and_pad_for_reset(
     return padded, splits, original_shape
 
 
-@torch.compiler.disable
+@_compiler_disable
 def _inv_pad_for_reset(
     tensordict_shaped: TensorDictBase,
     splits: torch.Tensor,
