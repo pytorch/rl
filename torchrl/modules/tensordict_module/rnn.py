@@ -39,7 +39,7 @@ def _get_hoptorch_scan() -> tuple[Any, Any]:
     if not _has_hoptorch:
         raise NotImplementedError(
             "recurrent_backend='scan' requires hoptorch. Install it with "
-            "`pip install hoptorch>=0.1.1`."
+            "`pip install hoptorch>=0.1.4`."
         )
     if _hoptorch_scan is None or _ensure_scan_backward is None:
         # Optional dependency: keep the import lazy because CI jobs install
@@ -147,6 +147,53 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
     scan, _ = _get_hoptorch_scan()
     return scan(*args, **kwargs)
+
+
+@torch.compiler.disable
+def _split_and_pad_for_reset(
+    tensordict_shaped: TensorDictBase,
+    in_keys: list,
+) -> tuple[TensorDictBase | None, torch.Tensor | None, torch.Size | None]:
+    """Split a flattened rollout into per-trajectory padded windows on reset.
+
+    Returns ``(padded_td, splits, original_shape)`` when ``is_init`` fires
+    mid-row (so the rollout must be cut into per-trajectory windows of shape
+    ``[N, T']`` before the RNN runs), or ``(None, None, None)`` otherwise.
+
+    This is an eager island under :func:`torch.compile` (``compiler.disable``):
+    the per-trajectory lengths are data-dependent, so both the padded shape and
+    the boolean-mask reconstruction in :func:`_inv_pad_for_reset`
+    (``tensor[mask]``) produce data-dependent shapes that FakeTensor tracing
+    cannot represent -- Inductor otherwise raises ``torch.Size() takes an
+    iterable of 'int' (item 0 is 'FakeTensor')`` from ``broadcast_shapes``. The
+    surrounding RNN compute still compiles; only this glue runs eagerly.
+    """
+    from torchrl.objectives.value.utils import (
+        _get_num_per_traj_init,
+        _split_and_pad_sequence,
+    )
+
+    is_init = tensordict_shaped["is_init"].squeeze(-1)
+    if not is_init[..., 1:].any():
+        return None, None, None
+    splits = _get_num_per_traj_init(is_init)
+    original_shape = tensordict_shaped.shape
+    padded = _split_and_pad_sequence(
+        tensordict_shaped.select(*in_keys, strict=False), splits
+    )
+    return padded, splits, original_shape
+
+
+@torch.compiler.disable
+def _inv_pad_for_reset(
+    tensordict_shaped: TensorDictBase,
+    splits: torch.Tensor,
+    shape: torch.Size,
+) -> TensorDictBase:
+    """Inverse of :func:`_split_and_pad_for_reset` (eager island, see there)."""
+    from torchrl.objectives.value.utils import _inv_pad_sequence
+
+    return _inv_pad_sequence(tensordict_shaped, splits).reshape(shape)
 
 
 def _place_at_traj_end(
@@ -1029,11 +1076,6 @@ class LSTMModule(ModuleBase):
         env side; without that transform there is no signal for boundary
         resets and hidden state will silently leak across episodes.
         """
-        from torchrl.objectives.value.functional import (
-            _inv_pad_sequence,
-            _split_and_pad_sequence,
-        )
-
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
@@ -1068,24 +1110,20 @@ class LSTMModule(ModuleBase):
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        if (
-            self.recurrent_mode
-            and not use_scan
-            and not use_triton
-            and is_init[..., 1:].any()
-        ):
-            from torchrl.objectives.value.utils import _get_num_per_traj_init
-
+        if self.recurrent_mode and not use_scan and not use_triton:
             # Multi-trajectory rollouts under the pad backend: split each row
             # into per-trajectory windows of shape [N, T'], run the LSTM on
             # the padded result, then stitch them back. Required for correctness
-            # whenever ``is_init`` fires mid-row.
-            splits = _get_num_per_traj_init(is_init)
-            tensordict_shaped_shape = tensordict_shaped.shape
-            tensordict_shaped = _split_and_pad_sequence(
-                tensordict_shaped.select(*self.in_keys, strict=False), splits
+            # whenever ``is_init`` fires mid-row. The split/unpad runs as an
+            # eager island so the pad backend stays usable under torch.compile
+            # (see _split_and_pad_for_reset).
+            padded, splits_maybe, tensordict_shaped_shape = _split_and_pad_for_reset(
+                tensordict_shaped, self.in_keys
             )
-            is_init = tensordict_shaped["is_init"].squeeze(-1)
+            if padded is not None:
+                tensordict_shaped = padded
+                splits = splits_maybe
+                is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden0, hidden1 = (
             tensordict_shaped.get(key, default)
@@ -1125,8 +1163,8 @@ class LSTMModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[1], hidden0)
         tensordict_shaped.set(self.out_keys[2], hidden1)
         if splits is not None:
-            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
-                tensordict_shaped_shape
+            tensordict_shaped = _inv_pad_for_reset(
+                tensordict_shaped, splits, tensordict_shaped_shape
             )
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
@@ -2325,11 +2363,6 @@ class GRUModule(ModuleBase):
     @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
-        from torchrl.objectives.value.functional import (
-            _inv_pad_sequence,
-            _split_and_pad_sequence,
-        )
-
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
@@ -2358,20 +2391,19 @@ class GRUModule(ModuleBase):
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        if (
-            self.recurrent_mode
-            and not use_scan
-            and not use_triton
-            and is_init[..., 1:].any()
-        ):
-            from torchrl.objectives.value.utils import _get_num_per_traj_init
-
-            splits = _get_num_per_traj_init(is_init)
-            tensordict_shaped_shape = tensordict_shaped.shape
-            tensordict_shaped = _split_and_pad_sequence(
-                tensordict_shaped.select(*self.in_keys, strict=False), splits
+        if self.recurrent_mode and not use_scan and not use_triton:
+            # Multi-trajectory rollouts under the pad backend: split each row
+            # into per-trajectory windows, run the GRU on the padded result,
+            # then stitch them back. The split/unpad runs as an eager island so
+            # the pad backend stays usable under torch.compile (see
+            # _split_and_pad_for_reset).
+            padded, splits_maybe, tensordict_shaped_shape = _split_and_pad_for_reset(
+                tensordict_shaped, self.in_keys
             )
-            is_init = tensordict_shaped["is_init"].squeeze(-1)
+            if padded is not None:
+                tensordict_shaped = padded
+                splits = splits_maybe
+                is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden = (
             tensordict_shaped.get(key, default)
@@ -2397,8 +2429,8 @@ class GRUModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
-            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
-                tensordict_shaped_shape
+            tensordict_shaped = _inv_pad_for_reset(
+                tensordict_shaped, splits, tensordict_shaped_shape
             )
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:

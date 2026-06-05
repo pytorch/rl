@@ -1532,6 +1532,64 @@ class TestLSTMModule:
             torch._dynamo.config.capture_scalar_outputs = prev
         assert "feat" in out.keys(True, True)
 
+    @pytest.mark.parametrize("rnn_type", ["gru", "lstm"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch.compile recurrent path requires Torch >= 2.6.0",
+    )
+    def test_module_pad_backend_compile_with_resets(self, rnn_type):
+        # Regression: the pad (cuDNN) backend cuts multi-trajectory rollouts via
+        # the data-dependent _split_and_pad_sequence / _inv_pad_sequence. Under
+        # torch.compile the boolean-mask reconstruction (tensor[mask]) produced
+        # a data-dependent shape and crashed with "torch.Size() takes an
+        # iterable of 'int' (item 0 is 'FakeTensor')". _split_and_pad_for_reset /
+        # _inv_pad_for_reset now run those as eager islands so the pad backend
+        # compiles; the compiled output must still match eager. Note there is no
+        # capture_scalar_outputs toggle here: the pad path must compile under the
+        # default config.
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 8, 3, 8, 1
+        obs = torch.randn(B, T, F_in)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        is_init[1, 4] = True  # mid-row reset -> exercises split/pad/unpad
+        if rnn_type == "gru":
+            module = GRUModule(
+                input_size=F_in,
+                hidden_size=H,
+                num_layers=L,
+                in_keys=["obs", "hidden"],
+                out_keys=["feat", ("next", "hidden")],
+                recurrent_backend="pad",
+            )
+            hidden = {"hidden": torch.zeros(B, T, L, H)}
+        else:
+            module = LSTMModule(
+                input_size=F_in,
+                hidden_size=H,
+                num_layers=L,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="pad",
+            )
+            hidden = {
+                "hidden0": torch.zeros(B, T, L, H),
+                "hidden1": torch.zeros(B, T, L, H),
+            }
+        data = TensorDict({"obs": obs, "is_init": is_init, **hidden}, [B, T])
+
+        with set_recurrent_mode(True), torch.no_grad():
+            ref = module(data.clone())
+
+        @torch.compile
+        def call(td):
+            with set_recurrent_mode(True):
+                return module(td)
+
+        with torch.no_grad():
+            out = call(data.clone())
+        torch.testing.assert_close(out["feat"], ref["feat"])
+
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
         reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
