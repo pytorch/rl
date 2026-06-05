@@ -155,15 +155,21 @@ if _has_triton:
 
     # Hidden tiling needs a global synchronization between recurrent time steps
     # because h[t + 1] depends on every hidden tile of h[t], so the tiled path
-    # issues one launch per step -- correct at any hidden size but launch-bound.
+    # issues one launch per step -- correct at any hidden size but launch-bound
+    # (measured ~3-5x slower than the fused path at H=256, B=8000 on H200).
     # The fused single-launch path keeps the recurrent state in registers across
-    # the whole sequence and is much faster, but a full-hidden program gets
-    # register-heavy as H grows. _FWD_TILED_H_MIN is the crossover: at/above it
-    # we tile. All four knobs are env-overridable so the crossover and the tiled
-    # block shape can be swept on a target GPU without editing the source
-    # (BLOCK_B=16 is the bare tensor-core minimum and is usually far too small
-    # for large batch).
-    _FWD_TILED_H_MIN = _env_int("TORCHRL_RNN_TRITON_TILED_H_MIN", 256)
+    # the whole sequence and is much faster, but a full-hidden program keeps
+    # ``n_gates`` ``[BLOCK_B, H]`` fp32 accumulators live: the binding limit is
+    # registers *per thread* (255 on every NVIDIA arch since Kepler), which the
+    # autotuner already hits at H=256 for LSTM (it falls to BLOCK_B=4 /
+    # num_warps=1). At H=512 fused spills and ptxas compile time explodes, so
+    # tiling takes over there. Because that ceiling is set by the 255-reg limit
+    # -- not by SMEM or register-file size, which is what device properties
+    # expose and which barely varies across H100/A100/V100 -- the crossover is
+    # effectively arch-invariant and is a constant rather than device-derived.
+    # All knobs stay env-overridable as a per-arch escape hatch (BLOCK_B=16 is
+    # the bare tensor-core minimum and is usually far too small for large batch).
+    _FWD_TILED_H_MIN = _env_int("TORCHRL_RNN_TRITON_TILED_H_MIN", 512)
     _FWD_TILED_BLOCK_B = _env_int("TORCHRL_RNN_TRITON_TILED_BLOCK_B", 16)
     _FWD_TILED_BLOCK_H = _env_int("TORCHRL_RNN_TRITON_TILED_BLOCK_H", 64)
     _FWD_TILED_BLOCK_K = _env_int("TORCHRL_RNN_TRITON_TILED_BLOCK_K", 64)
