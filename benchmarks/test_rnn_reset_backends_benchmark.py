@@ -24,6 +24,9 @@ RNNShape = tuple[int, int, int, int]
 
 _DEFAULT_RNN_SHAPE: RNNShape = (65536, 128, 32, 256)
 
+# Eager calls ``compile_with_warmup`` makes before compiling the module.
+_COMPILE_WARMUP = 1
+
 
 def _shape_id(shape: RNNShape) -> str:
     batch, steps, input_size, hidden_size = shape
@@ -214,8 +217,13 @@ def test_rnn_rollout_with_intermediate_resets(
             pytest.skip(f"triton recurrent backend unavailable: {err}")
         raise
     if compile:
-        module = compile_with_warmup(module, warmup=1)
-    for _ in range(3 if compile else 1):
+        module = compile_with_warmup(module, warmup=_COMPILE_WARMUP)
+    # ``compile_with_warmup`` runs ``_COMPILE_WARMUP`` eager calls before it
+    # compiles, so prep with ``warmup + 3`` calls: the warmup calls, the call
+    # that triggers compilation, plus a couple of warm steady-state calls. The
+    # eager path only needs a single prep call.
+    prep_iters = _COMPILE_WARMUP + 3 if compile else 1
+    for _ in range(prep_iters):
         _call(module, tensordict)
         _sync(device)
     memory_before = _reset_cuda_memory_stats(device)
