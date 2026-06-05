@@ -884,7 +884,7 @@ class TestLSTMModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
-    @pytest.mark.parametrize("H", [16, 64])
+    @pytest.mark.parametrize("H", [16, 64, 256])
     def test_lstm_module_triton_backend_matches_pad(self, H, compute_dtype):
         torch.manual_seed(0)
         device = torch.device("cuda")
@@ -2510,7 +2510,7 @@ class TestGRUModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
-    @pytest.mark.parametrize("H", [16, 64])
+    @pytest.mark.parametrize("H", [16, 64, 256])
     def test_gru_module_triton_backend_matches_pad(self, H, compute_dtype):
         torch.manual_seed(0)
         device = torch.device("cuda")
