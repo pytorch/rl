@@ -135,7 +135,8 @@ if _has_triton:
         out = [
             c
             for c in configs
-            if c.kwargs["BLOCK_K"] <= H and H % c.kwargs["BLOCK_K"] == 0
+            if c.kwargs["BLOCK_K"] <= H
+            and H % c.kwargs["BLOCK_K"] == 0
             and (min_block_b is None or c.kwargs["BLOCK_B"] >= min_block_b)
             and (max_block_b is None or c.kwargs["BLOCK_B"] <= max_block_b)
             and (max_block_k is None or c.kwargs["BLOCK_K"] <= max_block_k)
@@ -268,7 +269,10 @@ if _has_triton:
                 k_off = k_iter * BLOCK_K + k_inner
                 if t == 0:
                     h_chunk = tl.load(
-                        hidden_ptr + b_off_i64[:, None] * (T * H) + 0 * H + k_off[None, :],
+                        hidden_ptr
+                        + b_off_i64[:, None] * (T * H)
+                        + 0 * H
+                        + k_off[None, :],
                         mask=mask_b[:, None],
                         other=0.0,
                     )
@@ -282,7 +286,10 @@ if _has_triton:
                         other=0.0,
                     )
                     reset_chunk = tl.load(
-                        hidden_ptr + b_off_i64[:, None] * (T * H) + t * H + k_off[None, :],
+                        hidden_ptr
+                        + b_off_i64[:, None] * (T * H)
+                        + t * H
+                        + k_off[None, :],
                         mask=mask_b[:, None],
                         other=0.0,
                     )
@@ -314,7 +321,9 @@ if _has_triton:
                 tl.store(save_gh_n_ptr + base_out, gh_n, mask=mask_b[:, None])
 
         tl.store(
-            h_final_ptr + b_off_i64[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
+            h_final_ptr + b_off_i64[:, None] * H + h_off[None, :],
+            h,
+            mask=mask_b[:, None],
         )
 
     @triton.jit(do_not_specialize=["t"])
@@ -354,7 +363,9 @@ if _has_triton:
         mask_bh = mask_b[:, None] & mask_h[None, :]
         N_K: tl.constexpr = H // BLOCK_K
 
-        is_init = tl.load(is_init_ptr + b_off_i64 * T + t, mask=mask_b, other=False) != 0
+        is_init = (
+            tl.load(is_init_ptr + b_off_i64 * T + t, mask=mask_b, other=False) != 0
+        )
         reset_h = tl.load(
             hidden_ptr + b_off_i64[:, None] * (T * H) + t * H + h_off[None, :],
             mask=mask_bh,
@@ -517,7 +528,10 @@ if _has_triton:
                 h_prev = reset_h
             else:
                 h_prev_stored = tl.load(
-                    out_ptr + b_off_i64[:, None] * (T * H) + (t - 1) * H + h_off[None, :],
+                    out_ptr
+                    + b_off_i64[:, None] * (T * H)
+                    + (t - 1) * H
+                    + h_off[None, :],
                     mask=mask_b[:, None],
                     other=0.0,
                 )
@@ -569,7 +583,9 @@ if _has_triton:
             dh_prev_total = dh_prev_direct
             for k_iter in tl.static_range(N_K):
                 k_off = k_iter * BLOCK_K + k_inner
-                base_gx_k = b_off_i64[:, None] * (T * 3 * H) + t * (3 * H) + k_off[None, :]
+                base_gx_k = (
+                    b_off_i64[:, None] * (T * 3 * H) + t * (3 * H) + k_off[None, :]
+                )
                 w_r_chunk = tl.load(w_r_ptr + k_off[:, None] * H + h_off[None, :])
                 dr_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
@@ -725,7 +741,10 @@ if _has_triton:
                 k_off = k_iter * BLOCK_K + k_inner
                 if t == 0:
                     h_chunk = tl.load(
-                        hidden_ptr + b_off_i64[:, None] * (T * H) + 0 * H + k_off[None, :],
+                        hidden_ptr
+                        + b_off_i64[:, None] * (T * H)
+                        + 0 * H
+                        + k_off[None, :],
                         mask=mask_b[:, None],
                         other=0.0,
                     )
@@ -739,7 +758,10 @@ if _has_triton:
                         other=0.0,
                     )
                     reset_chunk = tl.load(
-                        hidden_ptr + b_off_i64[:, None] * (T * H) + t * H + k_off[None, :],
+                        hidden_ptr
+                        + b_off_i64[:, None] * (T * H)
+                        + t * H
+                        + k_off[None, :],
                         mask=mask_b[:, None],
                         other=0.0,
                     )
@@ -787,10 +809,14 @@ if _has_triton:
                 tl.store(save_tanhc_ptr + base_out, tanh_c, mask=mask_b[:, None])
 
         tl.store(
-            h_final_ptr + b_off_i64[:, None] * H + h_off[None, :], h, mask=mask_b[:, None]
+            h_final_ptr + b_off_i64[:, None] * H + h_off[None, :],
+            h,
+            mask=mask_b[:, None],
         )
         tl.store(
-            c_final_ptr + b_off_i64[:, None] * H + h_off[None, :], c, mask=mask_b[:, None]
+            c_final_ptr + b_off_i64[:, None] * H + h_off[None, :],
+            c,
+            mask=mask_b[:, None],
         )
 
     @triton.jit(do_not_specialize=["t"])
@@ -836,7 +862,9 @@ if _has_triton:
         mask_bh = mask_b[:, None] & mask_h[None, :]
         N_K: tl.constexpr = H // BLOCK_K
 
-        is_init = tl.load(is_init_ptr + b_off_i64 * T + t, mask=mask_b, other=False) != 0
+        is_init = (
+            tl.load(is_init_ptr + b_off_i64 * T + t, mask=mask_b, other=False) != 0
+        )
         reset_h = tl.load(
             hidden_ptr + b_off_i64[:, None] * (T * H) + t * H + h_off[None, :],
             mask=mask_bh,
@@ -1045,7 +1073,10 @@ if _has_triton:
                 c_prev = reset_c
             else:
                 c_prev_stored = tl.load(
-                    c_out_ptr + b_off_i64[:, None] * (T * H) + (t - 1) * H + h_off[None, :],
+                    c_out_ptr
+                    + b_off_i64[:, None] * (T * H)
+                    + (t - 1) * H
+                    + h_off[None, :],
                     mask=mask_b[:, None],
                     other=0.0,
                 )
@@ -1110,7 +1141,9 @@ if _has_triton:
             dh_prev_total = tl.zeros_like(dh_next)
             for k_iter in tl.static_range(N_K):
                 k_off = k_iter * BLOCK_K + k_inner
-                base_gx_k = b_off_i64[:, None] * (T * 4 * H) + t * (4 * H) + k_off[None, :]
+                base_gx_k = (
+                    b_off_i64[:, None] * (T * 4 * H) + t * (4 * H) + k_off[None, :]
+                )
                 w_i_chunk = tl.load(w_i_ptr + k_off[:, None] * H + h_off[None, :])
                 di_chunk = tl.load(
                     dgates_h_ptr + base_gx_k + 0 * H, mask=mask_b[:, None], other=0.0
@@ -1171,7 +1204,6 @@ if _has_triton:
             dc_next,
             mask=mask_b[:, None],
         )
-
 
     # ------------------------------------------------------------------------
     # Forward launchers
