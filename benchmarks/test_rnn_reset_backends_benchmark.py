@@ -111,10 +111,19 @@ def _make_module(
 
 
 def _call(
-    module: Callable[[TensorDict], TensorDict], tensordict: TensorDict
+    module: Callable[[TensorDict], TensorDict],
+    tensordict: TensorDict,
+    device: torch.device,
 ) -> TensorDict:
+    # Synchronize inside the timed region: CUDA launches are async, and the
+    # tiled Triton path issues one launch per time step, so without an in-loop
+    # sync pytest-benchmark would time enqueue cost (CPU running ahead of the
+    # GPU) rather than kernel execution -- producing a spuriously low Min and
+    # huge StdDev. Syncing here makes every round reflect GPU completion.
     with torch.inference_mode():
-        return module(tensordict)
+        out = module(tensordict)
+    _sync(device)
+    return out
 
 
 def _mib(num_bytes: int) -> float:
@@ -224,10 +233,9 @@ def test_rnn_rollout_with_intermediate_resets(
     # eager path only needs a single prep call.
     prep_iters = _COMPILE_WARMUP + 3 if compile else 1
     for _ in range(prep_iters):
-        _call(module, tensordict)
-        _sync(device)
+        _call(module, tensordict, device)
     memory_before = _reset_cuda_memory_stats(device)
-    benchmark(_call, module, tensordict)
+    benchmark(_call, module, tensordict, device)
     _sync(device)
     record_cuda_memory_stats(
         benchmark, _collect_cuda_memory_stats(device, memory_before)
