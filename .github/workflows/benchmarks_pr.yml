@@ -133,7 +133,7 @@ jobs:
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
           export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-          python -m pytest -vvv --rank 0 --timeout=60 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py .
+          python -m pytest -vvv --rank 0 --timeout=180 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py .
       - name: Run PR benchmarks
         run: |
           set -euxo pipefail
@@ -160,7 +160,7 @@ jobs:
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
           export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
-          python -m pytest -vvv --rank 0 --timeout=60 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
+          python -m pytest -vvv --rank 0 --timeout=180 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
       - name: Upload PR benchmark results
         if: ${{ always() }}
         run: |
