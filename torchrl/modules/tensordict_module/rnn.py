@@ -101,6 +101,40 @@ def _canonical_contiguous(value: Tensor) -> Tensor:
     return result.copy_(value)
 
 
+def _split_gru_gate_param(
+    param: Tensor | None,
+    hidden_size: int,
+) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
+    if param is None:
+        return None, None, None
+    gate_chunks = (hidden_size, hidden_size, hidden_size)
+    return tuple(gate.clone() for gate in param.split(gate_chunks, 0))
+
+
+def _gru_cell_from_gate_params(
+    x: Tensor,
+    hx: Tensor,
+    weight_ih: tuple[Tensor, Tensor, Tensor],
+    bias_ih: tuple[Tensor | None, Tensor | None, Tensor | None],
+    weight_hh: tuple[Tensor, Tensor, Tensor],
+    bias_hh: tuple[Tensor | None, Tensor | None, Tensor | None],
+) -> Tensor:
+    x = x.view(-1, x.size(1))
+
+    i_r = F.linear(x, weight_ih[0], bias_ih[0])
+    i_i = F.linear(x, weight_ih[1], bias_ih[1])
+    i_n = F.linear(x, weight_ih[2], bias_ih[2])
+    h_r = F.linear(hx, weight_hh[0], bias_hh[0])
+    h_i = F.linear(hx, weight_hh[1], bias_hh[1])
+    h_n = F.linear(hx, weight_hh[2], bias_hh[2])
+
+    resetgate = (i_r + h_r).sigmoid()
+    inputgate = (i_i + h_i).sigmoid()
+    newgate = (i_n + (resetgate * h_n)).tanh()
+
+    return newgate + inputgate * (hx - newgate)
+
+
 @implement_for("torch", None, "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:
     raise NotImplementedError(
@@ -1677,8 +1711,13 @@ class GRU(GRUBase):
             i_r, i_i, i_n = gate_x.chunk(3, 1)
             h_r, h_i, h_n = gate_h.chunk(3, 1)
         else:
-            i_r, i_i, i_n = gate_x.split(hidden_size, 1)
-            h_r, h_i, h_n = gate_h.split(hidden_size, 1)
+            # In scan's compiled backward, ``chunk(3, dim)`` derives gate sizes
+            # from a symbolic ``3 * hidden_size`` dim, while ``split(hidden_size)``
+            # can leak that composite SymInt through the HOP partitioner. Passing
+            # explicit sections keeps the sections concrete and the graph valid.
+            gate_chunks = (hidden_size, hidden_size, hidden_size)
+            i_r, i_i, i_n = gate_x.split(gate_chunks, 1)
+            h_r, h_i, h_n = gate_h.split(gate_chunks, 1)
 
         resetgate = (i_r + h_r).sigmoid()
         inputgate = (i_i + h_i).sigmoid()
@@ -1765,13 +1804,26 @@ class GRU(GRUBase):
                 "GRU(use_scan=True) does not support dropout yet."
             )
 
+        hidden_size = self.hidden_size
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.num_layers):
             weights = self._all_weights[layer]
-            weight_ihs.append(getattr(self, weights[0]).clone())
-            weight_hhs.append(getattr(self, weights[1]).clone())
-            bias_ihs.append(getattr(self, weights[2]).clone() if self.bias else None)
-            bias_hhs.append(getattr(self, weights[3]).clone() if self.bias else None)
+            weight_ihs.append(
+                _split_gru_gate_param(getattr(self, weights[0]), hidden_size)
+            )
+            weight_hhs.append(
+                _split_gru_gate_param(getattr(self, weights[1]), hidden_size)
+            )
+            bias_ihs.append(
+                _split_gru_gate_param(
+                    getattr(self, weights[2]) if self.bias else None, hidden_size
+                )
+            )
+            bias_hhs.append(
+                _split_gru_gate_param(
+                    getattr(self, weights[3]) if self.bias else None, hidden_size
+                )
+            )
 
         if self.batch_first:
             x = x.transpose(0, 1)
@@ -1781,7 +1833,6 @@ class GRU(GRUBase):
             mask = torch.ones(x.shape[0], x.shape[1], dtype=torch.bool, device=x.device)
 
         num_layers = self.num_layers
-        hidden_size = self.hidden_size
 
         def step(carry, inputs):
             h_layers = carry  # [num_layers, B, H]
@@ -1791,14 +1842,13 @@ class GRU(GRUBase):
             h_unbound = h_layers.unbind(0)
             for layer in range(num_layers):
                 h_prev = h_unbound[layer]
-                h_new = self._gru_cell(
+                h_new = _gru_cell_from_gate_params(
                     x_t,
                     h_prev,
                     weight_ihs[layer],
                     bias_ihs[layer],
                     weight_hhs[layer],
                     bias_hhs[layer],
-                    hidden_size,
                 )
                 h_new = torch.where(m_t, h_new, h_prev)
                 new_h.append(h_new)
@@ -2544,26 +2594,40 @@ class GRUModule(ModuleBase):
                 "GRUModule(recurrent_backend='scan') does not support bidirectional GRUs yet."
             )
 
-        # See _lstm_scan_with_resets: cuDNN flattens GRU parameters into a
-        # single storage, so the views alias each other and the scan tracer
-        # rejects them as inputs. Cloning produces independent allocations.
+        # Split the packed GRU gate parameters outside the scan body. This keeps
+        # the scan step from producing intermediate tensors whose width is the
+        # composite symbolic expression ``3 * hidden_size`` and avoids the
+        # chunk/split-on-activations path in scan's compiled backward. Each gate
+        # clone is an independent allocation, preserving the existing scan
+        # input-aliasing workaround for cuDNN-flattened RNN parameters while
+        # keeping gradients connected to the packed parameters.
+        hidden_size = self.gru.hidden_size
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
-            weight_ihs.append(getattr(self.gru, weights[0]).clone())
-            weight_hhs.append(getattr(self.gru, weights[1]).clone())
+            weight_ihs.append(
+                _split_gru_gate_param(getattr(self.gru, weights[0]), hidden_size)
+            )
+            weight_hhs.append(
+                _split_gru_gate_param(getattr(self.gru, weights[1]), hidden_size)
+            )
             bias_ihs.append(
-                getattr(self.gru, weights[2]).clone() if self.gru.bias else None
+                _split_gru_gate_param(
+                    getattr(self.gru, weights[2]) if self.gru.bias else None,
+                    hidden_size,
+                )
             )
             bias_hhs.append(
-                getattr(self.gru, weights[3]).clone() if self.gru.bias else None
+                _split_gru_gate_param(
+                    getattr(self.gru, weights[3]) if self.gru.bias else None,
+                    hidden_size,
+                )
             )
 
         input = _canonical_contiguous(input.transpose(0, 1))
         is_init = _canonical_contiguous(is_init.transpose(0, 1))
         reset_hidden = _canonical_contiguous(hidden_in.permute(1, 2, 0, 3))
         num_layers = self.gru.num_layers
-        hidden_size = self.gru.hidden_size
 
         def step(carry, inputs):
             h_layers = carry
@@ -2573,14 +2637,13 @@ class GRUModule(ModuleBase):
             h_unbound = h_layers.unbind(0)
             new_h = []
             for layer in range(num_layers):
-                h_new = GRU._gru_cell(
+                h_new = _gru_cell_from_gate_params(
                     x_t,
                     h_unbound[layer],
                     weight_ihs[layer],
                     bias_ihs[layer],
                     weight_hhs[layer],
                     bias_hhs[layer],
-                    hidden_size,
                 )
                 new_h.append(h_new)
                 x_t = h_new
