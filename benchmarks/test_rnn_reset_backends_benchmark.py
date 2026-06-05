@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterator
 from typing import Literal
 
 import pytest
@@ -78,6 +79,13 @@ def _call(module: torch.nn.Module, tensordict: TensorDict) -> TensorDict:
         return module(tensordict)
 
 
+@pytest.fixture(autouse=True)
+def _reset_compile_cache() -> Iterator[None]:
+    torch.compiler.reset()
+    yield
+    torch.compiler.reset()
+
+
 @pytest.mark.parametrize("rnn_type", ["gru", "lstm"])
 @pytest.mark.parametrize("reset_seed", [0])
 @pytest.mark.parametrize(
@@ -109,26 +117,13 @@ def test_rnn_rollout_with_intermediate_resets(
         if backend == "triton":
             pytest.skip(f"triton recurrent backend unavailable: {err}")
         raise
-    prev_capture = torch._dynamo.config.capture_scalar_outputs
-    torch._dynamo.config.capture_scalar_outputs = compile
-    try:
-        if compile:
-            module = torch.compile(module)
-        for _ in range(3 if compile else 1):
-            try:
-                _call(module, tensordict)
-                _sync(device)
-            except Exception as err:
-                if compile:
-                    pytest.xfail(
-                        f"torch.compile currently fails for public {rnn_type} "
-                        f"{backend} TensorDict rollout: {err}"
-                    )
-                raise
-        benchmark(_call, module, tensordict)
+    if compile:
+        module = torch.compile(module)
+    for _ in range(3 if compile else 1):
+        _call(module, tensordict)
         _sync(device)
-    finally:
-        torch._dynamo.config.capture_scalar_outputs = prev_capture
+    benchmark(_call, module, tensordict)
+    _sync(device)
 
 
 if __name__ == "__main__":
