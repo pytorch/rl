@@ -72,12 +72,24 @@ jobs:
           echo /usr/local/bin >> "$GITHUB_PATH"
       - name: Setup benchmarks
         run: |
+          BENCHMARK_SITE_DIR="$(mktemp -d)"
           {
             echo "BASE_SHA=${PR_BASE_SHA:0:8}"
             echo "HEAD_SHA=${PR_HEAD_SHA:0:8}"
             echo "BASELINE_JSON=$(mktemp)"
             echo "CONTENDER_JSON=$(mktemp)"
+            echo "BENCHMARK_SITE_DIR=${BENCHMARK_SITE_DIR}"
           } >> "$GITHUB_ENV"
+          cat > "${BENCHMARK_SITE_DIR}/sitecustomize.py" <<'PY'
+          import warnings
+
+          try:
+              import torch
+
+              torch._dynamo.config.reorderable_logging_functions.add(warnings.warn)
+          except (AttributeError, ImportError):
+              pass
+          PY
       - name: Install benchmark dependencies
         run: |
           set -euxo pipefail
@@ -86,7 +98,7 @@ jobs:
           export PYTHON_INCLUDE_DIR=/usr/include/python3.10
 
           python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "gym[accept-rom-license,atari]" transformers accelerate ray
+          python3.10 -m pip install ninja pytest pytest-benchmark pytest-timeout "hoptorch>=0.1.4" "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "gym[accept-rom-license,atari]" transformers accelerate ray
           python3.10 -m pip install "pybind11[global]"
           python3.10 -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
           python3.10 -m pip install --no-deps git+https://github.com/pytorch/tensordict
@@ -120,7 +132,8 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py .
+          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json "${BASELINE_JSON}" --ignore test_llm.py .
       - name: Run PR benchmarks
         run: |
           set -euxo pipefail
@@ -146,7 +159,8 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
+          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json "${CONTENDER_JSON}" --ignore test_llm.py .
       - name: Upload PR benchmark results
         if: ${{ always() }}
         run: |
