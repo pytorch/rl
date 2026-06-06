@@ -884,7 +884,7 @@ class TestLSTMModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
-    @pytest.mark.parametrize("H", [16, 64])
+    @pytest.mark.parametrize("H", [16, 64, 512])
     def test_lstm_module_triton_backend_matches_pad(self, H, compute_dtype):
         torch.manual_seed(0)
         device = torch.device("cuda")
@@ -1033,7 +1033,13 @@ class TestLSTMModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_lstm_module_triton_backward(self):
-        """Backward path: gradients match pad backend within tolerance."""
+        """Backward path: gradients match pad backend within tolerance.
+
+        Uses the fused path (H below ``_FWD_TILED_H_MIN``). The autotuned fused
+        backward at large H exceeds the unit-test timeout on CI GPUs, and the
+        tiled backward is only reachable via recompute (see #3752), so large-H
+        backward parity is left to the benchmark/recompute paths.
+        """
         torch.manual_seed(0)
         device = torch.device("cuda")
         B, T, F, H = 4, 7, 3, 64
@@ -2510,7 +2516,7 @@ class TestGRUModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
-    @pytest.mark.parametrize("H", [16, 64])
+    @pytest.mark.parametrize("H", [16, 64, 512])
     def test_gru_module_triton_backend_matches_pad(self, H, compute_dtype):
         torch.manual_seed(0)
         device = torch.device("cuda")
@@ -2637,7 +2643,13 @@ class TestGRUModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_gru_module_triton_backward(self):
-        """Backward path: gradients match pad backend within tolerance."""
+        """Backward path: gradients match pad backend within tolerance.
+
+        Uses the fused path (H below ``_FWD_TILED_H_MIN``). The autotuned fused
+        backward at large H exceeds the unit-test timeout on CI GPUs, and the
+        tiled backward is only reachable via recompute (see #3752), so large-H
+        backward parity is left to the benchmark/recompute paths.
+        """
         torch.manual_seed(0)
         device = torch.device("cuda")
         B, T, F, H = 4, 7, 3, 64
