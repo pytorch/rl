@@ -43,6 +43,7 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.rnn import (
+    canonicalize_rnn_subset,
     GRU,
     GRUCell,
     GRUModule,
@@ -84,6 +85,7 @@ __all__ = [
     "OrnsteinUhlenbeckProcessWrapper",
     "SafeProbabilisticModule",
     "SafeProbabilisticTensorDictSequential",
+    "canonicalize_rnn_subset",
     "GRU",
     "GRUCell",
     "GRUModule",
