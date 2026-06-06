@@ -412,6 +412,44 @@ flat (``split_trajs=False``, the default) and:
   ``split_trajectories(..., as_nested=True)`` (no zero-padding, no mask)
   rather than the padded form.
 
+Narrow canonicalization for recurrent inputs
+--------------------------------------------
+
+The recurrent backends (``scan`` and ``triton``) expect the RNN input and
+recurrent-state leaves to be in canonical (contiguous, predictable-stride)
+layout. Calling ``data.contiguous(canonical=True)`` on the whole TensorDict
+before feeding a recurrent learner is the simplest way to satisfy that, but
+it materializes a full-batch copy of every leaf — including rewards, dones,
+log-probs, advantages, and value targets the RNN never reads.
+
+:meth:`~torchrl.modules.LSTMModule.canonicalize` (and its
+:class:`~torchrl.modules.GRUModule` twin) canonicalize only the subset of
+keys the module actually reads/writes (:attr:`canonical_keys`), leaving
+unrelated leaves untouched:
+
+.. code-block:: python
+
+    from torchrl.modules import LSTMModule, canonicalize_rnn_subset
+
+    actor = LSTMModule(input_size=..., hidden_size=..., in_key="obs",
+                       out_key="actor_h")
+    critic = LSTMModule(input_size=..., hidden_size=..., in_key="obs",
+                        out_key="critic_h")
+
+    # Before GAE / PPO update: canonicalize only the RNN keys.
+    data = canonicalize_rnn_subset(data, [actor, critic])
+
+Pair with :class:`~torchrl.cuda_memory_profile` to verify the win:
+
+.. code-block:: python
+
+    from torchrl import cuda_memory_profile
+
+    with cuda_memory_profile("learner-canonicalize"):
+        data = canonicalize_rnn_subset(data, [actor, critic])
+        advantages = gae(data)
+        update(data)
+
 See also
 --------
 
@@ -425,5 +463,7 @@ See also
   :class:`~torchrl.modules.GRUModule`,
   :func:`~torchrl.modules.set_recurrent_mode` — the recurrent modules
   that consume the contiguous-trajectory layout natively.
+* :func:`~torchrl.modules.canonicalize_rnn_subset` — narrow
+  canonicalization for multi-RNN learners.
 * :doc:`modules_rnn` — recurrent execution modes, backend selection, and
   Triton precision controls.
