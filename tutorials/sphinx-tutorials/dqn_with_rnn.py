@@ -53,7 +53,7 @@ import tempfile
 # As this figure shows, our environment populates the TensorDict with zeroed recurrent
 # states which are read by the policy together with the observation to produce an
 # action, and recurrent states that will be used for the next step.
-# When the :func:`~torchrl.envs.utils.step_mdp` function is called, the recurrent states
+# When the :func:`~torchrl.envs.step_mdp` function is called, the recurrent states
 # from the next state are brought to the current TensorDict. Let's see how this
 # is implemented in practice.
 
@@ -252,7 +252,7 @@ print("out_keys", lstm.out_keys)
 # as well as recurrent key names. The out_keys are preceded by a "next" prefix
 # that indicates that they will need to be written in the "next" TensorDict.
 # We use this convention (which can be overridden by passing the in_keys/out_keys
-# arguments) to make sure that a call to :func:`~torchrl.envs.utils.step_mdp` will
+# arguments) to make sure that a call to :func:`~torchrl.envs.step_mdp` will
 # move the recurrent state to the root TensorDict, making it available to the
 # RNN during the following call (see figure in the intro).
 #
@@ -293,7 +293,7 @@ mlp = Mod(mlp, in_keys=["embed"], out_keys=["action_value"])
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #
 # The last part of our policy is the Q-Value Module.
-# The Q-Value module :class:`~torchrl.modules.tensordict_module.QValueModule`
+# The Q-Value module :class:`~torchrl.modules.QValueModule`
 # will read the ``"action_values"`` key that is produced by our MLP and
 # from it, gather the action that has the maximum value.
 # The only thing we need to do is to specify the action space, which can be done
@@ -305,7 +305,7 @@ qval = QValueModule(action_space=None, spec=env.action_spec)
 ######################################################################
 # .. note::
 #   TorchRL also provides a wrapper class :class:`torchrl.modules.QValueActor` that
-#   wraps a module in a Sequential together with a :class:`~torchrl.modules.tensordict_module.QValueModule`
+#   wraps a module in a Sequential together with a :class:`~torchrl.modules.QValueModule`
 #   like we are doing explicitly here. There is little advantage to do this
 #   and the process is less transparent, but the end results will be similar to
 #   what we do here.
@@ -355,7 +355,7 @@ policy(env.reset())
 #
 # Out DQN loss requires us to pass the policy and, again, the action-space.
 # While this may seem redundant, it is important as we want to make sure that
-# the :class:`~torchrl.objectives.DQNLoss` and the :class:`~torchrl.modules.tensordict_module.QValueModule`
+# the :class:`~torchrl.objectives.DQNLoss` and the :class:`~torchrl.modules.QValueModule`
 # classes are compatible, but aren't strongly dependent on each other.
 #
 # To use the Double-DQN, we ask for a ``delay_value`` argument that will
@@ -377,7 +377,7 @@ optim = torch.optim.Adam(policy.parameters(), lr=3e-4)
 # ---------------------------
 #
 # For RNN-based policies, we need to sample sequences of consecutive transitions
-# rather than independent transitions. We'll use a :class:`~torchrl.data.replay_buffers.samplers.SliceSampler`
+# rather than independent transitions. We'll use a :class:`~torchrl.data.replay_buffers.SliceSampler`
 # to sample trajectory slices of length 50. This ensures that the LSTM hidden states
 # can be properly propagated through the sequence during training.
 #

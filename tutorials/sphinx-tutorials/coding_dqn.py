@@ -176,7 +176,7 @@ def is_notebook() -> bool:
 #
 # We will be using five transforms:
 #
-# - :class:`~torchrl.envs.StepCounter` to count the number of steps in each trajectory;
+# - :class:`~torchrl.envs.transforms.StepCounter` to count the number of steps in each trajectory;
 # - :class:`~torchrl.envs.transforms.ToTensorImage` will convert a ``[W, H, C]`` uint8
 #   tensor in a floating point tensor in the ``[0, 1]`` space with shape
 #   ``[C, W, H]``;
@@ -201,7 +201,7 @@ def is_notebook() -> bool:
 #   technically work with every single environment attached to its own set of
 #   transforms.
 # - ``obs_norm_sd`` will contain the normalizing constants for
-#   the :class:`~torchrl.envs.ObservationNorm` transform.
+#   the :class:`~torchrl.envs.transforms.ObservationNorm` transform.
 #
 
 
@@ -260,7 +260,7 @@ def make_env(
 # with a full ``[C, W, H]`` normalizing mask, but with simpler ``[C, 1, 1]``
 # shaped set of normalizing constants (loc and scale parameters).
 # We will be using the ``reduce_dim`` argument
-# of :meth:`~torchrl.envs.ObservationNorm.init_stats` to instruct which
+# of :meth:`~torchrl.envs.transforms.ObservationNorm.init_stats` to instruct which
 # dimensions must be reduced, and the ``keep_dims`` parameter to ensure that
 # not all dimensions disappear in the process:
 #
@@ -273,7 +273,7 @@ def get_norm_stats():
     )
     obs_norm_sd = test_env.transform[-1].state_dict()
     # let's check that normalizing constants have a size of ``[C, 1, 1]`` where
-    # ``C=4`` (because of :class:`~torchrl.envs.CatFrames`).
+    # ``C=4`` (because of :class:`~torchrl.envs.transforms.CatFrames`).
     print("state dict of the observation norm:", obs_norm_sd)
     test_env.close()
     del test_env
@@ -361,7 +361,7 @@ def make_model(dummy_env):
 # could improve the performance significantly.
 #
 # We place the storage on disk using
-# :class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage` class. This
+# :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` class. This
 # storage is created in a lazy manner: it will only be instantiated once the
 # first batch of data is passed to it.
 #
