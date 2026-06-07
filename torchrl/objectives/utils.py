@@ -625,14 +625,14 @@ class hold_out_net(_context_manager):
         if self.mode:
             if is_dynamo_compiling():
                 self._params = TensorDict.from_module(self.network)
-                self._params.data.to_module(self.network)
+                self._params.data.to_module(self.network, preserve_module_state=False)
             else:
                 self.network.requires_grad_(False)
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if self.mode:
             if is_dynamo_compiling():
-                self._params.to_module(self.network)
+                self._params.to_module(self.network, preserve_module_state=False)
             else:
                 self.network.requires_grad_()
 
@@ -748,7 +748,7 @@ def _vmap_func(module, *args, func=None, pseudo_vmap: bool = False, **kwargs):
         def decorated_module(*module_args_params):
             params = module_args_params[-1]
             module_args = module_args_params[:-1]
-            with params.to_module(module):
+            with params.to_module(module, preserve_module_state=False):
                 if func is None:
                     r = module(*module_args)
                 else:

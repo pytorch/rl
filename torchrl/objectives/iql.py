@@ -445,7 +445,9 @@ class IQLLoss(LossModule):
 
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
 
         log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
@@ -464,7 +466,9 @@ class IQLLoss(LossModule):
             td_copy = tensordict.select(
                 *self.value_network.in_keys, strict=False
             ).detach()
-            with self.value_network_params.to_module(self.value_network):
+            with self.value_network_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(td_copy)
             value = td_copy.get(self.tensor_keys.value).squeeze(
                 -1
@@ -495,7 +499,9 @@ class IQLLoss(LossModule):
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile)
@@ -847,7 +853,9 @@ class DiscreteIQLLoss(IQLLoss):
 
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
 
         log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
@@ -886,7 +894,9 @@ class DiscreteIQLLoss(IQLLoss):
             td_copy = tensordict.select(
                 *self.value_network.in_keys, strict=False
             ).detach()
-            with self.value_network_params.to_module(self.value_network):
+            with self.value_network_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(td_copy)
             value = td_copy.get(self.tensor_keys.value).squeeze(
                 -1
@@ -942,7 +952,9 @@ class DiscreteIQLLoss(IQLLoss):
             min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_Q - value, self.expectile)

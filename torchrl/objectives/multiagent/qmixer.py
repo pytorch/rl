@@ -217,7 +217,7 @@ class QMixerLoss(LossModule):
         params = TensorDict.from_module(global_value_network)
         with params.apply(
             self._make_meta_params, device=torch.device("meta"), filter_empty=False
-        ).to_module(global_value_network):
+        ).to_module(global_value_network, preserve_module_state=False):
             self.__dict__["global_value_network"] = deepcopy(global_value_network)
 
         self.convert_to_functional(
@@ -320,7 +320,9 @@ class QMixerLoss(LossModule):
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDict:
         td_copy = tensordict.clone(False)
-        with self.local_value_network_params.to_module(self.local_value_network):
+        with self.local_value_network_params.to_module(
+            self.local_value_network, preserve_module_state=False
+        ):
             self.local_value_network(
                 td_copy,
             )
@@ -340,7 +342,9 @@ class QMixerLoss(LossModule):
             pred_val_index = (pred_val * action).sum(-1, keepdim=True)
 
         td_copy.set(self.tensor_keys.local_value, pred_val_index)  # [*B, n_agents, 1]
-        with self.mixer_network_params.to_module(self.mixer_network):
+        with self.mixer_network_params.to_module(
+            self.mixer_network, preserve_module_state=False
+        ):
             self.mixer_network(td_copy)
         pred_val_index = td_copy[self.tensor_keys.global_value].squeeze(-1)
         # [*B] this is global and shared among the agents as will be the target

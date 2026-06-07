@@ -455,7 +455,9 @@ class A2CLoss(LossModule):
             *self.actor_network.in_keys, strict=False
         ).copy()
         with (
-            self.actor_network_params.to_module(self.actor_network)
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -515,7 +517,9 @@ class A2CLoss(LossModule):
             *self.critic_network.in_keys, strict=False
         )
         with (
-            self.critic_network_params.to_module(self.critic_network)
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
