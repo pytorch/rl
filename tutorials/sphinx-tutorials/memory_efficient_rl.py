@@ -27,7 +27,8 @@ Memory-Efficient RL Training
       * Trading collection speed against the training memory budget with
         the collector's ``env_device`` / ``policy_device`` /
         ``storing_device`` placement
-      * When *not* to take this path (MultiStep DQN, truncated transitions)
+      * When *not* to take the compact path (MultiStep DQN, truncated
+        transitions) — and why the delta path keeps MultiStep available
       * Other knobs: :class:`~torchrl.data.LazyMemmapStorage`,
         :class:`~torchrl.data.SliceSampler`, the padding-free ``"scan"`` /
         ``"triton"`` RNN backends, and
@@ -66,11 +67,19 @@ torch.manual_seed(0)
 # The problem
 # -----------
 #
-# With the emergence of highly vectorized simulators (MuJoCo XLA / Warp /
-# the native PyTorch backend, Isaac Lab, Genesis, ...) we now collect data
-# at staggering rates, and policies and critics routinely scale from
-# hundreds of millions to billions of parameters. If one is not careful,
-# the memory cost of *acquiring* the data piles up just as fast as the
+# Two independent trends have made memory the bottleneck in modern RL:
+#
+# * **Environments scaled up.** Highly vectorized simulators (MuJoCo XLA /
+#   Warp / the native PyTorch backend, Isaac Lab, Genesis, ...) now produce
+#   transitions at staggering rates, so the sheer *volume* of data flowing
+#   through rollouts and replay buffers explodes.
+# * **Policies scaled up.** Models routinely run from hundreds of millions
+#   to billions of parameters — vision-language-action (VLA) policies,
+#   large recurrent critics, transformer world models — so each forward and
+#   backward pass carries a heavy parameter and activation footprint.
+#
+# Either trend alone strains memory; together they compound. If one is not
+# careful, the cost of *acquiring* the data piles up just as fast as the
 # cost of *training* on it.
 #
 # There is a fundamental tension here. Fast data collection wants to keep
@@ -262,7 +271,7 @@ print(
 )
 
 ######################################################################
-# Knob 2b — Lossy delta compression, boundary-preserving
+# Knob 3 — Lossy delta compression, boundary-preserving
 # ------------------------------------------------------
 #
 # ``compact_obs`` + :class:`~torchrl.envs.transforms.NextStateReconstructor`
@@ -357,14 +366,19 @@ print(
 #   happened inside ``env.step``, so end-of-trajectory positions
 #   reconstruct correctly within the round-trip precision of
 #   ``delta_dtype``. No ``NaN``, no need for the value-estimator
-#   sanitizer at Knob 2.5.
+#   sanitizer at Knob 4.
 # * **Loss compatibility.** The reconstructed ``("next", obs)`` is
 #   bit-close to the original (subject to ``delta_dtype`` precision).
 #   Truncated-step bootstraps see the real next obs, not the
 #   ``V(obs[t]) ≈ V(real_next_obs)`` approximation.
-# * **MultiStep.** Still incompatible — the n-step transform needs
-#   ``data[t + n]`` materialised at every position; a one-step delta
-#   doesn't carry that information.
+# * **MultiStep.** Compatible, unlike the compact-obs path. The delta
+#   keeps the full per-step transition: full-precision root ``obs`` is
+#   retained at every step and ``("next", obs)`` reconstructs exactly
+#   everywhere (rewards / dones are never dropped), so the n-step
+#   observation ``data[t + n]`` is recoverable and n-step returns can be
+#   rebuilt on top of it — reconstruct ``("next", obs)`` from the delta
+#   first, then apply
+#   :class:`~torchrl.envs.transforms.MultiStepTransform`.
 # * **Precision.** Lossy. Round-trip error scales with ``delta_dtype``
 #   precision and observation magnitude — best when observations are
 #   roughly normalized.
@@ -377,7 +391,7 @@ print(
 # concerns rule out the compact-obs route in your loss pipeline.
 
 ######################################################################
-# Knob 2.5 — value-estimator NaN safety
+# Knob 4 — value-estimator NaN safety
 # -------------------------------------
 #
 # ``NaN`` propagating through GAE / TD would be catastrophic:
@@ -414,12 +428,15 @@ print("any -inf or +inf?", torch.isinf(out["advantage"]).any().item())
 #
 # Two situations call for keeping the canonical ``("next", obs)``:
 #
-# 1. :class:`~torchrl.envs.transforms.MultiStepTransform`. The n-step
-#    next observation is the *original* ``data[t + n]``, not
-#    ``data[t + 1]``, and the in-trajectory fallback at the last
-#    ``n - 1`` frames depends on having every ``data[t + k]`` written
-#    to ``("next", obs)`` at extend time. Rehydration cannot
-#    reconstruct that.
+# 1. :class:`~torchrl.envs.transforms.MultiStepTransform` *on the
+#    compact path*. The n-step next observation is the *original*
+#    ``data[t + n]``, not ``data[t + 1]``, and the in-trajectory
+#    fallback at the last ``n - 1`` frames depends on having every
+#    ``data[t + k]`` written to ``("next", obs)`` at extend time.
+#    :class:`~torchrl.envs.transforms.NextStateReconstructor` only
+#    rebuilds the *one-step* next, so it cannot reconstruct that. (The
+#    delta path of Knob 3 *is* MultiStep-compatible — it keeps the full
+#    per-step transition; see its MultiStep note.)
 # 2. Losses that bootstrap on *truncated* transitions and need the
 #    real next observation, not the
 #    ``V(obs[t]) ≈ V(real_next_obs)`` approximation that
@@ -427,12 +444,12 @@ print("any -inf or +inf?", torch.isinf(out["advantage"]).any().item())
 #    falls back to. The approximation is fine for many tasks (it's
 #    consistent and finite) but it *is* an approximation. For these
 #    cases, prefer
-#    :class:`~torchrl.envs.transforms.NextObservationDelta` (Knob 2b):
+#    :class:`~torchrl.envs.transforms.NextObservationDelta` (Knob 3):
 #    it pays a smaller memory saving but reconstructs the real
 #    transition at every position, including trajectory boundaries.
 
 ######################################################################
-# Knob 2.6 — the budgeted ``shifted=True`` value-net backend
+# Knob 5 — the budgeted ``shifted=True`` value-net backend
 # ----------------------------------------------------------
 #
 # ``shifted=True`` on the value estimators
@@ -491,7 +508,7 @@ print(
 )
 
 ######################################################################
-# Knob 2.7 — cap peak value-net memory with chunked calls
+# Knob 6 — cap peak value-net memory with chunked calls
 # -------------------------------------------------------
 #
 # The two knobs above shrink what is *stored*. The value estimators also
@@ -529,7 +546,7 @@ print(
 # a peak-memory lever and leaves the numerics untouched.
 
 ######################################################################
-# Knob 3 — memory-mapped replay buffer storage
+# Knob 7 — memory-mapped replay buffer storage
 # --------------------------------------------
 #
 # Even after halving the observation footprint, the replay buffer can
@@ -556,7 +573,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # more on storage choices.
 
 ######################################################################
-# Knob 3.5 — keep collection off the training memory budget
+# Knob 8 — keep collection off the training memory budget
 # ---------------------------------------------------------
 #
 # This is the "fast collection vs. efficient training" tension from the
@@ -594,7 +611,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #
 # The rule of thumb: keep ``env_device`` / ``policy_device`` on the
 # accelerator for throughput, and move ``storing_device`` *down* the
-# memory hierarchy (accelerator → host RAM → memmap on disk, Knob 3) as
+# memory hierarchy (accelerator → host RAM → memmap on disk, Knob 7) as
 # the buffer grows. ``no_cuda_sync=True`` drops the explicit
 # synchronisations the collector inserts around cross-device transfers —
 # safe only when those transfers are already ordered, or on pure CPU. The
@@ -602,7 +619,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # :ref:`the collector internals page <ref_collectors_internals>`.
 
 ######################################################################
-# Knob 4 — sequence training without padding
+# Knob 9 — sequence training without padding
 # ------------------------------------------
 #
 # RNN-based policies and value heads classically train on
@@ -621,12 +638,13 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #   :class:`~torchrl.modules.GRUModule` accept a
 #   ``recurrent_backend`` argument with three non-default values:
 #
-#     * ``"scan"`` — built on
-#       ``torch._higher_order_ops.scan`` (PyTorch ≥ 2.6). Resets the
-#       hidden state at each ``is_init=True`` frame inside the kernel,
-#       so trajectories of different lengths can be concatenated end
-#       to end with no padding. Designed for :func:`torch.compile`
-#       friendliness and uses less backward-pass activation memory.
+#     * ``"scan"`` — built on the ``hoptorch`` scan primitive
+#       (``pip install hoptorch>=0.1.4``; requires PyTorch ≥ 2.7).
+#       Resets the hidden state at each ``is_init=True`` frame inside
+#       the kernel, so trajectories of different lengths can be
+#       concatenated end to end with no padding. Designed for
+#       :func:`torch.compile` friendliness and uses less backward-pass
+#       activation memory.
 #     * ``"triton"`` — same idea, implemented as a custom Triton
 #       kernel (requires CUDA and ``triton >= 2.2``). Fastest of the
 #       three on GPU.
@@ -782,7 +800,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #   act on the accelerator, but spill the stored batch toward host RAM (and
 #   then memmap on disk) as the buffer grows.
 # * :class:`~torchrl.envs.transforms.MultiStepTransform` is the main
-#   loss-side reason to *not* take this path.
+#   loss-side reason to *not* take the *compact* path (Knob 1 + Knob 2);
+#   the delta path (Knob 3) keeps MultiStep available.
 # * :class:`~torchrl.data.LazyMemmapStorage`,
 #   :class:`~torchrl.data.SliceSampler`, the padding-free ``"scan"`` /
 #   ``"triton"`` recurrent backends, and
