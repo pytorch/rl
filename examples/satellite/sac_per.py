@@ -73,7 +73,7 @@ def _train_env_factory(
     reward_scale: float = 1.0,
     seed: int | None = None,
 ):
-    """Picklable training-env factory for ``aSyncDataCollector``."""
+    """Picklable training-env factory for ``AsyncCollector``."""
     env, _ = make_train_env(
         num_envs=num_envs,
         device=torch.device(device_str),
@@ -419,7 +419,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--async-collector",
         action="store_true",
         help=(
-            "Use aSyncDataCollector (collection runs in a separate process "
+            "Use AsyncCollector (collection runs in a separate process "
             "and overlaps with gradient updates). Requires that the env "
             "constructor be picklable; weights are synced once per outer "
             "iter via MultiProcessWeightSyncScheme."
