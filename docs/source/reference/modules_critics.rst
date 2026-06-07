@@ -10,6 +10,9 @@ Value networks estimate the value of states or state-action pairs.
     :template: rl_template_noinherit.rst
 
     ValueOperator
+    ValueNorm
+    PopArtValueNorm
+    RunningValueNorm
     DuelingCnnDQNet
     DistributionalDQNnet
     ConvNet
@@ -23,6 +26,7 @@ Value networks estimate the value of states or state-action pairs.
     LSTMModule
     GRUModule
     canonicalize_rnn_subset
+    set_recurrent_mode
     OnlineDTActor
     DTActor
     DecisionTransformer

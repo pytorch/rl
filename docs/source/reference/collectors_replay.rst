@@ -93,7 +93,7 @@ Complete trajectory collection with ``trajs_per_batch``
 When using a multi-process collector
 (:class:`~torchrl.collectors.MultiSyncCollector` or
 :class:`~torchrl.collectors.MultiAsyncCollector`) with fixed-frame batches
-and a :class:`~torchrl.data.SliceSampler`, adjacent frames in the buffer can
+and a :class:`~torchrl.data.replay_buffers.SliceSampler`, adjacent frames in the buffer can
 come from **different workers and different episodes** without an intervening
 ``done`` signal.  The sampler has no way to detect these invisible boundaries,
 so it may draw slices that straddle unrelated trajectories — silently
@@ -104,7 +104,7 @@ assembles **complete trajectories** (episodes whose last step carries
 ``("next", "done") == True``) before writing them to the buffer as flat 1-D
 sequences — no padding, no artificial boundaries.  Every trajectory in the
 buffer is guaranteed to be a genuine episode segment, making it directly
-compatible with :class:`~torchrl.data.SliceSampler`.
+compatible with :class:`~torchrl.data.replay_buffers.SliceSampler`.
 
 **Synchronous iteration (for-loop)**
 
@@ -179,7 +179,7 @@ replay-buffer semantics:
 
     Without ``trajs_per_batch``, a multi-process collector writes fixed-frame
     batches from each worker.  If the buffer uses a
-    :class:`~torchrl.data.SliceSampler`, the sampler will reconstruct episode
+    :class:`~torchrl.data.replay_buffers.SliceSampler`, the sampler will reconstruct episode
     boundaries from ``done`` signals, but worker batch boundaries are invisible
     — consecutive frames in the buffer may belong to completely different
     episodes.
@@ -196,7 +196,7 @@ replay-buffer semantics:
 
     - :class:`~torchrl.collectors.BaseCollector` for the full ``trajs_per_batch``
       API, completeness guarantee, and batched-environment behaviour.
-    - :class:`~torchrl.data.SliceSampler` for configuring sub-sequence sampling
+    - :class:`~torchrl.data.replay_buffers.SliceSampler` for configuring sub-sequence sampling
       from the buffer.
     - :ref:`The trajectory batching section <collectors_single>` in the
       single-node collector docs for the non-replay-buffer usage
