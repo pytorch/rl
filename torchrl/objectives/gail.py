@@ -181,7 +181,9 @@ class GAILLoss(LossModule):
             fake_labels = torch.zeros((batch_size, 1), dtype=torch.float32).to(device)
             real_labels = torch.ones((batch_size, 1), dtype=torch.float32).to(device)
 
-        with self.discriminator_network_params.to_module(self.discriminator_network):
+        with self.discriminator_network_params.to_module(
+            self.discriminator_network, preserve_module_state=False
+        ):
             d_logits = self.discriminator_network(combined_inputs).get(
                 self.tensor_keys.discriminator_pred
             )
@@ -222,7 +224,7 @@ class GAILLoss(LossModule):
             )
 
             with self.discriminator_network_params.to_module(
-                self.discriminator_network
+                self.discriminator_network, preserve_module_state=False
             ):
                 d_logits_mixture = self.discriminator_network(pg_input_td).get(
                     self.tensor_keys.discriminator_pred

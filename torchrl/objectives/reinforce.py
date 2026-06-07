@@ -379,7 +379,7 @@ class ReinforceLoss(LossModule):
 
         # compute log-prob
         with self.actor_network_params.to_module(
-            self.actor_network
+            self.actor_network, preserve_module_state=False
         ) if self.functional else contextlib.nullcontext():
             tensordict = self.actor_network(tensordict)
 
@@ -439,7 +439,7 @@ class ReinforceLoss(LossModule):
             *self.critic_network.in_keys, strict=False
         )
         with self.critic_network_params.to_module(
-            self.critic_network
+            self.critic_network, preserve_module_state=False
         ) if self.functional else contextlib.nullcontext():
             state_value = self.critic_network(tensordict_select).get(
                 self.tensor_keys.value

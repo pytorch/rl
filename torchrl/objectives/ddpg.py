@@ -186,7 +186,7 @@ class DDPGLoss(LossModule):
     ]
 
     actor_network: TensorDictModule
-    value_network: actor_network
+    value_network: TensorDictModule
     actor_network_params: TensorDictParams
     value_network_params: TensorDictParams
     target_actor_network_params: TensorDictParams
@@ -218,7 +218,7 @@ class DDPGLoss(LossModule):
         params_meta = params.apply(
             self._make_meta_params, device=torch.device("meta"), filter_empty=False
         )
-        with params_meta.to_module(actor_critic):
+        with params_meta.to_module(actor_critic, preserve_module_state=False):
             self.__dict__["actor_critic"] = deepcopy(actor_critic)
 
         self.convert_to_functional(
@@ -325,9 +325,13 @@ class DDPGLoss(LossModule):
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys, strict=False
         ).detach()
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             td_copy = self.actor_network(td_copy)
-        with self._cached_detached_value_params.to_module(self.value_network):
+        with self._cached_detached_value_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
@@ -349,7 +353,9 @@ class DDPGLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 

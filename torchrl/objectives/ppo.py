@@ -669,7 +669,9 @@ class PPOLoss(LossModule):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
             with (
-                self.actor_network_params.to_module(self.actor_network)
+                self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                )
                 if self.functional
                 else contextlib.nullcontext()
             ):
@@ -802,7 +804,9 @@ class PPOLoss(LossModule):
                 )
 
         with (
-            self.critic_network_params.to_module(self.critic_network)
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -1622,7 +1626,9 @@ class KLPENPPOLoss(PPOLoss):
         neg_loss = log_weight.exp() * advantage
 
         with (
-            self.actor_network_params.to_module(self.actor_network)
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):

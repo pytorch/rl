@@ -474,7 +474,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if self.value_network is not None:
             with hold_out_net(
                 self.value_network
-            ) if target_params is None else target_params.to_module(self.value_network):
+            ) if target_params is None else target_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
@@ -714,7 +716,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             data_in.set(key, data_value)
         if params is not None:
-            with params.to_module(value_net):
+            with params.to_module(value_net, preserve_module_state=False):
                 values_full = _call_value_net(data_in)
         else:
             values_full = _call_value_net(data_in)
@@ -2540,7 +2542,9 @@ class VTrace(ValueEstimatorBase):
             actor_network = loss_module.actor_network
         if getattr(loss_module, "functional", False):
             actor_network = deepcopy(actor_network)
-            loss_module.actor_network_params.to_module(actor_network)
+            loss_module.actor_network_params.to_module(
+                actor_network, preserve_module_state=False
+            )
         return cls(
             value_network=value_network,
             actor_network=actor_network,

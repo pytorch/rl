@@ -372,7 +372,9 @@ class REDQLoss_deprecated(LossModule):
         tensordict_clone = tensordict.select(*obs_keys, strict=False)
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             self.actor_network(tensordict_clone)
 
         tensordict_expand = self._vmap_qvalue_networkN0(
@@ -409,7 +411,9 @@ class REDQLoss_deprecated(LossModule):
             # select pseudo-action
             with set_exploration_type(
                 ExplorationType.RANDOM
-            ), self.target_actor_network_params.to_module(self.actor_network):
+            ), self.target_actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ):
                 self.actor_network(next_td)
             sample_log_prob = next_td.get(self.tensor_keys.log_prob)
             # get q-values
