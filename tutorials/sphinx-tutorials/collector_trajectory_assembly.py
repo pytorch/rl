@@ -188,7 +188,7 @@ print(traj_data["collector", "mask"])
 #
 # In off-policy training the standard pattern is to store **flat
 # transitions** in a :class:`~torchrl.data.ReplayBuffer` and let a
-# :class:`~torchrl.data.SliceSampler` carve out contiguous
+# :class:`~torchrl.data.replay_buffers.SliceSampler` carve out contiguous
 # sub-sequences that respect episode boundaries. The sampler uses
 # ``("next", "done")`` to locate where episodes end, so you never get a
 # slice that straddles two unrelated trajectories.
@@ -199,8 +199,8 @@ print(traj_data["collector", "mask"])
 # .. seealso::
 #   The :ref:`replay buffer tutorial <tuto_rb_traj>` covers trajectory
 #   storage in more depth, including alternative samplers such as
-#   :class:`~torchrl.data.PrioritizedSliceSampler` and
-#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`.
+#   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`.
 
 from torchrl.data import SliceSampler
 

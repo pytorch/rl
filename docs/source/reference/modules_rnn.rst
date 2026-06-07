@@ -23,7 +23,7 @@ environment, the previous recurrent state is read from the TensorDict, and the
 next recurrent state is written under ``("next", ...)``.
 
 During training, wrap the recurrent policy with
-:func:`set_recurrent_mode` to process complete rollouts or replay-buffer
+:class:`set_recurrent_mode` to process complete rollouts or replay-buffer
 slices:
 
 .. code-block:: python
@@ -149,7 +149,7 @@ For most recurrent RL pipelines:
 * Store replay data in the flat contiguous layout and sample with
   :class:`~torchrl.data.replay_buffers.SliceSampler`.
 * Run collection in single-step mode and training under
-  :func:`set_recurrent_mode`.
+  :class:`set_recurrent_mode`.
 * Start with ``recurrent_backend="pad"`` for correctness, then benchmark
   ``"scan"`` or ``"triton"`` for the target hardware.
 
@@ -160,7 +160,7 @@ See also
   handoff.
 * :class:`LSTMModule` and :class:`GRUModule` for constructor arguments and
   examples.
-* :func:`set_recurrent_mode` for switching between single-step and recurrent
+* :class:`set_recurrent_mode` for switching between single-step and recurrent
   execution.
 * :func:`set_recurrent_matmul_precision` and
   :func:`get_recurrent_matmul_precision` for Triton precision control.

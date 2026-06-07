@@ -70,3 +70,18 @@ storage entries.
     >>> data["target"] = data["obs"] + 1
     >>> rb.write_all(data)
     >>> assert (rb[:] == data).all()
+
+TED-format conversion
+~~~~~~~~~~~~~~~~~~~~~~
+
+The following helpers convert between the TorchRL Episode Data (TED) layout and
+a flat, storage-friendly representation when serializing or restoring a buffer:
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    TED2Flat
+    Flat2TED
