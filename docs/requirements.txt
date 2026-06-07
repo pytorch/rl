@@ -2,14 +2,14 @@ matplotlib
 numpy
 sphinx-copybutton
 sphinx-gallery
-sphinx>=5.0.0,<8.0.0
+sphinx>=5.3.0,<=7.2.6
 Jinja2==3.1.4
 sphinx-autodoc-typehints
 sphinx-serve==1.0.1
 git+https://github.com/vmoens/aafig@4319769eae88fff8e3464858f3cf8c277f35335d
 sphinxcontrib-htmlhelp
 sphinxcontrib-video
-pytorch-sphinx-theme
+pytorch-sphinx-theme2>=0.4.11
 myst-parser
 docutils
 sphinx_design
