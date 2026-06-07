@@ -347,11 +347,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         compact_obs (bool, optional): if ``True``, each worker drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking. See
-            :class:`~torchrl.collectors.Collector` for details and the
-            pairing with
-            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
-            at sampling time.
-            Defaults to ``False``.
+            :class:`~torchrl.collectors.Collector` for the full
+            explanation and tradeoffs (most notably:
+            :class:`~torchrl.envs.transforms.MultiStepTransform` cannot be used
+            in compact mode), plus the pairing with
+            :class:`~torchrl.envs.transforms.NextStateReconstructor` at
+            sampling time, the boundary-preserving lossy alternative
+            :class:`~torchrl.envs.transforms.NextObservationDelta`, and the
+            *Memory-efficient RL training* tutorial. Defaults to ``False``.
         worker_idx (int, optional): the index of the worker.
 
     Examples:

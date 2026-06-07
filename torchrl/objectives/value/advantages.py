@@ -552,6 +552,17 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         Operates on a shallow copy so the caller's ``tensordict`` is not
         mutated.
+
+        .. seealso::
+
+            :class:`~torchrl.collectors.Collector` (``compact_obs``)
+            and :class:`~torchrl.envs.transforms.NextStateReconstructor` are
+            the typical producers of ``NaN`` next-observations at trajectory
+            ends. :class:`~torchrl.envs.transforms.NextObservationDelta`
+            is an alternative env-side compression that *avoids* the
+            ``NaN``-at-boundary case (at the cost of a smaller memory
+            saving). The *Memory-efficient RL training* tutorial wires the
+            knobs together end-to-end.
         """
         copied = False
         for k in in_keys:

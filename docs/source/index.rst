@@ -120,6 +120,7 @@ Intermediate
    tutorials/collector_trajectory_assembly
    tutorials/evaluator
    tutorials/rb_tutorial
+   tutorials/memory_efficient_rl
    tutorials/export
 
 Advanced

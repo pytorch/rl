@@ -36,7 +36,7 @@ multi-epoch training so the data path stays visible.
     from tensordict.nn import TensorDictModule, TensorDictSequential
     from torch import nn
 
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers import SliceSampler
     from torchrl.envs import GymEnv
@@ -101,7 +101,7 @@ multi-epoch training so the data path stays visible.
     # Thanks to auto_register_policy_transforms=True below, the collector sees
     # both RNNs and appends InitTracker + TensorDictPrimers.
     collector_policy = TensorDictSequential(actor, critic)
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         collector_policy,
         frames_per_batch=frames_per_batch,
@@ -174,7 +174,7 @@ The path at a glance
             └─ writes next-step hidden into ("next", "rs_h"), ("next", "rs_c")
             │
             ▼
-    SyncDataCollector
+    Collector
             │
             ├─ step_mdp moves ("next", "rs_*") to the root for step t+1
             └─ emits a batched TensorDict of shape (B, T, ...)
