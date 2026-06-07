@@ -24,10 +24,14 @@ Memory-Efficient RL Training
         backend, which masks dropped samples instead of approximating them
       * Capping peak value-net activation memory with the
         ``value_chunk_size`` / ``num_chunks`` knobs
+      * Trading collection speed against the training memory budget with
+        the collector's ``env_device`` / ``policy_device`` /
+        ``storing_device`` placement
       * When *not* to take this path (MultiStep DQN, truncated transitions)
       * Other knobs: :class:`~torchrl.data.LazyMemmapStorage`,
-        :class:`~torchrl.data.SliceSampler`, and the new padding-free RNN
-        backends
+        :class:`~torchrl.data.SliceSampler`, the padding-free ``"scan"`` /
+        ``"triton"`` RNN backends, and
+        :func:`~torchrl.collectors.utils.split_trajectories` nested mode
 
     .. grid-item-card:: :octicon:`list-unordered;1em;` Prerequisites
 
@@ -57,6 +61,36 @@ from torchrl.envs.transforms import NextObservationDelta, NextStateReconstructor
 from torchrl.objectives.value import GAE
 
 torch.manual_seed(0)
+
+######################################################################
+# The problem
+# -----------
+#
+# With the emergence of highly vectorized simulators (MuJoCo XLA / Warp /
+# the native PyTorch backend, Isaac Lab, Genesis, ...) we now collect data
+# at staggering rates, and policies and critics routinely scale from
+# hundreds of millions to billions of parameters. If one is not careful,
+# the memory cost of *acquiring* the data piles up just as fast as the
+# cost of *training* on it.
+#
+# There is a fundamental tension here. Fast data collection wants to keep
+# everything on the accelerator — simulate on device, run the policy on
+# device, minimise host/device transfers. Efficient training at scale
+# wants the opposite: spill the replay buffer to cheaper memory, keep only
+# what the loss actually reads, and free activations as early as possible.
+#
+# The pipeline makes this concrete. In a typical PPO loop the same data is
+# touched by three different consumers: the model runs as a *policy* during
+# collection, as a *critic* during GAE, and as the *whole loss* (including
+# the backward pass) during the update. Keeping each tensor on the right
+# device at the right time, reaching for accelerators only when they pay
+# off, and moving data quickly between the inference and training halves of
+# the loop are challenges that have to be addressed deliberately — they do
+# not solve themselves.
+#
+# This tutorial works through a set of independent *knobs* that each
+# attack one corner of this problem, from what gets stored to what gets
+# transferred to what gets transiently allocated. Adopt them à la carte.
 
 ######################################################################
 # Where the memory goes
@@ -522,6 +556,52 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # more on storage choices.
 
 ######################################################################
+# Knob 3.5 — keep collection off the training memory budget
+# ---------------------------------------------------------
+#
+# This is the "fast collection vs. efficient training" tension from the
+# intro, made concrete. By default the collector keeps the rollout on
+# whatever device the policy and env run on — ideal for *speed* (no
+# host/device transfers), but every batch then competes with the model's
+# own parameters and activations for the same VRAM.
+#
+# :class:`~torchrl.collectors.Collector` lets you place each stage of the
+# pipeline independently:
+#
+# * ``env_device`` — where the environment simulates. On-device
+#   simulators (Isaac Lab, MuJoCo Warp / XLA, Genesis) want this on the
+#   accelerator.
+# * ``policy_device`` — where the policy network runs during collection.
+# * ``storing_device`` — where the *collected batch* is materialised
+#   before it is yielded or written to the buffer. Setting this to
+#   ``"cpu"`` evicts each rollout off the accelerator as soon as it is
+#   produced, freeing VRAM for the next rollout and for the trainer — at
+#   the cost of a device-to-host transfer.
+# * ``device`` — a shorthand that sets all three at once.
+#
+# .. code-block:: python
+#
+#     collector = Collector(
+#         create_env_fn=env_maker,
+#         policy=policy,
+#         frames_per_batch=1024,
+#         total_frames=1_000_000,
+#         env_device="cuda",          # simulate + act on the accelerator
+#         policy_device="cuda",       # (fast collection)
+#         storing_device="cpu",       # but spill the batch to host RAM
+#         no_cuda_sync=False,         # keep explicit syncs unless transfers
+#     )                               # are already correctly ordered
+#
+# The rule of thumb: keep ``env_device`` / ``policy_device`` on the
+# accelerator for throughput, and move ``storing_device`` *down* the
+# memory hierarchy (accelerator → host RAM → memmap on disk, Knob 3) as
+# the buffer grows. ``no_cuda_sync=True`` drops the explicit
+# synchronisations the collector inserts around cross-device transfers —
+# safe only when those transfers are already ordered, or on pure CPU. The
+# exact cast and sync points are documented in
+# :ref:`the collector internals page <ref_collectors_internals>`.
+
+######################################################################
 # Knob 4 — sequence training without padding
 # ------------------------------------------
 #
@@ -545,12 +625,24 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #       ``torch._higher_order_ops.scan`` (PyTorch ≥ 2.6). Resets the
 #       hidden state at each ``is_init=True`` frame inside the kernel,
 #       so trajectories of different lengths can be concatenated end
-#       to end with no padding.
+#       to end with no padding. Designed for :func:`torch.compile`
+#       friendliness and uses less backward-pass activation memory.
 #     * ``"triton"`` — same idea, implemented as a custom Triton
 #       kernel (requires CUDA and ``triton >= 2.2``). Fastest of the
 #       three on GPU.
 #     * ``"auto"`` — picks ``"scan"`` under ``torch.compile`` and
 #       falls back to the classical ``"pad"`` path otherwise.
+#
+# Why this matters for memory: the classical cuDNN ``LSTM`` / ``GRU``
+# kernels cannot reset the hidden state *in the middle* of a sequence, so
+# a batch that contains intermediate resets (the common case once you
+# concatenate trajectories) has to be split at every boundary and
+# zero-padded to the longest piece. The ``"scan"`` and ``"triton"``
+# backends reset in place from ``is_init`` instead, so no split-and-pad
+# step is needed and no memory is spent on padding tokens. See
+# :ref:`the recurrent state lifecycle guide <ref_recurrent_state_lifecycle>`
+# for the full reset semantics and the
+# :ref:`recurrent DQN tutorial <RNN_tuto>` for an end-to-end example.
 #
 # A typical configuration looks like this:
 #
@@ -569,7 +661,20 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #
 # Combined with :class:`~torchrl.data.SliceSampler`, the trained
 # sequence is exactly the concatenation of the slices — no padding
-# allocated, no hidden states wasted on zero tokens.
+# allocated, no hidden states wasted on zero tokens. The value
+# estimators are aligned with this: :class:`~torchrl.objectives.value.GAE`
+# (and TD(λ)) consume the flat, contiguous slice layout directly and
+# never materialise a padded ``(batch, max_T)`` view, so the advantage
+# pass stays padding-free as well.
+#
+# When you *do* need a per-trajectory ``(batch, T, ...)`` view — for a
+# custom loss or analysis — reach for
+# :func:`~torchrl.collectors.utils.split_trajectories` with
+# ``as_nested=True``: it returns a *nested* tensor keyed by trajectory
+# instead of a zero-padded dense tensor, so ragged trajectory lengths
+# cost no padding memory. ``split_trajectories(data, as_nested=True)``
+# and the padded form are interchangeable
+# (``.to_padded_tensor(...)`` round-trips between them).
 
 ######################################################################
 # Putting it together
@@ -672,11 +777,17 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #   ``shifted_budget`` trades sequence length for fewer dropped samples.
 # * ``value_chunk_size`` / ``num_chunks`` cap the *transient* activation
 #   memory of the value-net forward without changing the numerics.
+# * The collector's ``env_device`` / ``policy_device`` / ``storing_device``
+#   resolve the collection-speed-vs-training-memory tension: simulate and
+#   act on the accelerator, but spill the stored batch toward host RAM (and
+#   then memmap on disk) as the buffer grows.
 # * :class:`~torchrl.envs.transforms.MultiStepTransform` is the main
 #   loss-side reason to *not* take this path.
 # * :class:`~torchrl.data.LazyMemmapStorage`,
-#   :class:`~torchrl.data.SliceSampler`, and the ``"scan"`` / ``"triton"``
-#   recurrent backends compose orthogonally for further memory wins.
+#   :class:`~torchrl.data.SliceSampler`, the padding-free ``"scan"`` /
+#   ``"triton"`` recurrent backends, and
+#   :func:`~torchrl.collectors.utils.split_trajectories` nested mode
+#   compose orthogonally for further memory wins.
 #
 # Useful next resources
 # ~~~~~~~~~~~~~~~~~~~~~
