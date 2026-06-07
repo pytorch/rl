@@ -347,7 +347,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         compact_obs (bool, optional): if ``True``, each worker drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking. See
-            :class:`~torchrl.collectors.SyncDataCollector` for the full
+            :class:`~torchrl.collectors.Collector` for the full
             explanation and tradeoffs (most notably:
             :class:`~torchrl.envs.transforms.MultiStepTransform` cannot be used
             in compact mode), plus the pairing with

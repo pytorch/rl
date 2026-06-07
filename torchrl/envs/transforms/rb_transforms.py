@@ -334,7 +334,7 @@ class NextStateReconstructor(Transform):
 
     .. seealso::
 
-        :class:`~torchrl.collectors.SyncDataCollector`'s ``compact_obs`` flag
+        :class:`~torchrl.collectors.Collector`'s ``compact_obs`` flag
         is the producer side of this transform — it drops the duplicated
         ``("next", obs)`` before stacking. Trajectory ends carry ``NaN`` after
         rehydration; the value-estimator pipeline keeps GAE / TD targets

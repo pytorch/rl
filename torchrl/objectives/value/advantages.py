@@ -555,7 +555,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         .. seealso::
 
-            :class:`~torchrl.collectors.SyncDataCollector` (``compact_obs``)
+            :class:`~torchrl.collectors.Collector` (``compact_obs``)
             and :class:`~torchrl.envs.transforms.NextStateReconstructor` are
             the typical producers of ``NaN`` next-observations at trajectory
             ends. :class:`~torchrl.envs.transforms.NextObservationDelta`

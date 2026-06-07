@@ -13,13 +13,17 @@ Memory-Efficient RL Training
       * The cost of keeping ``("next", obs)`` in rollouts and replay buffers
       * Why TorchRL keeps it by default (bootstrap targets and MultiStep)
       * Halving the observation footprint with
-        :class:`~torchrl.collectors.SyncDataCollector` ``compact_obs=True``
+        :class:`~torchrl.collectors.Collector` ``compact_obs=True``
       * Rebuilding ``("next", obs)`` on the consumer side with
         :class:`~torchrl.envs.transforms.NextStateReconstructor`
       * Why the resulting ``NaN`` at trajectory ends does not crash GAE / TD
       * The lossy-delta variant with
         :class:`~torchrl.envs.transforms.NextObservationDelta` —
         boundary-preserving but smaller saving
+      * Halving the value-net forward with the budgeted ``shifted=True``
+        backend, which masks dropped samples instead of approximating them
+      * Capping peak value-net activation memory with the
+        ``value_chunk_size`` / ``num_chunks`` knobs
       * When *not* to take this path (MultiStep DQN, truncated transitions)
       * Other knobs: :class:`~torchrl.data.LazyMemmapStorage`,
         :class:`~torchrl.data.SliceSampler`, and the new padding-free RNN
@@ -45,7 +49,7 @@ import tempfile
 
 import torch
 from tensordict.nn import TensorDictModule
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.envs import GymEnv, TransformedEnv
@@ -68,7 +72,7 @@ torch.manual_seed(0)
 # Let's measure this directly on a tiny CartPole rollout.
 
 env_maker = lambda: GymEnv("CartPole-v1")  # noqa: E731
-collector = SyncDataCollector(
+collector = Collector(
     create_env_fn=env_maker,
     frames_per_batch=200,
     total_frames=200,
@@ -131,7 +135,7 @@ print(
 # If your loss does not depend on a *bootable* terminal next-obs
 # (vanilla policy-gradient losses, on-policy GAE with terminated-only
 # transitions, …), the trade-off flips. The
-# :class:`~torchrl.collectors.SyncDataCollector` exposes a
+# :class:`~torchrl.collectors.Collector` exposes a
 # ``compact_obs=True`` flag that drops every observation / state key
 # under ``("next", ...)`` *before* stacking per-step data.
 # ``("next", "reward")``, ``("next", "done")`` and
@@ -139,7 +143,7 @@ print(
 # from the root keys. The flag works for ``MultiSyncCollector`` and
 # ``MultiAsyncCollector`` too.
 
-compact_collector = SyncDataCollector(
+compact_collector = Collector(
     create_env_fn=env_maker,
     frames_per_batch=200,
     total_frames=200,
@@ -178,7 +182,7 @@ print(set(data.keys(True, True)) - set(compact_data.keys(True, True)))
 #
 # "Same trajectory" is decided from a trajectory id (default
 # ``("collector", "traj_ids")``, which
-# :class:`~torchrl.collectors.SyncDataCollector` populates by default)
+# :class:`~torchrl.collectors.Collector` populates by default)
 # and ``("next", "done")``. The transform is sampler-agnostic — it does
 # not require :class:`~torchrl.data.SliceSampler` — but
 # :class:`~torchrl.data.SliceSampler` is the natural pairing because
@@ -246,7 +250,7 @@ print(
 env_maker_delta = lambda: TransformedEnv(  # noqa: E731
     GymEnv("CartPole-v1"), NextObservationDelta()
 )
-delta_collector = SyncDataCollector(
+delta_collector = Collector(
     create_env_fn=env_maker_delta,
     frames_per_batch=200,
     total_frames=200,
@@ -392,19 +396,103 @@ print("any -inf or +inf?", torch.isinf(out["advantage"]).any().item())
 #    :class:`~torchrl.envs.transforms.NextObservationDelta` (Knob 2b):
 #    it pays a smaller memory saving but reconstructs the real
 #    transition at every position, including trajectory boundaries.
+
+######################################################################
+# Knob 2.6 — the budgeted ``shifted=True`` value-net backend
+# ----------------------------------------------------------
 #
-# A second, smaller knob in the same area is the
-# ``shifted=True`` mode of the value estimators
+# ``shifted=True`` on the value estimators
 # (:class:`~torchrl.objectives.value.GAE`,
 # :class:`~torchrl.objectives.value.TD0Estimator`,
-# :class:`~torchrl.objectives.value.TDLambdaEstimator`, …). ``shifted``
-# folds the two value-net forward passes (one on root obs, one on
-# ``("next", obs)``) into a single pass on a length-``T + 1``
-# interleaved sequence. It saves roughly half of the value-net
-# compute, but requires the same parameters for root and next — no
-# distinct target network — and consumes the canonical
-# ``("next", obs)`` at trajectory ends, which means it inherits the
-# same approximation as the compact path at truncated steps.
+# :class:`~torchrl.objectives.value.TDLambdaEstimator`, …) folds the two
+# value-net forward passes (one on root obs, one on ``("next", obs)``)
+# into a *single* call, roughly halving value-net compute and the
+# activation memory it allocates.
+#
+# As of the budgeted-backend rework, ``shifted=True`` no longer
+# silently reuses ``("next", obs)`` at trajectory ends (the old
+# ``V(obs[t]) ≈ V(real_next_obs)`` approximation). Instead it runs the
+# value net once over a fixed-length ``T + shifted_budget`` sequence
+# (default ``shifted_budget=1`` → ``T + 1``): it inserts the *true*
+# reset next-observation after every internal truncation
+# (``done & ~terminated``), shifts the following samples one slot to the
+# right, and marks the displaced suffix that no longer fits in the
+# budget as invalid via a ``"shifted_valid"`` mask. Retained samples use
+# exact next observations — no approximation.
+#
+# Two consequences make this a genuine memory knob, not just a compute
+# one:
+#
+# * **It tolerates a compact rollout.** Missing ``("next", <in_key>)``
+#   entries are filled from the root observation under the same one-step
+#   layout assumption that ``compact_obs`` relies on
+#   (``("next", obs)[t] == obs[t + 1]`` whenever ``done[t]`` is False),
+#   so ``compact_obs=True`` + ``shifted=True`` composes without a
+#   :class:`~torchrl.envs.transforms.NextStateReconstructor` in between.
+# * **Dropped samples don't bias the loss.** The ``"shifted_valid"``
+#   mask is threaded through the loss reductions of
+#   :class:`~torchrl.objectives.PPOLoss`,
+#   :class:`~torchrl.objectives.A2CLoss` and
+#   :class:`~torchrl.objectives.ReinforceLoss`, so the few
+#   budget-displaced samples are excluded from the mean rather than
+#   contaminating it.
+#
+# Raise ``shifted_budget`` to retain more samples (``2`` covers one
+# internal reset plus the rollout boundary without dropping anything);
+# the cost is a longer fused sequence. ``shifted=True`` still requires
+# identical parameters at ``t`` and ``t + 1`` (no distinct target
+# network) and is unsupported with multi-step returns.
+
+gae_shifted = GAE(
+    gamma=0.99, lmbda=0.95, value_network=value_net, shifted=True
+)
+shifted_out = gae_shifted(sample.reshape(-1, 20).clone())
+print(
+    "shifted GAE advantage finite?",
+    torch.isfinite(shifted_out["advantage"]).all().item(),
+)
+print(
+    "shifted_valid mask present?",
+    "shifted_valid" in shifted_out.keys(),
+)
+
+######################################################################
+# Knob 2.7 — cap peak value-net memory with chunked calls
+# -------------------------------------------------------
+#
+# The two knobs above shrink what is *stored*. The value estimators also
+# expose a knob for what is *transiently allocated*: the activations of
+# the value-network forward pass over a large batch. On a deep critic or
+# a long slice-sampled batch, that single forward can dominate peak GPU
+# memory even when the stored data is modest.
+#
+# :class:`~torchrl.objectives.value.GAE` (and the other estimators)
+# accept ``value_chunk_size`` and ``num_chunks`` (alias ``num_chunk``).
+# Either one splits the value-network input along the leading dimension
+# and evaluates the chunks sequentially, trading a little extra Python
+# overhead for a lower activation high-water mark. The two are mutually
+# exclusive: give ``value_chunk_size`` a fixed number of leading-dim
+# elements per chunk, or ``num_chunks`` a fixed number of chunks. The
+# advantage / value targets are identical to the unchunked computation —
+# only the forward is split.
+
+gae_full = GAE(gamma=0.99, lmbda=0.95, value_network=value_net, shifted=False)
+gae_chunked = GAE(
+    gamma=0.99, lmbda=0.95, value_network=value_net, shifted=False, num_chunks=4
+)
+adv_full = gae_full(sample.reshape(-1, 20).clone())["advantage"]
+adv_chunked = gae_chunked(sample.reshape(-1, 20).clone())["advantage"]
+print(
+    "chunked advantage matches unchunked?",
+    torch.allclose(adv_full, adv_chunked, equal_nan=True),
+)
+
+######################################################################
+# ``num_chunks`` is the convenient default — it adapts the chunk size to
+# whatever batch arrives. Reach for ``value_chunk_size`` when you want a
+# fixed, hardware-tuned forward footprint regardless of batch size. The
+# knob composes with ``shifted`` and with everything below; it is purely
+# a peak-memory lever and leaves the numerics untouched.
 
 ######################################################################
 # Knob 3 — memory-mapped replay buffer storage
@@ -497,7 +585,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #
 # .. code-block:: python
 #
-#     collector = SyncDataCollector(
+#     collector = Collector(
 #         create_env_fn=env_maker,
 #         policy=policy,
 #         frames_per_batch=1024,
@@ -514,9 +602,12 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #         batch_size=8 * 64,
 #     )
 #     loss = ClipPPOLoss(actor=actor, critic=critic)
-#     advantage = GAE(                            # NaN-safe at boundaries
+#     advantage = GAE(
 #         gamma=0.99, lmbda=0.95,
-#         value_network=critic, shifted=True,     # one V-net call per step
+#         value_network=critic,
+#         shifted=True,           # single budgeted V-net call; masks
+#                                 # displaced samples via "shifted_valid"
+#         num_chunks=4,           # cap peak value-net activation memory
 #     )
 #
 # **Recipe B — NextObservationDelta on both sides** (smaller saving,
@@ -527,7 +618,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #     env_maker_delta = lambda: TransformedEnv(
 #         base_env_maker(), NextObservationDelta(),
 #     )
-#     collector = SyncDataCollector(
+#     collector = Collector(
 #         create_env_fn=env_maker_delta,
 #         policy=policy,
 #         frames_per_batch=1024,
@@ -561,7 +652,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # * ``("next", obs)`` is a duplicate of ``obs[t + 1]`` *within* a
 #   trajectory, but it is *not* a duplicate at trajectory boundaries.
 #   That is why TorchRL keeps it by default.
-# * :class:`~torchrl.collectors.SyncDataCollector`'s ``compact_obs``
+# * :class:`~torchrl.collectors.Collector`'s ``compact_obs``
 #   flag drops it at the producer side, halving the observation
 #   footprint of rollouts and replay buffers.
 # * :class:`~torchrl.envs.transforms.NextStateReconstructor` rebuilds
@@ -572,7 +663,15 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #   (smaller saving but boundary-preserving and ``NaN``-free).
 # * The value-estimator pipeline keeps GAE / TD targets numerically
 #   defined via
-#   :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`.
+#   :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`
+#   when ``shifted=False``.
+# * ``shifted=True`` is now a budgeted single-call backend: it halves the
+#   value-net forward, tolerates a compact rollout, and masks the few
+#   budget-displaced samples via ``"shifted_valid"`` (threaded through the
+#   PPO / A2C / Reinforce loss reductions) rather than approximating them.
+#   ``shifted_budget`` trades sequence length for fewer dropped samples.
+# * ``value_chunk_size`` / ``num_chunks`` cap the *transient* activation
+#   memory of the value-net forward without changing the numerics.
 # * :class:`~torchrl.envs.transforms.MultiStepTransform` is the main
 #   loss-side reason to *not* take this path.
 # * :class:`~torchrl.data.LazyMemmapStorage`,
@@ -587,6 +686,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
 # * :ref:`Recurrent DQN tutorial <RNN_tuto>` — sequence training with
 #   RNN policies; pair with the ``"scan"`` / ``"triton"`` backends for
 #   padding-free training.
+# * :ref:`Recurrent state lifecycle <ref_recurrent_state_lifecycle>` —
+#   what gets auto-wired for recurrent policies and what to check when
+#   sampling sequences for the loss.
 # * :ref:`Trajectory assembly tutorial <collector_trajectory_assembly>`
 #   — how collectors lay out trajectory ids, masks, and slices.
 # * `TorchRL documentation <https://pytorch.org/rl/>`_
