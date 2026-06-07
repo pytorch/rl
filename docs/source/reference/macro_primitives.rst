@@ -1,4 +1,4 @@
-.. currentmodule:: torchrl.envs
+.. currentmodule:: torchrl.envs.transforms
 
 .. _macro-primitives-guide:
 
@@ -184,7 +184,7 @@ to set it is the domain action object, exactly like the other two examples:
 
 That is the whole policy-side command: "make the satellite attitude match this
 target frame". The :class:`SatelliteAttitudeTransform` maps this semantic target
-to the low-level action. It reads these :class:`SatelliteEnv` observations:
+to the low-level action. It reads these :class:`~torchrl.envs.SatelliteEnv` observations:
 
 * ``bus_quat``: current satellite attitude quaternion, shape ``(..., 4)``;
 * ``bus_omega``: current body angular velocity, shape ``(..., 3)``;
@@ -217,7 +217,7 @@ CMG count and action scale:
    )
 
 The reset state still contains ``target_quat`` and ``init_bus_quat``. The target
-attitude frame is also rendered by :class:`SatelliteEnv` as a non-colliding RGB
+attitude frame is also rendered by :class:`~torchrl.envs.SatelliteEnv` as a non-colliding RGB
 visual frame, while the satellite body is semi-transparent so the attitude error
 is visible.
 
@@ -262,7 +262,7 @@ A policy can therefore use observations such as ``cube_pos``, ``bowl_pos`` and
 
 Here the position is the coordinate of an object that needs to be moved by the
 robot, expressed in the same world frame as the gripper observations. The
-:meth:`CubeBowlEnv.make_urscript_transform` preset maps that Cartesian pose to a
+:meth:`~torchrl.envs.CubeBowlEnv.make_urscript_transform` preset maps that Cartesian pose to a
 low-level joint target using the env-provided MuJoCo IK helper, fills the
 requested gripper command, interpolates the seven-dimensional action sequence,
 and executes it when ``execute=True``.
@@ -327,14 +327,14 @@ Comparison
      - Where shape and dtype come from
    * - Humanoid
      - :meth:`HumanoidMacroAction.reach_control <HumanoidMacroAction.reach_control>`
-     - :meth:`HumanoidEnv.make_control_transform <HumanoidEnv.make_control_transform>`
+     - :meth:`HumanoidEnv.make_control_transform <torchrl.envs.HumanoidEnv.make_control_transform>`
        / :class:`MacroPrimitiveTransform`
      - A low-level MuJoCo actuator-control destination
      - ``base_env.action_spec``
    * - Satellite
      - :meth:`SatelliteMacroAction.slew_attitude <SatelliteMacroAction.slew_attitude>`
        (a ``("action", "target")`` quaternion)
-     - :meth:`SatelliteEnv.make_attitude_transform <SatelliteEnv.make_attitude_transform>`
+     - :meth:`SatelliteEnv.make_attitude_transform <torchrl.envs.SatelliteEnv.make_attitude_transform>`
        / :class:`SatelliteAttitudeTransform`
      - A desired target attitude quaternion; the transform computes the
        normalized CMG gimbal-rate command
@@ -344,7 +344,7 @@ Comparison
        ``action_spec`` for final commands
    * - Cube bowl
      - :class:`RobotMacroAction` commands such as ``reach_pose`` and ``close_gripper``
-     - :meth:`CubeBowlEnv.make_urscript_transform` /
+     - :meth:`~torchrl.envs.CubeBowlEnv.make_urscript_transform` /
        :class:`URScriptPrimitiveTransform`
      - A semantic Cartesian pose, joint target or gripper command; the transform
        maps it to the seven-dimensional robot action

@@ -20,8 +20,8 @@ What you will learn
 -------------------
 
 - how to instantiate a Menagerie-backed custom MuJoCo environment;
-- how to use :class:`~torchrl.envs.RobotMacroAction` as a readable action object;
-- how :class:`~torchrl.envs.URScriptPrimitiveTransform` lets ``env.step(td)``
+- how to use :class:`~torchrl.envs.transforms.RobotMacroAction` as a readable action object;
+- how :class:`~torchrl.envs.transforms.URScriptPrimitiveTransform` lets ``env.step(td)``
   consume those actions directly;
 - how to write a scripted contact-rich cube-to-bowl policy as an explicit list
   of poses and gripper commands;
@@ -565,13 +565,13 @@ assert reset_td["robot_qpos"].shape == td["robot_qpos"].shape
 #    - :class:`~torchrl.envs.CubeBowlEnv` for the custom MuJoCo task used here.
 #    - :class:`~torchrl.envs.MujocoEnv` for the base class behind custom MuJoCo
 #      environments.
-#    - :class:`~torchrl.envs.RobotMacroAction` for the structured action object used
+#    - :class:`~torchrl.envs.transforms.RobotMacroAction` for the structured action object used
 #      by the scripted policy.
-#    - :class:`~torchrl.envs.MacroPrimitiveTransform` for robot-agnostic macro
+#    - :class:`~torchrl.envs.transforms.MacroPrimitiveTransform` for robot-agnostic macro
 #      expansion that domain transforms specialize via ``_resolve`` hooks.
-#    - :class:`~torchrl.envs.URScriptPrimitiveTransform` for the URScript-style
+#    - :class:`~torchrl.envs.transforms.URScriptPrimitiveTransform` for the URScript-style
 #      preset used in this tutorial.
-#    - :class:`~torchrl.envs.MultiAction` for executing batched low-level action
+#    - :class:`~torchrl.envs.transforms.MultiAction` for executing batched low-level action
 #      sequences.
 
 env.close()

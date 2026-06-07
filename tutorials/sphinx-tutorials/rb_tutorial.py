@@ -102,10 +102,10 @@ print("length after adding elements:", len(buffer))
 #
 # TorchRL proposes three types of storages:
 #
-# - The :class:`~torchrl.data.ListStorage` stores elements independently in a
+# - The :class:`~torchrl.data.replay_buffers.ListStorage` stores elements independently in a
 #   list. It supports any data type, but this flexibility comes at the cost
 #   of efficiency;
-# - The :class:`~torchrl.data.LazyTensorStorage` stores tensors data
+# - The :class:`~torchrl.data.replay_buffers.LazyTensorStorage` stores tensors data
 #   structures contiguously.
 #   It works naturally with :class:`~tensordidct.TensorDict`
 #   (or :class:`~torchrl.data.tensorclass`)
@@ -116,8 +116,8 @@ print("length after adding elements:", len(buffer))
 #   was used to instantiate the buffer.
 #   Passing data that does not match this requirement will either raise an
 #   exception or lead to some undefined behaviors.
-# - The :class:`~torchrl.data.LazyMemmapStorage` works as the
-#   :class:`~torchrl.data.LazyTensorStorage` in that it is lazy (i.e., it
+# - The :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` works as the
+#   :class:`~torchrl.data.replay_buffers.LazyTensorStorage` in that it is lazy (i.e., it
 #   expects the first batch of data to be instantiated), and it requires data
 #   that match in shape and dtype for each batch stored. What makes this
 #   storage unique is that it points to disk files (or uses the filesystem
@@ -141,9 +141,9 @@ print(buffer_list.sample(3))
 
 ######################################################################
 # Because it is the one with the lowest amount of assumption, the
-# :class:`~torchrl.data.ListStorage` is the default storage in TorchRL.
+# :class:`~torchrl.data.replay_buffers.ListStorage` is the default storage in TorchRL.
 #
-# A :class:`~torchrl.data.LazyTensorStorage` can store data contiguously.
+# A :class:`~torchrl.data.replay_buffers.LazyTensorStorage` can store data contiguously.
 # This should be the preferred option when dealing with complicated but
 # unchanging data structures of medium size:
 
@@ -182,7 +182,7 @@ sample = buffer_lazytensor.sample(5)
 print("samples", sample["a"], sample["b", "c"])
 
 ######################################################################
-# A :class:`~torchrl.data.LazyMemmapStorage` is created in the same manner.
+# A :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` is created in the same manner.
 # We can also customize the storage location on disk:
 #
 
@@ -797,7 +797,7 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # than simple transitions. TorchRL offers multiple ways of achieving this.
 #
 # The preferred way is currently to store trajectories along the first
-# dimension of the buffer and use a :class:`~torchrl.data.SliceSampler` to
+# dimension of the buffer and use a :class:`~torchrl.data.replay_buffers.SliceSampler` to
 # sample these batches of data. This class only needs a couple of information
 # about your data structure to do its job (not that as of now it is only
 # compatible with tensordict-structured data): the number of slices or their
@@ -847,7 +847,7 @@ gc.collect()
 # collecting data with a :class:`~torchrl.collectors.Collector` (or its
 # multi-process variants).  The collector already tags every transition with
 # a ``("collector", "traj_ids")`` key, so the
-# :class:`~torchrl.data.SliceSampler` can reconstruct episode boundaries
+# :class:`~torchrl.data.replay_buffers.SliceSampler` can reconstruct episode boundaries
 # automatically.
 #
 # For **single-process** collectors the setup is straightforward — just
@@ -912,8 +912,8 @@ gc.collect()
 # - Check the data API reference to learn about offline datasets in TorchRL,
 #   which are based on our Replay Buffer API;
 # - Check other samplers such as
-#   :class:`~torchrl.data.SamplerWithoutReplacement`,
-#   :class:`~torchrl.data.PrioritizedSliceSampler` and
-#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
-#   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
+#   :class:`~torchrl.data.replay_buffers.SamplerWithoutReplacement`,
+#   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`, or other writers
+#   such as :class:`~torchrl.data.replay_buffers.TensorDictMaxValueWriter`.
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.

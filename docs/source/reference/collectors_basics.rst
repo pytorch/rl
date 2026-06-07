@@ -62,7 +62,7 @@ Besides those compute parameters, users may choose to configure the following pa
   ``("collector", "traj_ids")`` integer per frame and updates it on every
   env reset.  Setting it to ``False`` skips the per-step bookkeeping —
   useful when neither :func:`~torchrl.collectors.utils.split_trajectories`
-  nor :class:`~torchrl.data.SliceSampler` are used downstream.  Note that
+  nor :class:`~torchrl.data.replay_buffers.SliceSampler` are used downstream.  Note that
   ``split_trajs=True`` requires ``track_traj_ids=True``.
 
 Trajectory IDs
@@ -75,7 +75,7 @@ unique across resets within a single worker.
 
 This is what makes trajectory-aware downstream consumers possible:
 
-- :class:`~torchrl.data.SliceSampler` draws whole trajectories (or slices of
+- :class:`~torchrl.data.replay_buffers.SliceSampler` draws whole trajectories (or slices of
   them) from a replay buffer by grouping frames by ``traj_ids``.
 - :func:`~torchrl.collectors.utils.split_trajectories` reshapes a flat batch
   into a padded ``[n_trajs, max_len]`` tensordict using ``traj_ids`` to find

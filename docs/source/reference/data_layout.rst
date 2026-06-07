@@ -30,8 +30,8 @@ Two main patterns coexist in TorchRL:
   trajectory / slice, ``("next", "done")`` at the last). No padding, no
   mask, no wasted FLOPs. Every TorchRL primitive that needs to know about
   trajectory structure (recurrent modules under
-  :func:`~torchrl.modules.set_recurrent_mode`,
-  :class:`~torchrl.data.SliceSampler`, value estimators in
+  :class:`~torchrl.modules.set_recurrent_mode`,
+  :class:`~torchrl.data.replay_buffers.SliceSampler`, value estimators in
   ``shifted=True`` value estimators) consumes this layout natively.
 
 The rest of this page walks through the building blocks.
@@ -53,7 +53,7 @@ Four per-step boolean keys jointly describe a trajectory:
     the key recurrent modules
     (:class:`~torchrl.modules.LSTMModule`,
     :class:`~torchrl.modules.GRUModule`) split on under
-    :func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")``: each
+    :class:`~torchrl.modules.set_recurrent_mode` ``("recurrent")``: each
     ``is_init=True`` position resets the hidden state to whatever was stored
     at that index, letting the RNN process a flat batch of concatenated
     trajectories as if it had been called recursively on each one.
@@ -63,7 +63,7 @@ Four per-step boolean keys jointly describe a trajectory:
     ``truncated`` (TorchRL's
     :class:`~torchrl.envs.EnvBase` metaclass guarantees both are flanked
     with their dual). Used by collectors to decide when to reset, by
-    :class:`~torchrl.data.SliceSampler` to reconstruct trajectory boundaries
+    :class:`~torchrl.data.replay_buffers.SliceSampler` to reconstruct trajectory boundaries
     when no ``traj_ids`` key is available, and by
     :func:`~torchrl.collectors.utils.split_trajectories` (legacy).
 
@@ -81,7 +81,7 @@ Four per-step boolean keys jointly describe a trajectory:
 ``("collector", "traj_ids")``
     *Optional integer per-step trajectory identifier.* Written by every
     :class:`~torchrl.collectors.BaseCollector` subclass. When present,
-    :class:`~torchrl.data.SliceSampler` uses this directly instead of
+    :class:`~torchrl.data.replay_buffers.SliceSampler` uses this directly instead of
     reconstructing boundaries from ``done``. Auto-detected on the first
     sample call when no ``traj_key`` is passed at construction.
 
@@ -104,7 +104,7 @@ preserve when extending. The natural mapping is:
   writes ``B`` rows of ``T`` consecutive frames each. Useful when the
   collector itself produces ``[num_envs, frames_per_env]`` batches (e.g.
   :class:`~torchrl.envs.ParallelEnv` rollouts), because that lets the
-  :class:`~torchrl.data.SliceSampler` infer one trajectory per row without
+  :class:`~torchrl.data.replay_buffers.SliceSampler` infer one trajectory per row without
   scanning ``done`` keys.
 * ``ndim=3`` and beyond — when both an outer worker dim and an env dim
   exist, e.g. ``MultiSyncCollector([ParallelEnv(2, …)] * 4, …)``.
@@ -124,7 +124,7 @@ many actors — the inter-worker write order is uncontrolled. Without
 boundary markers, a given row of the ``[N, T]`` storage can stitch
 together frames from a worker's two consecutive but unrelated episodes
 (or from different workers if a postprocessing step rearranges the extend
-order), and a :class:`~torchrl.data.SliceSampler` drawing whole rows would
+order), and a :class:`~torchrl.data.replay_buffers.SliceSampler` drawing whole rows would
 silently span them.
 
 Two existing knobs mitigate this without giving up ``ndim >= 2``:
@@ -141,7 +141,7 @@ Two existing knobs mitigate this without giving up ``ndim >= 2``:
   where complete-trajectory writes are an option.
 
 * **One buffer per worker, glued by a**
-  :class:`~torchrl.data.replay_buffers.ReplayBufferEnsemble`. Each member
+  :class:`~torchrl.data.ReplayBufferEnsemble`. Each member
   storage is written by exactly one worker, so its write order is
   deterministic and ``ndim >= 2`` is sound for that member. The ensemble
   samples uniformly across members at training time:
@@ -259,7 +259,7 @@ or more **complete trajectories** (last step has
 so even when worker A's flush interleaves with worker B's, the resulting
 storage is just a concatenation of complete episodes. No intra-episode
 boundary ever sits at a worker-handoff seam, and the
-:class:`~torchrl.data.SliceSampler`'s boundary detection works on a flat
+:class:`~torchrl.data.replay_buffers.SliceSampler`'s boundary detection works on a flat
 ``ndim = 1`` buffer regardless of write order.
 
 If complete-trajectory writes are not an option (e.g. very long episodes,
@@ -295,7 +295,7 @@ Defaults that match the recommended layout:
   from ``("next", "done")`` if neither key is present.
 
 The flat 1-D output plugs directly into a recurrent policy under
-:func:`~torchrl.modules.set_recurrent_mode` ``("recurrent")``: the
+:class:`~torchrl.modules.set_recurrent_mode` ``("recurrent")``: the
 RNN splits on ``is_init``, treats each slice as an independent
 sub-trajectory, and uses each slice's stored hidden state at position 0
 as its initial hidden state. The output is identical (bitwise) to what a
@@ -404,7 +404,7 @@ release. The recommended replacement is to keep the collector output
 flat (``split_trajs=False``, the default) and:
 
 * If you need to draw sub-sequences for training, write the data into a
-  buffer with a :class:`~torchrl.data.SliceSampler`.
+  buffer with a :class:`~torchrl.data.replay_buffers.SliceSampler`.
 * If you need per-trajectory aggregates (returns, lengths) for logging,
   group by ``("collector", "traj_ids")`` directly on the flat tensor.
 * If you need a ragged ``[N_traj, T_var]`` view for a custom op, prefer
@@ -461,7 +461,7 @@ See also
   sampler used throughout this page.
 * :class:`~torchrl.modules.LSTMModule`,
   :class:`~torchrl.modules.GRUModule`,
-  :func:`~torchrl.modules.set_recurrent_mode` — the recurrent modules
+  :class:`~torchrl.modules.set_recurrent_mode` — the recurrent modules
   that consume the contiguous-trajectory layout natively.
 * :func:`~torchrl.modules.canonicalize_rnn_subset` — narrow
   canonicalization for multi-RNN learners.

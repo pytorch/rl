@@ -37,12 +37,12 @@ in the relevant functions:
     >>> print(env2._env.env.env)
     <gym.envs.classic_control.pendulum.PendulumEnv at 0x1629916a0>
 
-We can see that the two libraries modify the value returned by :func:`~torchrl.envs.gym.gym_backend()`
+We can see that the two libraries modify the value returned by :func:`~torchrl.envs.gym_backend`
 which can be further used to indicate which library needs to be used for
 the current computation. :class:`~.gym.set_gym_backend` is also a decorator:
 we can use it to tell to a specific function what gym backend needs to be used
 during its execution.
-The :func:`torchrl.envs.libs.gym.gym_backend` function allows you to gather
+The :func:`~torchrl.envs.gym_backend` function allows you to gather
 the current gym backend or any of its modules:
 
         >>> import mo_gymnasium
@@ -56,7 +56,7 @@ the current gym backend or any of its modules:
         <module 'gymnasium.wrappers' from '/path/to/venv/python3.10/site-packages/gymnasium/wrappers/__init__.py'>
 
 Another tool that comes in handy with gym and other external dependencies is
-the :class:`torchrl._utils.implement_for` class. Decorating a function
+the :class:`~torchrl.implement_for` class. Decorating a function
 with ``@implement_for`` will tell torchrl that, depending on the version
 indicated, a specific behavior is to be expected. This allows us to easily
 support multiple versions of gym without requiring any effort from the user side.
@@ -130,7 +130,7 @@ Usually, in such cases the observations delivered with the done and reward (whic
 action in the environment) are actually the first observations of a new episode, and not the last observations of the
 current episode.
 
-To handle these cases, torchrl provides a :class:`~torchrl.envs.AutoResetTransform` that will copy the observations
+To handle these cases, torchrl provides a :class:`~torchrl.envs.transforms.AutoResetTransform` that will copy the observations
 that result from the call to `step` to the next `reset` and skip the calls to `reset` during rollouts (in both
 :meth:`~torchrl.envs.EnvBase.rollout` and :class:`~torchrl.collectors.Collector` iterations).
 This transform class also provides a fine-grained control over the behavior to be adopted for the invalid observations,
@@ -277,6 +277,6 @@ Here is a working example:
   single process, as serializing and deserializing large numbers of tensors
   can be very expensive.
 
-Currently, :func:`~torchrl.envs.utils.check_env_specs` will pass for dynamic specs where a shape varies along some
+Currently, :func:`~torchrl.envs.check_env_specs` will pass for dynamic specs where a shape varies along some
 dimensions, but not when a key is present during a step and absent during others, or when the number of dimensions
 varies.

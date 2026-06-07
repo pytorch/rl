@@ -15,7 +15,7 @@ TorchRL provides several collector implementations optimized for different scena
 - :class:`AsyncBatchedCollector`: Async environments + auto-batching inference server (see :class:`AsyncBatchedCollector`)
 - :class:`MultiCollector`: Parallel collection across multiple workers (see below)
 - :class:`Evaluator`: Sync or async evaluation during training (see :ref:`evaluation <collectors_eval>`)
-- **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`DistributedCollector` / :class:`RPCCollector`)
+- **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`~torchrl.collectors.distributed.DistributedCollector` / :class:`~torchrl.collectors.distributed.RPCCollector`)
 
 MultiCollector API
 ------------------
@@ -58,7 +58,7 @@ Key Features
 - **Weight synchronization**: Keep inference policies up-to-date with training weights
 - **Replay buffer integration**: Seamless compatibility with TorchRL's replay buffers
 - **Trajectory assembly**: Collect complete trajectories with ``trajs_per_batch`` for
-  clean :class:`~torchrl.data.SliceSampler` sampling — see :ref:`collectors_replay_trajs`
+  clean :class:`~torchrl.data.replay_buffers.SliceSampler` sampling — see :ref:`collectors_replay_trajs`
 - **Batching strategies**: Multiple ways to organize collected data
 - **Profiler-ready**: Set ``TORCHRL_PROFILING=1`` to emit named ranges on the
   collector, env, and policy hot paths — see :ref:`ref_profiling`

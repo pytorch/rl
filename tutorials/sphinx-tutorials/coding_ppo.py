@@ -299,8 +299,8 @@ print("normalization constant shape:", env.transform[0].loc.shape)
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`~torchrl.envs.libs.gym.GymWrapper` and
-# :class:`~torchrl.envs.libs.gym.GymEnv` that inherits
+# In our example, the :class:`~torchrl.envs.GymWrapper` and
+# :class:`~torchrl.envs.GymEnv` that inherits
 # from it already take care of setting the proper specs for your environment so
 # you should not have to care about this.
 #
@@ -318,7 +318,7 @@ print("input_spec:", env.input_spec)
 print("action_spec (as defined by input_spec):", env.action_spec)
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)

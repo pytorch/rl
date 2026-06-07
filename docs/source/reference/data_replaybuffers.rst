@@ -36,7 +36,7 @@ Supported data types and choosing a storage
 
 In theory, replay buffers support any data type but we can't guarantee that each
 component will support any data type. The most crude replay buffer implementation
-is made of a :class:`~torchrl.data.replay_buffers.ReplayBuffer` base with a
+is made of a :class:`~torchrl.data.ReplayBuffer` base with a
 :class:`~torchrl.data.replay_buffers.ListStorage` storage. This is very inefficient
 but it will allow you to store complex data structures with non-tensor data.
 Storages in contiguous memory include :class:`~torchrl.data.replay_buffers.TensorStorage`,
@@ -70,3 +70,18 @@ storage entries.
     >>> data["target"] = data["obs"] + 1
     >>> rb.write_all(data)
     >>> assert (rb[:] == data).all()
+
+TED-format conversion
+~~~~~~~~~~~~~~~~~~~~~
+
+The following helpers convert between the TorchRL Episode Data (TED) layout and
+a flat, storage-friendly representation when serializing or restoring a buffer:
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    TED2Flat
+    Flat2TED
