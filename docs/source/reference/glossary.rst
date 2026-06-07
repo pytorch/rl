@@ -29,7 +29,7 @@ terms with the minimum context needed to find the relevant code.
 
    carrier
       The :class:`~tensordict.TensorDictBase` stored as ``self._carrier`` inside
-      :meth:`~torchrl.collectors.SyncDataCollector.rollout`. It persists across
+      :meth:`~torchrl.collectors.Collector.rollout`. It persists across
       collector batches and holds the post-reset environment output that the
       next policy call consumes. See :ref:`ref_collectors_internals` for the
       full lifecycle.
@@ -37,9 +37,7 @@ terms with the minimum context needed to find the relevant code.
    Collector
       The single-process data collector, exposed as
       :class:`~torchrl.collectors.Collector`. It alternates policy calls and
-      environment steps to produce rollout tensordicts; the legacy name
-      :class:`~torchrl.collectors.SyncDataCollector` aliases the same
-      implementation.
+      environment steps to produce rollout tensordicts.
 
    compact_obs
       Collector setting that drops observation and state keys from the
@@ -48,7 +46,7 @@ terms with the minimum context needed to find the relevant code.
       the root keys of the following step. At trajectory boundaries or in
       non-contiguous random samples, reconstruction must use the configured fill
       value; see :class:`~torchrl.envs.transforms.NextStateReconstructor` and the
-      ``compact_obs`` argument on :class:`~torchrl.collectors.SyncDataCollector`.
+      ``compact_obs`` argument on :class:`~torchrl.collectors.Collector`.
 
    Composite
    CompositeSpec
@@ -175,7 +173,7 @@ terms with the minimum context needed to find the relevant code.
 
    trajectory ID
       An integer that uniquely identifies which trajectory each frame belongs
-      to. Written by :class:`~torchrl.collectors.SyncDataCollector` as
+      to. Written by :class:`~torchrl.collectors.Collector` as
       ``("collector", "traj_ids")`` when ``track_traj_ids=True``. Used by
       :class:`~torchrl.data.replay_buffers.SliceSampler` to draw whole trajectories from a
       buffer and by :func:`~torchrl.collectors.utils.split_trajectories` to
