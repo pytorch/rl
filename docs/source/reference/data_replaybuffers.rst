@@ -72,7 +72,7 @@ storage entries.
     >>> assert (rb[:] == data).all()
 
 TED-format conversion
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 The following helpers convert between the TorchRL Episode Data (TED) layout and
 a flat, storage-friendly representation when serializing or restoring a buffer:
