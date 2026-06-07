@@ -274,8 +274,18 @@ Available Transforms
     FrameSkipTransform
     GrayScale
     Hash
+    HumanoidMacroAction
     InitTracker
     LineariseRewards
+    MacroAction
+    MacroPrimitive
+    MacroPrimitiveTransform
+    TargetMacroAction
+    RobotMacroAction
+    RobotMacroActionMode
+    SatelliteMacroAction
+    SatelliteAttitudeTransform
+    URScriptPrimitive
     MeanActionSelector
     ModuleTransform
     MultiAction
@@ -303,11 +313,13 @@ Available Transforms
     StepCounter
     TargetReturn
     TensorDictPrimer
+    TerminateTransform
     TimeMaxPool
     Timer
     Tokenizer
     ToTensorImage
     TrajCounter
+    URScriptPrimitiveTransform
     UnaryTransform
     UnsqueezeTransform
     VC1Transform

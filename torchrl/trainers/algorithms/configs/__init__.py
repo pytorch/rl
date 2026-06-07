@@ -23,13 +23,10 @@ except ImportError as e:
 from torchrl.trainers.algorithms.configs.collectors import (
     # New canonical config names
     AsyncCollectorConfig,
-    # Legacy config names (aliases)
-    AsyncDataCollectorConfig,
     BaseCollectorConfig,
     CollectorConfig,
     MultiAsyncCollectorConfig,
     MultiSyncCollectorConfig,
-    SyncDataCollectorConfig,
 )
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
@@ -262,11 +259,6 @@ __all__ = [
     "BaseCollectorConfig",
     "MultiAsyncCollectorConfig",
     "MultiSyncCollectorConfig",
-    # Collectors (legacy aliases)
-    "AsyncDataCollectorConfig",
-    "MultiSyncCollectorConfig",
-    "MultiAsyncCollectorConfig",
-    "SyncDataCollectorConfig",
     # Environments
     "BatchedEnvConfig",
     "EnvConfig",

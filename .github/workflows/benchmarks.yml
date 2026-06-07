@@ -32,9 +32,9 @@ jobs:
       matrix:
         include:
           - device: CPU
-            image: nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+            image: nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04
           - device: GPU
-            image: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+            image: nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
     defaults:
       run:
         shell: bash -l {0}
@@ -84,14 +84,20 @@ jobs:
             export CUDA_VISIBLE_DEVICES=
           fi
 
-          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
-          python3.10 -m pip install ninja pytest pytest-benchmark mujoco dm_control "gym[accept-rom-license,atari]" transformers accelerate
+          # NB: the nightly/cu128 channel is frozen (torch and torchvision builds
+          # drifted out of sync there, making install ResolutionImpossible). Use the
+          # live cu126 nightly channel; its CUDA 12.6 wheels run fine on the GPU
+          # runner via driver backward-compatibility.
+          python3.10 -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu126 -U
+          python3.10 -m pip install ninja pytest pytest-benchmark pytest-timeout "hoptorch>=0.1.4" "mujoco>=3.8.1,<3.9.0" "dm_control>=1.0.41" "gym[accept-rom-license,atari]" transformers accelerate
           python -m pip install "pybind11[global]"
-          python3.10 -m pip install git+https://github.com/pytorch/tensordict 
+          python3.10 -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+          python3.10 -m pip install --no-deps git+https://github.com/pytorch/tensordict
           python3.10 -m pip install safetensors tqdm pandas numpy matplotlib ray
-          python3.10 setup.py develop
+          python3.10 -m pip install -e . --no-build-isolation --no-deps
 
           bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
 
           if [ "${{ matrix.device }}" = "GPU" ]; then
             # test import and fail early if the GPU runner did not expose CUDA
@@ -104,7 +110,19 @@ jobs:
           export TORCHDYNAMO_INLINE_INBUILT_NN_MODULES=1
           export COMPOSITE_LP_AGGREGATE=0
           export TD_GET_DEFAULTS_TO_NONE=1
-          python -m pytest -vvv --rank 0 --benchmark-only --benchmark-json output.json --ignore test_llm.py .
+          BENCHMARK_SITE_DIR="$(mktemp -d)"
+          cat > "${BENCHMARK_SITE_DIR}/sitecustomize.py" <<'PY'
+          import warnings
+
+          try:
+              import torch
+
+              torch._dynamo.config.reorderable_logging_functions.add(warnings.warn)
+          except (AttributeError, ImportError):
+              pass
+          PY
+          export PYTHONPATH="${BENCHMARK_SITE_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+          python -m pytest -vvv --rank 0 --timeout=240 --benchmark-only --benchmark-json output.json --ignore test_llm.py .
 
       # Upload benchmark results for main branch and manual dispatch runs.
       - name: Upload benchmark results

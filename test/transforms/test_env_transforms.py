@@ -41,6 +41,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetReturn,
+    TerminateTransform,
     TrajCounter,
     TransformedEnv,
 )
@@ -2189,3 +2190,58 @@ class TestExpandAs(TransformBase):
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse method for ExpandAs")
+
+
+class TestTerminateTransform:
+    def test_non_callable_raises(self):
+        with pytest.raises(ValueError, match="callable"):
+            TerminateTransform(stop=3)
+
+    def test_forward_raises(self):
+        t = TerminateTransform(lambda td: True)
+        with pytest.raises(RuntimeError, match="without a parent environment"):
+            t(TensorDict())
+
+    def test_check_env_specs(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=10),
+            TerminateTransform(lambda td: td["observation"].squeeze(-1) >= 5),
+        )
+        env.check_env_specs()
+
+    def test_terminates_when_predicate_true(self):
+        # CountingEnv observation increments 1, 2, 3, ...; stop once it hits 3.
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            TerminateTransform(lambda td: td["observation"].squeeze(-1) >= 3),
+        )
+        r = env.rollout(
+            max_steps=50,
+            actions=[torch.ones(1)] * 50,
+            break_when_any_done=True,
+        )
+        assert r.shape[-1] == 3
+        assert bool(r["next", "done"][..., -1, :].all())
+        assert bool(r["next", "terminated"][..., -1, :].all())
+
+    def test_write_done_true_sets_done_and_terminated(self):
+        # A python-bool predicate is coerced to a tensor.
+        env = TransformedEnv(
+            CountingEnv(max_steps=100), TerminateTransform(lambda td: True)
+        )
+        td = env.reset()
+        td["action"] = torch.ones(1)
+        out = env.step(td)
+        assert bool(out["next", "terminated"].all())
+        assert bool(out["next", "done"].all())
+
+    def test_write_done_false_writes_only_terminated(self):
+        env = TransformedEnv(
+            CountingEnv(max_steps=100),
+            TerminateTransform(lambda td: True, write_done=False),
+        )
+        td = env.reset()
+        td["action"] = torch.ones(1)
+        out = env.step(td)
+        assert bool(out["next", "terminated"].all())
+        assert not bool(out["next", "done"].any())

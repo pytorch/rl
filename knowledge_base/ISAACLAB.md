@@ -1,21 +1,17 @@
 # IsaacLab Guide
 
-This document covers how to install, run, and debug IsaacLab on a cluster, plus common pitfalls.
+This guide covers the pieces that tend to matter when running IsaacLab with
+TorchRL on headless GPU machines: import order, rendering dependencies,
+TorchRL wrappers, and common installation/debugging issues.
 
-## What is IsaacLab?
+## Must-know rules
 
-IsaacLab (formerly Isaac Gym) is NVIDIA's GPU-accelerated robotics simulation platform built on Omniverse. It runs thousands of parallel environments on a single GPU, giving orders-of-magnitude higher throughput than CPU-based simulators like MuJoCo/DMControl.
+### Launch Isaac before importing torch
 
-- **Docker image**: `nvcr.io/nvidia/isaac-lab:2.3.0`
-- **Python env**: Inside the Docker image at `/workspace/isaaclab/isaaclab.sh`
-- **Docs**: https://isaac-sim.github.io/IsaacLab/v2.3.0/
-
-## Critical: Import Order
-
-**The single most important thing to know**: IsaacLab's `AppLauncher` MUST be initialized BEFORE importing `torch`.
+IsaacLab's `AppLauncher` should be initialized before importing `torch` in a
+process that will own an Isaac simulation.
 
 ```python
-# CORRECT -- AppLauncher first, then torch
 from isaaclab.app import AppLauncher
 import argparse
 
@@ -24,190 +20,321 @@ AppLauncher.add_app_launcher_args(parser)
 args_cli, _ = parser.parse_known_args(["--headless"])
 AppLauncher(args_cli)
 
-# NOW safe to import torch
 import torch
 ```
 
+Avoid this order:
+
 ```python
-# WRONG -- will cause mysterious errors or crashes
 import torch
-from isaaclab.app import AppLauncher  # too late!
+from isaaclab.app import AppLauncher
 ```
 
-## Key Properties of IsaacLab Environments
+### One simulation per process
 
-### Pre-vectorized
+Do not create multiple IsaacLab simulations in the same process. Use separate
+processes for independent collectors, evaluators, or renderers.
 
-IsaacLab environments are already batched internally. A single `gym.make("Isaac-Ant-v0")` creates ~4096 parallel environments running on the GPU. There is **no need** to wrap with `ParallelEnv`.
+### Environments are GPU-native and pre-vectorized
+
+IsaacLab environments are already batched internally. A single `gym.make(...)`
+can create thousands of sub-environments on the GPU, so wrapping with a generic
+`ParallelEnv` is usually unnecessary.
+
+Standard manager-based tasks expose state observations under the `"policy"`
+observation key. Pixel observations are not added by `from_pixels`; add a camera
+sensor explicitly when pixels are needed.
+
+### Set non-interactive runtime variables
+
+For cluster or container jobs, set the EULA/headless-related environment
+variables before runtime:
+
+```bash
+export OMNI_KIT_ACCEPT_EULA=yes
+export ACCEPT_EULA=Y
+export PRIVACY_CONSENT=Y
+export OMNI_KIT_DISABLE_CUP=1
+export OMNI_KIT_ALLOW_ROOT=1
+export TERM="${TERM:-xterm}"
+```
+
+## Minimal state-based environment
 
 ```python
-env = gym.make("Isaac-Ant-v0")
-print(env.num_envs)  # 4096
+from isaaclab.app import AppLauncher
+import argparse
+
+parser = argparse.ArgumentParser()
+AppLauncher.add_app_launcher_args(parser)
+args_cli, _ = parser.parse_known_args(["--headless"])
+AppLauncher(args_cli)
+
+import gymnasium as gym
+import isaaclab_tasks  # noqa: F401
+from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+cfg = AntEnvCfg()
+cfg.scene.num_envs = 4096
+cfg.sim.device = "cuda:0"
+env = IsaacLabWrapper(gym.make("Isaac-Ant-v0", cfg=cfg), device="cuda:0")
+td = env.reset()
+print(td["policy"].shape)
 ```
 
-### GPU-native
+## Tiled-camera rendering
 
-All computation happens on `cuda:0`. The environment does NOT support CPU execution.
+Manager-based environments do not put camera data in the observation manager by
+default. Add a tiled camera to the scene config before `gym.make(...)` and launch
+with `--enable_cameras`; without it, camera/rendering APIs are not initialized.
 
-### State-based observations
+For TorchRL, prefer `IsaacLabWrapper.add_tiled_camera_config(...)` and
+`IsaacLabWrapper(..., from_tiled_camera=True)` so pixels are inserted into the
+TensorDict under `"pixels"`.
 
-Standard IsaacLab environments use vector observations, not pixels. The observation key is `"policy"` (not `"observation"` or `"pixels"`).
+```python
+from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
-Some environments (e.g., `Isaac-Cartpole-RGB-v0`) support pixel observations, but these require `--enable_cameras` and are not the default.
+IsaacLabWrapper.add_tiled_camera_config(env_cfg, width=64, height=64)
+env = IsaacLabWrapper(
+    gym.make("Isaac-Ant-v0", cfg=env_cfg),
+    device="cuda:0",
+    from_tiled_camera=True,
+)
+```
 
-### Auto-reset
+If configuring the sensor manually, add a `TiledCameraCfg` to the scene config:
 
-IsaacLab environments auto-reset individual sub-environments when they reach a terminal state. Done can be reported immediately after reset.
+```python
+from isaaclab.sensors import TiledCameraCfg
+import isaaclab.sim as sim_utils
 
-### In-place tensor modification
+env_cfg.scene.tiled_camera = TiledCameraCfg(
+    prim_path="{ENV_REGEX_NS}/Camera",
+    offset=TiledCameraCfg.OffsetCfg(
+        pos=(-3.0, 0.0, 2.0),
+        rot=(0.9945, 0.0, 0.1045, 0.0),
+        convention="world",
+    ),
+    data_types=["rgb"],
+    spawn=sim_utils.PinholeCameraCfg(
+        focal_length=24.0,
+        focus_distance=400.0,
+        horizontal_aperture=20.955,
+        clipping_range=(0.1, 20.0),
+    ),
+    width=64,
+    height=64,
+)
+```
 
-IsaacLab modifies `terminated` and `truncated` tensors in-place. Downstream code should clone these tensors to prevent data corruption.
+`TiledCamera` renders all environments in a single batched pass on the GPU,
+producing `[num_envs, H, W, C]` tensors efficiently. Rendering many
+environments is expensive: start with a smaller number of envs for pixels, and
+increase `env_cfg.scene.env_spacing` if neighboring envs appear in camera views.
 
-## Pixel-Based Observations (TiledCamera)
+For the ANYmal-C quadruped (base at approximately 0.5 m height), useful camera
+positions include:
 
-IsaacLab's default ManagerBased environments only provide state vectors. For pixel-based RL you need to add a `TiledCamera` sensor.
+- rear-elevated: `pos=(-3.0, 0.0, 2.0)`;
+- side view: `pos=(0.0, -3.0, 1.5)`;
+- top-down: `pos=(0.0, 0.0, 5.0)`.
 
-### How It Works
+The rotation quaternion `(w, x, y, z) = (0.9945, 0.0, 0.1045, 0.0)` applies a
+slight downward pitch (approximately 12 degrees).
 
-`TiledCamera` renders all environments in a single batched pass on the GPU, producing `[num_envs, H, W, C]` uint8 tensors efficiently.
+## Auto-reset and per-index reset
 
-### Setup Steps
+IsaacLab environments auto-reset individual sub-environments when they reach a
+terminal state. Done can be reported immediately after reset.
 
-1. **Enable cameras**: Pass `--enable_cameras` to `AppLauncher`. Without this, rendering APIs are not initialised.
+`IsaacLabWrapper(env, native_autoreset=True)` keeps Isaac's native post-reset
+observation in `tensordict_["policy"]` and marks the terminal
+`("next", "policy")` with NaN; `EnvBase.step_and_maybe_reset` then skips the
+synthetic reset call. The same bridge is installed for Direct-workflow envs
+(`DirectRLEnv`, `DirectMARLEnv`), not just Manager-based envs.
 
-2. **Add TiledCameraCfg to the scene config** before calling `gym.make`:
-    ```python
-    from isaaclab.sensors import TiledCameraCfg
-    import isaaclab.sim as sim_utils
+`IsaacLabWrapper` surfaces Isaac Lab's per-index reset and `reset_to` APIs
+through the standard torchrl `"_reset"` boolean mask:
 
-    env_cfg.scene.tiled_camera = TiledCameraCfg(
-        prim_path="{ENV_REGEX_NS}/Camera",
-        offset=TiledCameraCfg.OffsetCfg(
-            pos=(-3.0, 0.0, 2.0),  # behind and above the robot
-            rot=(0.9945, 0.0, 0.1045, 0.0),
-            convention="world",
-        ),
-        data_types=["rgb"],
-        spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0, focus_distance=400.0,
-            horizontal_aperture=20.955, clipping_range=(0.1, 20.0),
-        ),
-        width=64, height=64,
-    )
-    ```
+```python
+env = IsaacLabWrapper(gym.make("Isaac-Ant-v0", cfg=AntEnvCfg()), native_autoreset=True)
+td = env.reset()
 
-3. **Read camera data**: After each `env.step()`, read from `scene["tiled_camera"].data.output["rgb"]`.
+# ... step the env a few times ...
 
-4. **Reduce num_envs**: Rendering is expensive. 256 envs is a safe starting point for 64×64 images on A100/H100.
+# Reset half of the sub-envs without disturbing the others. The transform
+# stack (RewardSum, InitTracker, recurrent primers, VecNormV2, ...) fires
+# on the masked rows only, exactly like a normal reset.
+reset_mask = torch.zeros(env.batch_size[0], 1, dtype=torch.bool, device=env.device)
+reset_mask[: env.batch_size[0] // 2] = True
+td.set("_reset", reset_mask)
+env.reset(td)
 
-5. **Increase env_spacing**: Set `env_cfg.scene.env_spacing = 8.0` or higher to prevent the camera from seeing neighbouring environments.
+# Snapshot and branch from a deterministic state (manager-based envs only).
+snapshot = env.get_state()
+# ... evolve env from `snapshot` to explore one branch ...
+# Rewind to the snapshot via the unified deterministic-reset path:
+env.reset(td, set_state=True, scene_state=snapshot)
 
-### Camera Position for ANYmal-C
+# Convenience method (equivalent to the call above):
+env.reset_to_state(snapshot, td)
+```
 
-The `offset.pos` is in world coordinates relative to the environment origin. For the ANYmal-C quadruped (base at ~0.5m height):
-- **Rear-elevated**: `pos=(-3.0, 0.0, 2.0)` – sees the full body from behind
-- **Side view**: `pos=(0.0, -3.0, 1.5)` – captures gait from the side
-- **Top-down**: `pos=(0.0, 0.0, 5.0)` – overhead view
+Gotchas:
 
-The rotation quaternion `(w, x, y, z) = (0.9945, 0.0, 0.1045, 0.0)` applies a slight downward pitch (≈12°).
+- The per-index reset path is gated on `native_autoreset=True`. With the
+  default `native_autoreset=False`, the `VecGymEnvTransform`-based obs-swap path
+  already handles `step_and_maybe_reset`-driven partial resets implicitly; an
+  explicit per-index reset would double-reset those envs.
+- `reset_to_state` is only available on manager-based envs (`ManagerBasedEnv` /
+  `ManagerBasedRLEnv`). Direct envs do not expose `reset_to`.
+- `is_relative=True` interprets the snapshot pose relative to the env origin,
+  which is useful for terrain-relative pose reuse.
+- The snapshot is passed as the `scene_state` keyword argument rather than
+  inside the tensordict. A stateless env's reset state is torch-native
+  (tensordict / `torch.Tensor` entries in `state_spec`) and so lives in the
+  tensordict, but Isaac Lab's scene state is an opaque, non-torch-native object;
+  carrying it in the tensordict would require a `NonTensor` `state_spec` entry
+  threaded through the transform/step-MDP machinery, whereas a kwarg is simpler
+  and keeps simulator state out of the data path.
 
-## Available Environments
+## In-place tensor modification
 
-List environments by running (inside the Isaac container):
+IsaacLab modifies the `terminated` and `truncated` tensors in-place.
+`IsaacLabWrapper` defensively clones `terminated`, `truncated` and `done` in its
+output transform, so the TensorDict returned by `step` is already safe from this
+aliasing; no extra handling is needed downstream.
+
+### Headless EGL/Vulkan dependencies
+
+Headless tiled-camera RGB rendering needs the NVIDIA graphics userspace stack,
+not just CUDA. Minimal CUDA images often omit EGL/GLVND and Vulkan runtime
+packages. On Debian/Ubuntu images, install the generic loader/runtime packages:
+
 ```bash
-./isaaclab.sh -p scripts/environments/list_envs.py
+sudo apt-get update
+sudo apt-get install -y libegl-dev libglvnd0 libglx0 libvulkan1 vulkan-tools
 ```
 
-### Classic (MuJoCo-style)
-- `Isaac-Ant-v0` -- Ant locomotion (good for validation, tested in CI)
-- `Isaac-Humanoid-v0` -- Humanoid locomotion
-- `Isaac-Cartpole-v0` -- Cart-pole balance
+If using distro NVIDIA packages, install a `libnvidia-gl-<driver-version>`
+package matching the host driver when available. The NVIDIA userspace libraries
+must match the host driver; if package repositories provide a different patch
+release, Vulkan may report `ERROR_INCOMPATIBLE_DRIVER`.
 
-### Locomotion (quadruped/biped)
-- `Isaac-Velocity-Flat-Anymal-C-v0` -- Anymal-C on flat terrain
-- `Isaac-Velocity-Rough-Anymal-C-v0` -- Anymal-C on rough terrain
-- `Isaac-Velocity-Flat-Unitree-Go2-v0` -- Unitree Go2 on flat terrain
-- `Isaac-Velocity-Flat-H1-v0` -- Unitree H1 humanoid
-
-### Manipulation
-- `Isaac-Reach-Franka-v0` -- Franka reach
-- `Isaac-Lift-Cube-Franka-v0` -- Franka lift cube
-- `Isaac-Open-Drawer-Franka-v0` -- Franka open drawer
-- `Isaac-Repose-Cube-Allegro-v0` -- Allegro hand in-hand manipulation
-
-## Running on Steve
-
-### 1) Create a job with Isaac Docker image
+Useful checks:
 
 ```bash
-JOBID=$(steve job \
-    --partition h200-high \
-    --gpus-per-task 1 \
-    --ntasks 1 \
-    --time 24:00:00 \
-    --job-name "dreamer-isaac" \
-    --container-image nvcr.io/nvidia/isaac-lab:2.3.0 \
-    --jobid-only)
+nvidia-smi --query-gpu=driver_version,name --format=csv,noheader | head
+ldconfig -p | grep -E 'libEGL_nvidia|libnvidia-eglcore|libGLX_nvidia'
+ls /usr/share/glvnd/egl_vendor.d/
+ls /usr/share/vulkan/icd.d/
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary
 ```
 
-### 2) Copy and run setup
+When a matching driver userspace bundle is outside the default library path,
+point the process at it explicitly:
 
 ```bash
-steve cp "$JOBID" ./setup-and-run.sh :/root/setup-and-run.sh
-steve step "$JOBID" 'bash /root/setup-and-run.sh --build-only'
+export LD_LIBRARY_PATH=/path/to/nvidia/lib:${LD_LIBRARY_PATH}
+export VK_ICD_FILENAMES=/path/to/nvidia_icd.json
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export XDG_RUNTIME_DIR=/tmp/xdg-runtime-${USER}
+mkdir -p "${XDG_RUNTIME_DIR}" && chmod 700 "${XDG_RUNTIME_DIR}"
 ```
 
-### 3) Run training (detached)
+Some Isaac/Kit rendering paths expect the rendering device to be `cuda:0`. For a
+dedicated render/eval GPU, expose a single physical GPU to the process and use
+`cuda:0` inside that process:
 
 ```bash
-steve step -d "$JOBID" 'WANDB_MODE=online bash /root/setup-and-run.sh'
+CUDA_VISIBLE_DEVICES=<physical-render-gpu> python render_or_eval.py --device cuda:0
 ```
 
-### 4) Override the task
+## TorchRL integration
+
+### IsaacLab wrapper
+
+Use `IsaacLabWrapper` around an IsaacLab Gymnasium environment. The wrapper
+handles IsaacLab's in-place `terminated`/`truncated` tensors and can read tiled
+camera pixels when configured with `from_tiled_camera=True`.
+
+```python
+from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+IsaacLabWrapper.add_tiled_camera_config(env_cfg, width=320, height=240)
+env = IsaacLabWrapper(
+    gym.make("Isaac-Ant-v0", cfg=env_cfg),
+    device="cuda:0",
+    from_tiled_camera=True,
+)
+```
+
+### Recurrent PPO collector/evaluator notes
+
+For IsaacLab PPO with recurrent policies, keep the dataflow explicitly
+on-policy:
+
+1. Build collector policies with `policy_factory`.
+2. Use collector auto-registration for `InitTracker` and recurrent-state
+   primers; on transitional branches, pass `auto_register_policy_transforms=True`.
+3. Use separate devices for large runs when possible: one GPU for Isaac
+   collection/inference, one GPU for learner updates, and another for rendered
+   eval.
+4. Collect one rollout window, compute GAE over that window, train for the
+   configured PPO epochs, empty the training buffer, sync weights, then collect
+   again.
+5. With compact rollout data, prefer shifted value estimation so batches do not
+   need `("next", "policy")` rehydration.
+
+For robust explicit weight sync in fallback collector paths:
+
+```python
+from tensordict import TensorDict
+
+collector.update_policy_weights_(weights=TensorDict.from_module(actor).data)
+```
+
+### Rendered async eval in the recurrent PPO example
+
+The recurrent PPO example can run rendered eval in a separate evaluator process.
+Use a dedicated physical GPU for the worker and remap it to `cuda:0` inside the
+worker:
 
 ```bash
-steve step -d "$JOBID" 'WANDB_MODE=online bash /root/setup-and-run.sh env.name=Isaac-Ant-v0'
+python examples/collectors/isaaclab_rnn_ppo_memory.py \
+  --eval \
+  --eval-cuda-visible-devices <physical-render-gpu> \
+  --eval-worker-device cuda:0 \
+  --eval-nvidia-lib-dir /path/to/nvidia/lib \
+  --eval-vulkan-icd /path/to/nvidia_icd.json \
+  --eval-xdg-runtime-dir /tmp/xdg-runtime-eval
 ```
 
-## Environment Variables
+By default, eval should collect a requested number of complete trajectories.
+Only pass `--eval-max-steps` when a hard cap is desired.
 
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `OMNI_KIT_ACCEPT_EULA` | `yes` | Accept IsaacLab EULA (required) |
-| `ACCEPT_EULA` | `Y` | Accept NVIDIA container / Omniverse EULA in non-interactive jobs |
-| `PRIVACY_CONSENT` | `Y` | Avoid privacy consent prompts in Isaac Sim / Omniverse startup |
-| `OMNI_KIT_DISABLE_CUP` | `1` | Disable Customer Usage Profile prompts |
-| `OMNI_KIT_ALLOW_ROOT` | `1` | Allow Kit to run as root in containerized jobs |
-| `PYTHONNOUSERSITE` | `1` | Avoid user-site packages conflicting |
-| `WANDB_MODE` | `online` | Weights & Biases logging mode |
+## Pip/source installation
 
-## Pip-Based IsaacLab Flow on Cluster Jobs
+Prefer an IsaacLab container when possible. If starting from a generic CUDA
+image, a pip/source flow can work, but keep the order explicit.
 
-Prefer the IsaacLab container when possible. If the job starts from a generic
-CUDA container, a pip-based flow can work, but the order matters.
+### Create the venv
 
-### Use `uv venv` when `ensurepip` is missing
-
-Some cluster images ship Python without `ensurepip`, so `python -m venv` creates
-an unusable environment. Use `uv venv` directly:
+Some images ship Python without `ensurepip`; use `uv venv` directly:
 
 ```bash
 VENV_DIR=/root/.venv/rl-isaac
 uv venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
-```
-
-Run installs from `/root` (or another directory without a restrictive
-`pyproject.toml`) and clear inherited uv resolution pins:
-
-```bash
 cd /root
 unset UV_EXCLUDE_NEWER UV_EXCLUDE_NEWER_PACKAGE
 ```
 
-### Install Isaac Sim before IsaacLab
+### Install Isaac Sim, then IsaacLab source packages
 
-Install Isaac Sim from NVIDIA's package index, then install IsaacLab from source:
+Pin versions for the experiment. Example:
 
 ```bash
 uv pip install "isaacsim[all,extscache]==6.0.0" \
@@ -220,165 +347,81 @@ cd /root/IsaacLab
 ./isaaclab.sh --install || true
 ```
 
-The `|| true` is intentional for non-interactive setup scripts: the package
-installation can succeed, then the VSCode / Kit bootstrap step can still ask for
-the EULA and exit with EOF. The runtime job must set the EULA variables listed
-above.
+The `|| true` is for non-interactive setup scripts: package installation can
+succeed even if a later VSCode/Kit bootstrap step exits after an EULA prompt.
+The runtime job must set the EULA variables above.
 
-### Check package presence without importing Isaac
-
-Do not use `python -c "import isaacsim"` or `python -c "import isaaclab"` as an
-installation check in setup scripts. Importing can initialize Kit or trigger EULA
-prompts. Check package presence with `importlib.util.find_spec` instead:
+Check package presence without importing Isaac, since imports can initialize Kit
+or trigger prompts:
 
 ```bash
 python -c "import importlib.util; raise SystemExit(importlib.util.find_spec('isaacsim') is None)"
 python -c "import importlib.util; raise SystemExit(importlib.util.find_spec('isaaclab') is None)"
 ```
 
-### Reinstall the target torch after IsaacLab
+### Restore the target torch/TorchRL stack
 
-IsaacLab's installer may install its preferred torch build, for example a cu128
-wheel. If the experiment needs a torch nightly, reinstall it after IsaacLab:
+IsaacLab installers may replace torch with their preferred build. Reinstall the
+experiment's target torch after IsaacLab if needed:
 
 ```bash
 uv pip install --upgrade --pre torch torchvision \
     --index-url https://download.pytorch.org/whl/nightly/cu130
 ```
 
-For cu130 nightlies, also reinstall the cu13 NCCL wheel after any IsaacLab or
-cu12/cu128 torch install. `nvidia-nccl-cu12` and `nvidia-nccl-cu13` write to the
-same `site-packages/nvidia/nccl/lib` path; the cu12 package can overwrite
-`libnccl.so.2` and make `import torch` fail with:
-
-```text
-ImportError: .../libtorch_cuda.so: undefined symbol: ncclCommResume
-```
-
-The fix is to force reinstall the matching cu13 NCCL wheel and make the venv's
-NVIDIA libraries first on `LD_LIBRARY_PATH`:
+For cu130 nightlies, if `import torch` fails with an NCCL symbol such as
+`ncclCommResume`, force reinstall the matching cu13 NCCL wheel after all
+cu12/cu128 installs and prepend the venv NVIDIA library paths to
+`LD_LIBRARY_PATH`.
 
 ```bash
 uv pip install --force-reinstall "nvidia-nccl-cu13==2.30.4" \
     --index-url https://download.pytorch.org/whl/nightly/cu130
-
-SITE_PKGS="$(python -c 'import site; print(site.getsitepackages()[0])')"
-NVIDIA_LIBS="$SITE_PKGS/nvidia/nccl/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cublas/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cuda_runtime/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cudnn/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cufft/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/curand/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cusolver/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cusparse/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/cuda_nvrtc/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/nvjitlink/lib"
-NVIDIA_LIBS="$NVIDIA_LIBS:$SITE_PKGS/nvidia/nvtx/lib"
-export LD_LIBRARY_PATH="$NVIDIA_LIBS:${LD_LIBRARY_PATH:-}"
-python -c "import torch; print(torch.__version__, torch.version.cuda)"
 ```
 
-### Install TorchRL and TensorDict without dependencies
-
-After torch is correct, install local TorchRL and TensorDict with `--no-deps` so
-pip does not replace the torch runtime:
+After torch is correct, install local TensorDict and TorchRL without
+dependencies so pip does not replace torch:
 
 ```bash
 uv pip install -e /root/tensordict --no-deps
-uv pip install -e /root/rl-isaac --no-deps
+uv pip install -e /root/rl --no-deps
+python -c "import torch, tensordict, torchrl; print(torch.__version__, tensordict.__version__, torchrl.__version__)"
 ```
 
-If TensorDict and TorchRL are being tested across stacked PRs, make sure the
-TensorDict branch contains the compatibility hooks expected by the TorchRL
-branch. A stale TensorDict checkout can fail during `import torchrl` even when
-torch itself imports correctly.
+## Environment discovery
 
-## TorchRL Recurrent PPO Flow
+List registered IsaacLab environments inside the Isaac environment:
 
-For IsaacLab PPO with an RNN policy, keep the dataflow explicitly on-policy:
-
-1. Build the collector policy with `policy_factory`, not by manually injecting
-   recurrent reset keys into the env.
-2. On TorchRL branches where `auto_register_policy_transforms` still defaults
-   to `None`, pass `auto_register_policy_transforms=True` so the collector adds
-   `InitTracker` and recurrent state `TensorDictPrimer` transforms.
-3. Use separate devices for large runs when possible: one GPU for Isaac
-   collection/inference, one GPU for learner updates.
-4. Collect one rollout window, freeze it, and run GAE over the full window once
-   per PPO epoch.
-5. For each epoch, empty/fill a training replay buffer from that processed
-   window, sample random slices for minibatches, then discard the buffer before
-   the next collection.
-6. After training, sync learner weights back to the collector before collecting
-   the next window.
-
-In the current collector fallback path, the robust weight sync form is:
-
-```python
-from tensordict import TensorDict
-
-collector.update_policy_weights_(weights=TensorDict.from_module(actor).data)
+```bash
+./isaaclab.sh -p scripts/environments/list_envs.py
 ```
 
-With compact rollout data, prefer `shifted="compact"` value estimation so the PPO
-batch does not need `("next", "policy")` rehydration. If a backend requires
-canonical strides, `td.contiguous()` and `td.clone()` may not be enough for
-size-1 dimensions; `torch.empty_like(td).update_(td)` is the stronger
-materialization pattern, and RNN backends should ideally handle this internally.
+Useful validation tasks include:
 
-## Gotchas and Pitfalls
+- `Isaac-Ant-v0`
+- `Isaac-Humanoid-v0`
+- `Isaac-Cartpole-v0`
+- `Isaac-Velocity-Flat-Anymal-C-v0`
+- `Isaac-Reach-Franka-v0`
 
-1. **Import order**: AppLauncher MUST be initialized before `import torch`. This cannot be stressed enough.
+## Troubleshooting checklist
 
-2. **Single simulation per process**: Don't try to create two IsaacLab environments in the same process.
-
-3. **EULA acceptance**: Set `OMNI_KIT_ACCEPT_EULA=yes` or the simulation won't start.
-
-4. **`--headless` flag**: Always pass `--headless` for server/cluster training (no display).
-
-5. **Zombie processes**: IsaacLab can leave orphan processes. Always `pkill -9 python` before relaunching.
-
-6. **`TERM` environment variable**: The Isaac container may not have `TERM` set, causing `isaaclab.sh` to print `'': unknown terminal type`. **Fix**: `export TERM="${TERM:-xterm}"`.
-
-7. **`rsync` not installed**: The IsaacLab container does not ship with `rsync`. Install with `apt-get install -y rsync` if needed.
-
-8. **`gym.make` requires `cfg` argument**: IsaacLab environments require an explicit configuration object. Resolve it dynamically:
-    ```python
-    spec = gymnasium.spec(env_name)
-    entry = spec.kwargs["env_cfg_entry_point"]
-    module_path, class_name = entry.rsplit(":", 1)
-    env_cfg = getattr(importlib.import_module(module_path), class_name)()
-    env = gymnasium.make(env_name, cfg=env_cfg)
-    ```
-
-9. **`from_pixels` ignored for IsaacLab**: The `from_pixels` parameter in `GymEnv` does NOT add pixel observations. You must add a TiledCamera sensor to the scene config manually.
-
-10. **Camera data is NOT in the observation manager**: ManagerBased envs don't include camera data in their observation groups. The camera data must be read separately from `scene["tiled_camera"].data.output[...]`.
-
-11. **Memory**: Pixel replay buffers are large. 500K frames at 64×64×3 float32 ≈ 24 GB on disk (memmap).
-
-12. **Installing torchrl in Isaac container**: Use `--no-build-isolation --no-deps` to avoid conflicts with Isaac's pre-installed torch/numpy.
-
-13. **Pip IsaacLab can downgrade torch**: Always verify
-    `python -c "import torch; print(torch.__version__, torch.version.cuda)"`
-    after IsaacLab installation, then reinstall the desired torch build if
-    needed.
-
-14. **cu12 and cu13 NVIDIA wheels share runtime paths**: If a cu130 nightly
-    fails with `ncclCommResume`, force reinstall `nvidia-nccl-cu13` after all
-    cu12/cu128 installs and prepend the venv NVIDIA library paths to
-    `LD_LIBRARY_PATH`.
-
-15. **Non-interactive setup checks should not import Isaac**: Use
-    `importlib.util.find_spec` for install checks; save real Isaac imports for
-    the final runtime after EULA variables are exported.
-
-16. **RNN collector transforms**: For recurrent policies, use
-    `policy_factory` and collector auto-registration for `InitTracker` and
-    recurrent state primers. On branches where the default is still transitional,
-    passing `auto_register_policy_transforms=True` is required.
-
-17. **On-policy buffers**: Do not let a continuously filled replay buffer drive
-    PPO updates. Fill one training window, compute GAE over the whole window,
-    train for the configured epochs, empty the buffer, sync weights, then
-    collect again.
+- AppLauncher was created before importing torch in each Isaac-owning process.
+- The job sets EULA/headless variables and `TERM`.
+- Only one Isaac simulation is created per process.
+- `gym.make` receives an explicit IsaacLab config object (`cfg=...`).
+- `from_pixels` is not used as a substitute for adding a `TiledCameraCfg`.
+- Camera rendering was launched with `--enable_cameras`.
+- EGL/GLVND/Vulkan packages are installed in minimal CUDA images.
+- NVIDIA GL/EGL userspace libraries match the host driver.
+- Dedicated render workers use `CUDA_VISIBLE_DEVICES=<gpu>` and `cuda:0` inside
+  the worker.
+- Setup checks use `importlib.util.find_spec`, not real Isaac imports.
+- Torch was verified after IsaacLab installation and reinstalled if necessary.
+- TensorDict/TorchRL were installed with `--no-deps` after torch was correct.
+- Recurrent collectors use policy factories and recurrent-state auto transforms.
+- PPO updates use one collected rollout window at a time; avoid continuously
+  filling replay buffers for on-policy updates.
+- If Isaac leaves orphan processes after failed runs, clean up stale Python/Kit
+  processes before relaunching.
+- If a container lacks `rsync`, install it with `apt-get install -y rsync`.

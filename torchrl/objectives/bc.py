@@ -170,7 +170,9 @@ class BCLoss(LossModule):
         action_expert = tensordict.get(self.tensor_keys.action)
 
         # Forward pass through actor
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             tensordict = self.actor_network(tensordict)
 
             if self.loss_function is not None:

@@ -108,7 +108,7 @@ identically on every subclass. Pass it like any other keyword:
     env = GymEnv("CartPole-v1", policy=gru)
 
 The same auto-wrap helper is applied a second time by
-:class:`~torchrl.collectors.SyncDataCollector` when an env is passed to it,
+:class:`~torchrl.collectors.Collector` when an env is passed to it,
 so users who construct a bare env first and only later hand it to a
 collector with a recurrent policy still get the right transforms wired up.
 Because the helper is idempotent, going through both paths does not produce
@@ -126,6 +126,62 @@ Limitations:
   transforms manually with
   :func:`~torchrl.modules.utils.get_env_transforms_from_module`.
 
+.. _Environment-compile-arg:
+
+Compiling envs via the ``compile=`` constructor argument
+--------------------------------------------------------
+
+Every concrete :class:`~torchrl.envs.EnvBase` subclass and
+:class:`~torchrl.envs.TransformedEnv` inherit a ``compile`` keyword argument
+on their constructors. When provided, the :class:`~torchrl.envs.EnvBase`
+metaclass post-init hook calls :meth:`~torchrl.envs.EnvBase.compile` on the
+fully-built env (after spec locking, after auto-reset wrapping if any, after
+policy-driven transform appending if any). Accepted values:
+
+* ``False`` or ``None`` (default): no compilation.
+* ``True``: ``env.compile()`` with default :func:`torch.compile` settings.
+* a ``dict``: forwarded to :meth:`~torchrl.envs.EnvBase.compile`.
+
+Using a dict avoids name collisions between :func:`torch.compile` kwargs
+(``backend``, ``mode``, ``fullgraph``, ``dynamic``, ``warmup``, ...) and
+constructor kwargs of specific envs. ``warmup`` is the number of eager calls
+to :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` before tracing kicks in;
+it stabilizes the input TensorDict layout (e.g. post-:meth:`reset` vs.
+steady-state post-``step_mdp``) so the compiled function does not recompile.
+
+The same flag works equally well with collectors:
+
+.. code-block:: python
+
+    from functools import partial
+    from torchrl.collectors import Collector
+    from torchrl.envs import GymEnv, TransformedEnv
+    from torchrl.envs.transforms import Compose
+
+    # Plain env, compiled with a 4-call warmup.
+    collector = Collector(
+        partial(
+            GymEnv,
+            "HalfCheetah-v4",
+            compile={"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"},
+        ),
+        ...,
+    )
+
+    # TransformedEnv: compile applies to the outermost env, which is what
+    # the collector calls step_and_maybe_reset on.
+    collector = Collector(
+        lambda: TransformedEnv(
+            GymEnv("HalfCheetah-v4"),
+            Compose(...),
+            compile={"warmup": 4, "fullgraph": True},
+        ),
+        ...,
+    )
+
+See :meth:`~torchrl.envs.EnvBase.compile` and
+:meth:`~torchrl.envs.EnvBase.eager` for the underlying methods.
+
 Env methods
 -----------
 
@@ -135,6 +191,19 @@ With these, the following methods are implemented:
   a :class:`tensordict.TensorDict` input. It return the first tensordict of a rollout, usually
   containing a ``"done"`` state and a set of observations. If not present,
   a ``"reward"`` key will be instantiated with 0s and the appropriate shape.
+
+  To reset *deterministically* to a state contained in the input tensordict
+  (e.g. branch a rollout from a saved state, or replay a fixed initial
+  condition), pass ``set_state=True``: ``env.reset(td, set_state=True)``. For
+  stateless environments such as :class:`~torchrl.envs.PendulumEnv` this honors
+  the state entries found in ``td``; for stateful environments that support it,
+  the underlying set-state API is used; envs that cannot honor a provided state
+  raise ``NotImplementedError``. ``set_state`` is a keyword argument (not a
+  tensordict key) so it never stacks/pads across a rollout. When ``set_state`` is
+  left unspecified but the tensordict carries state, the state is honored for
+  backwards compatibility and a :class:`FutureWarning` is emitted: from v0.15 an
+  unspecified ``set_state`` will be treated as ``False`` (state ignored, fresh
+  reset).
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
@@ -243,6 +312,40 @@ TorchRL offers a series of custom built-in environments.
     LLMHashingEnv
     PendulumEnv
     TicTacToeEnv
+
+MuJoCo custom environments
+--------------------------
+
+A family of MuJoCo-backed envs sharing one base class
+(:class:`~torchrl.envs.MujocoEnv`) with a swappable physics backend
+(``"mujoco-torch"`` -- the default and ``torch.compile``-friendly
+native-torch engine, ``"mjx"`` -- JAX-vectorized, or ``"mujoco"`` --
+official C-bindings). For envs with a standalone XML asset, the XML can be a
+local path or an ``http(s)`` URL, so users can point at remote models without
+vendoring them. Subclasses describe the *task* by overriding
+:meth:`~torchrl.envs.MujocoEnv._compute_reward` and
+:meth:`~torchrl.envs.MujocoEnv._compute_done`.
+
+The locomotion classes mirror the Gymnasium ``-v4`` reward and
+termination semantics. :class:`~torchrl.envs.SatelliteEnv` is an
+attitude-control task with a 4- or 6-CMG cluster and a
+manipulability-based singularity penalty driving the policy away from
+internal singular configurations of the gimbal Jacobian.
+:class:`~torchrl.envs.CubeBowlEnv` is a compact
+manipulation task for scripted MuJoCo macro-control examples. It composes a
+local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    MujocoEnv
+    AntEnv
+    CubeBowlEnv
+    HopperEnv
+    HumanoidEnv
+    SatelliteEnv
+    Walker2dEnv
 
 Domain-specific
 ---------------

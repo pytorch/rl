@@ -297,7 +297,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`
             transforms to their envs if the env specs don't already provide
             them. ``False`` disables it; ``None`` (default through v0.14)
-            preserves pre-0.13 behavior and emits a
+            preserves pre-v0.15 behavior and emits a
             :class:`FutureWarning` when wrapping would have been needed.
             Default flips to ``True`` in v0.15.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
@@ -313,7 +313,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
             RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
-            This enables cascading in hierarchies like: RPCDataCollector -> MultiSyncCollector -> Collector.
+            This enables cascading in hierarchies like: RPCCollector -> MultiSyncCollector -> Collector.
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.

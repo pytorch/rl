@@ -1,5 +1,9 @@
 @echo off
-set TORCHRL_BUILD_VERSION=0.12.0
+if "%BUILD_VERSION%" == "" (
+    set TORCHRL_BUILD_VERSION=0.13.0
+) else (
+    set TORCHRL_BUILD_VERSION=%BUILD_VERSION%
+)
 echo TORCHRL_BUILD_VERSION is set to %TORCHRL_BUILD_VERSION%
 
 @echo on

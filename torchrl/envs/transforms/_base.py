@@ -31,7 +31,13 @@ from torchrl._utils import (
 )
 
 from torchrl.data.tensor_specs import Composite, TensorSpec
-from torchrl.envs.common import _EnvPostInit, _maybe_unlock, EnvBase
+from torchrl.envs.common import (
+    _EnvPostInit,
+    _maybe_compile_env,
+    _maybe_unlock,
+    _pop_compile_kwargs,
+    EnvBase,
+)
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.envs.utils import _update_during_reset
 
@@ -45,6 +51,39 @@ IMAGE_KEYS = ["pixels"]
 _MAX_NOOPS_TRIALS = 10
 
 FORWARD_NOT_IMPLEMENTED = "class {} cannot be executed without a parent environment."
+
+# ``nn.Module`` instance attributes that must never delegate to ``base_env``
+# through :meth:`TransformedEnv.__getattr__`. Otherwise ``nn.Module.__dir__``
+# (which reads ``_parameters`` / ``_buffers`` / ``_modules`` via attribute
+# access) re-enters ``__getattr__`` and infinite-recurses under
+# ``torch.compile``; and ``env._parameters`` etc. would also masquerade as
+# ``base_env._parameters`` from the outside, which is wrong (the wrapper
+# has its own params/buffers/modules storage).
+#
+# The list mirrors the attributes set in ``torch.nn.Module.__init__`` plus
+# a handful of compile/serialization helpers added in recent PyTorch
+# releases. Keep it sorted to make new pytorch additions easy to spot.
+_NN_MODULE_INTERNAL_NAMES: frozenset[str] = frozenset(
+    {
+        "_backward_hooks",
+        "_backward_pre_hooks",
+        "_buffers",
+        "_compiled_call_impl",
+        "_forward_hooks",
+        "_forward_hooks_always_called",
+        "_forward_hooks_with_kwargs",
+        "_forward_pre_hooks",
+        "_forward_pre_hooks_with_kwargs",
+        "_is_full_backward_hook",
+        "_load_state_dict_post_hooks",
+        "_load_state_dict_pre_hooks",
+        "_modules",
+        "_non_persistent_buffers_set",
+        "_parameters",
+        "_state_dict_hooks",
+        "_state_dict_pre_hooks",
+    }
+)
 
 T = TypeVar("T", bound="Transform")
 
@@ -312,6 +351,17 @@ class Transform(nn.Module):
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
         """Resets a transform if it is stateful."""
+        return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Updates transform state after an environment-side auto-reset.
+
+        Native auto-reset envs have already reset their base state during
+        ``step``. The reset mask is carried through regular reset keys in the
+        input tensordict.
+        """
         return tensordict_reset
 
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -880,10 +930,11 @@ class Transform(nn.Module):
 
 class _TEnvPostInit(_EnvPostInit):
     def __call__(self, *args, **kwargs):
+        compile_kwargs = _pop_compile_kwargs(kwargs)
         instance: EnvBase = super(_EnvPostInit, self).__call__(*args, **kwargs)
         # we skip the materialization of the specs, because this can't be done with lazy
         # transforms such as ObservationNorm.
-        return instance
+        return _maybe_compile_env(instance, compile_kwargs)
 
 
 class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
@@ -1091,6 +1142,17 @@ class TransformedEnv(EnvBase, metaclass=_TEnvPostInit):
             )
         return tensordict, tensordict_
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        """Run native-autoreset transform hooks in reset order."""
+        base_env = self.base_env
+        if base_env is not None:
+            tensordict_reset = base_env._reset_on_native_autoreset(
+                tensordict, tensordict_reset
+            )
+        return self.transform._reset_on_native_autoreset(tensordict, tensordict_reset)
+
     def fake_tensordict(self) -> TensorDictBase:
         """Build a fake tensordict and let the transform chain post-process it."""
         fake_td = super().fake_tensordict()
@@ -1147,6 +1209,13 @@ but got an object of type {type(transform)}."""
     @batch_locked.setter
     def batch_locked(self, value):
         raise RuntimeError("batch_locked is a read-only property")
+
+    @property
+    def _supports_set_state(self) -> bool:
+        # Deterministic resets (``reset(td, set_state=True)``) are delegated to
+        # the wrapped env; the transform stack forwards the kwarg through
+        # ``_reset`` and preserves the state keys.
+        return self.base_env._supports_set_state
 
     @property
     def run_type_checks(self) -> bool:
@@ -1326,9 +1395,8 @@ but got an object of type {type(transform)}."""
         if tensordict is not None:
             # We must avoid modifying the original tensordict so a shallow copy is necessary.
             # We just select the input data and reset signal, which is all we need.
-            tensordict = tensordict.select(
-                *self.reset_keys, *self.state_spec.keys(True, True), strict=False
-            )
+            state_keys = list(self.state_spec.keys(True, True))
+            tensordict = tensordict.select(*self.reset_keys, *state_keys, strict=False)
         # We always call _reset_env_preprocess, even if tensordict is None - that way one can augment that
         # method to do any pre-reset operation.
         # By default, within _reset_env_preprocess we will skip the inv call when tensordict is None.
@@ -1472,18 +1540,32 @@ but got an object of type {type(transform)}."""
                     f"Could not get {attr} because an internal error was raised. To find what this error "
                     f"is, call env.transform.transform_<placeholder>_spec(env.base_env.spec)."
                 )
-            if attr.startswith("__"):
+            # Dunders and nn.Module's own instance slots must never delegate
+            # to ``base_env``. Otherwise ``nn.Module.__dir__`` (which reads
+            # ``self._parameters`` / ``_buffers`` / ``_modules`` via
+            # attribute access) would re-enter ``__getattr__`` under
+            # ``torch.compile`` tracing and infinite-recurse, and the
+            # outside world would see ``env._parameters`` masquerading as
+            # ``base_env._parameters``. Other single-underscore names
+            # (e.g. ``_counter`` / ``_env`` / ``_is_batched`` on the
+            # wrapped env) still delegate as before.
+            if attr.startswith("__") or attr in _NN_MODULE_INTERNAL_NAMES:
                 raise AttributeError(
-                    "passing built-in private methods is "
-                    f"not permitted with type {type(self)}. "
-                    f"Got attribute {attr}."
-                )
-            elif "base_env" in self.__dir__():
-                base_env = self.__getattr__("base_env")
-                return getattr(base_env, attr)
-            raise AttributeError(
-                f"env not set in {self.__class__.__name__}, cannot access {attr}"
-            ) from err
+                    f"{type(self).__name__!r} object has no attribute {attr!r}"
+                ) from err
+            # Resolve ``base_env`` via the parent class's ``__getattr__``
+            # (which is ``nn.Module``'s: it looks up
+            # ``self.__dict__['_modules']`` directly, so it cannot recurse
+            # back through this ``__getattr__``). Previously the lookup
+            # went through ``"base_env" in self.__dir__()`` which is what
+            # triggered the infinite recursion under ``torch.compile``.
+            try:
+                base_env = super().__getattr__("base_env")
+            except AttributeError:
+                raise AttributeError(
+                    f"env not set in {self.__class__.__name__}, cannot access {attr}"
+                ) from err
+            return getattr(base_env, attr)
 
     def __repr__(self) -> str:
         env_str = indent(f"env={self.base_env}", 4 * " ")
@@ -1702,7 +1784,8 @@ class Compose(Transform):
             t._check_batched_worker_compat()
 
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._inv_call(tensordict)
         return tensordict
 
@@ -1804,8 +1887,18 @@ class Compose(Transform):
             tensordict_reset = t._reset(tensordict, tensordict_reset)
         return tensordict_reset
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        for t in self.transforms:
+            tensordict_reset = t._reset_on_native_autoreset(
+                tensordict, tensordict_reset
+            )
+        return tensordict_reset
+
     def _reset_env_preprocess(self, tensordict: TensorDictBase) -> TensorDictBase:
-        for t in reversed(self.transforms):
+        for i in range(len(self.transforms) - 1, -1, -1):
+            t = self.transforms[i]
             tensordict = t._reset_env_preprocess(tensordict)
         return tensordict
 
@@ -1835,7 +1928,7 @@ class Compose(Transform):
                 self.append(t)
         else:
             self.transforms.append(transform)
-        transform.set_container(self)
+            transform.set_container(self)
         parent = self.parent
         if parent is not None:
             parent.empty_cache()

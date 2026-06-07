@@ -18,14 +18,16 @@ Key TorchRL features exercised:
   Shifted value estimation reconstructs next observations by shifting the
   root observations when the next observations are absent.
 - Configurable :class:`~torchrl.objectives.value.GAE` shifted mode. The
-  ``shifted="compact"`` path keeps a constant-shape single value-network
-  call along the time dim and is friendly to ``torch.compile`` + scan/triton
-  LSTM. ``shifted="false"`` keeps the full observation representation.
+  ``shifted=True`` path keeps a budgeted constant-shape single value-network
+  call and is friendly to ``torch.compile`` + scan/triton LSTM.
+  ``shifted=False`` keeps the full observation representation.
 - :class:`~torchrl.modules.LSTMModule` with a configurable
   ``recurrent_backend``: during collection (``set_recurrent_mode=False``)
   the LSTM auto-uses cuDNN regardless of the backend; the configured
   backend kicks in only during training (``set_recurrent_mode=True``).
 - Optional ``torch.compile`` + ``CudaGraphModule`` around the update step.
+- Optional asynchronous rendered evaluation through
+  :class:`~torchrl.collectors.Evaluator` on a dedicated eval GPU.
 
 Run on a SLURM Isaac Lab container:
 
@@ -33,6 +35,9 @@ Run on a SLURM Isaac Lab container:
 
     python isaaclab_rnn_ppo_memory.py --num-envs 16384 --num-collectors 2 \
         --rollout-steps 32 --rnn-backend scan --compile-update --cudagraph-update
+
+    python isaaclab_rnn_ppo_memory.py --eval --eval-device cuda:2 \
+        --eval-num-envs 16 --random-init-steps 16
 """
 from __future__ import annotations
 
@@ -44,11 +49,22 @@ from functools import partial
 import torch
 import torch.optim
 
-from isaaclab_rnn_ppo_memory_utils import _init_isaac_app, make_env, make_models
-from tensordict import TensorDictBase
+from isaaclab_rnn_ppo_memory_utils import (
+    _assert_rollout_shapes,
+    _cuda_metrics,
+    _inference_metrics,
+    _init_isaac_app,
+    _leaf_shape_summary,
+    _log_eval_result,
+    _loss_metrics,
+    _normalize_rollout_batch,
+    _rendered_eval_metrics,
+    make_env,
+    make_models,
+)
 from tensordict.nn import CudaGraphModule
 from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.collectors import MultiCollector
+from torchrl.collectors import Evaluator, MultiCollector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs import ExplorationType, set_exploration_type
@@ -57,149 +73,6 @@ from torchrl.objectives import ClipPPOLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record import WandbLogger
 from torchrl.weight_update import MultiProcessWeightSyncScheme
-
-
-_RECURRENT_STATE_KEYS = {
-    "recurrent_state_h",
-    "recurrent_state_c",
-    "('next', 'recurrent_state_h')",
-    "('next', 'recurrent_state_c')",
-}
-
-
-def _leaf_shape_summary(tensordict: TensorDictBase) -> dict[str, dict[str, str]]:
-    return {
-        str(key): {
-            "shape": str(tuple(value.shape)),
-            "dtype": str(value.dtype),
-            "device": str(value.device),
-        }
-        for key, value in tensordict.items(include_nested=True, leaves_only=True)
-        if hasattr(value, "shape")
-    }
-
-
-def _metric_float(value) -> float:
-    if isinstance(value, torch.Tensor):
-        value = value.detach()
-        if value.numel() != 1:
-            value = value.float().mean()
-        return float(value.cpu())
-    return float(value)
-
-
-def _tensor_stats(prefix: str, value: torch.Tensor) -> dict[str, float]:
-    value = value.detach().float()
-    return {
-        f"{prefix}/mean": _metric_float(value.mean()),
-        f"{prefix}/std": _metric_float(value.std(unbiased=False)),
-        f"{prefix}/min": _metric_float(value.min()),
-        f"{prefix}/max": _metric_float(value.max()),
-    }
-
-
-def _loss_metrics(loss_acc: TensorDictBase, loss_count: int) -> dict[str, float]:
-    metrics = {}
-    for key, value in loss_acc.items():
-        value = value / loss_count
-        key = str(key)
-        if key.startswith("loss_"):
-            key = f"loss/{key.removeprefix('loss_')}"
-        elif key.startswith("grad_norm"):
-            key = key.replace("grad_norm", "grad_norm/")
-        metrics[f"training/{key}"] = _metric_float(value)
-    return metrics
-
-
-def _inference_metrics(
-    data: TensorDictBase,
-    *,
-    frames: int,
-) -> dict[str, float | int]:
-    metrics: dict[str, float | int] = {
-        "inference/frames": frames,
-        "inference/batch_numel": data.numel(),
-        "inference/batch_ndim": data.ndim,
-    }
-    reward = data.get(("next", "reward"), default=None)
-    if reward is not None:
-        metrics.update(_tensor_stats("inference/reward", reward))
-    episode_reward = data.get(("next", "episode_reward"), default=None)
-    done = data.get(("next", "done"), default=None)
-    if episode_reward is not None and done is not None:
-        episode_reward = episode_reward.squeeze(-1)
-        done = done.squeeze(-1).to(torch.bool)
-        end_of_traj_reward = episode_reward[done]
-        if end_of_traj_reward.numel():
-            metrics.update(
-                _tensor_stats(
-                    "inference/end_of_traj_episode_reward", end_of_traj_reward
-                )
-            )
-    return metrics
-
-
-def _cuda_metrics(prefix: str, device: torch.device) -> dict[str, float]:
-    if device.type != "cuda":
-        return {}
-    return {
-        f"telemetry/{prefix}/allocated_gb": torch.cuda.memory_allocated(device) / 1e9,
-        f"telemetry/{prefix}/reserved_gb": torch.cuda.memory_reserved(device) / 1e9,
-        f"telemetry/{prefix}/max_allocated_gb": torch.cuda.max_memory_allocated(device)
-        / 1e9,
-        f"telemetry/{prefix}/max_reserved_gb": torch.cuda.max_memory_reserved(device)
-        / 1e9,
-    }
-
-
-def _assert_rollout_shapes(
-    tensordict: TensorDictBase,
-    *,
-    expected_shape: torch.Size,
-    hidden_size: int,
-    phase: str,
-) -> None:
-    if tensordict.shape != expected_shape:
-        raise RuntimeError(
-            f"{phase}: expected TensorDict shape {expected_shape}, "
-            f"got {tensordict.shape}."
-        )
-    expected_state_shape = (*expected_shape, 1, hidden_size)
-    for key, value in tensordict.items(include_nested=True, leaves_only=True):
-        if not hasattr(value, "shape"):
-            continue
-        if value.shape[: len(expected_shape)] != expected_shape:
-            raise RuntimeError(
-                f"{phase}: key {key} has shape {tuple(value.shape)}, "
-                f"which does not start with {tuple(expected_shape)}."
-            )
-        if str(key) in _RECURRENT_STATE_KEYS and tuple(value.shape) != tuple(
-            expected_state_shape
-        ):
-            raise RuntimeError(
-                f"{phase}: key {key} has recurrent-state shape "
-                f"{tuple(value.shape)}, expected {tuple(expected_state_shape)}."
-            )
-
-
-def _normalize_rollout_batch(
-    tensordict: TensorDictBase, expected_shape: torch.Size
-) -> TensorDictBase:
-    if tensordict.shape == expected_shape:
-        return tensordict
-    if tensordict.shape == torch.Size((1, *expected_shape)):
-        return tensordict.squeeze(0)
-    if tensordict.ndim < 2 or tensordict.shape[-1] != expected_shape[-1]:
-        raise RuntimeError(
-            f"Expected collected batch ending in time shape {tuple(expected_shape)}, "
-            f"got {tuple(tensordict.shape)}."
-        )
-    if tensordict.shape[:-1].numel() != expected_shape[0]:
-        raise RuntimeError(
-            f"Expected collected batch with {expected_shape[0]} env elements before "
-            f"time, got shape {tuple(tensordict.shape)}."
-        )
-    return tensordict.reshape(expected_shape)
 
 
 def parse_args() -> argparse.Namespace:
@@ -211,6 +84,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rollout-steps", type=int, default=32)
     parser.add_argument("--max-episode-steps", type=int, default=500)
     parser.add_argument("--iterations", type=int, default=20)
+    parser.add_argument(
+        "--random-init-steps",
+        type=int,
+        default=0,
+        help=(
+            "Maximum number of random reset-time environment steps. A value "
+            "greater than 0 jitters vectorized envs within each batch."
+        ),
+    )
+    parser.add_argument(
+        "--random-init-random",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Sample reset-time jitter independently per env. Use "
+            "--no-random-init-random to apply --random-init-steps to every env."
+        ),
+    )
     # Model
     parser.add_argument("--hidden-size", type=int, default=256)
     parser.add_argument("--obs-dim", type=int, default=60)
@@ -246,18 +137,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--gae-shifted",
-        choices=["false", "legacy", "compact"],
-        default="compact",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
-            "GAE shifted mode. Use 'false' for the full baseline path and "
-            "'compact' for the compile-friendly compact shifted path."
+            "Use the budgeted constant-shape single-call GAE path. Use "
+            "--no-gae-shifted for the full shifted=False reference path."
         ),
     )
     parser.add_argument(
-        "--gae-compact-cat-dim",
-        choices=["batch", "time"],
-        default="batch",
-        help="Concatenation dimension used by GAE shifted='compact'.",
+        "--gae-shifted-budget",
+        type=int,
+        default=1,
+        help=(
+            "Number of extra value-network slots used by shifted GAE. "
+            "A budget of 2 can retain one internal reset plus the rollout "
+            "boundary without dropping samples."
+        ),
     )
     parser.add_argument(
         "--deactivate-vmap",
@@ -274,6 +169,26 @@ def parse_args() -> argparse.Namespace:
         "--compile-update", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
+        "--compile-gae",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Wrap the GAE module with torch.compile.",
+    )
+    parser.add_argument(
+        "--env-compile-warmup",
+        type=int,
+        default=0,
+        help=(
+            "Compile the worker env's step_and_maybe_reset via the "
+            "compile={'warmup': N} env constructor kwarg. The first N calls "
+            "run eagerly to populate Transform.parent / done_keys / obs_keys "
+            "caches before tracing, which avoids dynamo wrapping a "
+            "half-initialised TransformedEnv built by Compose._rebuild_up_to "
+            "during the compiled trace. 0 disables env compile entirely. Use "
+            ">=1 to enable; 2 is a safe default."
+        ),
+    )
+    parser.add_argument(
         "--compile-mode",
         choices=["default", "reduce-overhead", "max-autotune"],
         default="default",
@@ -285,12 +200,65 @@ def parse_args() -> argparse.Namespace:
     # Devices
     parser.add_argument("--collector-device", default="cuda:0")
     parser.add_argument("--train-device", default="cuda:1")
+    parser.add_argument("--eval-device", default="cuda:2")
+    parser.add_argument(
+        "--eval-worker-device",
+        default=None,
+        help=(
+            "Device used inside the evaluator worker. If "
+            "--eval-cuda-visible-devices is set, defaults to cuda:0 so the "
+            "rendering worker can use a remapped single visible GPU."
+        ),
+    )
     parser.add_argument(
         "--sync-collector",
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Synchronous MultiCollector. Async (default) yields per-worker batches.",
     )
+    # Evaluation
+    parser.add_argument(
+        "--eval",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable asynchronous rendered evaluation on --eval-device.",
+    )
+    parser.add_argument("--eval-every", type=int, default=1)
+    parser.add_argument("--eval-num-envs", type=int, default=16)
+    parser.add_argument("--eval-num-trajectories", type=int, default=16)
+    parser.add_argument("--eval-max-steps", type=int, default=None)
+    parser.add_argument(
+        "--eval-random-init-steps",
+        type=int,
+        default=None,
+        help=(
+            "Maximum reset-time jitter for the eval env. Defaults to "
+            "--random-init-steps."
+        ),
+    )
+    parser.add_argument(
+        "--eval-backend",
+        choices=["process", "thread"],
+        default="process",
+        help=(
+            "Evaluator backend. The process backend keeps Isaac Lab and the "
+            "eval CUDA context isolated from training."
+        ),
+    )
+    parser.add_argument(
+        "--eval-render-backend",
+        choices=["isaac_rtx", "newton_warp", "ovrtx"],
+        default=None,
+        help=(
+            "Renderer backend for the eval tiled camera. Defaults to Isaac "
+            "Lab's TiledCamera default."
+        ),
+    )
+    parser.add_argument("--eval-cuda-visible-devices", default=None)
+    parser.add_argument("--eval-nvidia-lib-dir", default=None)
+    parser.add_argument("--eval-vulkan-icd", default=None)
+    parser.add_argument("--eval-xdg-runtime-dir", default=None)
+    parser.add_argument("--eval-shutdown-timeout", type=float, default=30.0)
     # Logging
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--wandb-project", default="torchrl-isaac-rnn-memory")
@@ -306,14 +274,20 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, args.log_level))
     if args.num_envs % args.num_collectors:
         raise ValueError("--num-envs must be divisible by --num-collectors.")
-    if args.compile_update or args.cudagraph_update:
+    if (
+        args.compile_update
+        or args.compile_gae
+        or args.env_compile_warmup > 0
+        or args.cudagraph_update
+    ):
         torch._dynamo.config.capture_scalar_outputs = True
-    gae_shifted: bool | str = False if args.gae_shifted == "false" else args.gae_shifted
+    gae_shifted = args.gae_shifted
 
     torch.manual_seed(args.seed)
     torch.set_float32_matmul_precision("high")
     collector_device = torch.device(args.collector_device)
     train_device = torch.device(args.train_device)
+    eval_device = torch.device(args.eval_device)
     if train_device.type == "cuda":
         torch.cuda.set_device(train_device)
         torch.cuda.manual_seed_all(args.seed)
@@ -346,10 +320,12 @@ def main() -> None:
         value_network=full_value,
         average_gae=False,
         shifted=gae_shifted,
-        compact_cat_dim=args.gae_compact_cat_dim,
+        shifted_budget=args.gae_shifted_budget,
         deactivate_vmap=args.deactivate_vmap,
         device=train_device,
     )
+    if args.compile_gae:
+        adv_module = torch.compile(adv_module, mode=args.compile_mode)
     optim = group_optimizers(
         torch.optim.Adam(
             actor.parameters(), lr=args.lr, eps=1e-5, capturable=args.cudagraph_update
@@ -383,12 +359,20 @@ def main() -> None:
         )
 
     # ---- Collector (Isaac lives in workers; main process never imports it) ----
+    compile_env: bool | dict
+    if args.env_compile_warmup > 0:
+        compile_env = {"warmup": args.env_compile_warmup}
+    else:
+        compile_env = False
     make_env_fn = partial(
         make_env,
         task=args.task,
         num_envs=per_collector_envs,
         max_episode_steps=args.max_episode_steps,
         device=str(collector_device),
+        random_init_steps=args.random_init_steps,
+        random_init_random=args.random_init_random,
+        compile_env=compile_env,
     )
     # The worker's actor uses the same backend; during collection the LSTM
     # runs with set_recurrent_mode=False and auto-dispatches to cuDNN.
@@ -416,6 +400,71 @@ def main() -> None:
         weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()},
     )
 
+    evaluator = None
+    if args.eval:
+        eval_worker_device = torch.device(
+            args.eval_worker_device
+            or ("cuda:0" if args.eval_cuda_visible_devices is not None else eval_device)
+        )
+        eval_env_max_steps = args.eval_max_steps or args.max_episode_steps
+        eval_random_init_steps = (
+            args.random_init_steps
+            if args.eval_random_init_steps is None
+            else args.eval_random_init_steps
+        )
+        make_eval_env_fn = partial(
+            make_env,
+            task=args.task,
+            num_envs=args.eval_num_envs,
+            max_episode_steps=eval_env_max_steps,
+            device=str(eval_worker_device),
+            random_init_steps=eval_random_init_steps,
+            random_init_random=args.random_init_random,
+            render=True,
+            render_backend=args.eval_render_backend,
+        )
+        evaluator = Evaluator(
+            make_eval_env_fn,
+            policy_factory=partial(
+                _make_eval_actor,
+                obs_dim=args.obs_dim,
+                action_dim=args.action_dim,
+                hidden_size=args.hidden_size,
+                rnn_backend=args.rnn_backend,
+                device=str(eval_worker_device),
+            ),
+            num_trajectories=args.eval_num_trajectories,
+            max_steps=args.eval_max_steps,
+            frames_per_batch=args.eval_num_envs * eval_env_max_steps,
+            backend=args.eval_backend,
+            init_fn=partial(
+                _init_isaac_app,
+                device=str(eval_worker_device),
+                enable_cameras=True,
+                rendering_mode="performance",
+                cuda_visible_devices=args.eval_cuda_visible_devices,
+                nvidia_lib_dir=args.eval_nvidia_lib_dir,
+                vulkan_icd=args.eval_vulkan_icd,
+                xdg_runtime_dir=args.eval_xdg_runtime_dir,
+            ),
+            device=eval_worker_device,
+            metrics_fn=_rendered_eval_metrics,
+            dump_video=False,
+            busy_policy="skip",
+            collector_kwargs={
+                "policy_device": eval_worker_device,
+                "env_device": eval_worker_device,
+                "storing_device": "cpu",
+                "no_cuda_sync": True,
+                "trust_policy": True,
+                "auto_register_policy_transforms": True,
+                "compact_obs": False,
+            },
+            weight_sync_schemes={"policy": MultiProcessWeightSyncScheme()}
+            if args.eval_backend == "process"
+            else None,
+        )
+
     train_buffer = ReplayBuffer(
         storage=LazyTensorStorage(args.num_envs, device="cpu", ndim=1),
         sampler=SamplerWithoutReplacement(drop_last=True),
@@ -438,6 +487,13 @@ def main() -> None:
     try:
         for iteration in range(args.iterations):
             timeit.erase()
+            if evaluator is not None:
+                result = evaluator.poll()
+                if result is not None:
+                    _log_eval_result(
+                        result,
+                        experiment_logger=experiment_logger,
+                    )
             with timeit("collector_policy_sync"):
                 collector.update_policy_weights_(actor)
             with timeit("collector_next"):
@@ -509,8 +565,29 @@ def main() -> None:
                 metrics.update(_cuda_metrics("collector_cuda", collector_device))
                 metrics.update(_cuda_metrics("train_cuda", train_device))
                 experiment_logger.log_metrics(metrics, step=iteration)
+            if (
+                evaluator is not None
+                and args.eval_every > 0
+                and iteration % args.eval_every == 0
+            ):
+                accepted = evaluator.trigger_eval(
+                    weights_dict={"policy": actor},
+                    step=(iteration + 1) * frames_per_batch,
+                )
+                if not accepted:
+                    torchrl_logger.info(
+                        {"phase": "eval_skipped", "iteration": iteration}
+                    )
             torchrl_logger.info({"phase": "iteration_done", "iteration": iteration})
     finally:
+        if evaluator is not None:
+            result = evaluator.poll(timeout=args.eval_shutdown_timeout)
+            if result is not None:
+                _log_eval_result(
+                    result,
+                    experiment_logger=experiment_logger,
+                )
+            evaluator.shutdown(timeout=args.eval_shutdown_timeout)
         collector.shutdown()
         if experiment_logger is not None:
             experiment_logger.experiment.finish()
@@ -530,6 +607,25 @@ def _make_collector_actor(
         hidden_size=hidden_size,
         rnn_backend=rnn_backend,
         device=device,
+    )
+    return actor
+
+
+def _make_eval_actor(
+    *unused_args,
+    obs_dim: int,
+    action_dim: int,
+    hidden_size: int,
+    rnn_backend: str,
+    device,
+):
+    del unused_args
+    actor, _, _ = make_models(
+        obs_dim=obs_dim,
+        action_dim=action_dim,
+        hidden_size=hidden_size,
+        rnn_backend=rnn_backend,
+        device=torch.device(device),
     )
     return actor
 

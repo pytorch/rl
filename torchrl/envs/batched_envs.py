@@ -15,6 +15,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
+from inspect import getattr_static
 from multiprocessing import connection
 from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
@@ -724,7 +725,10 @@ class BatchedEnvBase(EnvBase):
         worker raise here so the user gets immediate feedback rather than
         silently-wrong runtime behavior.
         """
-        transform = getattr(env, "transform", None)
+        if getattr_static(env, "transform", None) is None:
+            transform = None
+        else:
+            transform = getattr(env, "transform", None)
         if transform is not None:
             transform._check_batched_worker_compat()
 
@@ -810,6 +814,18 @@ class BatchedEnvBase(EnvBase):
                 )
             )
         return self._cache_in_keys
+
+    @property
+    def _supports_set_state(self) -> bool:
+        # Derived from the wrapped sub-envs' metadata: a deterministic reset is
+        # only supported if every sub-env supports it (the kwarg broadcasts to
+        # all workers).
+        meta_data = getattr(self, "meta_data", None)
+        if meta_data is None:
+            return False
+        if isinstance(meta_data, (list, tuple)):
+            return all(md.supports_set_state for md in meta_data)
+        return meta_data.supports_set_state
 
     def _set_properties(self):
 

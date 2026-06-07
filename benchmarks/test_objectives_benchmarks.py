@@ -847,7 +847,7 @@ def test_a2c_speed(
         value_network=critic,
         gamma=0.99,
         lmbda=0.95,
-        shifted="legacy",
+        shifted=True,
         device=device,
     )
     advantage(td)
@@ -956,7 +956,7 @@ def test_ppo_speed(
         value_network=critic,
         gamma=0.99,
         lmbda=0.95,
-        shifted="legacy",
+        shifted=True,
         device=device,
     )
     advantage(td)
@@ -1065,7 +1065,7 @@ def test_reinforce_speed(
         value_network=critic,
         gamma=0.99,
         lmbda=0.95,
-        shifted="legacy",
+        shifted=True,
         device=device,
     )
     advantage(td)

@@ -108,13 +108,14 @@ We will cover six crucial components of TorchRL:
 # sphinx_gallery_start_ignore
 import warnings
 
+from torch import multiprocessing as _multiprocessing
+
 warnings.filterwarnings("ignore")
 # Set multiprocessing start method to fork if not already set
 # This allows the tutorial to run as a script without if __name__ == "__main__"
-from torch import multiprocessing
 
-if multiprocessing.get_start_method(allow_none=True) is None:
-    multiprocessing.set_start_method("fork")
+if _multiprocessing.get_start_method(allow_none=True) is None:
+    _multiprocessing.set_start_method("fork")
 
 # sphinx_gallery_end_ignore
 
@@ -124,7 +125,7 @@ import matplotlib.pyplot as plt
 import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
+from torch import multiprocessing, nn
 
 from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
@@ -151,10 +152,6 @@ from tqdm import tqdm
 # We set the hyperparameters for our algorithm. Depending on the resources
 # available, one may choose to execute the policy on GPU or on another
 # device.
-# The ``frame_skip`` will control how for how many frames is a single
-# action being executed. The rest of the arguments that count frames
-# must be corrected for this value (since one environment step will
-# actually return ``frame_skip`` frames).
 #
 
 is_fork = multiprocessing.get_start_method() == "fork"

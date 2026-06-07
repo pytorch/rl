@@ -568,8 +568,7 @@ class TestSamplers:
     def test_slice_sampler_auto_traj_key_collector_ids(self):
         """Auto-detection should prefer ("collector", "traj_ids") over "episode"."""
         torch.manual_seed(0)
-        # Build data with both keys present; sampler should pick collector key
-        # and warn that this changes the pre-0.13 default.
+        # Build data with both keys present; sampler should pick collector key.
         traj_ids = torch.tensor([0, 0, 0, 1, 1, 1, 2, 2], dtype=torch.int)
         data = TensorDict(
             {
@@ -585,8 +584,9 @@ class TestSamplers:
             batch_size=6,
         )
         rb.extend(data)
-        # Force resolution — with both keys present we must see a FutureWarning.
-        with pytest.warns(FutureWarning, match="auto-detected"):
+        # Force resolution. Both keys are present, but the collector key wins.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
             sample = rb.sample()
         assert rb.sampler.traj_key == ("collector", "traj_ids")
         assert rb.sampler._fetch_traj is True

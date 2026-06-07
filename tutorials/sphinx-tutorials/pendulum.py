@@ -344,6 +344,45 @@ def _reset(self, tensordict):
 
 
 ######################################################################
+# Deterministic reset: ``env.reset(td, set_state=True)``
+# ------------------------------------------------------
+#
+# Because this environment is stateless, the full state (``"th"`` and
+# ``"thdot"``) lives in the ``tensordict``. This makes it natural to reset the
+# simulator *to a chosen state* -- e.g. to branch a rollout from a saved
+# checkpoint, or to replay a fixed initial condition. The canonical way to do
+# this is the ``set_state`` keyword argument of
+# :meth:`~torchrl.envs.EnvBase.reset`:
+#
+# .. code-block:: python
+#
+#     >>> state = env.reset()                       # some state of interest
+#     >>> td = env.reset(state, set_state=True)      # reset *to* that state
+#     >>> assert (td["th"] == state["th"]).all()
+#
+# ``set_state`` is a keyword argument rather than a ``tensordict`` key on
+# purpose: a per-step entry would not stack uniformly across a rollout and
+# padding it would be costly. With ``set_state=False`` (the future default) any
+# state in the input is ignored and a fresh random state is drawn, which is what
+# you want when starting a new trajectory from the terminal ``tensordict`` of a
+# previous one. A ``_reset`` implementation honors the flag by reading it from
+# its keyword arguments, e.g.::
+#
+#     def _reset(self, tensordict, **kwargs):
+#         if kwargs.get("set_state") and tensordict is not None \
+#                 and "th" in tensordict and "thdot" in tensordict:
+#             return tensordict.copy()          # honor the provided state
+#         ...                                    # otherwise draw a fresh state
+#
+# .. note:: Until v0.15, passing a state-bearing ``tensordict`` to ``reset``
+#    *without* ``set_state`` keeps honoring that state (for backwards
+#    compatibility) but raises a ``FutureWarning``. Pass ``set_state=True`` (or
+#    ``set_state=False``) explicitly to opt into the final behavior and silence
+#    the warning.
+#
+
+
+######################################################################
 # Environment metadata: ``env.*_spec``
 # ------------------------------------
 #

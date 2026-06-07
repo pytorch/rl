@@ -7,7 +7,6 @@ from __future__ import annotations
 import contextlib
 import warnings
 from collections.abc import Mapping
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -39,19 +38,11 @@ from torchrl.objectives.utils import (
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    GAE,
-    MultiAgentGAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-    VTrace,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class PPOLoss(LossModule):
@@ -678,7 +669,9 @@ class PPOLoss(LossModule):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
             with (
-                self.actor_network_params.to_module(self.actor_network)
+                self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                )
                 if self.functional
                 else contextlib.nullcontext()
             ):
@@ -811,7 +804,9 @@ class PPOLoss(LossModule):
                 )
 
         with (
-            self.critic_network_params.to_module(self.critic_network)
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -878,6 +873,32 @@ class PPOLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
+    def _standardize_advantage(
+        self, advantage: torch.Tensor, tensordict: TensorDictBase
+    ) -> torch.Tensor:
+        mask = tensordict.get("shifted_valid", default=None)
+        if mask is None:
+            return _standardize(advantage, self.normalize_advantage_exclude_dims)
+        while mask.ndim < advantage.ndim:
+            mask = mask.unsqueeze(-1)
+        mask = mask.expand_as(advantage).to(advantage.dtype)
+        exclude_dims = {
+            dim if dim >= 0 else advantage.ndim + dim
+            for dim in self.normalize_advantage_exclude_dims
+        }
+        reduce_dims = [dim for dim in range(advantage.ndim) if dim not in exclude_dims]
+        count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
+        loc = (advantage * mask).sum(dim=reduce_dims, keepdim=True) / count
+        scale = (
+            (
+                ((advantage - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True)
+                / count
+            )
+            .sqrt()
+            .clamp_min(1e-4)
+        )
+        return (advantage - loc) / scale
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -899,7 +920,7 @@ class PPOLoss(LossModule):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -927,8 +948,9 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -942,62 +964,38 @@ class PPOLoss(LossModule):
         )
         return td_out
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+        ValueEstimators.GAE,
+        ValueEstimators.MAGAE,
+        ValueEstimators.VTrace,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
 
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.MAGAE:
-            self._value_estimator = MultiAgentGAE(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "advantage": self.tensor_keys.advantage,
+                "value": self.tensor_keys.value,
+                "value_target": self.tensor_keys.value_target,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+                "sample_log_prob": self.tensor_keys.sample_log_prob,
+            },
+            **hyperparams,
+        )
 
     def _weighted_loss_entropy(
         self, entropy: torch.Tensor | TensorDictBase
@@ -1282,7 +1280,7 @@ class ClipPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -1334,8 +1332,9 @@ class ClipPPOLoss(PPOLoss):
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())
             td_out.set("mean_ratio", ratio.mean())
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1619,7 +1618,7 @@ class KLPENPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
@@ -1627,7 +1626,9 @@ class KLPENPPOLoss(PPOLoss):
         neg_loss = log_weight.exp() * advantage
 
         with (
-            self.actor_network_params.to_module(self.actor_network)
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -1690,8 +1691,9 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict_copy.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
