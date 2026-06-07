@@ -225,7 +225,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if copy:
             net = deepcopy(net)
         params = getattr(self, network_name + "_params")
-        params.to_module(net)
+        params.to_module(net, preserve_module_state=False)
         return net
 
     def from_stateful_net(self, network_name: str, stateful_net: nn.Module):
@@ -589,13 +589,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         target = self._modules.get(target_name, None)
 
         if params is not None:
-            with params.to_module(module):
+            with params.to_module(module, preserve_module_state=False):
                 module.reset_parameters_recursive()
         else:
             module.reset_parameters_recursive()
 
         if target is not None:
-            with target.to_module(module):
+            with target.to_module(module, preserve_module_state=False):
                 module.reset_parameters_recursive()
 
     def reset_parameters_recursive(

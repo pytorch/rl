@@ -386,7 +386,9 @@ class TD3Loss(LossModule):
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             tensordict_actor_grad = self.actor_network(tensordict_actor_grad)
         actor_loss_td = tensordict_actor_grad.select(
             *self.qvalue_network.in_keys, strict=False
@@ -430,7 +432,9 @@ class TD3Loss(LossModule):
             next_td_actor = step_mdp(tensordict).select(
                 *self.actor_network.in_keys, strict=False
             )  # next_observation ->
-            with self.target_actor_network_params.to_module(self.actor_network):
+            with self.target_actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ):
                 next_td_actor = self.actor_network(next_td_actor)
             next_action = (next_td_actor.get(self.tensor_keys.action) + noise).clamp(
                 self.min_action, self.max_action

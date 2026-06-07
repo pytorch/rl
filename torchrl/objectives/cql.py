@@ -584,7 +584,9 @@ class CQLLoss(LossModule):
     def actor_bc_loss(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
@@ -607,7 +609,9 @@ class CQLLoss(LossModule):
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
@@ -657,7 +661,7 @@ class CQLLoss(LossModule):
             filter_and_repeat, batch_size=batch_size, filter_empty=True
         )
         with set_exploration_type(ExplorationType.RANDOM), actor_params.data.to_module(
-            self.actor_network
+            self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
             action = dist.rsample()
@@ -675,14 +679,18 @@ class CQLLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         # TODO: wait for compile to handle this properly
-        actor_data = actor_params.data.to_module(self.actor_network)
+        actor_data = actor_params.data.to_module(
+            self.actor_network, preserve_module_state=False
+        )
         with set_exploration_type(ExplorationType.RANDOM):
             next_tensordict = tensordict.get("next").clone(False)
             next_dist = self.actor_network.get_dist(next_tensordict)
             next_action = next_dist.rsample()
             next_tensordict.set(self.tensor_keys.action, next_action)
             next_sample_log_prob = next_dist.log_prob(next_action)
-        actor_data.to_module(self.actor_network, return_swap=False)
+        actor_data.to_module(
+            self.actor_network, return_swap=False, preserve_module_state=False
+        )
 
         # get q-values
         if not self.max_q_backup:
@@ -1201,7 +1209,9 @@ class DiscreteCQLLoss(LossModule):
         # DiscreteCQL needs a stateful copy of the value network so the
         # estimator can be called without re-attaching params.
         value_net = deepcopy(self.value_network)
-        self.value_network_params.to_module(value_net, return_swap=False)
+        self.value_network_params.to_module(
+            value_net, return_swap=False, preserve_module_state=False
+        )
         dispatch_value_estimator(
             self,
             value_type,
@@ -1233,7 +1243,9 @@ class DiscreteCQLLoss(LossModule):
         tensordict: TensorDictBase,
     ) -> tuple[torch.Tensor, dict]:
         td_copy = tensordict.clone(False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)

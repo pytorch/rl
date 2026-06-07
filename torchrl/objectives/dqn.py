@@ -306,7 +306,9 @@ class DQNLoss(LossModule):
 
         """
         td_copy = tensordict.clone(False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
@@ -325,12 +327,16 @@ class DQNLoss(LossModule):
             step_td = step_mdp(td_copy, keep_other=False)
             step_td_copy = step_td.clone(False)
             # Use online network to compute the action
-            with self.value_network_params.data.to_module(self.value_network):
+            with self.value_network_params.data.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(step_td)
                 next_action = step_td.get(self.tensor_keys.action)
 
             # Use target network to compute the values
-            with self.target_value_network_params.to_module(self.value_network):
+            with self.target_value_network_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(step_td_copy)
                 next_pred_val = step_td_copy.get(self.tensor_keys.action_value)
 
@@ -537,7 +543,9 @@ class DistributionalDQNLoss(LossModule):
         # Calculate current state probabilities (online network noise already
         # sampled)
         td_clone = tensordict.clone()
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(
                 td_clone,
             )  # Log probabilities log p(s_t, ·; θonline)
@@ -550,7 +558,9 @@ class DistributionalDQNLoss(LossModule):
                 action, action_log_softmax, batch_size, atoms
             )
 
-        with torch.no_grad(), self.value_network_params.to_module(self.value_network):
+        with torch.no_grad(), self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             # Calculate nth next state probabilities
             next_td = step_mdp(tensordict)
             self.value_network(next_td)  # Probabilities p(s_t+n, ·; θonline)
@@ -560,7 +570,9 @@ class DistributionalDQNLoss(LossModule):
                 argmax_indices_ns = next_td_action.squeeze(-1)
             else:
                 argmax_indices_ns = next_td_action.argmax(-1)  # one-hot encoding
-            with self.target_value_network_params.to_module(self.value_network):
+            with self.target_value_network_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(next_td)  # Probabilities p(s_t+n, ·; θtarget)
             pns = next_td.get(self.tensor_keys.action_value).exp()
             # Double-Q probabilities

@@ -724,7 +724,9 @@ class SACLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
         log_prob = compute_log_prob(dist, a_reparm, self.tensor_keys.log_prob)
@@ -838,7 +840,9 @@ class SACLoss(LossModule):
         with torch.no_grad():
             with set_exploration_type(
                 ExplorationType.RANDOM
-            ), self.actor_network_params.to_module(self.actor_network):
+            ), self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ):
                 next_tensordict = tensordict.get("next").copy()
                 if self.skip_done_states:
                     # Check done state and avoid passing these to the actor
@@ -929,10 +933,14 @@ class SACLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
-        with self.target_actor_network_params.to_module(self.actor_network):
+        with self.target_actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             action_dist = self.actor_network.get_dist(td_copy)  # resample an action
         action = action_dist.rsample()
 
@@ -1417,7 +1425,9 @@ class DiscreteSACLoss(LossModule):
                     next_tensordict_select = next_tensordict
 
                 # get probs and log probs for actions computed from "next"
-                with self.actor_network_params.to_module(self.actor_network):
+                with self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                ):
                     next_dist = self.actor_network.get_dist(next_tensordict_select)
                 next_log_prob = next_dist.logits
                 next_prob = next_log_prob.exp()
@@ -1443,7 +1453,9 @@ class DiscreteSACLoss(LossModule):
                     ).masked_scatter_(mask, next_state_value)
             else:
                 # get probs and log probs for actions computed from "next"
-                with self.actor_network_params.to_module(self.actor_network):
+                with self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                ):
                     next_dist = self.actor_network.get_dist(next_tensordict)
                 next_prob = next_dist.probs
                 next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
@@ -1513,7 +1525,9 @@ class DiscreteSACLoss(LossModule):
     ) -> tuple[Tensor, dict[str, Tensor]]:
         weights = self._maybe_get_priority_weight(tensordict)
         # get probs and log probs for actions
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict.clone(False))
         prob = dist.probs
         log_prob = dist.logits

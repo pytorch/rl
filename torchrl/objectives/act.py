@@ -166,7 +166,9 @@ class ACTLoss(LossModule):
             batch_size=tensordict.batch_size,
             device=tensordict.device,
         )
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             td_out = self.actor_network(td_in)
 
         action_pred = td_out.get(self.tensor_keys.action_pred)
