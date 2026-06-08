@@ -1,0 +1,40 @@
+name: Continuous Benchmark (PR Comment)
+on:
+  workflow_run:
+    workflows:
+      - Continuous Benchmark (PR)
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  benchmark-comment:
+    name: Publish benchmark PR comment
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download PR benchmark artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: '*-benchmark-pr-results'
+          path: benchmark-artifacts
+      - name: Publish benchmark comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BENCHMARK_RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          python .github/scripts/comment_pr_benchmarks.py \
+            --artifact-root benchmark-artifacts \
+            --repository "${{ github.repository }}" \
+            --run-url "${BENCHMARK_RUN_URL}" \
+            --comment

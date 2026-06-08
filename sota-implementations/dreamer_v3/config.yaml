@@ -1,0 +1,41 @@
+env:
+  name: Pendulum-v1
+  seed: 0
+  device: cpu
+
+collector:
+  frames_per_batch: 200
+  total_frames: 5000
+  exploration: random  # one of: random, mode
+
+replay_buffer:
+  buffer_size: 10000
+  batch_size: 16
+  seq_len: 16
+  warmup_factor: 2  # collect (warmup_factor * batch_size * seq_len) frames before training
+
+networks:
+  state_dim: 16
+  rnn_hidden_dim: 32
+  num_categoricals: 4
+  num_classes: 4
+  obs_embed_dim: 32
+  num_reward_bins: 41
+  hidden_dim: 64
+  depth: 2
+
+optimization:
+  lr: 3.0e-4
+  grad_clip: 100.0
+  updates_per_batch: 8
+  imagination_horizon: 10
+  use_reinforce: true
+  free_bits: 1.0
+  kl_alpha: 0.8
+  gamma: 0.99
+  lmbda: 0.95
+
+logger:
+  eval_every: 500
+  eval_episodes: 3
+  output_plot: dreamer_v3_pendulum.png

@@ -11,7 +11,7 @@ import torch.optim
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from tensordict.nn.distributions import NormalParamExtractor
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -130,7 +130,7 @@ def make_collector(
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
@@ -462,8 +462,7 @@ def make_continuous_cql_optimizer(cfg, loss_module):
 
 def log_metrics(logger, metrics, step):
     if logger is not None:
-        for metric_name, metric_value in metrics.items():
-            logger.log_scalar(metric_name, metric_value, step)
+        logger.log_metrics(metrics, step)
 
 
 def dump_video(module):

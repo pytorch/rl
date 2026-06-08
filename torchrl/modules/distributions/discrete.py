@@ -74,8 +74,8 @@ class OneHotCategorical(D.Categorical):
         grad_method (ReparamGradientStrategy, optional): strategy to gather
             reparameterized samples.
             ``ReparamGradientStrategy.PassThrough`` will compute the sample gradients
-             by using the softmax valued log-probability as a proxy to the
-             sample gradients.
+            by using the softmax valued log-probability as a proxy to the
+            sample gradients.
             ``ReparamGradientStrategy.RelaxedOneHot`` will use
             :class:`torch.distributions.RelaxedOneHot` to sample from the distribution.
 
@@ -360,7 +360,9 @@ class MaskedCategorical(D.Categorical):
                         original_value_shape = value.shape
                         value = value.flatten()
                     logits = logits.unsqueeze(0).expand(value.shape + logits.shape)
-                result = -torch.nn.functional.cross_entropy(logits, value, reduce=False)
+                result = -torch.nn.functional.cross_entropy(
+                    logits, value, reduction="none"
+                )
                 if original_value_shape is not None:
                     result = result.unflatten(0, original_value_shape)
             else:
@@ -391,7 +393,7 @@ class MaskedCategorical(D.Categorical):
                     original_idx_shape = idx.shape
                     idx = idx.flatten()
                 logits = logits.unsqueeze(0).expand(idx.shape + logits.shape)
-            ret = -torch.nn.functional.cross_entropy(logits, idx, reduce=False)
+            ret = -torch.nn.functional.cross_entropy(logits, idx, reduction="none")
             if original_idx_shape is not None:
                 ret = ret.unflatten(0, original_idx_shape)
         else:
@@ -805,7 +807,16 @@ class LLMMaskedCategorical(D.Distribution):
     def _sampling_dist(self):
         """Get masked distribution for sampling operations."""
         if self._masked_dist is None:
-            self._masked_dist = D.Categorical(logits=self._sampling_logits)
+            logits = self._sampling_logits
+            # Replace inf/NaN to prevent softmax → multinomial crashes
+            if not logits.isfinite().all():
+                logits = torch.nan_to_num(
+                    logits,
+                    nan=0.0,
+                    posinf=1e4,
+                    neginf=-1e4,
+                )
+            self._masked_dist = D.Categorical(logits=logits)
         return self._masked_dist
 
     def log_prob(self, value: torch.Tensor) -> torch.Tensor:
@@ -832,7 +843,10 @@ class LLMMaskedCategorical(D.Distribution):
 
             # Compute cross_entropy with ignore_index
             log_probs_flat = -F.cross_entropy(
-                logits_flat, value_flat, reduce=False, ignore_index=self.ignore_index
+                logits_flat,
+                value_flat,
+                reduction="none",
+                ignore_index=self.ignore_index,
             )
 
             # Reshape back
@@ -841,7 +855,7 @@ class LLMMaskedCategorical(D.Distribution):
             log_probs = -F.cross_entropy(
                 logits,
                 value,
-                reduce=False,
+                reduction="none",
                 ignore_index=self.ignore_index,
             )
         return log_probs

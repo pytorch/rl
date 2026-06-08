@@ -1,3 +1,5 @@
+:orphan:
+
 .. currentmodule:: torchrl.envs.llm.transforms
 
 LLM Transforms
@@ -13,6 +15,7 @@ Transforms for LLM environments, including tools and utilities.
     BrowserTransform
     DataLoadingPrimer
     ExecuteToolsInOrder
+    IncrementalTokenizer
     JSONCallParser
     KLComputation
     KLRewardTransform

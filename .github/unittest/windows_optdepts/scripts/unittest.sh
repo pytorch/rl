@@ -98,16 +98,18 @@ fi
 
 #python -m pip install pip --upgrade
 
+# install build dependencies (needed for torchrl C++ extensions)
+echo "=== Installing build dependencies ==="
+conda install anaconda::cmake -y
+python -m pip install "pybind11[global]"
+python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+
 # install tensordict
 echo "=== Installing tensordict ==="
 if [[ "$RELEASE" == 0 ]]; then
-  conda install anaconda::cmake -y
-
-  python -m pip install "pybind11[global]"
-
-  python -m pip install git+https://github.com/pytorch/tensordict
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict
 else
-  pip3 install tensordict
+  python -m pip install --no-deps tensordict
 fi
 
 # smoke test
@@ -120,8 +122,11 @@ print('successfully imported tensordict')
 echo "=== Setting up CUDA environment ==="
 source "$this_dir/set_cuda_envs.sh"
 
+printf "* Installing hoptorch\n"
+python -m pip install "hoptorch>=0.1.1"
+
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 
 whatsinside=$(ls -rtlh ./torchrl)
 echo $whatsinside
@@ -146,6 +151,9 @@ export LAZY_LEGACY_OP=False
 
 echo "=== Collecting environment info ==="
 python -m torch.utils.collect_env
+
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 echo "=== Starting pytest execution ==="
 echo "Current working directory: $(pwd)"

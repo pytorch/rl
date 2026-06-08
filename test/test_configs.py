@@ -7,16 +7,58 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
+import subprocess
 import sys
 
 import pytest
 import torch
+from tensordict.nn import TensorDictModule, TensorDictSequential
 
-from torchrl import logger as torchrl_logger
+from torchrl import logger as torchrl_logger, trainers as trainers_module
+from torchrl.collectors import AsyncCollector, MultiAsyncCollector, MultiSyncCollector
 
-from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
+from torchrl.data.replay_buffers.replay_buffers import (
+    ReplayBuffer,
+    TensorDictReplayBuffer,
+)
+from torchrl.data.replay_buffers.samplers import (
+    PrioritizedSampler,
+    PrioritizedSliceSampler,
+    RandomSampler,
+    SamplerEnsemble,
+    SamplerWithoutReplacement,
+    SliceSampler,
+    SliceSamplerWithoutReplacement,
+)
+from torchrl.data.replay_buffers.storages import (
+    LazyMemmapStorage,
+    LazyStackStorage,
+    LazyTensorStorage,
+    ListStorage,
+    StorageEnsemble,
+    TensorStorage,
+)
+from torchrl.data.replay_buffers.writers import (
+    ImmutableDatasetWriter,
+    RoundRobinWriter,
+    TensorDictMaxValueWriter,
+    TensorDictRoundRobinWriter,
+    WriterEnsemble,
+)
 from torchrl.envs import AsyncEnvPool, ParallelEnv, SerialEnv
-from torchrl.modules.models.models import MLP
+from torchrl.envs.libs.vmas import VmasEnv
+from torchrl.modules import ConvNet, MLP, TanhModule, ValueOperator
+from torchrl.modules.tensordict_module.exploration import AdditiveGaussianModule
+from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
+from torchrl.record.loggers import (
+    trackio as trackio_logger_module,
+    wandb as wandb_logger_module,
+)
+from torchrl.record.loggers.trackio import TrackioLogger
+from torchrl.record.loggers.wandb import WandbLogger
+from torchrl.trainers import Trainer
+from torchrl.trainers.trainers import CountFramesLog
 
 # Test if configs can be imported (requires hydra)
 try:
@@ -34,13 +76,12 @@ except ImportError:
 _has_gym = (importlib.util.find_spec("gym") is not None) or (
     importlib.util.find_spec("gymnasium") is not None
 )
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
-
+_has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
-pytestmark = [
-    pytest.mark.filterwarnings("error"),
-]
+pytestmark = pytest.mark.filterwarnings("error")
 
 
 @pytest.mark.skipif(
@@ -50,7 +91,7 @@ pytestmark = [
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
 class TestEnvConfigs:
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_gym_env_config(self):
         from hydra.utils import instantiate
@@ -62,8 +103,31 @@ class TestEnvConfigs:
         assert cfg.from_pixels is False
         instantiate(cfg)
 
+    def test_vmas_env_config(self):
+        from torchrl.trainers.algorithms.configs.envs_libs import VmasEnvConfig
+
+        cfg = VmasEnvConfig(
+            scenario="balance",
+            num_envs=4,
+            continuous_actions=True,
+            max_steps=100,
+            scenario_kwargs={"n_agents": 3},
+        )
+        assert cfg._target_ == "torchrl.envs.libs.vmas.VmasEnv"
+        assert cfg.scenario == "balance"
+        assert cfg.scenario_kwargs["n_agents"] == 3
+
+    @pytest.mark.skipif(not _has_vmas, reason="Vmas is not installed")
+    def test_vmas_env_config_instantiation(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.envs_libs import VmasEnvConfig
+
+        cfg = VmasEnvConfig(scenario="balance", num_envs=1)
+        env = instantiate(cfg)
+        assert isinstance(env, VmasEnv)
+
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.parametrize("cls", [ParallelEnv, SerialEnv, AsyncEnvPool])
     def test_batched_env_config(self, cls):
         from hydra.utils import instantiate
@@ -83,7 +147,10 @@ class TestEnvConfigs:
             batched_env_type=batched_env_type,
         )
         env = instantiate(cfg)
-        assert isinstance(env, cls)
+        try:
+            assert isinstance(env, cls)
+        finally:
+            env.close(raise_if_closed=False)
 
 
 @pytest.mark.skipif(
@@ -114,8 +181,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import RoundRobinWriter
-
         assert isinstance(writer, RoundRobinWriter)
         assert writer._compilable is True
 
@@ -137,8 +202,6 @@ class TestDataConfigs:
 
         # Test instantiation
         sampler = instantiate(cfg)
-        from torchrl.data.replay_buffers.samplers import RandomSampler
-
         assert isinstance(sampler, RandomSampler)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -155,13 +218,9 @@ class TestDataConfigs:
         assert cfg.compilable is True
 
         # Test instantiation (requires storage parameter)
-        import torch
-
         storage_tensor = torch.zeros(1000, 10)
         cfg.storage = storage_tensor
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import TensorStorage
-
         assert isinstance(storage, TensorStorage)
         assert storage.max_size == 1000
         assert storage.ndim == 2
@@ -188,8 +247,6 @@ class TestDataConfigs:
 
         # Test instantiation
         buffer = instantiate(cfg)
-        from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-
         assert isinstance(buffer, TensorDictReplayBuffer)
         assert buffer._batch_size == 32
 
@@ -206,8 +263,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import ListStorage
-
         assert isinstance(storage, ListStorage)
         assert storage.max_size == 1000
 
@@ -234,8 +289,6 @@ class TestDataConfigs:
 
         # Test instantiation
         buffer = instantiate(cfg)
-        from torchrl.data.replay_buffers.replay_buffers import ReplayBuffer
-
         assert isinstance(buffer, ReplayBuffer)
         assert buffer._batch_size == 32
 
@@ -281,8 +334,6 @@ class TestDataConfigs:
         assert cfg.p == [0.5, 0.5]
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.writers import RoundRobinWriter, WriterEnsemble
-
         writer1 = RoundRobinWriter()
         writer2 = RoundRobinWriter()
         writer = WriterEnsemble(writer1, writer2)
@@ -303,8 +354,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import TensorDictMaxValueWriter
-
         assert isinstance(writer, TensorDictMaxValueWriter)
 
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
@@ -321,8 +370,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
-
         assert isinstance(writer, TensorDictRoundRobinWriter)
         assert writer._compilable is True
 
@@ -339,8 +386,6 @@ class TestDataConfigs:
 
         # Test instantiation
         writer = instantiate(cfg)
-        from torchrl.data.replay_buffers.writers import ImmutableDatasetWriter
-
         assert isinstance(writer, ImmutableDatasetWriter)
 
     def test_sampler_ensemble_config(self):
@@ -358,8 +403,6 @@ class TestDataConfigs:
         assert cfg.p == [0.5, 0.5]
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import RandomSampler, SamplerEnsemble
-
         sampler1 = RandomSampler()
         sampler2 = RandomSampler()
         sampler = SamplerEnsemble(sampler1, sampler2, p=[0.5, 0.5])
@@ -407,8 +450,6 @@ class TestDataConfigs:
         assert cfg.reduction == "max"
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import PrioritizedSliceSampler
-
         sampler = PrioritizedSliceSampler(
             num_slices=10,
             max_capacity=1000,
@@ -455,8 +496,6 @@ class TestDataConfigs:
         assert cfg.use_gpu is False
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import SliceSamplerWithoutReplacement
-
         sampler = SliceSamplerWithoutReplacement(num_slices=10)
         assert isinstance(sampler, SliceSamplerWithoutReplacement)
         assert sampler.num_slices == 10
@@ -490,8 +529,6 @@ class TestDataConfigs:
         assert cfg.use_gpu is False
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.samplers import SliceSampler
-
         sampler = SliceSampler(num_slices=10)
         assert isinstance(sampler, SliceSampler)
         assert sampler.num_slices == 10
@@ -514,8 +551,6 @@ class TestDataConfigs:
 
         # Test instantiation
         sampler = instantiate(cfg)
-        from torchrl.data.replay_buffers.samplers import PrioritizedSampler
-
         assert isinstance(sampler, PrioritizedSampler)
         assert sampler._max_capacity == 1000
         assert sampler._alpha == 0.7
@@ -538,8 +573,6 @@ class TestDataConfigs:
 
         # Test instantiation
         sampler = instantiate(cfg)
-        from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-
         assert isinstance(sampler, SamplerWithoutReplacement)
         assert sampler.drop_last is True
         assert sampler.shuffle is False
@@ -577,8 +610,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import LazyStackStorage
-
         assert isinstance(storage, LazyStackStorage)
         assert storage.max_size == 1000
         assert storage.stack_dim == 1
@@ -599,8 +630,6 @@ class TestDataConfigs:
         assert len(cfg.transforms) == 0
 
         # Test instantiation - use direct instantiation since StorageEnsemble expects *storages
-        from torchrl.data.replay_buffers.storages import ListStorage, StorageEnsemble
-
         storage1 = ListStorage(max_size=100)
         storage2 = ListStorage(max_size=200)
         storage = StorageEnsemble(
@@ -626,8 +655,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-
         assert isinstance(storage, LazyMemmapStorage)
         assert storage.max_size == 1000
         assert storage.ndim == 2
@@ -649,8 +676,6 @@ class TestDataConfigs:
 
         # Test instantiation
         storage = instantiate(cfg)
-        from torchrl.data.replay_buffers.storages import LazyTensorStorage
-
         assert isinstance(storage, LazyTensorStorage)
         assert storage.max_size == 1000
         assert storage.ndim == 2
@@ -694,11 +719,6 @@ class TestDataConfigs:
         assert cfg.batch_size == 64
 
         # Test instantiation - use direct instantiation to avoid Union type issues
-        from torchrl.data.replay_buffers.replay_buffers import TensorDictReplayBuffer
-        from torchrl.data.replay_buffers.samplers import PrioritizedSliceSampler
-        from torchrl.data.replay_buffers.storages import LazyMemmapStorage
-        from torchrl.data.replay_buffers.writers import TensorDictRoundRobinWriter
-
         sampler = PrioritizedSliceSampler(
             num_slices=10, max_capacity=1000, alpha=0.7, beta=0.9
         )
@@ -818,8 +838,6 @@ class TestModuleConfigs:
         assert cfg.device == "cpu"
 
         convnet = instantiate(cfg)
-        from torchrl.modules import ConvNet
-
         assert isinstance(convnet, ConvNet)
         convnet(torch.randn(1, 3, 32, 32))  # Test forward pass
 
@@ -941,12 +959,8 @@ class TestModuleConfigs:
         assert cfg.inplace is None
 
         seq = instantiate(cfg)
-        from tensordict.nn import TensorDictSequential
-
         assert isinstance(seq, TensorDictSequential)
         assert len(seq.module) == 2
-        from tensordict.nn import TensorDictModule
-
         assert all(isinstance(m, TensorDictModule) for m in seq.module)
         assert seq.in_keys == ["observation"]
         assert "action" in seq.out_keys
@@ -976,8 +990,6 @@ class TestModuleConfigs:
 
         # Test instantiation
         tanh_module = instantiate(cfg)
-        from torchrl.modules import TanhModule
-
         assert isinstance(tanh_module, TanhModule)
         assert tanh_module.in_keys == ["action"]
         assert tanh_module.out_keys == ["action"]
@@ -1001,12 +1013,84 @@ class TestModuleConfigs:
 
         # Test instantiation - this should work now with the new config structure
         value_model = instantiate(cfg)
-        from torchrl.modules import MLP, ValueOperator
-
         assert isinstance(value_model, ValueOperator)
         assert isinstance(value_model.module, MLP)
         assert value_model.module.in_features == 10
         assert value_model.module.out_features == 1
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_qvalue_model_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            MLPConfig,
+            QValueModelConfig,
+        )
+
+        network = MLPConfig(in_features=4, out_features=2, depth=2, num_cells=64)
+        cfg = QValueModelConfig(
+            network=network,
+            in_keys=["observation"],
+            action_space="one-hot",
+            action_key=("agent", "action"),
+            action_value_key=("agent", "action_value"),
+            chosen_action_value_key=("agent", "chosen_action_value"),
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_qvalue_model"
+        )
+        assert cfg.action_space == "one-hot"
+
+        actor = instantiate(cfg)
+        assert actor.module[1].out_keys == [
+            ("agent", "action"),
+            ("agent", "action_value"),
+            ("agent", "chosen_action_value"),
+        ]
+
+    def test_qmixer_network_config(self):
+        from torchrl.trainers.algorithms.configs.modules import QMixerNetworkConfig
+
+        cfg = QMixerNetworkConfig(state_shape=[8], n_agents=3)
+        assert cfg._target_ == "torchrl.modules.models.multiagent.QMixer"
+        assert cfg.mixing_embed_dim == 32
+
+    def test_vdn_network_config(self):
+        from torchrl.trainers.algorithms.configs.modules import VDNMixerNetworkConfig
+
+        cfg = VDNMixerNetworkConfig(n_agents=3)
+        assert cfg._target_ == "torchrl.modules.models.multiagent.VDNMixer"
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_additive_gaussian_module_config(self):
+        """Test AdditiveGaussianModuleConfig."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.modules import (
+            AdditiveGaussianModuleConfig,
+        )
+
+        cfg = AdditiveGaussianModuleConfig(
+            spec=None,
+            sigma_init=1.0,
+            sigma_end=0.1,
+            annealing_num_steps=1000,
+            mean=0.0,
+            std=0.1,
+            action_key="action",
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.modules._make_additive_gaussian_module"
+        )
+        assert cfg.spec is None
+        assert cfg.sigma_init == 1.0
+        assert cfg.sigma_end == 0.1
+        assert cfg.action_key == "action"
+
+        module = instantiate(cfg)
+        assert isinstance(module, AdditiveGaussianModule)
+        assert module._spec is None
+        assert module.action_key == "action"
 
 
 @pytest.mark.skipif(
@@ -1018,17 +1102,12 @@ class TestModuleConfigs:
 class TestCollectorsConfig:
     @pytest.mark.parametrize("factory", [True, False])
     @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
-        from torchrl.collectors import (
-            AsyncCollector,
-            MultiAsyncCollector,
-            MultiSyncCollector,
-        )
         from torchrl.trainers.algorithms.configs.collectors import (
-            AsyncDataCollectorConfig,
+            AsyncCollectorConfig,
             MultiAsyncCollectorConfig,
             MultiSyncCollectorConfig,
         )
@@ -1052,7 +1131,7 @@ class TestCollectorsConfig:
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
 
-            cfg_cls = AsyncDataCollectorConfig
+            cfg_cls = AsyncCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
             cfg_cls = MultiSyncCollectorConfig
@@ -1096,9 +1175,95 @@ class TestCollectorsConfig:
                 # Just check that we can iterate
                 break
         finally:
-            # Only call shutdown if the collector has that method
-            if hasattr(collector_instance, "shutdown"):
-                collector_instance.shutdown(timeout=10)
+            collector_instance.shutdown(timeout=10)
+
+    @pytest.mark.parametrize("factory", [True, False])
+    @pytest.mark.parametrize("collector", ["async", "multi_sync", "multi_async"])
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_collector_auto_configures_exploration_modules(self, factory, collector):
+        """Test that collector instantiation auto-configures exploration modules.
+
+        This tests that when an exploration module (e.g. AdditiveGaussianModule) is configured
+        without a spec (spec=None), the collector's __init__ automatically sets the spec
+        from the environment's action_spec.
+        """
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.collectors import (
+            AsyncCollectorConfig,
+            MultiAsyncCollectorConfig,
+            MultiSyncCollectorConfig,
+        )
+        from torchrl.trainers.algorithms.configs.envs_libs import GymEnvConfig
+        from torchrl.trainers.algorithms.configs.modules import (
+            AdditiveGaussianModuleConfig,
+            MLPConfig,
+            TanhNormalModelConfig,
+            TensorDictSequentialConfig,
+        )
+        from torchrl.trainers.algorithms.configs.weight_update import (
+            RemoteModuleWeightUpdaterConfig,
+        )
+
+        env_cfg = GymEnvConfig(env_name="Pendulum-v1")
+
+        policy_cfg = TanhNormalModelConfig(
+            network=MLPConfig(in_features=3, out_features=2, depth=2, num_cells=32),
+            in_keys=["observation"],
+            out_keys=["action"],
+        )
+
+        exploration_cfg = AdditiveGaussianModuleConfig(
+            spec=None,  # Will be auto-set by collector from environment
+            sigma_init=0.5,
+            sigma_end=0.1,
+            annealing_num_steps=100,
+            action_key="action",
+        )
+
+        exploratory_policy_cfg = TensorDictSequentialConfig(
+            modules=[policy_cfg, exploration_cfg],
+        )
+
+        if collector == "async":
+            cfg_cls = AsyncCollectorConfig
+            expected_cls = AsyncCollector
+            kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
+        elif collector == "multi_sync":
+            cfg_cls = MultiSyncCollectorConfig
+            expected_cls = MultiSyncCollector
+            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
+        elif collector == "multi_async":
+            cfg_cls = MultiAsyncCollectorConfig
+            expected_cls = MultiAsyncCollector
+            kwargs = {"create_env_fn": [env_cfg], "frames_per_batch": 10}
+        else:
+            raise ValueError(f"Unknown collector type: {collector}")
+
+        if factory:
+            cfg = cfg_cls(
+                policy_factory=exploratory_policy_cfg,
+                weight_updater=RemoteModuleWeightUpdaterConfig(),
+                **kwargs,
+            )
+        else:
+            cfg = cfg_cls(policy=exploratory_policy_cfg, **kwargs)
+
+        collector_instance = instantiate(cfg)
+
+        try:
+            assert isinstance(collector_instance, expected_cls)
+            # This would raise RuntimeError if spec was not set on workers' exploration module
+            for batch in collector_instance:
+                assert "action" in batch.keys()
+                assert batch["action"].shape[-1] == 1
+                assert (batch["action"] >= -2.0).all() and (
+                    batch["action"] <= 2.0
+                ).all(), "Actions should be clipped to environment spec bounds [-2, 2]"
+                break
+
+        finally:
+            collector_instance.shutdown(timeout=10)
 
 
 @pytest.mark.skipif(
@@ -1107,10 +1272,9 @@ class TestCollectorsConfig:
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
 class TestLossConfigs:
     @pytest.mark.parametrize("loss_type", ["clip", "kl", "ppo"])
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_loss_config(self, loss_type):
         from hydra.utils import instantiate
-        from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
         from torchrl.trainers.algorithms.configs.modules import (
             MLPConfig,
             TanhNormalModelConfig,
@@ -1145,6 +1309,87 @@ class TestLossConfigs:
         elif loss_type == "kl":
             assert isinstance(loss, KLPENPPOLoss)
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import DQNLossConfig
+
+        cfg = DQNLossConfig()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_dqn_loss"
+        )
+        assert cfg.loss_function == "l2"
+        assert cfg.delay_value is True
+        assert cfg.double_dqn is False
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_qmixer_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import QMixerLossConfig
+
+        cfg = QMixerLossConfig(gamma=0.9)
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_qmixer_loss"
+        )
+        assert cfg.loss_function == "l2"
+        assert cfg.delay_value is True
+        assert cfg.gamma == 0.9
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ddpg_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import DDPGLossConfig
+
+        cfg = DDPGLossConfig()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_ddpg_loss"
+        )
+        assert cfg.loss_function == "l2"
+        assert cfg.delay_actor is False
+        assert cfg.delay_value is True
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_iql_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import IQLLossConfig
+
+        cfg = IQLLossConfig(temperature=3.0, expectile=0.7)
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_iql_loss"
+        )
+        assert cfg.temperature == 3.0
+        assert cfg.expectile == 0.7
+        assert cfg.num_qvalue_nets == 2
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_cql_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import CQLLossConfig
+
+        cfg = CQLLossConfig(min_q_weight=5.0, with_lagrange=True, lagrange_thresh=10.0)
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_cql_loss"
+        )
+        assert cfg.min_q_weight == 5.0
+        assert cfg.with_lagrange is True
+        assert cfg.lagrange_thresh == 10.0
+        assert cfg.num_random == 10
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_td3_loss_config(self):
+        from torchrl.trainers.algorithms.configs.objectives import TD3LossConfig
+
+        cfg = TD3LossConfig()
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.objectives._make_td3_loss"
+        )
+        assert cfg.num_qvalue_nets == 2
+        assert cfg.policy_noise == 0.2
+        assert cfg.noise_clip == 0.5
+        assert cfg.delay_actor is True
+        assert cfg.delay_qvalue is True
+
 
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
@@ -1172,8 +1417,131 @@ class TestOptimizerConfigs:
 @pytest.mark.skipif(
     not _configs_available, reason="Config system requires hydra-core and omegaconf"
 )
+class TestLoggerConfigs:
+    def test_wandb_logger_config(self):
+        """Test WandbLoggerConfig."""
+        from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
+
+        cfg = WandbLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            wandb_kwargs={"entity": "unit-test"},
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.logging._make_wandb_logger"
+        )
+        assert cfg.exp_name == "test"
+        assert cfg.project == "torchrl"
+        assert cfg.video_fps == 32
+        assert cfg.wandb_kwargs == {"entity": "unit-test"}
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_wandb_logger_config_instantiation(self, monkeypatch):
+        """Test WandbLoggerConfig instantiation."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.logging import WandbLoggerConfig
+
+        init_kwargs = {}
+
+        def init(**kwargs):
+            init_kwargs.update(kwargs)
+            return argparse.Namespace(config={})
+
+        wandb = argparse.Namespace(init=init)
+        monkeypatch.setitem(sys.modules, "wandb", wandb)
+        monkeypatch.setattr(wandb_logger_module, "_has_wandb", True)
+        cfg = WandbLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            log_dir="wandb_logs",
+            wandb_kwargs={"entity": "unit-test"},
+        )
+        logger = instantiate(cfg)
+        assert isinstance(logger, WandbLogger)
+        assert init_kwargs["name"] == "test"
+        assert init_kwargs["project"] == "torchrl"
+        assert init_kwargs["dir"] == "wandb_logs"
+        assert init_kwargs["entity"] == "unit-test"
+
+    def test_trackio_logger_config(self):
+        """Test TrackioLoggerConfig."""
+        from torchrl.trainers.algorithms.configs.logging import TrackioLoggerConfig
+
+        cfg = TrackioLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            trackio_kwargs={"entity": "unit-test"},
+        )
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.logging._make_trackio_logger"
+        )
+        assert cfg.exp_name == "test"
+        assert cfg.project == "torchrl"
+        assert cfg.video_fps == 32
+        assert cfg.trackio_kwargs == {"entity": "unit-test"}
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    def test_trackio_logger_config_instantiation(self, monkeypatch):
+        """Test TrackioLoggerConfig instantiation."""
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.logging import TrackioLoggerConfig
+
+        init_kwargs = {}
+
+        def init(**kwargs):
+            init_kwargs.update(kwargs)
+            return argparse.Namespace(config={})
+
+        trackio = argparse.Namespace(init=init)
+        monkeypatch.setitem(sys.modules, "trackio", trackio)
+        monkeypatch.setattr(trackio_logger_module, "_has_trackio", True)
+        cfg = TrackioLoggerConfig(
+            exp_name="test",
+            project="torchrl",
+            trackio_kwargs={"entity": "unit-test"},
+        )
+        logger = instantiate(cfg)
+        assert isinstance(logger, TrackioLogger)
+        assert init_kwargs["name"] == "test"
+        assert init_kwargs["project"] == "torchrl"
+        assert init_kwargs["entity"] == "unit-test"
+
+
+@pytest.mark.skipif(
+    not _python_version_compatible, reason="Python 3.10+ required for config system"
+)
+@pytest.mark.skipif(
+    not _configs_available, reason="Config system requires hydra-core and omegaconf"
+)
 class TestTrainerConfigs:
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    def test_nested_key_normalization_for_hydra_lists(self):
+        from omegaconf import ListConfig
+        from torchrl.trainers.algorithms.configs.common import (
+            _normalize_hydra_key,
+            _normalize_hydra_keys,
+        )
+
+        assert _normalize_hydra_key(["agents", "done"]) == ("agents", "done")
+        assert _normalize_hydra_key(ListConfig(["agents", "done"])) == (
+            "agents",
+            "done",
+        )
+        assert _normalize_hydra_key(["action"]) == "action"
+        assert _normalize_hydra_key(ListConfig(["action"])) == "action"
+        assert _normalize_hydra_key("observation") == "observation"
+        assert _normalize_hydra_key(None) is None
+
+        assert _normalize_hydra_keys(None) is None
+        assert _normalize_hydra_keys(["action"]) == ["action"]
+        assert _normalize_hydra_keys([["agents", "observation"], "action"]) == [
+            ("agents", "observation"),
+            "action",
+        ]
+        assert _normalize_hydra_keys(["next", "reward"]) == ["next", "reward"]
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config(self):
         from torchrl.trainers.algorithms.configs.trainers import PPOTrainerConfig
 
@@ -1203,7 +1571,7 @@ class TestTrainerConfigs:
         assert cfg.total_frames == 100
         assert cfg.frame_skip == 1
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_ppo_trainer_config_optional_fields(self):
         """Test that optional fields can be omitted from PPO trainer config."""
         from torchrl.trainers.algorithms.configs.collectors import CollectorConfig
@@ -1226,10 +1594,11 @@ class TestTrainerConfigs:
         actor_network = MLPConfig(
             in_features=4,  # CartPole observation space
             out_features=2,  # CartPole action space
+            depth=2,
             num_cells=64,
         )
 
-        critic_network = MLPConfig(in_features=4, out_features=1, num_cells=64)
+        critic_network = MLPConfig(in_features=4, out_features=1, depth=2, num_cells=64)
 
         actor_model = TanhNormalModelConfig(
             network=actor_network, in_keys=["observation"], out_keys=["action"]
@@ -1263,7 +1632,7 @@ class TestTrainerConfigs:
             optimizer=optimizer_config,
             logger=None,  # Optional field
             save_trainer_file="/tmp/test.pt",
-            replay_buffer=replay_buffer_config
+            replay_buffer=replay_buffer_config,
             # All optional fields are omitted to test defaults
         )
 
@@ -1279,8 +1648,230 @@ class TestTrainerConfigs:
         assert trainer_config.actor_network is None
         assert trainer_config.critic_network is None
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import DQNTrainerConfig
+
+        cfg = DQNTrainerConfig(
+            collector=None,
+            total_frames=100,
+            optim_steps_per_batch=1,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer"
+        )
+        assert cfg.total_frames == 100
+        assert cfg.frame_skip == 1
+        assert cfg.clip_grad_norm is True
+
+    def test_hook_config(self):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms.configs.hooks import CountFramesLogConfig
+
+        cfg = CountFramesLogConfig(frame_skip=2, log_pbar=True)
+        assert cfg._target_ == "torchrl.trainers.trainers.CountFramesLog"
+        hook = instantiate(cfg)
+        assert isinstance(hook, CountFramesLog)
+        assert hook.frame_skip == 2
+        assert hook.log_pbar is True
+
+    @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+    @pytest.mark.parametrize(
+        "config_cls, kwargs, hook_cls",
+        [
+            (
+                "BatchSubSamplerConfig",
+                {"batch_size": 8, "sub_traj_len": 2, "min_sub_traj_len": 1},
+                "BatchSubSampler",
+            ),
+            ("ClearCudaCacheConfig", {"interval": 10}, "ClearCudaCache"),
+            (
+                "LogScalarConfig",
+                {
+                    "key": ["next", "reward"],
+                    "logname": "train_reward",
+                    "reduction": "max",
+                },
+                "LogScalar",
+            ),
+            (
+                "LogTimingConfig",
+                {"prefix": "perf", "percall": False, "erase": True},
+                "LogTiming",
+            ),
+            (
+                "RewardNormalizerConfig",
+                {"decay": 0.99, "scale": 0.5},
+                "RewardNormalizer",
+            ),
+            (
+                "SelectKeysConfig",
+                {"keys": ["observation", "action"]},
+                "SelectKeys",
+            ),
+            (
+                "CountFramesLogConfig",
+                {"frame_skip": 2, "log_pbar": True},
+                "CountFramesLog",
+            ),
+            (
+                "EarlyStoppingConfig",
+                {
+                    "monitor": "r_training",
+                    "mode": "max",
+                    "min_delta": 0.01,
+                    "patience": 3,
+                    "wait_for": 0,
+                    "check_finite": True,
+                },
+                "EarlyStopping",
+            ),
+        ],
+    )
+    def test_individual_hook_configs(self, config_cls, kwargs, hook_cls):
+        from hydra.utils import instantiate
+        from torchrl.trainers.algorithms import configs as configs_module
+
+        cfg = getattr(configs_module, config_cls)(**kwargs)
+        hook = instantiate(cfg)
+        assert isinstance(hook, getattr(trainers_module, hook_cls))
+
+        # Verify the hook can be registered on a trainer through the same path
+        # _register_trainer_hooks uses (i.e. ``hook.register(trainer)`` with no
+        # name argument). This catches missing register/state_dict/load_state_dict
+        # methods which would otherwise only fail at trainer build time.
+        class _MockCollector:
+            def set_seed(self, seed, **kwargs):
+                return seed
+
+            def update_policy_weights_(self):
+                pass
+
+            def shutdown(self):
+                pass
+
+            def state_dict(self):
+                return {}
+
+            def load_state_dict(self, state_dict):
+                pass
+
+        trainer = Trainer(
+            collector=_MockCollector(),
+            total_frames=None,
+            frame_skip=None,
+            optim_steps_per_batch=None,
+            loss_module=torch.nn.Module(),
+            optimizer=None,
+            save_trainer_file=None,
+        )
+        hook.register(trainer)
+        # Round-trip the state dict to verify state_dict/load_state_dict are
+        # implemented (Trainer.state_dict iterates registered modules).
+        hook.load_state_dict(hook.state_dict())
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ddpg_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import DDPGTrainerConfig
+
+        cfg = DDPGTrainerConfig(
+            collector=None,
+            total_frames=200,
+            optim_steps_per_batch=4,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
+        )
+        assert cfg.total_frames == 200
+        assert cfg.optim_steps_per_batch == 4
+        assert cfg.async_collection is False
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_iql_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import IQLTrainerConfig
+
+        cfg = IQLTrainerConfig(
+            collector=None,
+            total_frames=300,
+            optim_steps_per_batch=2,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
+        )
+        assert cfg.total_frames == 300
+        assert cfg.actor_network is None
+        assert cfg.qvalue_network is None
+        assert cfg.value_network is None
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_cql_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import CQLTrainerConfig
+
+        cfg = CQLTrainerConfig(
+            collector=None,
+            total_frames=400,
+            optim_steps_per_batch=3,
+            loss_module=None,
+            optimizer=None,
+            logger=None,
+            save_trainer_file=None,
+            replay_buffer=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
+        )
+        assert cfg.total_frames == 400
+        assert cfg.actor_network is None
+        assert cfg.qvalue_network is None
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_td3_trainer_config(self):
+        from torchrl.trainers.algorithms.configs.trainers import TD3TrainerConfig
+
+        cfg = TD3TrainerConfig(
+            collector=None,
+            total_frames=500,
+            loss_module=None,
+            logger=None,
+            replay_buffer=None,
+            save_trainer_file=None,
+        )
+
+        assert (
+            cfg._target_
+            == "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
+        )
+        assert cfg.total_frames == 500
+        assert cfg.optim_steps_per_batch == 1
+        assert cfg.policy_update_delay == 2
+        assert cfg.clip_grad_norm is True
+
 
 @pytest.mark.skipif(not _has_hydra, reason="Hydra is not installed")
+@pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
 @pytest.mark.skipif(
     not _python_version_compatible, reason="Python 3.10+ required for config system"
 )
@@ -1310,9 +1901,6 @@ class TestHydraParsing:
         self, tmpdir, yaml_config, test_script_content, success_message="SUCCESS"
     ):
         """Helper function to run a Hydra test with subprocess approach."""
-        import subprocess
-        import sys
-
         # Create a test script that follows the pattern
         test_script = tmpdir / "test.py"
 
@@ -1349,7 +1937,7 @@ if __name__ == "__main__":
                 cwd=str(tmpdir),
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=120,
             )
 
             if result.returncode == 0:
@@ -1391,7 +1979,7 @@ if __name__ == "__main__":
         except Exception:
             raise
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_simple_env_config(self, tmpdir):
         """Test simple environment configuration without any transforms or batching."""
         yaml_config = """
@@ -1411,7 +1999,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_batched_env_config(self, tmpdir):
         """Test batched environment configuration without transforms."""
         yaml_config = """
@@ -1435,7 +2023,7 @@ training_env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_batched_env_with_one_transform(self, tmpdir):
         """Test batched environment with one transform."""
         yaml_config = """
@@ -1464,7 +2052,7 @@ training_env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_batched_env_with_two_transforms(self, tmpdir):
         """Test batched environment with two transforms using Compose."""
         yaml_config = """
@@ -1505,7 +2093,7 @@ training_env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_simple_config_instantiation(self, tmpdir):
         """Test that simple configs can be instantiated using registered names."""
         yaml_config = """
@@ -1535,7 +2123,7 @@ network:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_env_parsing(self, tmpdir):
         """Test environment parsing with overrides."""
         yaml_config = """
@@ -1555,7 +2143,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_env_parsing_with_file(self, tmpdir):
         """Test environment parsing with file config."""
         yaml_config = """
@@ -1575,6 +2163,7 @@ env:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_collector_parsing_with_file(self, tmpdir):
         """Test collector parsing with file config."""
         yaml_config = """
@@ -1616,10 +2205,9 @@ collector:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_trainer_parsing_with_file(self, tmpdir):
         """Test trainer parsing with file config."""
-        import os
-
         os.makedirs(tmpdir / "save", exist_ok=True)
 
         yaml_config = f"""
@@ -1723,7 +2311,970 @@ trainer:
 
         self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
 
-    @pytest.mark.skipif(not _has_gym, reason="Gym is not installed")
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_parsing_with_file(self, tmpdir):
+        """Test DQN trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: dqn
+  - target_net_updater@target_net_updater: hard
+  - logger@logger: csv
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+  reward_key: reward
+  done_key: done
+  terminated_key: terminated
+  action_key: action
+  action_value_key: action_value
+  value_key: chosen_action_value
+
+target_net_updater:
+  value_network_update_interval: 50
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_parsing_with_hook_config(self, tmpdir):
+        """Test DQN trainer parsing with hook configs."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: dqn
+  - target_net_updater@target_net_updater: hard
+  - logger@logger: csv
+  - hook@hook0: count_frames_log
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+
+target_net_updater:
+  value_network_update_interval: 50
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn_with_hook
+
+hook0:
+  frame_skip: 1
+  log_pbar: false
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+  hooks:
+    - ${hook0}
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+    assert any(
+        isinstance(module, torchrl.trainers.CountFramesLog)
+        for module in trainer._modules.values()
+    )
+    trainer.collector.shutdown()
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_iql_style_parsing_with_file(self, tmpdir):
+        """Test DQN trainer parsing with iql-style key routing."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: dqn
+  - target_net_updater@target_net_updater: hard
+  - logger@logger: csv
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  value_network: ${models.qvalue_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+
+target_net_updater:
+  value_network_update_interval: 50
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn_iql_style
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  mixing_strategy: iql
+  reward_key: reward
+  episode_reward_key: reward_sum
+  done_key: done
+  terminated_key: terminated
+  action_key: action
+  observation_key: observation
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_dqn_trainer_qmix_style_parsing_with_file(self, tmpdir):
+        """Test DQN trainer parsing with qmix-style loss and mixer config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.qvalue_model: qvalue
+  - network@networks.qvalue_network: mlp
+  - network@networks.mixer_network: qmixer
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: dqn
+  - optimizer@optimizer: adam
+  - loss@loss: mixer
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  qvalue_network:
+    out_features: 2
+    in_features: 4
+    num_cells: [64, 64]
+
+  mixer_network:
+    state_shape: [4]
+    n_agents: 1
+    mixing_embed_dim: 16
+
+models:
+  qvalue_model:
+    in_keys: ["observation"]
+    action_space: "one-hot"
+    network: ${networks.qvalue_network}
+
+  mixer_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_module
+    module: ${networks.mixer_network}
+    in_keys: ["chosen_action_value", "observation"]
+    out_keys: ["chosen_action_value"]
+
+transform0:
+  max_steps: 500
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: CartPole-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+    _partial_: true
+
+loss:
+  local_value_network: ${models.qvalue_model}
+  mixer_network: ${models.mixer_model}
+  loss_function: l2
+  delay_value: true
+  action_space: "one-hot"
+  gamma: 0.99
+  reward_key: reward
+  done_key: done
+  terminated_key: terminated
+  action_key: action
+  action_value_key: action_value
+  local_value_key: chosen_action_value
+  global_value_key: chosen_action_value
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 2.5e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.qvalue_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_dqn_qmix_style
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  value_network: ${models.qvalue_model}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: true
+  clip_norm: 10.0
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  mixing_strategy: qmix
+  reward_key: reward
+  episode_reward_key: reward_sum
+  aggregated_reward_key: reward
+  aggregated_episode_reward_key: reward_sum
+  done_key: done
+  terminated_key: terminated
+  action_key: action
+  observation_key: observation
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.dqn.DQNTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_ddpg_trainer_parsing_with_file(self, tmpdir):
+        """Test DDPG trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.value_model: value
+  - network@networks.actor_network: mlp
+  - network@networks.value_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: ddpg
+  - optimizer@optimizer: adam
+  - loss@loss: ddpg
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  actor_network:
+    out_features: 1
+    in_features: 3
+    num_cells: [64, 64]
+
+  value_network:
+    out_features: 1
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  actor_module:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_module
+    module: ${networks.actor_network}
+    in_keys: ["observation"]
+    out_keys: ["param"]
+
+  actor_tanh:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tanh_module
+    in_keys: ["param"]
+    out_keys: ["action"]
+    low: -2.0
+    high: 2.0
+
+  actor_model:
+    _target_: torchrl.trainers.algorithms.configs.modules._make_tensordict_sequential
+    modules:
+      - ${models.actor_module}
+      - ${models.actor_tanh}
+
+  value_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.value_network}
+
+transform0:
+  max_steps: 200
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: null
+  out_keys: null
+
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+loss:
+  actor_network: ${models.actor_model}
+  value_network: ${models.value_model}
+  loss_function: l2
+  delay_value: true
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 3.0e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.actor_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_ddpg
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false
+  clip_norm: null
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.ddpg.DDPGTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_iql_trainer_parsing_with_file(self, tmpdir):
+        """Test IQL trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.policy_model: tanh_normal
+  - model@models.qvalue_model: value
+  - model@models.value_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.qvalue_network: mlp
+  - network@networks.value_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: iql
+  - optimizer@optimizer: adam
+  - loss@loss: iql
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 3
+    num_cells: [64, 64]
+
+  qvalue_network:
+    out_features: 1
+    in_features: 4
+    num_cells: [64, 64]
+
+  value_network:
+    out_features: 1
+    in_features: 3
+    num_cells: [64, 64]
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  qvalue_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.qvalue_network}
+
+  value_model:
+    in_keys: ["observation"]
+    out_keys: ["state_value"]
+    network: ${networks.value_network}
+
+transform0:
+  max_steps: 200
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: null
+  out_keys: null
+
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+loss:
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  value_network: ${models.value_model}
+  temperature: 3.0
+  expectile: 0.7
+  loss_function: smooth_l1
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 3.0e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_iql
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false
+  clip_norm: null
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.iql.IQLTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
+    def test_cql_trainer_parsing_with_file(self, tmpdir):
+        """Test CQL trainer parsing with Hydra config."""
+        yaml_config = """
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: double_to_float
+  - transform@transform2: reward_sum
+  - env@training_env: batched_env
+  - env@training_env.create_env_fn: transformed_env
+  - env@training_env.create_env_fn.base_env: gym
+  - transform@training_env.create_env_fn.transform: compose
+  - model@models.policy_model: tanh_normal
+  - model@models.qvalue_model: value
+  - network@networks.policy_network: mlp
+  - network@networks.qvalue_network: mlp
+  - collector@collector: sync
+  - replay_buffer@replay_buffer: base
+  - storage@replay_buffer.storage: lazy_tensor
+  - writer@replay_buffer.writer: round_robin
+  - sampler@replay_buffer.sampler: random
+  - trainer@trainer: cql
+  - optimizer@optimizer: adam
+  - loss@loss: cql
+  - target_net_updater@target_net_updater: soft
+  - logger@logger: csv
+  - _self_
+
+networks:
+  policy_network:
+    out_features: 2
+    in_features: 3
+    num_cells: [64, 64]
+
+  qvalue_network:
+    out_features: 1
+    in_features: 4
+    num_cells: [64, 64]
+
+models:
+  policy_model:
+    return_log_prob: true
+    in_keys: ["observation"]
+    param_keys: ["loc", "scale"]
+    out_keys: ["action"]
+    network: ${networks.policy_network}
+
+  qvalue_model:
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+    network: ${networks.qvalue_network}
+
+transform0:
+  max_steps: 200
+  step_count_key: "step_count"
+
+transform1:
+  in_keys: null
+  out_keys: null
+
+transform2:
+  in_keys: ["reward"]
+  out_keys: ["reward_sum"]
+
+training_env:
+  num_workers: 1
+  create_env_fn:
+    base_env:
+      env_name: Pendulum-v1
+    transform:
+      transforms:
+        - ${transform0}
+        - ${transform1}
+        - ${transform2}
+    _partial_: true
+
+loss:
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  loss_function: smooth_l1
+  alpha_init: 1.0
+  target_entropy: -1.0
+  delay_qvalue: true
+  temperature: 1.0
+  min_q_weight: 1.0
+  with_lagrange: true
+  lagrange_thresh: 10.0
+  num_random: 10
+
+target_net_updater:
+  tau: 0.005
+
+optimizer:
+  lr: 3.0e-4
+
+collector:
+  create_env_fn: ${training_env}
+  policy: ${models.policy_model}
+  total_frames: 500
+  frames_per_batch: 100
+  init_random_frames: 100
+  _partial_: true
+
+replay_buffer:
+  storage:
+    max_size: 1000
+    device: cpu
+    ndim: 1
+  sampler:
+  writer:
+    compilable: false
+  batch_size: 32
+
+logger:
+  exp_name: test_cql
+
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  replay_buffer: ${replay_buffer}
+  target_net_updater: ${target_net_updater}
+  loss_module: ${loss}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  frame_skip: 1
+  clip_grad_norm: false
+  clip_norm: null
+  progress_bar: false
+  seed: 42
+  save_trainer_interval: 10000
+  log_interval: 10000
+  save_trainer_file: null
+  optim_steps_per_batch: 2
+  async_collection: false
+"""
+
+        test_code = """
+    trainer = hydra.utils.instantiate(cfg.trainer)
+    assert isinstance(trainer, torchrl.trainers.algorithms.cql.CQLTrainer)
+"""
+
+        self._run_hydra_test(tmpdir, yaml_config, test_code, "SUCCESS")
+
+    @pytest.mark.skipif(not _has_gymnasium, reason="Gymnasium is not installed")
     def test_transformed_env_parsing_with_file(self, tmpdir):
         """Test transformed environment configuration using the same pattern as the working PPO trainer."""
         yaml_config = """

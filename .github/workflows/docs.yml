@@ -11,11 +11,12 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  group: docs-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -34,38 +35,20 @@ jobs:
       repository: pytorch/rl
       upload-artifact: docs
       timeout: 120
+      # Use PyTorch image with newer GCC for GLIBCXX_3.4.30 support (needed by AOTInductor in export.py)
+      docker-image: pytorch/pytorch:2.5.1-cuda12.4-cudnn9-devel
       script: |
         set -e
         set -v
-        yum makecache
-        # Install Mesa and OpenGL Libraries:
-        yum install -y glfw mesa-libGL mesa-libGL-devel egl-utils freeglut mesa-libGLU mesa-libEGL python39-pip
-        yum install epel-release -y  # for missing librhash0 when installing tensordict
-        yum install rhash -y  # Provides librhash.so.0 needed by cmake
-        # Install DRI Drivers:
-        yum install -y mesa-dri-drivers
-        # Install Xvfb for Headless Environments:
-        yum install -y xorg-x11-server-Xvfb
-        # xhost +local:docker
-        # Xvfb :1 -screen 0 1024x768x24 &
-
-        root_dir="$(pwd)"
-        conda_dir="${root_dir}/conda"
-        env_dir="${root_dir}/env"
-        os=Linux
         
-        # 1. Install conda at ./conda
-        printf "* Installing conda\n"
-        wget -O miniconda.sh "http://repo.continuum.io/miniconda/Miniconda3-latest-${os}-x86_64.sh"
-        bash ./miniconda.sh -b -f -p "${conda_dir}"
-        eval "$(${conda_dir}/bin/conda shell.bash hook)"
-        printf "* Creating a test environment\n"
-        conda create --prefix "${env_dir}" -y python=3.12
-        printf "* Activating\n"
-        conda activate "${env_dir}"
-
+        # Install system dependencies (Ubuntu-based PyTorch image)
+        apt-get update
+        apt-get install -y libglfw3 libglfw3-dev libgl1-mesa-glx libgl1-mesa-dev libegl1-mesa-dev \
+          freeglut3-dev libglu1-mesa libegl1 mesa-utils xvfb wget git cmake \
+          ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+          libavdevice-dev libavfilter-dev libswresample-dev pkg-config
+        
         # 2. upgrade pip, ninja and packaging
-        conda install anaconda::cmake -y
         python -m pip install --upgrade pip
         python -m pip install setuptools ninja packaging "pybind11[global]" -U
         
@@ -76,19 +59,45 @@ jobs:
         git version
         
         # 5. Install PyTorch
+        # Uninstall pre-installed packages from Docker image to avoid conflicts
+        # (gym conflicts with gymnasium, torch/torchaudio versions conflict with nightly)
+        python -m pip uninstall -y torch torchvision torchaudio gym || true
+        
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
-          python -m pip install torch torchvision
-          python -m pip install tensordict
+          # Use stable PyTorch for releases (tags and release/* branches)
+          python -m pip install torch torchvision --quiet --root-user-action=ignore
+          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0" --quiet --root-user-action=ignore
+          python -m pip install tensordict --no-deps --quiet --root-user-action=ignore
+          python -m pip install torchcodec --quiet --root-user-action=ignore
         else
+          # Use nightly PyTorch for main, nightly, and PRs
           python -m pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --quiet --root-user-action=ignore
-          python -m pip install git+https://github.com/pytorch/tensordict.git --quiet --root-user-action=ignore
+          python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0" --quiet --root-user-action=ignore
+          python -m pip install git+https://github.com/pytorch/tensordict.git --no-deps --quiet --root-user-action=ignore
+          torchcodec_dir=$(mktemp -d)
+          git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
+          python_base="$(python -c 'import sys; print(sys.base_prefix)')"
+          CMAKE_PREFIX_PATH="${python_base}${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}" \
+            I_CONFIRM_THIS_IS_NOT_A_LICENSE_VIOLATION=1 \
+            python -m pip install --no-build-isolation "$torchcodec_dir" --quiet --root-user-action=ignore
+          rm -rf "$torchcodec_dir"
         fi
         
-        # 7. Install TorchRL
-        python -m pip install -e . --no-build-isolation
-        
-        # 8. Install requirements
+        # 6. Install doc requirements BEFORE TorchRL to ensure gymnasium is available
+        # (TorchRL's gym backend detection happens at import time)
         python -m pip install -r docs/requirements.txt --quiet --root-user-action=ignore
+        
+        # 7. Install TorchRL
+        python -m pip install -e . --no-build-isolation --no-deps
+
+        # 8. Assert PyTorch version matches expectations
+        if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
+          bash .github/unittest/helpers/assert_torch_version.sh stable
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh stable
+        else
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly
+        fi
 
         # 9. Set sanitize version
         if [[ ${{ github.event_name }} == push && (${{ github.ref_type }} == tag || (${{ github.ref_type }} == branch && ${{ github.ref_name }} == release/*)) ]]; then
@@ -105,8 +114,19 @@ jobs:
         PYOPENGL_PLATFORM=egl MUJOCO_GL=egl python -c """from torchrl.envs.libs.dm_control import DMControlEnv
         print(DMControlEnv('cheetah', 'run', from_pixels=True).reset())"""
         cd ..
+
+        # 11. Fetch the MuJoCo Menagerie assets used by the macro-control tutorial.
+        # MuJoCo Menagerie is a model repository, not an installable Python package,
+        # so we keep the docs dependency as a sparse checkout instead of adding it
+        # to docs/requirements.txt.
+        MENAGERIE_DIR="$(pwd)/.docs_mujoco_menagerie"
+        git clone --depth=1 --filter=blob:none --sparse \
+          https://github.com/google-deepmind/mujoco_menagerie.git "$MENAGERIE_DIR"
+        git -C "$MENAGERIE_DIR" sparse-checkout set \
+          universal_robots_ur5e robotiq_2f85
+        export TORCHRL_MUJOCO_MENAGERIE_PATH="$MENAGERIE_DIR"
         
-        # 11. Build doc
+        # 12. Build doc
         export MAX_IDLE_COUNT=180 # Max 180 secs before killing an unresponsive collector
         export BATCHED_PIPE_TIMEOUT=180
         cd ./docs

@@ -1,5 +1,7 @@
 .. currentmodule:: torchrl.data.replay_buffers
 
+.. _checkpoint-rb:
+
 Storage Backends
 ================
 
@@ -32,7 +34,7 @@ Storage Performance
 
 Storage choice is very influential on replay buffer sampling latency, especially
 in distributed reinforcement learning settings with larger data volumes.
-:class:`~torchrl.data.replay_buffers.storages.LazyMemmapStorage` is highly
+:class:`~torchrl.data.replay_buffers.LazyMemmapStorage` is highly
 advised in distributed settings with shared storage due to the lower serialization
 cost of MemoryMappedTensors as well as the ability to specify file storage locations
 for improved node failure recovery.

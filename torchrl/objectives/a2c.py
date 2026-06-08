@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-import warnings
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -34,18 +32,11 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
-    _reduce,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    GAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    VTrace,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class A2CLoss(LossModule):
@@ -262,6 +253,7 @@ class A2CLoss(LossModule):
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
     default_value_estimator: ValueEstimators = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"entropy_coeff", "critic_coeff", "clip_value"})
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
@@ -291,31 +283,21 @@ class A2CLoss(LossModule):
         clip_value: float | None = None,
         **kwargs,
     ):
-        # Handle deprecated entropy_coef argument
+        # entropy_coef has been removed in v0.11
         if "entropy_coef" in kwargs:
-            if entropy_coeff is not None:  # Check if entropy_coeff was explicitly set
-                raise ValueError(
-                    "Cannot specify both 'entropy_coef' and 'entropy_coeff'"
-                )
-            warnings.warn(
-                "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'entropy_coef' has been removed in torchrl v0.11. Please use 'entropy_coeff' instead."
             )
-            entropy_coeff = kwargs.pop("entropy_coef")
 
         # Set default value if None
         if entropy_coeff is None:
             entropy_coeff = 0.01
 
-        # Handle deprecated critic_coef argument
+        # critic_coef has been removed in v0.11
         if "critic_coef" in kwargs:
-            if critic_coeff != 1.0:  # Check if critic_coeff was explicitly set
-                raise ValueError("Cannot specify both 'critic_coef' and 'critic_coeff'")
-            warnings.warn(
-                "'critic_coef' is deprecated and will be removed in torchrl v0.11. Please use 'critic_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'critic_coef' has been removed in torchrl v0.11. Please use 'critic_coeff' instead."
             )
-            critic_coeff = kwargs.pop("critic_coef")
 
         if actor is not None:
             actor_network = actor
@@ -472,9 +454,13 @@ class A2CLoss(LossModule):
         tensordict_clone = tensordict.select(
             *self.actor_network.in_keys, strict=False
         ).copy()
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             dist = self.actor_network.get_dist(tensordict_clone)
         if isinstance(dist, CompositeDistribution):
             action_keys = self.tensor_keys.action
@@ -530,9 +516,13 @@ class A2CLoss(LossModule):
         tensordict_select = tensordict.select(
             *self.critic_network.in_keys, strict=False
         )
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value = self.critic_network(
                 tensordict_select,
             ).get(self.tensor_keys.value)
@@ -592,8 +582,9 @@ class A2CLoss(LossModule):
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -607,52 +598,36 @@ class A2CLoss(LossModule):
         )
         return td_out
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+        ValueEstimators.GAE,
+        ValueEstimators.MAGAE,
+        ValueEstimators.VTrace,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
 
-        device = _get_default_device(self)
-        hp["device"] = device
-
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        hyperparams.setdefault("device", _get_default_device(self))
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "advantage": self.tensor_keys.advantage,
+                "value": self.tensor_keys.value,
+                "value_target": self.tensor_keys.value_target,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+                "sample_log_prob": self.tensor_keys.sample_log_prob,
+            },
+            **hyperparams,
+        )

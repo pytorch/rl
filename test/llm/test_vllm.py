@@ -8,6 +8,9 @@ import importlib.util
 
 import pytest
 import torch
+from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.modules.llm.backends import AsyncVLLM
+from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -34,14 +37,13 @@ def sampling_params():
 class TestAsyncVLLMIntegration:
     """Integration tests for AsyncVLLM with real models."""
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     @pytest.mark.slow
     def test_vllm_api_compatibility(self, sampling_params):
         """Test that AsyncVLLM supports the same inputs as vLLM.LLM.generate()."""
-        from torchrl.modules.llm.backends import AsyncVLLM
-
         # Create AsyncVLLM service
         service = AsyncVLLM.from_pretrained(
             MODEL_NAME,
@@ -106,18 +108,13 @@ class TestAsyncVLLMIntegration:
         finally:
             service.shutdown()
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_ray, reason="ray not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     @pytest.mark.slow
     def test_weight_updates_with_transformer(self, sampling_params):
         """Test weight updates using vLLMUpdater with a real transformer model."""
-        from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-        from torchrl.modules.llm.backends import AsyncVLLM
-        from torchrl.modules.llm.policies.transformers_wrapper import (
-            TransformersWrapper,
-        )
-
         # Create a transformer policy with the same model
         policy = TransformersWrapper(
             model=MODEL_NAME,
@@ -159,8 +156,8 @@ class TestAsyncVLLMIntegration:
                     self.policy = policy_ref
                     # The vLLMUpdater expects the collector to have a _collector attribute
                     # for Ray-based collectors, or a policy.model for local collectors
-                    # We'll use the local collector pattern and patch policy.model to be the Ray actor
-                    self.policy.model = vllm_service.actors[0]
+                    # Use object.__setattr__ to bypass nn.Module type checks
+                    object.__setattr__(self.policy, "model", vllm_service.actors[0])
 
                 def increment_version(self):
                     pass

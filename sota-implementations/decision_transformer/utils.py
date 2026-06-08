@@ -13,7 +13,7 @@ import torch.optim
 from lamb import Lamb
 from tensordict.nn import TensorDictModule
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import (
     LazyMemmapStorage,
     RoundRobinWriter,
@@ -196,7 +196,7 @@ def make_collector(cfg, policy):
         cat,
     )
     collector_cfg = cfg.collector
-    collector_class = SyncDataCollector
+    collector_class = Collector
     collector = collector_class(
         make_env(cfg.env, train=True),
         policy,
@@ -553,8 +553,7 @@ def make_logger(cfg):
 
 
 def log_metrics(logger, metrics, step):
-    for metric_name, metric_value in metrics.items():
-        logger.log_scalar(metric_name, metric_value, step)
+    logger.log_metrics(metrics, step)
 
 
 def dump_video(module):

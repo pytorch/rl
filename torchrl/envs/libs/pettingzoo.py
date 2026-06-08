@@ -111,7 +111,7 @@ class PettingZooWrapper(_EnvWrapper):
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
-    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    neural network. You can split agents in different groups where they are heterogeneous or should be processed by
     different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
 
     By default, agents in pettingzoo will be grouped by name.
@@ -584,7 +584,7 @@ class PettingZooWrapper(_EnvWrapper):
                         )
 
         if self.return_state:
-            state = torch.as_tensor(self.state(), device=self.device)
+            state = self.observation_spec["state"].encode(self.state())
             tensordict_out.set("state", state)
 
         return tensordict_out
@@ -707,7 +707,7 @@ class PettingZooWrapper(_EnvWrapper):
         tensordict_out.set("truncated", truncated)
 
         if self.return_state:
-            state = torch.as_tensor(self.state(), device=self.device)
+            state = self.observation_spec["state"].encode(self.state())
             tensordict_out.set("state", state)
 
         return tensordict_out
@@ -804,6 +804,8 @@ class PettingZooWrapper(_EnvWrapper):
                 group_mask = td.get((group, "action_mask"))
                 group_mask += True
                 for index, agent in enumerate(agents):
+                    if agent not in observation_dict:
+                        continue
                     agent_obs = observation_dict[agent]
                     agent_info = info_dict[agent]
                     if isinstance(agent_obs, dict) and "action_mask" in agent_obs:
@@ -881,7 +883,7 @@ class PettingZooEnv(PettingZooWrapper):
 
     As a feature of torchrl multiagent, you are able to control the grouping of agents in your environment.
     You can group agents together (stacking their tensors) to leverage vectorization when passing them through the same
-    neural network. You can split agents in different groups where they are heterogenous or should be processed by
+    neural network. You can split agents in different groups where they are heterogeneous or should be processed by
     different neural networks. To group, you just need to pass a ``group_map`` at env constructiuon time.
 
     By default, agents in pettingzoo will be grouped by name.

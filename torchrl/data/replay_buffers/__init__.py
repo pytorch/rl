@@ -13,6 +13,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .her import HERReplayBuffer, HindsightStrategy
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -31,6 +32,7 @@ from .samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StalenessAwareSampler,
 )
 from .storages import (
     CompressedListStorage,
@@ -40,6 +42,7 @@ from .storages import (
     ListStorage,
     Storage,
     StorageEnsemble,
+    StoreStorage,
     TensorStorage,
 )
 from .utils import Flat2TED, H5Combine, H5Split, Nested2TED, TED2Flat, TED2Nested
@@ -53,6 +56,8 @@ from .writers import (
 )
 
 __all__ = [
+    "HERReplayBuffer",
+    "HindsightStrategy",
     "CompressedListStorage",
     "CompressedListStorageCheckpointer",
     "FlatStorageCheckpointer",
@@ -77,12 +82,14 @@ __all__ = [
     "SamplerWithoutReplacement",
     "SliceSampler",
     "SliceSamplerWithoutReplacement",
+    "StalenessAwareSampler",
     "LazyMemmapStorage",
     "LazyStackStorage",
     "LazyTensorStorage",
     "ListStorage",
     "Storage",
     "StorageEnsemble",
+    "StoreStorage",
     "TensorStorage",
     "Flat2TED",
     "H5Combine",

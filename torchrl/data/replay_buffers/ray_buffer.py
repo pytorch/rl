@@ -57,8 +57,8 @@ class RayReplayBuffer(ReplayBuffer):
     Keyword Args:
         replay_buffer_cls (type[ReplayBuffer], optional): the class to use for the replay buffer.
             Defaults to :class:`~torchrl.data.ReplayBuffer`.
-        ray_init_config (dict[str, Any], optiona): keyword arguments to pass to `ray.init()`.
-        remote_config (dict[str, Any], optiona): keyword arguments to pass to `cls.as_remote()`.
+        ray_init_config (dict[str, Any], optional): keyword arguments to pass to `ray.init()`.
+        remote_config (dict[str, Any], optional): keyword arguments to pass to `cls.as_remote()`.
             Defaults to `torchrl.collectors.distributed.ray.DEFAULT_REMOTE_CLASS_CONFIG`.
         **kwargs: keyword arguments to pass to the replay buffer class.
 

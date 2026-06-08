@@ -96,8 +96,10 @@ def log_training(
     if isinstance(logger, WandbLogger):
         logger.experiment.log(metrics_to_log, commit=False)
     else:
-        for key, value in metrics_to_log.items():
-            logger.log_scalar(key.replace("/", "_"), value, step=step)
+        logger.log_metrics(
+            {key.replace("/", "_"): value for key, value in metrics_to_log.items()},
+            step=step,
+        )
 
     return metrics_to_log
 
@@ -146,6 +148,8 @@ def log_evaluation(
             commit=False,
         )
     else:
-        for key, value in metrics_to_log.items():
-            logger.log_scalar(key.replace("/", "_"), value, step=step)
+        logger.log_metrics(
+            {key.replace("/", "_"): value for key, value in metrics_to_log.items()},
+            step=step,
+        )
         logger.log_video("eval_video", vid, step=step)

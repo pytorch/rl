@@ -25,7 +25,7 @@ from torchrl._utils import (
     logger as torchrl_logger,
     VERBOSE,
 )
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_base import MultiCollector
@@ -492,7 +492,7 @@ class DistributedCollector(BaseCollector):
             updated.
             Defaults to ``False``, ie. updates have to be executed manually
             through
-            :meth:`~torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.
+            :meth:`~torchrl.collectors.distributed.DistributedCollector.update_policy_weights_`.
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -526,7 +526,7 @@ class DistributedCollector(BaseCollector):
         weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
             RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
-            This is typically used when DistributedDataCollector is itself a worker in a larger distributed setup.
+            This is typically used when DistributedCollector is itself a worker in a larger distributed setup.
             Defaults to ``None``.
 
     """
@@ -1209,7 +1209,7 @@ class DistributedWeightUpdater(WeightUpdaterBase):
 
     The `DistributedWeightUpdater` class provides a mechanism for updating the weights
     of a policy across distributed inference workers. It is designed to work with the
-    :class:`~torchrl.collectors.distributed.DistributedDataCollector` to ensure that each worker receives the latest policy weights.
+    :class:`~torchrl.collectors.distributed.DistributedCollector` to ensure that each worker receives the latest policy weights.
     This class is typically used in distributed data collection scenarios where multiple workers
     need to be kept in sync with the central policy weights.
 
@@ -1238,7 +1238,7 @@ class DistributedWeightUpdater(WeightUpdaterBase):
         RuntimeError: If the worker rank is less than 1 or if the status returned by the store is not "updated".
 
     .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
-        :class:`~torchrl.collectors.distributed.DistributedDataCollector`.
+        :class:`~torchrl.collectors.distributed.DistributedCollector`.
 
     """
 
@@ -1298,9 +1298,3 @@ class DistributedWeightUpdater(WeightUpdaterBase):
             if status != b"updated":
                 raise RuntimeError(f"Expected 'updated' but got status {status}.")
             self._store.delete_key(f"NODE_{rank}_out")
-
-
-class DistributedDataCollector(DistributedCollector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.distributed.DistributedCollector`."""
-
-    ...

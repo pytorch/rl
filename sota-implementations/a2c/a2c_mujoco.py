@@ -24,7 +24,7 @@ def main(cfg: DictConfig):  # noqa: F821
     from tensordict.nn import CudaGraphModule
 
     from torchrl._utils import get_available_device, timeit
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -75,8 +75,8 @@ def main(cfg: DictConfig):  # noqa: F821
         actor_network=actor,
         critic_network=critic,
         loss_critic_type=cfg.loss.loss_critic_type,
-        entropy_coef=cfg.loss.entropy_coef,
-        critic_coef=cfg.loss.critic_coef,
+        entropy_coeff=cfg.loss.entropy_coeff,
+        critic_coeff=cfg.loss.critic_coeff,
     )
 
     # Create optimizers
@@ -155,7 +155,7 @@ def main(cfg: DictConfig):  # noqa: F821
         adv_module = CudaGraphModule(adv_module, warmup=20)
 
     # Create collector
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=make_env(cfg.env.env_name, device),
         policy=actor,
         frames_per_batch=cfg.collector.frames_per_batch,
@@ -261,8 +261,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if logger:
             metrics_to_log.update(timeit.todict(prefix="time"))
             metrics_to_log["time/speed"] = pbar.format_dict["rate"]
-            for key, value in metrics_to_log.items():
-                logger.log_scalar(key, value, collected_frames)
+            logger.log_metrics(metrics_to_log, collected_frames)
 
     collector.shutdown()
     if not test_env.is_closed:

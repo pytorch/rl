@@ -7,7 +7,6 @@ from __future__ import annotations
 import contextlib
 import warnings
 from collections.abc import Mapping
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -39,17 +38,11 @@ from torchrl.objectives.utils import (
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    GAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    VTrace,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class PPOLoss(LossModule):
@@ -397,6 +390,7 @@ class PPOLoss(LossModule):
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
     default_value_estimator = ValueEstimators.GAE
+    _schedulable_buffers = frozenset({"entropy_coeff", "critic_coeff", "clip_value"})
 
     actor_network: ProbabilisticTensorDictModule
     critic_network: TensorDictModule
@@ -438,15 +432,11 @@ class PPOLoss(LossModule):
             critic_network = critic
             del critic
 
-        # Handle deprecated critic_coef argument
+        # critic_coef has been removed in v0.11
         if "critic_coef" in kwargs:
-            if critic_coeff is not None:
-                raise ValueError("Cannot specify both 'critic_coef' and 'critic_coeff'")
-            warnings.warn(
-                "'critic_coef' is deprecated and will be removed in torchrl v0.11. Please use 'critic_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'critic_coef' has been removed in torchrl v0.11. Please use 'critic_coeff' instead."
             )
-            critic_coeff = kwargs.pop("critic_coef")
 
         if critic_coeff is None and critic_network is not None:
             critic_coeff = 1.0
@@ -502,17 +492,11 @@ class PPOLoss(LossModule):
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
 
-        # Handle deprecated entropy_coef argument
+        # entropy_coef has been removed in v0.11
         if "entropy_coef" in kwargs:
-            if entropy_coeff is not None:  # Check if entropy_coeff was explicitly set
-                raise ValueError(
-                    "Cannot specify both 'entropy_coef' and 'entropy_coeff'"
-                )
-            warnings.warn(
-                "'entropy_coef' is deprecated and will be removed in torchrl v0.11. Please use 'entropy_coeff' instead.",
-                DeprecationWarning,
+            raise TypeError(
+                "'entropy_coef' has been removed in torchrl v0.11. Please use 'entropy_coeff' instead."
             )
-            entropy_coeff = kwargs.pop("entropy_coef")
 
         # Set default value if None
         if entropy_coeff is None:
@@ -660,9 +644,11 @@ class PPOLoss(LossModule):
                 x = dist.rsample((self.samples_mc_entropy,))
             else:
                 x = dist.sample((self.samples_mc_entropy,))
-            with set_composite_lp_aggregate(False) if isinstance(
-                dist, CompositeDistribution
-            ) else contextlib.nullcontext():
+            with (
+                set_composite_lp_aggregate(False)
+                if isinstance(dist, CompositeDistribution)
+                else contextlib.nullcontext()
+            ):
                 log_prob = dist.log_prob(x)
                 if is_tensor_collection(log_prob):
                     if isinstance(self.tensor_keys.sample_log_prob, NestedKey):
@@ -682,9 +668,13 @@ class PPOLoss(LossModule):
         ) or hasattr(self.actor_network, "get_dist"):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
-            with self.actor_network_params.to_module(
-                self.actor_network
-            ) if self.functional else contextlib.nullcontext():
+            with (
+                self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                )
+                if self.functional
+                else contextlib.nullcontext()
+            ):
                 dist = self.actor_network.get_dist(tensordict)
             is_composite = isinstance(dist, CompositeDistribution)
 
@@ -766,6 +756,23 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
+    def _critic_loss_inputs(
+        self,
+        target_return: torch.Tensor,
+        state_value: torch.Tensor,
+        old_state_value: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        """Transform the critic-loss inputs before distance / clip.
+
+        Default implementation is identity. Subclasses (notably
+        :class:`~torchrl.objectives.multiagent.MAPPOLoss`) override this to
+        push the three tensors through a running
+        :class:`~torchrl.modules.ValueNorm` so the MSE / smooth-L1 distance
+        lives on a fixed scale -- and so the PPO value-clip radius stays
+        meaningful when reward scales drift.
+        """
+        return target_return, state_value, old_state_value
+
     def loss_critic(
         self, tensordict: TensorDictBase
     ) -> tuple[torch.Tensor | TensorDict, ...]:
@@ -786,6 +793,7 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        old_state_value = None
         if self.clip_value:
             old_state_value = tensordict.get(self.tensor_keys.value)
             if old_state_value is None:
@@ -795,9 +803,13 @@ class PPOLoss(LossModule):
                     f"Make sure that the 'value_key' passed to PPO exists in the input tensordict."
                 )
 
-        with self.critic_network_params.to_module(
-            self.critic_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             state_value_td = self.critic_network(tensordict)
 
         state_value = state_value_td.get(self.tensor_keys.value)
@@ -806,6 +818,14 @@ class PPOLoss(LossModule):
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
                 f"Make sure that the 'value_key' passed to PPO is accurate."
             )
+
+        # Subclass hook: lets e.g. MAPPOLoss inject PopArt-style value
+        # normalisation uniformly across target_return / state_value /
+        # old_state_value so the MSE and the clip radius both live in
+        # normalised space.
+        target_return, state_value, old_state_value = self._critic_loss_inputs(
+            target_return, state_value, old_state_value
+        )
 
         loss_value = distance_loss(
             target_return,
@@ -853,6 +873,32 @@ class PPOLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
+    def _standardize_advantage(
+        self, advantage: torch.Tensor, tensordict: TensorDictBase
+    ) -> torch.Tensor:
+        mask = tensordict.get("shifted_valid", default=None)
+        if mask is None:
+            return _standardize(advantage, self.normalize_advantage_exclude_dims)
+        while mask.ndim < advantage.ndim:
+            mask = mask.unsqueeze(-1)
+        mask = mask.expand_as(advantage).to(advantage.dtype)
+        exclude_dims = {
+            dim if dim >= 0 else advantage.ndim + dim
+            for dim in self.normalize_advantage_exclude_dims
+        }
+        reduce_dims = [dim for dim in range(advantage.ndim) if dim not in exclude_dims]
+        count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
+        loc = (advantage * mask).sum(dim=reduce_dims, keepdim=True) / count
+        scale = (
+            (
+                ((advantage - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True)
+                / count
+            )
+            .sqrt()
+            .clamp_min(1e-4)
+        )
+        return (advantage - loc) / scale
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -874,7 +920,7 @@ class PPOLoss(LossModule):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -902,8 +948,9 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -917,51 +964,38 @@ class PPOLoss(LossModule):
         )
         return td_out
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+        ValueEstimators.GAE,
+        ValueEstimators.MAGAE,
+        ValueEstimators.VTrace,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
 
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "advantage": self.tensor_keys.advantage,
+                "value": self.tensor_keys.value,
+                "value_target": self.tensor_keys.value_target,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+                "sample_log_prob": self.tensor_keys.sample_log_prob,
+            },
+            **hyperparams,
+        )
 
     def _weighted_loss_entropy(
         self, entropy: torch.Tensor | TensorDictBase
@@ -1135,6 +1169,8 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
+    _schedulable_buffers = frozenset({"clip_epsilon"})
+
     actor_network: TensorDictModule
     critic_network: TensorDictModule
     actor_network_params: TensorDictParams
@@ -1209,7 +1245,7 @@ class ClipPPOLoss(PPOLoss):
                 keys.append("loss_critic")
             if self.clip_value:
                 keys.append("value_clip_fraction")
-            keys.append("ESS")
+            keys.extend(["ESS", "kl_approx", "max_ratio", "mean_ratio"])
             self._out_keys = keys
         return self._out_keys
 
@@ -1244,7 +1280,7 @@ class ClipPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
@@ -1292,8 +1328,13 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("explained_variance", explained_variance)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        with torch.no_grad():
+            ratio = log_weight.exp()
+            td_out.set("max_ratio", ratio.max())
+            td_out.set("mean_ratio", ratio.mean())
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1426,6 +1467,8 @@ class KLPENPPOLoss(PPOLoss):
       This will work regardless of whether separate_losses is activated or not.
 
     """
+
+    _schedulable_buffers = frozenset({"beta"})
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
@@ -1575,25 +1618,31 @@ class KLPENPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
         )
         neg_loss = log_weight.exp() * advantage
 
-        with self.actor_network_params.to_module(
-            self.actor_network
-        ) if self.functional else contextlib.nullcontext():
+        with (
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
+            if self.functional
+            else contextlib.nullcontext()
+        ):
             current_dist = self.actor_network.get_dist(tensordict_copy)
         is_composite = isinstance(current_dist, CompositeDistribution)
         try:
             kl = torch.distributions.kl.kl_divergence(previous_dist, current_dist)
         except NotImplementedError:
             x = previous_dist.sample((self.samples_mc_kl,))
-            with set_composite_lp_aggregate(
-                False
-            ) if is_composite else contextlib.nullcontext():
+            with (
+                set_composite_lp_aggregate(False)
+                if is_composite
+                else contextlib.nullcontext()
+            ):
                 previous_log_prob = previous_dist.log_prob(x)
                 current_log_prob = current_dist.log_prob(x)
             if is_tensor_collection(previous_log_prob):
@@ -1642,8 +1691,9 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict_copy.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

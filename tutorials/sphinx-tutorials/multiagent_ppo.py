@@ -120,7 +120,7 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import multiprocessing
 
 # Data collection
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -249,7 +249,7 @@ env = VmasEnv(
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`~.envs.libs.vmas.VmasEnv` takes care of setting the proper specs for your env so
+# In our example, the :class:`~torchrl.envs.VmasEnv` takes care of setting the proper specs for your env so
 # you should not have to care about this.
 #
 # There are four specs to look at:
@@ -315,7 +315,7 @@ env = TransformedEnv(
 
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -385,7 +385,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Another important decision we need to make is whether we want our agents to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
+# On the other hand, it will make them behaviorally *homogeneous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -434,17 +434,17 @@ policy_module = TensorDictModule(
 )
 
 ######################################################################
-# **Third**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
+# **Third**: wrap the :class:`TensorDictModule` in a :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
 #
 # We now need to build a distribution out of the location and scale of our
-# normal distribution. To do so, we instruct the :class:`ProbabilisticActor`
-# class to build a :class:`TanhNormal` out of the location and scale
+# normal distribution. To do so, we instruct the :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
+# class to build a :class:`~torchrl.modules.TanhNormal` out of the location and scale
 # parameters. We also provide the minimum and maximum values of this
 # distribution, which we gather from the environment specs.
 #
 # The name of the ``in_keys`` (and hence the name of the ``out_keys`` from
 # the :class:`TensorDictModule` above) has to end with the
-# :class:`TanhNormal` distribution constructor keyword arguments (loc and scale).
+# :class:`~torchrl.modules.TanhNormal` distribution constructor keyword arguments (loc and scale).
 #
 
 policy = ProbabilisticActor(
@@ -541,7 +541,7 @@ print("Running value:", critic(env.reset()))
 # We will use the simplest possible data collector, which has the same output as an environment rollout,
 # with the only difference that it will auto reset done states until the desired frames are collected.
 #
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy,
     device=vmas_device,
@@ -577,7 +577,7 @@ replay_buffer = ReplayBuffer(
 # -------------
 #
 # The PPO loss can be directly imported from TorchRL for convenience using the
-# :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilising PPO:
+# :class:`~torchrl.objectives.ClipPPOLoss` class. This is the easiest way of utilising PPO:
 # it hides away the mathematical operations of PPO and the control flow that
 # goes with it.
 #
@@ -591,7 +591,7 @@ replay_buffer = ReplayBuffer(
 # ``"value_target"`` entries.
 # The ``"value_target"`` is a gradient-free tensor that represents the empirical
 # value that the value network should represent with the input observation.
-# Both of these will be used by :class:`ClipPPOLoss` to
+# Both of these will be used by :class:`~torchrl.objectives.ClipPPOLoss` to
 # return the policy and value losses.
 #
 
@@ -599,7 +599,7 @@ loss_module = ClipPPOLoss(
     actor_network=policy,
     critic_network=critic,
     clip_epsilon=clip_epsilon,
-    entropy_coef=entropy_eps,
+    entropy_coeff=entropy_eps,
     normalize_advantage=False,  # Important to avoid normalizing across the agent dimension
 )
 loss_module.set_keys(  # We have to tell the loss where to find the keys

@@ -58,6 +58,35 @@ Besides those compute parameters, users may choose to configure the following pa
   along with a ``"mask"`` key that will point to a boolean mask representing the valid values.
 - exploration_type: the exploration strategy to be used with the policy.
 - reset_when_done: whether environments should be reset when reaching a done state.
+- track_traj_ids: if ``True`` (default), the collector writes a unique
+  ``("collector", "traj_ids")`` integer per frame and updates it on every
+  env reset.  Setting it to ``False`` skips the per-step bookkeeping —
+  useful when neither :func:`~torchrl.collectors.utils.split_trajectories`
+  nor :class:`~torchrl.data.replay_buffers.SliceSampler` are used downstream.  Note that
+  ``split_trajs=True`` requires ``track_traj_ids=True``.
+
+Trajectory IDs
+--------------
+
+When ``track_traj_ids=True``, every frame yielded by a collector carries a
+``("collector", "traj_ids")`` integer that uniquely identifies the trajectory
+it belongs to.  IDs are drawn from a process-local pool so they remain
+unique across resets within a single worker.
+
+This is what makes trajectory-aware downstream consumers possible:
+
+- :class:`~torchrl.data.replay_buffers.SliceSampler` draws whole trajectories (or slices of
+  them) from a replay buffer by grouping frames by ``traj_ids``.
+- :func:`~torchrl.collectors.utils.split_trajectories` reshapes a flat batch
+  into a padded ``[n_trajs, max_len]`` tensordict using ``traj_ids`` to find
+  the boundaries.
+
+Set ``track_traj_ids=False`` only when the downstream consumer does not need
+trajectory identity — e.g. step-level off-policy training that samples
+i.i.d. transitions from a uniform buffer.
+
+See :ref:`ref_collectors_internals` for the per-step bookkeeping that
+maintains these IDs.
 
 Collectors and batch size
 -------------------------
@@ -82,7 +111,7 @@ In each of these cases, the last dimension (``T`` for ``time``) is adapted such
 that the batch size equals the ``frames_per_batch`` argument passed to the
 collector.
 
-.. warning:: :class:`~torchrl.collectors.MultiSyncDataCollector` (i.e., ``MultiCollector(sync=True)``) should not be
+.. warning:: :class:`~torchrl.collectors.MultiSyncCollector` (i.e., ``MultiCollector(sync=True)``) should not be
   used with ``cat_results=0``, as the data will be stacked along the batch
   dimension with batched environment, or the time dimension for single environments,
   which can introduce some confusion when swapping one with the other.
@@ -91,12 +120,12 @@ collector.
   better interchangeability between configurations, collector classes and other
   components.
 
-Whereas :class:`~torchrl.collectors.MultiSyncDataCollector` (i.e., ``MultiCollector(sync=True)``)
+Whereas :class:`~torchrl.collectors.MultiSyncCollector` (i.e., ``MultiCollector(sync=True)``)
 has a dimension corresponding to the number of sub-collectors being run (``B``),
-:class:`~torchrl.collectors.MultiaSyncDataCollector` (i.e., ``MultiCollector(sync=False)``) doesn't. This
-is easily understood when considering that :class:`~torchrl.collectors.MultiaSyncDataCollector`
+:class:`~torchrl.collectors.MultiAsyncCollector` (i.e., ``MultiCollector(sync=False)``) doesn't. This
+is easily understood when considering that :class:`~torchrl.collectors.MultiAsyncCollector`
 delivers batches of data on a first-come, first-serve basis, whereas
-:class:`~torchrl.collectors.MultiSyncDataCollector` gathers data from
+:class:`~torchrl.collectors.MultiSyncCollector` gathers data from
 each sub-collector before delivering it.
 
 Collectors and policy copies
@@ -105,7 +134,7 @@ Collectors and policy copies
 When passing a policy to a collector, we can choose the device on which this policy will be run. This can be used to
 keep the training version of the policy on a device and the inference version on another. For example, if you have two
 CUDA devices, it may be wise to train on one device and execute the policy for inference on the other. If that is the
-case, a :meth:`~torchrl.collectors.DataCollector.update_policy_weights_` can be used to copy the parameters from one
+case, a :meth:`~torchrl.collectors.Collector.update_policy_weights_` can be used to copy the parameters from one
 device to the other (if no copy is required, this method is a no-op).
 
 Since the goal is to avoid calling `policy.to(policy_device)` explicitly, the collector will do a deepcopy of the

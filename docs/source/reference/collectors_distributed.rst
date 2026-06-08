@@ -38,6 +38,14 @@ node or across multiple nodes.
   By default, TorchRL filters out these warnings in sub-processes. If one still wishes to
   see these warnings, they can be displayed by setting ``torchrl.filter_warnings_subprocess=False``.
 
+.. tip::
+
+  All distributed collectors support ``trajs_per_batch`` combined with
+  ``replay_buffer``.  When set, each remote worker assembles **complete
+  trajectories** and writes them to the shared buffer as flat 1-D sequences,
+  which is directly compatible with :class:`~torchrl.data.replay_buffers.SliceSampler`.
+  See :ref:`collectors_replay_trajs` for examples and best practices.
+
 .. autosummary::
     :toctree: generated/
     :template: rl_template.rst
@@ -45,17 +53,13 @@ node or across multiple nodes.
     DistributedCollector
     RPCCollector
     DistributedSyncCollector
-    DistributedDataCollector
-    RPCDataCollector
-    DistributedSyncDataCollector
     submitit_delayed_launcher
     RayCollector
+    RayEvalWorker
 
-Legacy names
-------------
+Removed legacy names
+--------------------
 
-The following names are kept for backward compatibility:
-
-- ``DistributedDataCollector`` → ``DistributedCollector``
-- ``RPCDataCollector`` → ``RPCCollector``
-- ``DistributedSyncDataCollector`` → ``DistributedSyncCollector``
+The deprecated distributed collector aliases were removed in v0.13. Use
+``DistributedCollector``, ``RPCCollector``, and ``DistributedSyncCollector``
+directly.

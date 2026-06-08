@@ -12,6 +12,7 @@ we avoid importing those dependencies at module import time.
 from __future__ import annotations
 
 from .common import ChatHistory, LLMWrapperBase, LogProbs, Masks, Text, Tokens
+from .sglang_wrapper import SGLangWrapper
 from .transformers_wrapper import RemoteTransformersWrapper, TransformersWrapper
 from .vllm_wrapper import vLLMWrapper
 
@@ -19,6 +20,7 @@ __all__ = [
     "TransformersWrapper",
     "RemoteTransformersWrapper",
     "vLLMWrapper",
+    "SGLangWrapper",
     "LLMWrapperBase",
     "Text",
     "LogProbs",

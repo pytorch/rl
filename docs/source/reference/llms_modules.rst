@@ -1,3 +1,5 @@
+:orphan:
+
 .. currentmodule:: torchrl.modules.llm
 
 LLM Wrappers
@@ -16,8 +18,10 @@ Wrappers
     LLMWrapperBase
     TransformersWrapper
     vLLMWrapper
+    SGLangWrapper
     RemoteTransformersWrapper
     AsyncVLLM
+    AsyncSGLang
 
 Data Structure Classes
 ----------------------

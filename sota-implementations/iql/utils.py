@@ -12,7 +12,7 @@ from tensordict.nn import InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 from torch.distributions import Categorical
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import (
     Composite,
     LazyMemmapStorage,
@@ -129,7 +129,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode):
             device = torch.device("cuda:0")
         else:
             device = torch.device("cpu")
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         frames_per_batch=cfg.collector.frames_per_batch,
@@ -428,8 +428,7 @@ def make_iql_optimizer(optim_cfg, loss_module):
 
 def log_metrics(logger, metrics, step):
     if logger is not None:
-        for metric_name, metric_value in metrics.items():
-            logger.log_scalar(metric_name, metric_value, step)
+        logger.log_metrics(metrics, step)
 
 
 def dump_video(module):

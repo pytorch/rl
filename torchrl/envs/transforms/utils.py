@@ -34,7 +34,7 @@ class _set_missing_tolerance:
 
     For custom `_reset` methods, you should implement this yourself:
 
-    Exmples:
+    Examples:
         >>> def _reset(self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase) -> TensorDictBase:
         ...     with _set_missing_tolerance(self, True):
         ...         tensordict_reset = self.foo(tensordict, tensordict_reset)

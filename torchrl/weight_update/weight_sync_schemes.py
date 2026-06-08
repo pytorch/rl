@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import copy
 import threading
 import warnings
 import weakref
@@ -15,6 +16,7 @@ from typing import Any, Literal, overload, Protocol
 import torch
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import Buffer
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
 
@@ -102,6 +104,20 @@ class TransportBackend(Protocol):
 # ============================================================================
 
 
+def _to_module_compatible_tensor(
+    tensor: torch.Tensor,
+    destination_tensor: torch.Tensor,
+) -> torch.Tensor:
+    """Cast a tensor so ``TensorDict.to_module`` preserves module registration."""
+    if isinstance(tensor, (nn.Parameter, Buffer)):
+        return tensor
+    if isinstance(destination_tensor, nn.Parameter):
+        return nn.Parameter(tensor, requires_grad=destination_tensor.requires_grad)
+    if isinstance(destination_tensor, Buffer):
+        return Buffer(tensor)
+    return tensor
+
+
 class WeightStrategy:
     """Unified strategy for weight transmission.
 
@@ -144,7 +160,16 @@ class WeightStrategy:
         if self.extract_as == "tensordict":
             # Extract as TensorDict
             if isinstance(source, nn.Module):
-                return TensorDict.from_module(source)
+                td = TensorDict.from_module(source)
+                # Also capture extra_state (e.g., VecNormV2 running stats)
+                # which is not included in TensorDict.from_module()
+                try:
+                    extra = source.get_extra_state()
+                except RuntimeError:
+                    extra = None
+                if extra:
+                    td["__extra_state__"] = TensorDict(extra)
+                return td
             elif isinstance(source, TensorDictBase):
                 return source
             elif isinstance(source, dict):
@@ -158,6 +183,8 @@ class WeightStrategy:
         elif self.extract_as == "state_dict":  # state_dict
             # Extract as state_dict
             if isinstance(source, nn.Module):
+                if hasattr(source, "merge_and_unload"):
+                    return _merged_lora_state_dict(source)
                 return source.state_dict()
             elif isinstance(source, dict):
                 return source
@@ -199,10 +226,35 @@ class WeightStrategy:
             weights = TensorDict(weights)
             if any("." in key for key in weights.keys()):
                 weights = weights.unflatten_keys(".")
+
+        # Exclude extra_state before applying parameter weights, without mutating
+        # the input weights. Reusing the same weight container for repeated syncs
+        # must be idempotent.
+        extra_state = None
+        if isinstance(weights, TensorDictBase) and "__extra_state__" in weights.keys():
+            extra_state = weights["__extra_state__"].clone().flatten_keys(".").to_dict()
+            weights = weights.exclude("__extra_state__")
+
+        if not isinstance(weights, TensorDictBase):
+            raise ValueError(
+                f"Unsupported weights type: {type(weights)}. "
+                "Must be dict or TensorDictBase."
+            )
+
+        destination_module = None
         if isinstance(destination, nn.Module):
+            destination_module = destination
             # Do not update in-place
             if not inplace:
+                destination_params = TensorDict.from_module(destination)
+                weights = weights.apply(
+                    _to_module_compatible_tensor,
+                    destination_params,
+                    filter_empty=False,
+                )
                 weights.to_module(destination)
+                if extra_state is not None:
+                    destination_module.set_extra_state(extra_state)
                 return
             else:
                 destination = TensorDict.from_module(destination)
@@ -213,15 +265,13 @@ class WeightStrategy:
             if any(isinstance(key, str) and "." in key for key in destination.keys()):
                 destination = destination.unflatten_keys(".")
 
-        if not isinstance(weights, TensorDictBase):
-            raise ValueError(
-                f"Unsupported weights type: {type(weights)}. Must be dict or TensorDictBase."
-            )
         if not isinstance(destination, TensorDictBase):
             if not weights.is_empty():
                 raise ValueError(
                     "Non-empty weights are associated with a non-dict, non-td, non-Module destination."
                 )
+            if extra_state is not None and destination_module is not None:
+                destination_module.set_extra_state(extra_state)
             return
 
         try:
@@ -233,6 +283,9 @@ class WeightStrategy:
             raise KeyError(
                 f"Error updating destination. Destination keys: {destination.keys(True, True)}, weights keys: {weights.keys(True, True)}"
             ) from e
+
+        if extra_state is not None and destination_module is not None:
+            destination_module.set_extra_state(extra_state)
         return
 
 
@@ -250,6 +303,15 @@ def _get_strategy(strategy: Literal["tensordict", "state_dict"]) -> WeightStrate
             f"Unknown strategy: {strategy}. Must be 'tensordict' or 'state_dict'."
         )
     return WeightStrategy(extract_as=strategy)
+
+
+def _merged_lora_state_dict(source: nn.Module) -> dict[str, torch.Tensor]:
+    """Return merged PEFT weights without mutating the live training module."""
+    source_copy = copy.deepcopy(source)
+    try:
+        return source_copy.merge_and_unload().state_dict()
+    finally:
+        del source_copy
 
 
 # ============================================================================
@@ -920,7 +982,11 @@ class WeightSyncScheme(metaclass=abc.ABCMeta):
         weights = result
         model_id = self._model_id or "policy"
 
-        # Cascade weight update to sub-collectors if context supports it
+        # Cascade weight update to sub-collectors if context supports it.
+        # Note on policy_version tracking: the cascade eventually reaches a
+        # leaf Collector.update_policy_weights_, which bumps the local
+        # PolicyVersion transform on the worker's env. So there is no
+        # separate increment_version() call here.
         if self.context is not None and hasattr(self.context, "update_policy_weights_"):
             self.context.update_policy_weights_(
                 model_id=model_id, policy_or_weights=weights

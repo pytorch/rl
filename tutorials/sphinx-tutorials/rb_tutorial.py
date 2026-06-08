@@ -102,10 +102,10 @@ print("length after adding elements:", len(buffer))
 #
 # TorchRL proposes three types of storages:
 #
-# - The :class:`~torchrl.data.ListStorage` stores elements independently in a
+# - The :class:`~torchrl.data.replay_buffers.ListStorage` stores elements independently in a
 #   list. It supports any data type, but this flexibility comes at the cost
 #   of efficiency;
-# - The :class:`~torchrl.data.LazyTensorStorage` stores tensors data
+# - The :class:`~torchrl.data.replay_buffers.LazyTensorStorage` stores tensors data
 #   structures contiguously.
 #   It works naturally with :class:`~tensordidct.TensorDict`
 #   (or :class:`~torchrl.data.tensorclass`)
@@ -116,8 +116,8 @@ print("length after adding elements:", len(buffer))
 #   was used to instantiate the buffer.
 #   Passing data that does not match this requirement will either raise an
 #   exception or lead to some undefined behaviors.
-# - The :class:`~torchrl.data.LazyMemmapStorage` works as the
-#   :class:`~torchrl.data.LazyTensorStorage` in that it is lazy (i.e., it
+# - The :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` works as the
+#   :class:`~torchrl.data.replay_buffers.LazyTensorStorage` in that it is lazy (i.e., it
 #   expects the first batch of data to be instantiated), and it requires data
 #   that match in shape and dtype for each batch stored. What makes this
 #   storage unique is that it points to disk files (or uses the filesystem
@@ -141,9 +141,9 @@ print(buffer_list.sample(3))
 
 ######################################################################
 # Because it is the one with the lowest amount of assumption, the
-# :class:`~torchrl.data.ListStorage` is the default storage in TorchRL.
+# :class:`~torchrl.data.replay_buffers.ListStorage` is the default storage in TorchRL.
 #
-# A :class:`~torchrl.data.LazyTensorStorage` can store data contiguously.
+# A :class:`~torchrl.data.replay_buffers.LazyTensorStorage` can store data contiguously.
 # This should be the preferred option when dealing with complicated but
 # unchanging data structures of medium size:
 
@@ -182,7 +182,7 @@ sample = buffer_lazytensor.sample(5)
 print("samples", sample["a"], sample["b", "c"])
 
 ######################################################################
-# A :class:`~torchrl.data.LazyMemmapStorage` is created in the same manner.
+# A :class:`~torchrl.data.replay_buffers.LazyMemmapStorage` is created in the same manner.
 # We can also customize the storage location on disk:
 #
 
@@ -548,7 +548,7 @@ print(info)
 #   tensordict passed to the loss module, making it possible to update the
 #   weights without effort:
 #
-#   ..code - block::Python
+#   .. code-block:: python
 #
 #      >>> data = replay_buffer.sample()
 #      >>> loss_val = loss_module(data)
@@ -628,7 +628,7 @@ plt.show()
 # transformations can be recycled in the replay buffer:
 
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs.libs.gym import GymEnv
 from torchrl.envs.transforms import (
     Compose,
@@ -663,7 +663,7 @@ print(env.rollout(3))
 
 from torchrl.envs.transforms import ExcludeTransform
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     RandomPolicy(env.action_spec),
     frames_per_batch=10,
@@ -741,7 +741,7 @@ env = TransformedEnv(
         CatFrames(dim=-4, N=4, in_keys=["pixels_trsf"]),
     ),
 )
-collector = SyncDataCollector(
+collector = Collector(
     env,
     RandomPolicy(env.action_spec),
     frames_per_batch=10,
@@ -797,7 +797,7 @@ assert (data.exclude("collector") == s.squeeze(0).exclude("index", "collector"))
 # than simple transitions. TorchRL offers multiple ways of achieving this.
 #
 # The preferred way is currently to store trajectories along the first
-# dimension of the buffer and use a :class:`~torchrl.data.SliceSampler` to
+# dimension of the buffer and use a :class:`~torchrl.data.replay_buffers.SliceSampler` to
 # sample these batches of data. This class only needs a couple of information
 # about your data structure to do its job (not that as of now it is only
 # compatible with tensordict-structured data): the number of slices or their
@@ -840,6 +840,60 @@ print("steps are successive", sample["steps"])
 gc.collect()
 
 ######################################################################
+# Storing trajectories from a collector
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# The example above uses hand-crafted data.  In practice you will be
+# collecting data with a :class:`~torchrl.collectors.Collector` (or its
+# multi-process variants).  The collector already tags every transition with
+# a ``("collector", "traj_ids")`` key, so the
+# :class:`~torchrl.data.replay_buffers.SliceSampler` can reconstruct episode boundaries
+# automatically.
+#
+# For **single-process** collectors the setup is straightforward — just
+# ``extend`` the buffer with the collected batch and use ``traj_ids`` as
+# the trajectory key:
+#
+# .. code-block:: python
+#
+#     from torchrl.collectors import Collector
+#     from torchrl.data import ReplayBuffer, LazyTensorStorage, SliceSampler
+#
+#     rb = ReplayBuffer(
+#         storage=LazyTensorStorage(100_000),
+#         sampler=SliceSampler(
+#             slice_len=20,
+#             traj_key=("collector", "traj_ids"),
+#         ),
+#         batch_size=256,
+#     )
+#     collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
+#     for data in collector:
+#         rb.extend(data)
+#         batch = rb.sample()  # contiguous sub-sequences
+#
+# For **multi-process** collectors, a subtlety arises: different workers
+# write their batches independently, so adjacent frames in the buffer can
+# come from unrelated episodes *without* an intervening ``done`` signal.
+# The sampler cannot detect these invisible boundaries and may draw slices
+# that cross episodes.
+#
+# The recommended solution is ``trajs_per_batch``, which makes each worker
+# write only **complete trajectories** to the buffer — see
+# :ref:`the dedicated collector + replay buffer section <collectors_replay_trajs>`
+# for full examples and discussion.
+#
+# .. important::
+#
+#     When using ``trajs_per_batch``, always use a **flat 1-D storage**
+#     (the default ``ndim=1``).  Although batched environments normally call
+#     for ``ndim=2``, ``trajs_per_batch`` disassembles batches and writes
+#     each trajectory as a variable-length 1-D sequence.  A storage with
+#     ``ndim >= 2`` expects a fixed second dimension that variable-length
+#     trajectories cannot fill.
+#
+
+######################################################################
 # Conclusion
 # ----------
 #
@@ -858,8 +912,8 @@ gc.collect()
 # - Check the data API reference to learn about offline datasets in TorchRL,
 #   which are based on our Replay Buffer API;
 # - Check other samplers such as
-#   :class:`~torchrl.data.SamplerWithoutReplacement`,
-#   :class:`~torchrl.data.PrioritizedSliceSampler` and
-#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`, or other writers
-#   such as :class:`~torchrl.data.TensorDictMaxValueWriter`.
+#   :class:`~torchrl.data.replay_buffers.SamplerWithoutReplacement`,
+#   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`, or other writers
+#   such as :class:`~torchrl.data.replay_buffers.TensorDictMaxValueWriter`.
 # - Check how to checkpoint ReplayBuffers in :ref:`the doc <checkpoint-rb>`.
