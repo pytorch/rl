@@ -67,6 +67,121 @@ an environment with :attr:`env.batch_size` ``== torch.Size([4])`` should have
 an :attr:`env.action_spec` with shape :class:`torch.Size` ``([4, action_size])``.
 This is helpful when preallocation tensors, checking shape consistency etc.
 
+.. _Environment-policy-arg:
+
+Auto-wrapping recurrent transforms via the ``policy=`` argument
+---------------------------------------------------------------
+
+Every concrete :class:`~torchrl.envs.EnvBase` subclass — :class:`~torchrl.envs.GymEnv`,
+:class:`~torchrl.envs.DMControlEnv`, custom subclasses, etc. — inherits a
+``policy`` keyword argument on its constructor. When provided, the
+:class:`~torchrl.envs.EnvBase` metaclass post-init hook walks the policy
+looking for recurrent submodules (anything implementing
+``make_tensordict_primer()``, e.g. :class:`~torchrl.modules.LSTMModule`,
+:class:`~torchrl.modules.GRUModule`) and appends what's missing to the env:
+
+* an :class:`~torchrl.envs.transforms.InitTracker` (so ``is_init`` is written
+  at every reset) if one is not already present in the env's
+  ``full_observation_spec``;
+* one :class:`~torchrl.envs.transforms.TensorDictPrimer` per recurrent
+  submodule, providing the hidden-state primers the policy needs.
+
+The hook is idempotent and *spec-based* — it asks the env's
+``full_observation_spec`` / ``full_state_spec`` what's already there, so it
+works correctly even when transforms live inside child envs of a
+:class:`~torchrl.envs.SerialEnv` or :class:`~torchrl.envs.ParallelEnv`.
+
+Because the argument is injected by the metaclass, **it does not appear in
+subclass** ``__init__`` **signatures** (just like ``spec_locked`` and
+``auto_reset``). It is documented on :class:`~torchrl.envs.EnvBase` and works
+identically on every subclass. Pass it like any other keyword:
+
+.. code-block:: python
+
+    from torchrl.envs import GymEnv
+    from torchrl.modules import GRUModule
+
+    gru = GRUModule(input_size=4, hidden_size=8, num_layers=1,
+                    in_keys=["observation", "recurrent_state", "is_init"],
+                    out_keys=["features", ("next", "recurrent_state")])
+    # Single call: env now has InitTracker + TensorDictPrimer for the GRU.
+    env = GymEnv("CartPole-v1", policy=gru)
+
+The same auto-wrap helper is applied a second time by
+:class:`~torchrl.collectors.Collector` when an env is passed to it,
+so users who construct a bare env first and only later hand it to a
+collector with a recurrent policy still get the right transforms wired up.
+Because the helper is idempotent, going through both paths does not produce
+duplicates.
+
+Limitations:
+
+* If a custom :class:`~torchrl.envs.transforms.InitTracker` was attached
+  with a renamed ``init_key``, the helper won't recognise it and may add a
+  duplicate. Pass the same custom ``init_key`` (matched by leaf name in
+  multi-agent setups) to avoid this, or wire transforms manually.
+* Policy factories — ``Callable[[], Callable]`` objects — cannot be
+  inspected without instantiation, so auto-wrapping is skipped for them.
+  Either build the policy once and pass it via ``policy=``, or attach
+  transforms manually with
+  :func:`~torchrl.modules.get_env_transforms_from_module`.
+
+.. _Environment-compile-arg:
+
+Compiling envs via the ``compile=`` constructor argument
+--------------------------------------------------------
+
+Every concrete :class:`~torchrl.envs.EnvBase` subclass and
+:class:`~torchrl.envs.transforms.TransformedEnv` inherit a ``compile`` keyword argument
+on their constructors. When provided, the :class:`~torchrl.envs.EnvBase`
+metaclass post-init hook calls :meth:`~torchrl.envs.EnvBase.compile` on the
+fully-built env (after spec locking, after auto-reset wrapping if any, after
+policy-driven transform appending if any). Accepted values:
+
+* ``False`` or ``None`` (default): no compilation.
+* ``True``: ``env.compile()`` with default :func:`torch.compile` settings.
+* a ``dict``: forwarded to :meth:`~torchrl.envs.EnvBase.compile`.
+
+Using a dict avoids name collisions between :func:`torch.compile` kwargs
+(``backend``, ``mode``, ``fullgraph``, ``dynamic``, ``warmup``, ...) and
+constructor kwargs of specific envs. ``warmup`` is the number of eager calls
+to :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` before tracing kicks in;
+it stabilizes the input TensorDict layout (e.g. post-:meth:`reset` vs.
+steady-state post-``step_mdp``) so the compiled function does not recompile.
+
+The same flag works equally well with collectors:
+
+.. code-block:: python
+
+    from functools import partial
+    from torchrl.collectors import Collector
+    from torchrl.envs import GymEnv, TransformedEnv
+    from torchrl.envs.transforms import Compose
+
+    # Plain env, compiled with a 4-call warmup.
+    collector = Collector(
+        partial(
+            GymEnv,
+            "HalfCheetah-v4",
+            compile={"warmup": 4, "fullgraph": True, "mode": "reduce-overhead"},
+        ),
+        ...,
+    )
+
+    # TransformedEnv: compile applies to the outermost env, which is what
+    # the collector calls step_and_maybe_reset on.
+    collector = Collector(
+        lambda: TransformedEnv(
+            GymEnv("HalfCheetah-v4"),
+            Compose(...),
+            compile={"warmup": 4, "fullgraph": True},
+        ),
+        ...,
+    )
+
+See :meth:`~torchrl.envs.EnvBase.compile` and
+:meth:`~torchrl.envs.EnvBase.eager` for the underlying methods.
+
 Env methods
 -----------
 
@@ -76,6 +191,19 @@ With these, the following methods are implemented:
   a :class:`tensordict.TensorDict` input. It return the first tensordict of a rollout, usually
   containing a ``"done"`` state and a set of observations. If not present,
   a ``"reward"`` key will be instantiated with 0s and the appropriate shape.
+
+  To reset *deterministically* to a state contained in the input tensordict
+  (e.g. branch a rollout from a saved state, or replay a fixed initial
+  condition), pass ``set_state=True``: ``env.reset(td, set_state=True)``. For
+  stateless environments such as :class:`~torchrl.envs.PendulumEnv` this honors
+  the state entries found in ``td``; for stateful environments that support it,
+  the underlying set-state API is used; envs that cannot honor a provided state
+  raise ``NotImplementedError``. ``set_state`` is a keyword argument (not a
+  tensordict key) so it never stacks/pads across a rollout. When ``set_state`` is
+  left unspecified but the tensordict carries state, the state is honored for
+  backwards compatibility and a :class:`FutureWarning` is emitted: from v0.15 an
+  unspecified ``set_state`` will be treated as ``False`` (state ignored, fresh
+  reset).
 - :meth:`env.step`: a step method that takes a :class:`tensordict.TensorDict` input
   containing an input action as well as other inputs (for model-based or stateless
   environments, for instance).
@@ -83,7 +211,7 @@ With these, the following methods are implemented:
   environments if it needs to. It returns the updated input with a ``"next"``
   key containing the data of the next step, as well as a tensordict containing
   the input data for the next step (ie, reset or result or
-  :func:`~torchrl.envs.utils.step_mdp`)
+  :func:`~torchrl.envs.step_mdp`)
   This is done by reading the ``done_keys`` and
   assigning a ``"_reset"`` signal to each done state. This method allows
   to code non-stopping rollout functions with little effort:
@@ -119,7 +247,7 @@ In brief, a TensorDict is created by the :meth:`~.EnvBase.reset` method,
 then populated with an action by the policy before being passed to the
 :meth:`~.EnvBase.step` method which writes the observations, done flag(s) and
 reward under the ``"next"`` entry. The result of this call is stored for
-delivery and the ``"next"`` entry is gathered by the :func:`~.utils.step_mdp`
+delivery and the ``"next"`` entry is gathered by the :func:`~torchrl.envs.step_mdp`
 function.
 
 .. note::
@@ -139,16 +267,20 @@ function.
 
 .. note::
 
-  The `torchrl.collectors.utils.split_trajectories` function can be used to
-  slice adjacent trajectories. It relies on a ``"traj_ids"`` entry in the
-  input tensordict, or to the junction of ``"done"`` and ``"truncated"`` key
-  if the ``"traj_ids"`` is missing.
+  The :func:`~torchrl.collectors.utils.split_trajectories` function can be
+  used to slice adjacent trajectories. It relies on a ``"traj_ids"`` entry
+  in the input tensordict, or on the junction of ``"done"`` and
+  ``"truncated"`` if ``"traj_ids"`` is missing. The function emits an
+  ``[N_traj, T_max]`` zero-padded tensordict + ``mask``; for new code
+  prefer the contiguous 1-D layout and
+  :class:`~torchrl.data.replay_buffers.SliceSampler` instead — see
+  :ref:`Data layout: contiguous trajectories <data-layout>`.
 
 
 .. note::
 
   In some contexts, it can be useful to mark the first step of a trajectory.
-  TorchRL provides such functionality through the :class:`~torchrl.envs.InitTracker`
+  TorchRL provides such functionality through the :class:`~torchrl.envs.transforms.InitTracker`
   transform.
 
 
@@ -176,9 +308,44 @@ TorchRL offers a series of custom built-in environments.
     :template: rl_template.rst
 
     ChessEnv
+    FinancialRegimeEnv
+    LLMHashingEnv
     PendulumEnv
     TicTacToeEnv
-    LLMHashingEnv
+
+MuJoCo custom environments
+--------------------------
+
+A family of MuJoCo-backed envs sharing one base class
+(:class:`~torchrl.envs.MujocoEnv`) with a swappable physics backend
+(``"mujoco-torch"`` -- the default and ``torch.compile``-friendly
+native-torch engine, ``"mjx"`` -- JAX-vectorized, or ``"mujoco"`` --
+official C-bindings). For envs with a standalone XML asset, the XML can be a
+local path or an ``http(s)`` URL, so users can point at remote models without
+vendoring them. Subclasses describe the *task* by overriding
+:meth:`~torchrl.envs.MujocoEnv._compute_reward` and
+:meth:`~torchrl.envs.MujocoEnv._compute_done`.
+
+The locomotion classes mirror the Gymnasium ``-v4`` reward and
+termination semantics. :class:`~torchrl.envs.SatelliteEnv` is an
+attitude-control task with a 4- or 6-CMG cluster and a
+manipulability-based singularity penalty driving the policy away from
+internal singular configurations of the gimbal Jacobian.
+:class:`~torchrl.envs.CubeBowlEnv` is a compact
+manipulation task for scripted MuJoCo macro-control examples. It composes a
+local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    MujocoEnv
+    AntEnv
+    CubeBowlEnv
+    HopperEnv
+    HumanoidEnv
+    SatelliteEnv
+    Walker2dEnv
 
 Domain-specific
 ---------------
@@ -190,6 +357,7 @@ Domain-specific
     ModelBasedEnvBase
     model_based.dreamer.DreamerEnv
     model_based.dreamer.DreamerDecoder
+    model_based.imagined.ImaginedEnv
 
 Helpers
 -------

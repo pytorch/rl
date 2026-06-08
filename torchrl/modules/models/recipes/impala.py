@@ -42,8 +42,7 @@ class _ResNetBlock(nn.Module):
         self.seq = nn.Sequential(*resnet_block)
 
     def forward(self, x):
-        x += self.seq(x)
-        return x
+        return x + self.seq(x)
 
 
 class _ConvNetBlock(nn.Module):
@@ -64,7 +63,7 @@ class _ConvNetBlock(nn.Module):
     def forward(self, x):
         x = self.feats_conv(x)
         x = self.resnet1(x)
-        x = self.resnet1(x)
+        x = self.resnet2(x)
         return x
 
 

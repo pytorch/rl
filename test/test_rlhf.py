@@ -8,6 +8,7 @@ import argparse
 import zipfile
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -21,6 +22,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModule
+from torchrl._utils import print_directory_tree
 from torchrl.data.llm import TensorDictTokenizer
 from torchrl.data.llm.dataset import (
     _has_datasets,
@@ -68,8 +70,6 @@ def tldr_batch_dir(tmp_path_factory):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
         yield dest / Path(dataset_path).stem
-    from torchrl._utils import print_directory_tree
-
     print_directory_tree(dest)
 
 
@@ -396,6 +396,27 @@ def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, 
 
     loss = reward_model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
     assert loss.shape == torch.Size([])
+
+
+def test_compute_reward_loss_identical_sequences():
+    """Non-regression test for https://github.com/pytorch/rl/issues/3520."""
+    seq_len = 6
+    pad_token_id = 50256
+    input_ids = torch.tensor([[1, 2, 3, 4, 5, pad_token_id]])
+
+    chosen_batch = SimpleNamespace(
+        input_ids=input_ids,
+        rewards=torch.randn(1, seq_len),
+    )
+    rejected_batch = SimpleNamespace(
+        input_ids=input_ids.clone(),
+        rewards=torch.randn(1, seq_len),
+    )
+    loss = GPT2RewardModel.compute_reward_loss(
+        chosen_batch, rejected_batch, pad_token_id=pad_token_id
+    )
+    assert loss.shape == torch.Size([])
+    assert loss.item() == 0.0
 
 
 @pytest.mark.skipif(

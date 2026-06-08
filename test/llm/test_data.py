@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import re
+import uuid
 from collections.abc import Mapping
 
 import pytest
@@ -21,8 +23,15 @@ from torchrl.data import (
     ReplayBuffer,
     SamplerWithoutReplacement,
 )
-from torchrl.data.llm.history import ContentBase
+from torchrl.data.llm.history import (
+    _CHAT_TEMPLATES,
+    _CUSTOM_INVERSE_PARSERS,
+    _CUSTOM_MODEL_FAMILY_KEYWORDS,
+    add_chat_template,
+    ContentBase,
+)
 from torchrl.data.llm.topk import TopKRewardSelector
+from torchrl.modules.llm.policies.common import _extract_responses_from_full_histories
 
 _has_transformers = importlib.util.find_spec("transformers")
 _has_vllm = importlib.util.find_spec("vllm")
@@ -33,6 +42,70 @@ class TestHistory:
     def set_context(self):
         with set_list_to_stack(True):
             yield
+
+    @pytest.fixture(scope="class")
+    def mock_llama_tokenizer(self):
+        """Create a mock tokenizer with Llama 3 special tokens for testing.
+
+        This allows testing the Llama chat template parsing without requiring
+        access to the gated Llama models on HuggingFace.
+
+        We use SmolLM-135M-Instruct as the base tokenizer because:
+        - It's a modern BPE tokenizer with chat template support
+        - Very small (135M params), fast to download and load
+        - Apache 2.0 licensed, from HuggingFace official
+        - Non-gated, always accessible in CI
+        """
+        from transformers import AutoTokenizer
+
+        # Use SmolLM as a modern base tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-135M-Instruct")
+
+        # Add Llama 3 special tokens that aren't in SmolLM's vocabulary
+        llama_special_tokens = [
+            "<|begin_of_text|>",
+            "<|end_of_text|>",
+            "<|header_start|>",
+            "<|header_end|>",
+            "<|eot|>",
+        ]
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": llama_special_tokens}
+        )
+
+        return tokenizer
+
+    @staticmethod
+    def _assert_assistant_mask_matches_content(tokenizer, proc, history):
+        assistant_contents = [
+            content
+            for role, content in zip(history.role, history.content)
+            if role == "assistant" and content
+        ]
+        if not assistant_contents:
+            assert not proc["assistant_masks"].any()
+            return
+
+        assert proc["assistant_masks"].any()
+        decoded = tokenizer.decode(
+            proc["input_ids"][proc["assistant_masks"].bool()],
+            skip_special_tokens=False,
+        )
+        assert isinstance(decoded, str)
+        for content in assistant_contents:
+            assert content in decoded, (decoded, content)
+
+        for marker in (
+            "<|im_start|>",
+            "<|im_end|>",
+            "<|header_start|>",
+            "<|header_end|>",
+            "<|eot|>",
+            "Assistant:",
+        ):
+            assert marker not in decoded, decoded
+        if not any("assistant" in content.lower() for content in assistant_contents):
+            assert "assistant" not in decoded.lower(), decoded
 
     def test_history_construct(self):
         hst0 = History(role="user", content="a message")
@@ -341,23 +414,7 @@ The result is""",
             return_dict=True,
             return_assistant_tokens_mask=True,
         )
-        role_assistant = torch.tensor([r == "assistant" for r in history.role])
-        last_item: str = history[role_assistant].apply_chat_template(
-            tokenizer=tokenizer,
-            chat_template_name="qwen",
-            add_generation_prompt=False,
-        )
-
-        if "assistant" in history.role:
-            assert proc["assistant_masks"].any()
-        else:
-            assert not proc["assistant_masks"].any()
-        if last_item:
-            decoded = tokenizer.decode(
-                proc["input_ids"][proc["assistant_masks"].bool()]
-            )
-            assert type(decoded) is str
-            assert last_item.endswith(decoded), (decoded, last_item)
+        self._assert_assistant_mask_matches_content(tokenizer, proc, history)
 
     LLAMA_TEST_CASES = [
         # Case 1: All messages complete
@@ -418,15 +475,11 @@ The result is""",
         LLAMA_TEST_CASES,
         ids=["case_1", "case_2", "case_3", "case_4", "case_6"],
     )
-    def test_history_assistant_mask_llama(self, test_case):
-        from transformers import AutoTokenizer
-
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(
-                "meta-llama/Llama-4-Scout-17B-16E-Instruct"
-            )
-        except Exception:
-            pytest.skip("Could not load Llama tokenizer")
+    def test_history_assistant_mask_llama(self, test_case, mock_llama_tokenizer):
+        # This test verifies that the Llama chat template parsing works correctly.
+        # We use a mock tokenizer with Llama 3 special tokens added, which allows
+        # testing the API without requiring access to the gated Llama models.
+        tokenizer = mock_llama_tokenizer
 
         history = History.from_text(test_case, chat_template_name="llama")
         proc = history.apply_chat_template(
@@ -436,23 +489,7 @@ The result is""",
             return_dict=True,
             return_assistant_tokens_mask=True,
         )
-        role_assistant = torch.tensor([r == "assistant" for r in history.role])
-        last_item: str = history[role_assistant].apply_chat_template(
-            tokenizer=tokenizer,
-            chat_template_name="llama",
-            add_generation_prompt=False,
-        )
-
-        if "assistant" in history.role:
-            assert proc["assistant_masks"].any()
-        else:
-            assert not proc["assistant_masks"].any()
-        if last_item:
-            decoded = tokenizer.decode(
-                proc["input_ids"][proc["assistant_masks"].bool()]
-            )
-            assert type(decoded) is str
-            assert last_item.endswith(decoded), (decoded, last_item)
+        self._assert_assistant_mask_matches_content(tokenizer, proc, history)
 
     def test_history_completion(self):
         """Test the History class's handling of complete and incomplete messages."""
@@ -522,7 +559,7 @@ The result is""",
         [
             ("Qwen/Qwen2.5-0.5B", "qwen"),
             ("microsoft/phi-2", "chatml_format"),
-            ("mosaicml/mpt-7b-instruct", "chatml_format"),
+            ("HuggingFaceH4/zephyr-7b-beta", "chatml_format"),
             ("facebook/opt-125m", "chatml_format"),
             ("gpt2", "chatml_format"),
             ("EleutherAI/pythia-70m", "chatml_format"),
@@ -606,6 +643,7 @@ The result is""",
 
         assert "assistant_masks" in result
         assert result["assistant_masks"].sum().item() > 0
+        self._assert_assistant_mask_matches_content(tokenizer, result, history[0])
 
     @pytest.mark.parametrize(
         "model_name, template_name",
@@ -618,8 +656,6 @@ The result is""",
     )
     def test_custom_template_equivalence(self, model_name, template_name):
         """Test that our custom templates produce the same output as the model's default template (except for masking)."""
-        import re
-
         import transformers
 
         # Simple multi-turn chat for each model
@@ -679,10 +715,6 @@ The result is""",
 
     def test_add_chat_template_parameters_used(self):
         """Test that add_chat_template actually uses inverse_parser and model_family_keywords parameters with a real tokenizer."""
-        import re
-        import uuid
-
-        from torchrl.data.llm.history import add_chat_template, History
         from transformers import AutoTokenizer
 
         try:
@@ -761,12 +793,6 @@ The result is""",
             assert parsed.role == history.role
             assert parsed.content == history.content
         finally:
-            from torchrl.data.llm.history import (
-                _CHAT_TEMPLATES,
-                _CUSTOM_INVERSE_PARSERS,
-                _CUSTOM_MODEL_FAMILY_KEYWORDS,
-            )
-
             if template_name in _CHAT_TEMPLATES:
                 del _CHAT_TEMPLATES[template_name]
             if template_name in _CUSTOM_INVERSE_PARSERS:
@@ -800,7 +826,7 @@ The result is""",
     @pytest.mark.parametrize(
         "tokenizer_name",
         [
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
             "Qwen/Qwen2.5-0.5B",
             "microsoft/phi-2",
         ],
@@ -815,8 +841,6 @@ The result is""",
         self, tokenizer_name, use_tokenizer_chat_template, chat
     ):
         """Test round-trip conversion: History -> string -> History for various templates and tokenizers."""
-        import re
-
         from transformers import AutoTokenizer
 
         # Example chats
@@ -831,7 +855,9 @@ The result is""",
                 not hasattr(tokenizer, "chat_template")
                 or tokenizer.chat_template is None
             ):
-                pytest.skip(f"Tokenizer {tokenizer_name} does not have a chat template")
+                pytest.xfail(
+                    f"Tokenizer {tokenizer_name} does not have a chat template"
+                )
             chat_template = tokenizer.chat_template
             chat_template_name = None
         else:
@@ -878,7 +904,7 @@ The result is""",
         [
             "Qwen/Qwen2.5-0.5B",
             "microsoft/phi-2",
-            "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+            "Qwen/Qwen2.5-0.5B-Instruct",
         ],
     )
     @pytest.mark.parametrize(
@@ -892,9 +918,7 @@ The result is""",
     ):
         """Test that truncated strings are properly parsed with the last message marked as incomplete."""
         if chat[0]["role"] != "system":
-            pytest.skip("Skipping test for non-system message")
-        import re
-
+            pytest.xfail("Skipping test for non-system message")
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
@@ -908,7 +932,9 @@ The result is""",
                 not hasattr(tokenizer, "chat_template")
                 or tokenizer.chat_template is None
             ):
-                pytest.skip(f"Tokenizer {tokenizer_name} does not have a chat template")
+                pytest.xfail(
+                    f"Tokenizer {tokenizer_name} does not have a chat template"
+                )
             chat_template = tokenizer.chat_template
             chat_template_name = None
         else:
@@ -969,9 +995,6 @@ The result is""",
     @pytest.mark.skipif(not _has_transformers, reason="requires transformers library")
     def test_extract_responses_from_full_histories_batch_issue(self):
         """Test the isolated function for handling different response shapes in batch processing."""
-        from torchrl.modules.llm.policies.common import (
-            _extract_responses_from_full_histories,
-        )
         from transformers import AutoTokenizer
 
         # Create a batch of 2 prompt histories
@@ -1061,7 +1084,7 @@ To get to the other side!<|im_end|>""",
 You are a helpful assistant.<|im_end|>
 <|im_start|>assistant
 I'm doing well, thank you for asking!<|im_end|>
-    """
+"""
         assert template_0 == expected_0
 
         # Test second response (should show all 3 messages)
@@ -1072,11 +1095,11 @@ I'm doing well, thank you for asking!<|im_end|>
 You are a helpful assistant.<|im_end|>
 <|im_start|>assistant
 Why did the chicken cross the road?<|im_end|>
-    <|im_start|>user
+<|im_start|>user
 I don't know, why?<|im_end|>
 <|im_start|>assistant
 To get to the other side!<|im_end|>
-    """
+"""
         assert template_1 == expected_1
 
 

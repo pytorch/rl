@@ -12,7 +12,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
 
 from torch import nn, optim
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictPrioritizedReplayBuffer, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.storages import LazyMemmapStorage, LazyTensorStorage
 from torchrl.envs import (
@@ -116,7 +116,7 @@ def make_collector(cfg, train_env, actor_model_explore, compile_mode, device):
     collector_device = cfg.collector.device
     if collector_device in ("", None):
         collector_device = device
-    collector = SyncDataCollector(
+    collector = Collector(
         train_env,
         actor_model_explore,
         init_random_frames=cfg.collector.init_random_frames,
@@ -299,8 +299,7 @@ def make_optimizer(cfg, loss_module):
 
 
 def log_metrics(logger, metrics, step):
-    for metric_name, metric_value in metrics.items():
-        logger.log_scalar(metric_name, metric_value, step)
+    logger.log_metrics(metrics, step)
 
 
 def get_activation(cfg):

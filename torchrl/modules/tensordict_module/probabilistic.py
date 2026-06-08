@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import inspect
 import warnings
 
 import torch
@@ -15,10 +16,18 @@ from tensordict.nn import (
     TensorDictModule,
 )
 from tensordict.utils import NestedKey
+
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.modules.distributions import Delta
 from torchrl.modules.tensordict_module.common import _forward_hook_safe_action
 from torchrl.modules.tensordict_module.sequence import SafeSequential
+
+# Older stable-release versions of ``tensordict`` predate the ``generator``
+# kwarg on ``ProbabilisticTensorDictModule.__init__``. We probe the signature
+# once at import time and forward the kwarg only when it is supported.
+_PTDM_HAS_GENERATOR = (
+    "generator" in inspect.signature(ProbabilisticTensorDictModule.__init__).parameters
+)
 
 
 class SafeProbabilisticModule(ProbabilisticTensorDictModule):
@@ -42,7 +51,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
     - It uses a real mapping R^n -> R^m to create a distribution in R^d from
       which values can be sampled or computed.
 
-    When the :meth:`__call__` and :meth:`~.forward` method are called, a distribution is
+    When the ``__call__`` and ``forward`` methods are called, a distribution is
     created, and a value computed (depending on the ``interaction_type`` value, 'dist.mean',
     'dist.mode', 'dist.median' attributes could be used, as well as
     the 'dist.rsample', 'dist.sample' method). The sampling step is skipped if the supplied
@@ -145,6 +154,15 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         n_empirical_estimate (int, optional): keyword-only argument.
             Number of samples to compute the empirical
             mean when it is not available. Defaults to 1000.
+        generator (torch.Generator, int, NestedKey, or None, optional): keyword-only argument.
+            Routes sampling through an explicit RNG instead of the global PyTorch RNG.
+            Accepts a :class:`torch.Generator` (used in place, advances across calls),
+            an :class:`int` (shorthand for ``Generator().manual_seed(int)``), or a
+            :class:`NestedKey` to fetch the generator from the input tensordict on every
+            call (the value can be a ``Generator`` or a scalar int / Tensor used as a
+            JAX-style stream-key with a ``next_seed`` written back). Defaults to ``None``,
+            in which case the global RNG is used. See
+            :class:`~tensordict.nn.ProbabilisticTensorDictModule` for details.
 
     .. warning:: Running checks takes time! Using `safe=True` will guarantee that the samples are within the spec bounds
         given some heuristic coded in :meth:`~torchrl.data.TensorSpec.project`, but that requires checking whether the
@@ -177,7 +195,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         tensor([ 1., -1., -1.,  1., -1., -1.,  1.,  1., -1., -1.],
                grad_fn=<ClampBackward0>)
         >>> data["action"].mean().backward()
-        >>> print(data["loc"].grad) # clamp anihilates gradients
+        >>> print(data["loc"].grad) # clamp annihilates gradients
         tensor([0., 0., 0., 0., 0., 0., 0., 0., 0., 0.])
     """
 
@@ -197,7 +215,12 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
         cache_dist: bool = False,
         n_empirical_estimate: int = 1000,
         num_samples: int | torch.Size | None = None,
+        generator: torch.Generator | int | NestedKey | None = None,
     ):
+        # ``generator`` was added to ``ProbabilisticTensorDictModule`` after
+        # the current stable-release tensordict; forward it only when the
+        # underlying class accepts it.
+        extra_kwargs = {"generator": generator} if _PTDM_HAS_GENERATOR else {}
         super().__init__(
             in_keys=in_keys,
             out_keys=out_keys,
@@ -210,6 +233,7 @@ class SafeProbabilisticModule(ProbabilisticTensorDictModule):
             log_prob_keys=log_prob_keys,
             log_prob_key=log_prob_key,
             num_samples=num_samples,
+            **extra_kwargs,
         )
         if spec is not None:
             spec = spec.clone()

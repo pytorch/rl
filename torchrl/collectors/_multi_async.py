@@ -8,13 +8,16 @@ from copy import deepcopy
 from queue import Empty
 
 import torch
-
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
-from torchrl._utils import _check_for_faulty_process, accept_remote_rref_udf_invocation
-from torchrl.collectors._base import _make_legacy_metaclass
+from torchrl._utils import (
+    _check_for_faulty_process,
+    _maybe_record_function_decorator,
+    accept_remote_rref_udf_invocation,
+    logger as torchrl_logger,
+)
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
-from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
+from torchrl.collectors._multi_base import MultiCollector
 from torchrl.collectors.utils import split_trajectories
 
 
@@ -126,14 +129,14 @@ class MultiAsyncCollector(MultiCollector):
         self.out_tensordicts = defaultdict(lambda: None)
         self.running = False
 
-        if self.postprocs is not None and self.replay_buffer is None:
-            postproc = self.postprocs
-            self.postprocs = {}
+        self._postproc_per_device = {}
+        if self.postproc is not None and self.replay_buffer is None:
+            postproc = self.postproc
             for _device in self.storing_device:
-                if _device not in self.postprocs:
+                if _device not in self._postproc_per_device:
                     if hasattr(postproc, "to"):
                         postproc = deepcopy(postproc).to(_device)
-                    self.postprocs[_device] = postproc
+                    self._postproc_per_device[_device] = postproc
 
     # for RPC
     def next(self):
@@ -167,6 +170,7 @@ class MultiAsyncCollector(MultiCollector):
         return super().load_state_dict(state_dict)
 
     # for RPC
+    @_maybe_record_function_decorator("MultiAsyncCollector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -222,13 +226,14 @@ class MultiAsyncCollector(MultiCollector):
             self.update_policy_weights_()
 
         for i in range(self.num_workers):
-            if self.init_random_frames is not None and self.init_random_frames > 0:
+            if self._should_use_random_frames():
                 self.pipes[i].send((None, "continue_random"))
             else:
                 self.pipes[i].send((None, "continue"))
         self.running = True
 
         workers_frames = [0 for _ in range(self.num_workers)]
+        _iter_start_time = time.time()
         while self._frames < self.total_frames:
             self._iter += 1
             counter = 0
@@ -239,7 +244,19 @@ class MultiAsyncCollector(MultiCollector):
                 except (TimeoutError, Empty):
                     counter += _TIMEOUT
                     _check_for_faulty_process(self.procs)
+                    # Debug logging for queue timeout
+                    if counter % (10 * _TIMEOUT) == 0:  # Log every 10 timeouts
+                        _elapsed = time.time() - _iter_start_time
+                        torchrl_logger.debug(
+                            f"MultiAsyncCollector.iterator: Queue timeout, counter={counter:.1f}s, "
+                            f"iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s"
+                        )
                 if counter > (_TIMEOUT * _MAX_IDLE_COUNT):
+                    _elapsed = time.time() - _iter_start_time
+                    torchrl_logger.debug(
+                        f"MultiAsyncCollector.iterator: CRITICAL - Max idle exceeded, "
+                        f"counter={counter:.1f}s, iter={self._iter}, frames={self._frames}, elapsed={_elapsed:.1f}s"
+                    )
                     raise RuntimeError(
                         f"Failed to gather all collector output within {_TIMEOUT * _MAX_IDLE_COUNT} seconds. "
                         f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
@@ -252,15 +269,12 @@ class MultiAsyncCollector(MultiCollector):
                 worker_frames = self.frames_per_batch_worker()
             self._frames += worker_frames
             workers_frames[idx] = workers_frames[idx] + worker_frames
-            if out is not None and self.postprocs:
-                out = self.postprocs[out.device](out)
+            if out is not None and self._postproc_per_device:
+                out = self._postproc_per_device[out.device](out)
 
             # the function blocks here until the next item is asked, hence we send the message to the
             # worker to keep on working in the meantime before the yield statement
-            if (
-                self.init_random_frames is not None
-                and self._frames < self.init_random_frames
-            ):
+            if self._should_use_random_frames():
                 msg = "continue_random"
             else:
                 msg = "continue"
@@ -287,10 +301,7 @@ class MultiAsyncCollector(MultiCollector):
             raise Exception("self.queue_out is full")
         if self.running:
             for idx in range(self.num_workers):
-                if (
-                    self.init_random_frames is not None
-                    and self._frames < self.init_random_frames
-                ):
+                if self._should_use_random_frames():
                     self.pipes[idx].send((idx, "continue_random"))
                 else:
                     self.pipes[idx].send((idx, "continue"))
@@ -302,12 +313,3 @@ class MultiAsyncCollector(MultiCollector):
     # for RPC
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
         return super().receive_weights(policy_or_weights)
-
-
-_LegacyMultiAsyncMeta = _make_legacy_metaclass(_MultiCollectorMeta)
-
-
-class MultiaSyncDataCollector(MultiAsyncCollector, metaclass=_LegacyMultiAsyncMeta):
-    """Deprecated version of :class:`~torchrl.collectors.MultiAsyncCollector`."""
-
-    ...

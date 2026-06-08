@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
-    # Base classes
+    # Base classes - vLLM
     "RLvLLMEngine",
     # Sync vLLM
     "make_vllm_worker",
@@ -24,13 +24,17 @@ __all__ = [
     "_AsyncLLMEngine",
     "AsyncVLLM",
     "make_async_vllm_engine",
-    # Utilities
+    # Utilities - vLLM
     "stateless_init_process_group",
     "stateless_init_process_group_async",
+    # Base classes - SGLang
+    "RLSGLangEngine",
+    # Async SGLang
+    "AsyncSGLang",
 ]
 
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
-    # Base classes and interfaces
+    # Base classes and interfaces - vLLM
     "RLvLLMEngine": ("torchrl.modules.llm.backends.vllm", "RLvLLMEngine"),
     # Sync vLLM
     "make_vllm_worker": ("torchrl.modules.llm.backends.vllm", "make_vllm_worker"),
@@ -44,7 +48,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
         "torchrl.modules.llm.backends.vllm",
         "make_async_vllm_engine",
     ),
-    # Utilities
+    # Utilities - vLLM
     "stateless_init_process_group": (
         "torchrl.modules.llm.backends.vllm",
         "stateless_init_process_group",
@@ -53,6 +57,10 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
         "torchrl.modules.llm.backends.vllm",
         "stateless_init_process_group_async",
     ),
+    # Base classes and interfaces - SGLang
+    "RLSGLangEngine": ("torchrl.modules.llm.backends.sglang", "RLSGLangEngine"),
+    # Async SGLang
+    "AsyncSGLang": ("torchrl.modules.llm.backends.sglang", "AsyncSGLang"),
 }
 
 

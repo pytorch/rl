@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import os
 from functools import partial
@@ -53,6 +54,15 @@ from torchrl.collectors.llm import RayLLMCollector
 from torchrl.data import LazyStackStorage, ReplayBuffer, SamplerWithoutReplacement
 from torchrl.data.replay_buffers.ray_buffer import RayReplayBuffer
 from torchrl.objectives.llm.grpo import GRPOLoss, MCAdvantage
+
+
+def _finish_wandb_logger(wandb_logger: WandbLogger | None, exit_code: int) -> None:
+    """Finish a wandb run if one was created."""
+    if wandb_logger is None:
+        return
+    finish = getattr(wandb_logger.experiment, "finish", None)
+    if finish is not None:
+        finish(exit_code=exit_code)
 
 
 def setup_environment() -> None:
@@ -110,20 +120,26 @@ def train(
     if cfg.model.compile:
         loss_fn = torch.compile(loss_fn)
 
-    vllm_engine = inference_policy.model
+    inference_engine = inference_policy.model
 
     # Create weight sync scheme
-    weight_sync_scheme = make_weight_sync_scheme(vllm_engine=vllm_engine)
+    weight_sync_scheme = make_weight_sync_scheme(engine=inference_engine, cfg=cfg)
 
     # Set up weight sender
     torchrl_logger.info("Setting up weight synchronization scheme...")
     sender = weight_sync_scheme.create_sender()
-    sender.register_model(policy_training)
+    # Register the HuggingFace model directly (not the TransformersWrapper)
+    # so state_dict() keys match vLLM's expected format (e.g., model.layers.0.*)
+    sender.register_model(policy_training.model)
 
     # Initialize collective group
     torchrl_logger.info("Initializing collective group...")
-    metadata = get_model_metadata(policy_training)
-    sender.init_all_workers_group(metadata, vllm_engine=vllm_engine)
+    metadata = get_model_metadata(policy_training.model)
+    sender.init_all_workers_group(metadata, vllm_engine=inference_engine)
+
+    # Register the collector with the sender so update_weights() increments
+    # the policy version (needed for policy_version tracking in logged metrics).
+    sender.register_collector(collector)
 
     # First weight update
     with timeit("update_policy_weights"):
@@ -137,6 +153,7 @@ def train(
         policy_training.parameters(),
         lr=cfg.optimizer.lr,
         weight_decay=cfg.optimizer.weight_decay,
+        eps=getattr(cfg.optimizer, "eps", 1e-8),
         fused=False,
     )
     scaler = GradScaler(enabled=cfg.train.mixed_precision)
@@ -200,7 +217,13 @@ def train(
                 data_read_count += batch.numel()
 
                 with timeit("forward_pass"):
-                    with autocast("cuda", enabled=cfg.train.mixed_precision):
+                    # Use the model's dtype for autocast to avoid bf16→fp16 downcast
+                    autocast_dtype = getattr(torch, cfg.train_model.torch_dtype)
+                    with autocast(
+                        "cuda",
+                        enabled=cfg.train.mixed_precision,
+                        dtype=autocast_dtype,
+                    ):
                         loss = loss_fn(batch)
                         loss_val = (
                             loss.mean(reduce=True)
@@ -284,15 +307,23 @@ def train(
             gc.collect()
 
         timeit.print(prefix="timeit")
-        for key, val in timeit.todict().items():
-            wandb_logger.log_scalar(f"timeit/{key}", val)
+        wandb_logger.log_metrics(
+            {f"timeit/{key}": val for key, val in timeit.todict().items()}
+        )
         timeit.reset()
 
         if cfg.train.empty_replay_buffer:
             replay_buffer.empty(empty_write_count=False)
 
     pbar.close()
-    collector.shutdown()
+    with contextlib.suppress(Exception):
+        _finish_wandb_logger(wandb_logger, 0)
+    with contextlib.suppress(Exception):
+        collector.shutdown()
+    shutdown = getattr(sender, "shutdown", None)
+    if shutdown is not None:
+        with contextlib.suppress(Exception):
+            shutdown()
 
 
 @hydra.main(version_base=None, config_path="config", config_name="grpo_gsm8k")
@@ -354,13 +385,6 @@ def main(cfg):
     torchrl_logger.info(f"Inference policy: {inference_policy}")
 
     torchrl_logger.info(f"Starting replay buffer with {replay_buffer_config=}")
-    if cfg.train.buffer_size is not None and (
-        cfg.train.buffer_size != cfg.train.dialog_turns_per_batch
-    ):
-        raise ValueError(
-            "buffer_size must be equal to dialog_turns_per_batch in sync settings."
-        )
-
     if cfg.train.optim_batch_size % cfg.train.gradient_accumulation_steps != 0:
         raise ValueError(
             "optim_batch_size must be divisible by gradient_accumulation_steps"
@@ -418,15 +442,19 @@ def main(cfg):
     )(train)
 
     # launch training
-    ray.get(
-        train_handler.remote(
-            rb,
-            cfg,
-            collector,
-            inference_policy,
-            devices=device_config["train_model_devices"],
+    try:
+        ray.get(
+            train_handler.remote(
+                rb,
+                cfg,
+                collector,
+                inference_policy,
+                devices=device_config["train_model_devices"],
+            )
         )
-    )
+    finally:
+        if ray.is_initialized():
+            ray.shutdown()
 
 
 if __name__ == "__main__":

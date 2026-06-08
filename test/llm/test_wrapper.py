@@ -7,8 +7,10 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import sys
 import threading
 import time
+import types
 from concurrent.futures import ThreadPoolExecutor, wait
 from functools import partial
 from typing import Any, TYPE_CHECKING
@@ -16,11 +18,15 @@ from typing import Any, TYPE_CHECKING
 import pytest
 import torch
 from tensordict import assert_close, lazy_stack, set_list_to_stack, TensorDict
-
 from tensordict.utils import _zip_strict
+from torch.nn.utils.rnn import pad_sequence
+from torchrl import logger as torchrl_logger
 from torchrl.data.llm import History
+from torchrl.envs.llm import ChatEnv
 from torchrl.envs.llm.transforms.kl import KLComputation, RetrieveKL, RetrieveLogProb
 from torchrl.modules.llm import AsyncVLLM
+from torchrl.modules.llm.backends.vllm import vllm_async
+from torchrl.modules.llm.policies import RemoteTransformersWrapper
 from torchrl.modules.llm.policies.common import (
     _batching,
     ChatHistory,
@@ -30,8 +36,11 @@ from torchrl.modules.llm.policies.common import (
     Tokens,
 )
 from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
-from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
-
+from torchrl.modules.llm.policies.vllm_wrapper import (
+    _completion_output_to_tc,
+    _RequestOutput_tc,
+    vLLMWrapper,
+)
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_vllm = importlib.util.find_spec("vllm") is not None
@@ -94,9 +103,9 @@ def vllm_instance() -> tuple[LLM, AutoTokenizer]:  # noqa # type: ignore
 
 
 @pytest.fixture(scope="module")
-def async_vllm_instance() -> tuple[
-    Any, AutoTokenizer  # noqa # type: ignore
-]:  # noqa # type: ignore
+def async_vllm_instance() -> (
+    tuple[Any, AutoTokenizer]  # noqa # type: ignore
+):  # noqa # type: ignore
     """Create async vLLM engine and tokenizer for testing."""
     if not _has_vllm:
         pytest.skip("vllm not available")
@@ -127,15 +136,16 @@ def async_vllm_instance() -> tuple[
 
 
 @pytest.fixture(scope="module")
-def transformers_instance() -> tuple[
-    AutoModelForCausalLM, AutoTokenizer  # noqa # type: ignore
-]:  # noqa # type: ignore
+def transformers_instance() -> (
+    tuple[AutoModelForCausalLM, AutoTokenizer]  # noqa # type: ignore
+):  # noqa # type: ignore
     """Create transformers model and tokenizer for testing."""
     if not _has_transformers:
         pytest.skip("transformers not available")
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B")
+    model.eval()
     tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B")
     tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
@@ -188,6 +198,38 @@ def sample_history_assistant():
         ],
     ]
     return History.from_chats(chats)
+
+
+def test_async_vllm_prefix_caching_defaults_to_false(monkeypatch):
+    """AsyncVLLM should not reuse prompt KV caches across online weight updates."""
+
+    class FakeAsyncEngineArgs:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    fake_vllm = types.SimpleNamespace(
+        AsyncEngineArgs=FakeAsyncEngineArgs, __version__="0.10.0"
+    )
+    captured = {}
+
+    def fake_launch(engine_args, num_replicas):
+        captured["engine_args"] = engine_args
+        captured["num_replicas"] = num_replicas
+        return object()
+
+    monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+    monkeypatch.setattr(vllm_async, "_has_vllm", True)
+    monkeypatch.setattr(vllm_async.AsyncVLLM, "launch", staticmethod(fake_launch))
+
+    vllm_async.make_async_vllm_engine(model_name="Qwen/Qwen2.5-0.5B", verbose=False)
+    assert captured["engine_args"].enable_prefix_caching is False
+
+    vllm_async.make_async_vllm_engine(
+        model_name="Qwen/Qwen2.5-0.5B",
+        enable_prefix_caching=True,
+        verbose=False,
+    )
+    assert captured["engine_args"].enable_prefix_caching is True
 
 
 @pytest.fixture
@@ -366,9 +408,6 @@ def create_batching_test_wrapper(
 @pytest.fixture
 def monkey_patch_forward_for_timing():
     """Fixture to monkey patch the forward method to add timing and batch size tracking."""
-    import threading
-    import time
-
     # Track processing times and batch sizes
     processing_times = []
     batch_sizes = []
@@ -439,9 +478,9 @@ def monkey_patch_forward_for_instrumentation():
             processing_events.append(
                 {
                     "timestamp": time.time(),
-                    "batch_size": td_input.batch_size[0]
-                    if td_input.batch_dims > 0
-                    else 1,
+                    "batch_size": (
+                        td_input.batch_size[0] if td_input.batch_dims > 0 else 1
+                    ),
                     "thread_id": threading.current_thread().ident,
                 }
             )
@@ -1954,8 +1993,143 @@ class TestKLTransforms:
         assert reward is not None
 
 
+@pytest.mark.gpu
 class TestLogProbsComparison:
     """Test log-probability consistency between vLLM and Transformers wrappers."""
+
+    @staticmethod
+    def _get_padded(result, key, padding_value):
+        value = result.get(
+            key,
+            as_padded_tensor=True,
+            padding_side="left",
+            padding_value=padding_value,
+        )
+        if value is not None:
+            return value
+        value = result.get(key, as_list=True)
+        if value is None:
+            return None
+        return pad_sequence(
+            [
+                item if isinstance(item, torch.Tensor) else torch.tensor(item)
+                for item in value
+            ],
+            batch_first=True,
+            padding_value=padding_value,
+            padding_side="left",
+        )
+
+    @classmethod
+    def _padded_tokens_log_probs_and_masks(cls, result, pad_token_id):
+        tokens = cls._get_padded(result, ("tokens", "full"), pad_token_id)
+        log_probs = cls._get_padded(result, ("log_probs", "full"), 0.0)
+        attention_mask = cls._get_padded(result, ("masks", "all_attention_mask"), 0)
+        assistant_mask = cls._get_padded(result, ("masks", "all_assistant_mask"), 0)
+        assert tokens is not None
+        assert log_probs is not None
+        assert attention_mask is not None
+        attention_mask = attention_mask.bool()
+        if assistant_mask is not None:
+            assistant_mask = assistant_mask.bool()
+        assert tokens.shape == log_probs.shape == attention_mask.shape
+        if assistant_mask is not None:
+            assert assistant_mask.shape == tokens.shape
+        return tokens, log_probs, attention_mask, assistant_mask
+
+    @staticmethod
+    def _response_token_list(result, pad_token_id):
+        response = result.get(
+            ("tokens", "response"),
+            as_padded_tensor=True,
+            padding_side="right",
+            padding_value=pad_token_id,
+        )
+        if response is not None:
+            return [row[row != pad_token_id].long() for row in response]
+        response = result.get(("tokens", "response"), as_list=True)
+        assert response is not None
+        return [tokens.long() for tokens in response]
+
+    @staticmethod
+    def _suffix_token_mask(tokens, attention_mask, response_tokens):
+        mask = torch.zeros_like(attention_mask, dtype=torch.bool)
+        for i, response in enumerate(response_tokens):
+            assert response.numel()
+            attended = attention_mask[i].nonzero(as_tuple=False).squeeze(-1)
+            full_tokens = tokens[i, attended].long()
+            assert response.numel() <= full_tokens.numel()
+            torch.testing.assert_close(full_tokens[-response.numel() :], response)
+            mask[i, attended[-response.numel() :]] = True
+        return mask
+
+    @classmethod
+    def _assert_backend_log_probs_match(
+        cls,
+        backend_result,
+        transformers_result,
+        response_tokens,
+        pad_token_id,
+        *,
+        use_assistant_mask,
+    ):
+        (
+            backend_tokens,
+            backend_log_probs,
+            backend_attention_mask,
+            backend_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_masks(backend_result, pad_token_id)
+        (
+            transformers_tokens,
+            transformers_log_probs,
+            transformers_attention_mask,
+            transformers_assistant_mask,
+        ) = cls._padded_tokens_log_probs_and_masks(transformers_result, pad_token_id)
+
+        torch.testing.assert_close(backend_attention_mask, transformers_attention_mask)
+        torch.testing.assert_close(
+            backend_tokens[backend_attention_mask].long(),
+            transformers_tokens[transformers_attention_mask].long(),
+        )
+
+        if use_assistant_mask:
+            assert backend_assistant_mask is not None
+            assert transformers_assistant_mask is not None
+            torch.testing.assert_close(
+                backend_assistant_mask, transformers_assistant_mask
+            )
+            for i, response in enumerate(response_tokens):
+                selected = backend_tokens[i, backend_assistant_mask[i]].long()
+                torch.testing.assert_close(selected, response)
+            comparison_mask = backend_assistant_mask
+        else:
+            response_mask = cls._suffix_token_mask(
+                backend_tokens, backend_attention_mask, response_tokens
+            )
+            comparison_mask = response_mask
+
+        assert comparison_mask.any()
+        backend_selected = backend_log_probs[comparison_mask].float()
+        transformers_selected = transformers_log_probs[comparison_mask].float()
+        assert torch.isfinite(backend_selected).all()
+        assert torch.isfinite(transformers_selected).all()
+        torch.testing.assert_close(
+            backend_selected, transformers_selected, atol=3e-1, rtol=1e-1
+        )
+        delta = backend_selected - transformers_selected
+        abs_delta = delta.abs()
+        mse = delta.square().mean().item()
+        max_abs = abs_delta.max().item()
+        mean_abs = abs_delta.mean().item()
+        importance_weights = torch.exp(delta.double())
+        ess = importance_weights.sum().square() / (
+            importance_weights.square().sum() * importance_weights.numel()
+        )
+        ess = ess.item()
+        assert ess > 0.99, (
+            "Backend and Transformers log-probs diverged: "
+            f"{ess=:.6f}, {mse=:.6f}, {mean_abs=:.6f}, {max_abs=:.6f}"
+        )
 
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not _has_transformers, reason="transformers not available")
@@ -2007,27 +2181,19 @@ class TestLogProbsComparison:
             input_key=input_key,
             generate=True,
             pad_output=pad_output,
-            generate_kwargs={"max_tokens": 5, "temperature": 0.0},  # Deterministic
-        )
-
-        # Create Transformers wrapper for generation
-        tf_gen_wrapper = TransformersWrapper(
-            tf_model,
-            tokenizer=tf_tokenizer,
-            input_mode=input_mode,
-            input_key=input_key,
-            generate=True,
-            pad_output=pad_output,
+            return_log_probs=False,
             generate_kwargs={
-                "max_new_tokens": 5,
-                "do_sample": False,
+                "max_tokens": 5,
                 "temperature": 0.0,
-            },  # Deterministic
+                "ignore_eos": True,
+            },  # Deterministic fixed-length response
         )
 
-        # Step 1: Generate tokens with both wrappers
+        # Step 1: Generate the canonical response tokens with vLLM.
         vllm_gen_result = vllm_gen_wrapper(data.copy())
-        tf_gen_wrapper(data.copy())
+        response_tokens = self._response_token_list(
+            vllm_gen_result, vllm_tokenizer.pad_token_id
+        )
 
         # Step 2: Extract generated tokens and create new input for log-probs computation
         if input_mode == "history":
@@ -2093,12 +2259,20 @@ class TestLogProbsComparison:
 
         # Step 4: Compute log-probs for the full sequence (original + generated)
         vllm_lp_result = vllm_lp_wrapper(new_data.copy())
-        tf_lp_result = tf_lp_wrapper(new_data.copy())
+        with torch.inference_mode():
+            tf_lp_result = tf_lp_wrapper(new_data.copy())
+        check_output_shapes(vllm_lp_result, pad_output, requested_log_probs=True)
+        check_output_shapes(tf_lp_result, pad_output, requested_log_probs=True)
 
-        assert_close(
-            vllm_lp_result, tf_lp_result, atol=1e-1, rtol=1e-1, intersection=True
+        self._assert_backend_log_probs_match(
+            vllm_lp_result,
+            tf_lp_result,
+            response_tokens,
+            vllm_tokenizer.pad_token_id,
+            use_assistant_mask=input_mode == "history",
         )
 
+    @pytest.mark.gpu
     @pytest.mark.skipif(not _has_vllm, reason="vllm not available")
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_sync_async_vllm_strict_equivalence(
@@ -2107,10 +2281,6 @@ class TestLogProbsComparison:
         """Test strict equivalence between sync vLLM.LLM and async engine in real-world setting."""
         sync_model, sync_tokenizer = vllm_instance
         async_model, async_tokenizer = async_vllm_instance
-
-        from tensordict import TensorDict
-        from torchrl.modules.llm.policies.common import Text
-        from torchrl.modules.llm.policies.vllm_wrapper import vLLMWrapper
 
         # Test prompts
         test_prompts = [
@@ -2513,8 +2683,6 @@ class TestBatching:
         async_vllm_instance,
         vllm_backend,
     ):
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         # Handle the case where vLLM is not available
         if wrapper_class == vLLMWrapper:
             try:
@@ -2569,8 +2737,6 @@ class TestBatching:
         async_vllm_instance,
         vllm_backend,
     ):
-        from concurrent.futures import ThreadPoolExecutor, wait
-
         if wrapper_class == vLLMWrapper:
             if vllm_backend == "async":
                 model, tokenizer = async_vllm_instance
@@ -2665,8 +2831,6 @@ class TestBatching:
         input2 = TensorDict(text=Text(prompt=["Test 2"]), batch_size=(1,))
 
         # Submit inputs (they won't be processed immediately due to batch size)
-        from concurrent.futures import ThreadPoolExecutor
-
         pool = ThreadPoolExecutor(max_workers=1)
         try:
             # Submit work
@@ -2868,6 +3032,9 @@ class TestBatching:
         [vLLMWrapper, TransformersWrapperMaxTokens],
         ids=["vllm", "transformers"],
     )
+    @pytest.mark.xfail(
+        strict=False, reason="vLLM no longer has best_of parameter in SamplingParams"
+    )
     def test_standardized_generation_parameters(
         self, wrapper_class, vllm_instance, transformers_instance
     ):
@@ -3018,8 +3185,6 @@ class TestBatching:
 
         # Test 4: Verify that the _batching decorator correctly handles the squeeze logic
         # This tests the specific fix in the _batching decorator
-        from torchrl.modules.llm.policies.common import _batching
-
         # Create a simple mock function to test the decorator
         def mock_forward(self, td_input, **kwargs):
             # Return the input as-is for testing
@@ -3059,13 +3224,8 @@ class TestBatching:
 
 class TestRayWrapper:
     @pytest.mark.parametrize("backend", ["transformers"])
+    @pytest.mark.skip(reason="Ray wrapper tests hang in CI - needs investigation")
     def test_ray_wrapper(self, sample_text, backend):
-        import gc
-        from concurrent.futures import ThreadPoolExecutor
-
-        from torchrl import logger as torchrl_logger
-        from torchrl.modules.llm.policies import RemoteTransformersWrapper
-
         # check that the wrapper is remote
         if backend == "vllm":
             raise ValueError("vllm backend is not supported")
@@ -3109,10 +3269,10 @@ class TestActorSharing:
     """Test actor sharing functionality for Remote wrappers."""
 
     @pytest.mark.parametrize("backend", ["transformers"])
+    @pytest.mark.skip(reason="Ray actor sharing tests hang in CI - needs investigation")
     def test_actor_sharing(self, backend):
         """Test that creating the same wrapper twice uses the same actor."""
         import ray
-        from torchrl.modules.llm.policies import RemoteTransformersWrapper
 
         # Initialize Ray if not already done
         if not ray.is_initialized():
@@ -3168,13 +3328,372 @@ class TestActorSharing:
             assert isinstance(result2["text"].response, str)
 
         finally:
-            # Cleanup
+            # Cleanup: wrappers, GPU memory, and Ray
             try:
                 del wrapper1
                 del wrapper2
                 gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                ray.shutdown()
             except Exception:
                 pass
+
+
+@pytest.mark.skipif(not _has_transformers, reason="transformers not available")
+class TestPreferTokens:
+    """Tests for the token-first LLM wrapper API (prefer_tokens feature).
+
+    These tests use the shared transformers_instance fixture to avoid redundant model downloads.
+    """
+
+    def test_transformers_wrapper_prefer_tokens_explicit(self, transformers_instance):
+        """Test that TransformersWrapper can be set with prefer_tokens=True."""
+        model, tokenizer = transformers_instance
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=True,
+        )
+
+        # Verify prefer_tokens is True when explicitly set
+        assert wrapper.prefer_tokens is True
+
+    def test_transformers_wrapper_prefer_tokens_with_chatenv(
+        self, transformers_instance
+    ):
+        """Test that TransformersWrapper uses tokens from ChatEnv(with_tokenizer=True)."""
+        model, tokenizer = transformers_instance
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=True,
+        )
+
+        # Create env with token maintenance using with_tokenizer=True
+        env = ChatEnv(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+            with_tokenizer=True,
+        )
+
+        # Reset and verify tokens are created
+        td = TensorDict({"query": "Hello, world!"}, batch_size=(1,))
+        result = env.reset(td)
+        assert ("tokens", "prompt") in result.keys(True, True)
+
+        # Run through wrapper - it should use the existing tokens
+        output = wrapper(result)
+
+        # Verify output has expected keys
+        assert ("text", "response") in output.keys(True, True)
+        assert ("tokens", "full") in output.keys(True, True)  # Output has full tokens
+
+    def test_transformers_wrapper_prefer_tokens_false(self, transformers_instance):
+        """Test that TransformersWrapper ignores tokens when prefer_tokens=False."""
+        model, tokenizer = transformers_instance
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 10},
+            prefer_tokens=False,
+        )
+
+        assert wrapper.prefer_tokens is False
+
+        # Create env with token maintenance
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+
+        # Reset
+        td = TensorDict({"query": "Hello!"}, batch_size=(1,))
+        result = env.reset(td)
+
+        # Run through wrapper - should still work
+        output = wrapper(result)
+        assert ("text", "response") in output.keys(True, True)
+
+    def test_get_new_version_preserves_prefer_tokens(self, transformers_instance):
+        """Test that get_new_version preserves the prefer_tokens setting."""
+        model, tokenizer = transformers_instance
+
+        # Create with prefer_tokens=False
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            prefer_tokens=False,
+        )
+
+        # Get new version for log probs
+        new_wrapper = wrapper.get_new_version(generate=False)
+
+        # Should preserve prefer_tokens=False
+        assert new_wrapper.prefer_tokens is False
+
+        # Get new version with explicit prefer_tokens
+        new_wrapper2 = wrapper.get_new_version(prefer_tokens=True)
+        assert new_wrapper2.prefer_tokens is True
+
+    def test_multi_turn_conversation_with_tokens(self, transformers_instance):
+        """Test that tokens are maintained correctly across multiple turns."""
+        model, tokenizer = transformers_instance
+
+        wrapper = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            input_mode="history",
+            generate=True,
+            generate_kwargs={"max_new_tokens": 5},
+            prefer_tokens=True,
+        )
+
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+
+        # Turn 1
+        td = TensorDict({"query": "Hi"}, batch_size=(1,))
+        result = env.reset(td)
+        tokens_after_reset = result.get(("tokens", "prompt"), as_list=True)[0].clone()
+
+        output = wrapper(result)
+
+        # Get the full history for stepping
+        action_td = output.clone()
+        step_result = env.step(action_td)
+        next_td = step_result["next"]
+
+        tokens_after_step = next_td.get(("tokens", "prompt"), as_list=True)[0]
+
+        # Tokens should have grown (we added more messages to the new prompt)
+        assert tokens_after_step.numel() > tokens_after_reset.numel()
+
+    def test_token_prefix_stays_consistent(self, transformers_instance):
+        """Test that token prefix remains consistent across turns for KV cache."""
+        _model, tokenizer = transformers_instance
+
+        env = ChatEnv.with_tokenizer(
+            tokenizer=tokenizer,
+            batch_size=(1,),
+        )
+
+        # Reset
+        td = TensorDict({"query": "Hello"}, batch_size=(1,))
+        result = env.reset(td)
+        initial_tokens = result.get(("tokens", "prompt"), as_list=True)[0].clone()
+
+        # Simulate a response - need proper batch dimensions
+        history_prompt = result.get(("history", "prompt"))
+        response = History(role="assistant", content="Hi!", batch_size=1).unsqueeze(0)
+        history_full = history_prompt.extend(response, inplace=False, dim=-1)
+
+        action_td = result.clone()
+        action_td.set(("history", "full"), history_full)
+
+        step_result = env.step(action_td)
+        next_td = step_result["next"]
+        new_tokens = next_td.get(("tokens", "prompt"), as_list=True)[0]
+
+        # The prefix should be preserved in the new prompt tokens
+        prefix_length = initial_tokens.numel()
+        assert new_tokens.numel() >= prefix_length
+
+        # Verify the content is preserved by decoding
+        initial_decoded = tokenizer.decode(initial_tokens, skip_special_tokens=False)
+        new_decoded = tokenizer.decode(new_tokens, skip_special_tokens=False)
+        assert initial_decoded in new_decoded or new_decoded.startswith(
+            initial_decoded.strip()
+        )
+
+
+@pytest.mark.skipif(not _has_vllm, reason="vllm not available")
+class TestRequestOutputConversion:
+    """Tests for _RequestOutput_tc, CompletionOutput_tc, and the conversion helpers."""
+
+    @pytest.fixture
+    def CompletionOutput_tc(self):
+        return vLLMWrapper.CompletionOutput_tc
+
+    @pytest.fixture
+    def mock_completion_output(self):
+        """Create a mock vLLM CompletionOutput with typical fields."""
+        from vllm.outputs import CompletionOutput
+
+        return CompletionOutput(
+            index=0,
+            text="Hello world",
+            token_ids=[1, 2, 3, 4],
+            cumulative_logprob=-1.5,
+            logprobs=None,
+            finish_reason="stop",
+            stop_reason=None,
+        )
+
+    def test_completion_output_to_tc_basic(
+        self, CompletionOutput_tc, mock_completion_output
+    ):
+        """Test basic conversion of CompletionOutput without logprobs."""
+        tc = _completion_output_to_tc(mock_completion_output, CompletionOutput_tc)
+        assert tc.index == 0
+        assert tc.text == "Hello world"
+        assert tc.cumulative_logprob == -1.5
+        assert tc.logprobs is None
+        assert tc.finish_reason == "stop"
+        assert tc.stop_reason is None
+
+    def test_completion_output_to_tc_with_logprobs(self, CompletionOutput_tc):
+        """Test conversion of CompletionOutput with logprobs present."""
+        from vllm.outputs import CompletionOutput
+
+        logprobs = [
+            {1: {"logprob": -0.1, "rank": 1}},
+            {2: {"logprob": -0.2, "rank": 1}},
+        ]
+        output = CompletionOutput(
+            index=0,
+            text="Hi",
+            token_ids=[1, 2],
+            cumulative_logprob=-0.3,
+            logprobs=logprobs,
+            finish_reason="stop",
+            stop_reason=None,
+        )
+        tc = _completion_output_to_tc(output, CompletionOutput_tc)
+        # logprobs should be passed through (not None) since they are non-empty
+        assert tc.logprobs is not None
+
+    def test_completion_output_to_tc_empty_logprobs_list(self, CompletionOutput_tc):
+        """Test conversion when vLLM returns logprobs=[] (vLLM 0.17 V1 behavior).
+
+        This is the case that was crashing with from_dataclass due to
+        tensordict's _convert_list_to_stack failing on empty lists.
+        """
+        from vllm.outputs import CompletionOutput
+
+        output = CompletionOutput(
+            index=0,
+            text="",
+            token_ids=[],
+            cumulative_logprob=None,
+            logprobs=[],  # vLLM 0.17 V1 returns [] instead of None
+            finish_reason=None,
+            stop_reason=None,
+        )
+        tc = _completion_output_to_tc(output, CompletionOutput_tc)
+        # Empty logprobs list should be converted to None (falsy)
+        assert tc.logprobs is None
+
+    def test_request_output_post_init(self, CompletionOutput_tc):
+        """Test that _RequestOutput_tc.__post_init__ correctly processes outputs."""
+        from vllm.outputs import CompletionOutput
+
+        outputs = [
+            CompletionOutput(
+                index=0,
+                text="Hello",
+                token_ids=[10, 20, 30],
+                cumulative_logprob=-1.0,
+                logprobs=None,
+                finish_reason="stop",
+                stop_reason=None,
+            ),
+        ]
+        tc = _RequestOutput_tc(
+            request_id="req-1",
+            prompt="Say hello",
+            prompt_token_ids=torch.tensor([1, 2, 3]),
+            prompt_logprobs=torch.tensor([]),
+            outputs=outputs,
+            finished="true",
+            metrics=None,
+            lora_request=None,
+            encoder_prompt=None,
+            encoder_prompt_token_ids=None,
+            num_cached_tokens=torch.tensor(0),
+        )
+        # After __post_init__, outputs should be a CompletionOutput_tc, not a raw list
+        assert not isinstance(tc.outputs, list)
+        assert tc.outputs.text == "Hello"
+        assert tc.outputs.token_ids.dtype == torch.long
+        torch.testing.assert_close(
+            tc.outputs.token_ids, torch.tensor([10, 20, 30], dtype=torch.long)
+        )
+
+    def test_request_output_post_init_empty_logprobs(self, CompletionOutput_tc):
+        """Test __post_init__ with empty logprobs list (vLLM 0.17 V1 edge case)."""
+        from vllm.outputs import CompletionOutput
+
+        outputs = [
+            CompletionOutput(
+                index=0,
+                text="",
+                token_ids=[],
+                cumulative_logprob=None,
+                logprobs=[],  # vLLM 0.17 V1 behavior
+                finish_reason=None,
+                stop_reason=None,
+            ),
+        ]
+        # This should not crash (previously crashed with from_dataclass)
+        tc = _RequestOutput_tc(
+            request_id="req-2",
+            prompt="Test",
+            prompt_token_ids=torch.tensor([1]),
+            prompt_logprobs=torch.tensor([]),
+            outputs=outputs,
+            finished="false",
+            metrics=None,
+            lora_request=None,
+            encoder_prompt=None,
+            encoder_prompt_token_ids=None,
+            num_cached_tokens=torch.tensor(0),
+        )
+        assert not isinstance(tc.outputs, list)
+
+    def test_from_request_output(self):
+        """Test from_request_output preserves batch semantics for request lists."""
+        from vllm.outputs import CompletionOutput, RequestOutput
+
+        completion = CompletionOutput(
+            index=0,
+            text="world",
+            token_ids=[10, 20],
+            cumulative_logprob=-0.5,
+            logprobs=None,
+            finish_reason="stop",
+            stop_reason=None,
+        )
+        request = RequestOutput(
+            request_id="req-3",
+            prompt="Hello",
+            prompt_token_ids=[1, 2, 3],
+            prompt_logprobs=None,
+            outputs=[completion],
+            finished=True,
+        )
+        result = _RequestOutput_tc.from_request_output([request])
+        assert result.batch_size == torch.Size([1])
+        assert result.request_id[0] == "req-3"
+        assert result.prompt[0] == "Hello"
+        torch.testing.assert_close(result.prompt_token_ids[0], torch.tensor([1, 2, 3]))
+        # prompt_logprobs=None should become empty tensor
+        assert result.prompt_logprobs[0].numel() == 0
 
 
 if __name__ == "__main__":

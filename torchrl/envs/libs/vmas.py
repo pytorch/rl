@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import importlib.util
-import warnings
 
 import torch
 from tensordict import LazyStackedTensorDict, TensorDict, TensorDictBase
@@ -147,9 +146,10 @@ class VmasWrapper(_EnvWrapper):
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
         agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
-        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
+        full_action_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_observation_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_reward_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_done_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
         het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
@@ -314,7 +314,8 @@ class VmasWrapper(_EnvWrapper):
         return group_map
 
     def _make_specs(
-        self, env: vmas.simulator.environment.environment.Environment  # noqa
+        self,
+        env: vmas.simulator.environment.environment.Environment,  # noqa
     ) -> None:
         # Create and check group map
         self.agent_names = [agent.name for agent in self.agents]
@@ -366,38 +367,6 @@ class VmasWrapper(_EnvWrapper):
         self.full_observation_spec_unbatched = full_observation_spec_unbatched
         self.full_reward_spec_unbatched = full_reward_spec_unbatched
         self.full_done_spec_unbatched = full_done_spec_unbatched
-
-    @property
-    def unbatched_action_spec(self):
-        warnings.warn(
-            "unbatched_action_spec is deprecated and will be removed in v0.9. "
-            "Please use full_action_spec_unbatched instead."
-        )
-        return self.full_action_spec_unbatched
-
-    @property
-    def unbatched_observation_spec(self):
-        warnings.warn(
-            "unbatched_observation_spec is deprecated and will be removed in v0.9. "
-            "Please use full_observation_spec_unbatched instead."
-        )
-        return self.full_observation_spec_unbatched
-
-    @property
-    def unbatched_reward_spec(self):
-        warnings.warn(
-            "unbatched_reward_spec is deprecated and will be removed in v0.9. "
-            "Please use full_reward_spec_unbatched instead."
-        )
-        return self.full_reward_spec_unbatched
-
-    @property
-    def unbatched_done_spec(self):
-        warnings.warn(
-            "unbatched_done_spec is deprecated and will be removed in v0.9. "
-            "Please use full_done_spec_unbatched instead."
-        )
-        return self.full_done_spec_unbatched
 
     def _make_unbatched_group_specs(self, group: str):
         # Agent specs
@@ -691,8 +660,14 @@ class VmasEnv(VmasWrapper):
             in one group named ``"agents"``.
             Otherwise, a group map can be specified or selected from some premade options.
             See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
-        **kwargs (Dict, optional): These are additional arguments that can be passed to the VMAS scenario constructor.
-            (e.g., number of agents, reward sparsity). The available arguments will vary based on the chosen scenario.
+        scenario_kwargs (Dict, optional): dictionary of additional arguments passed to the VMAS
+            scenario constructor (e.g., number of agents, reward sparsity).
+            This is convenient when scenario parameters are stored under a dedicated config field.
+        **kwargs (Dict, optional): Additional arguments passed to the VMAS scenario constructor.
+            This allows passing scenario arguments directly as keyword arguments.
+            If the same key is provided in both ``scenario_kwargs`` and ``kwargs``, the value in
+            ``kwargs`` takes precedence.
+            The available arguments will vary based on the chosen scenario.
             To see the available arguments for a specific scenario, see the constructor in its file from
             `the scenario folder <https://github.com/proroklab/VectorizedMultiAgentSimulator/tree/VMAS-1.3.3/vmas/scenarios>`__.
 
@@ -702,9 +677,10 @@ class VmasEnv(VmasWrapper):
             input/output. See :class:`~torchrl.envs.utils.MarlGroupMapType` for more info.
         agent_names (list of str): names of the agent in the environment
         agent_names_to_indices_map (Dict[str, int]): dictionary mapping agent names to their index in the environment
-        unbatched_action_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_observation_spec (TensorSpec): version of the spec without the vectorized dimension
-        unbatched_reward_spec (TensorSpec): version of the spec without the vectorized dimension
+        full_action_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_observation_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_reward_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
+        full_done_spec_unbatched (TensorSpec): version of the spec without the vectorized dimension
         het_specs (bool): whether the environment has any lazy spec
         het_specs_map (Dict[str, bool]): dictionary mapping each group to a flag representing of the group has lazy specs
         available_envs (List[str]): the list of the scenarios available to build.
@@ -781,6 +757,7 @@ class VmasEnv(VmasWrapper):
         categorical_actions: bool = True,
         seed: int | None = None,
         group_map: MarlGroupMapType | dict[str, list[str]] | None = None,
+        scenario_kwargs: dict | None = None,
         **kwargs,
     ):
         if not _has_vmas:
@@ -788,6 +765,7 @@ class VmasEnv(VmasWrapper):
                 f"vmas python package was not found. Please install this dependency. "
                 f"More info: {self.git_url}."
             )
+        scenario_kwargs = {**(scenario_kwargs or {}), **kwargs}
         super().__init__(
             scenario=scenario,
             num_envs=num_envs,
@@ -796,7 +774,7 @@ class VmasEnv(VmasWrapper):
             seed=seed,
             categorical_actions=categorical_actions,
             group_map=group_map,
-            **kwargs,
+            **scenario_kwargs,
         )
 
     def _check_kwargs(self, kwargs: dict):

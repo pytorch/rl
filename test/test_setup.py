@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 _ROOT = Path(__file__).resolve().parents[1]
+_IS_WINDOWS = sys.platform == "win32"
 
 
 def _run(cmd, *, cwd, env=None, timeout=60 * 60) -> str:
@@ -16,6 +17,8 @@ def _run(cmd, *, cwd, env=None, timeout=60 * 60) -> str:
         cwd=str(cwd),
         env=env,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         timeout=timeout,
@@ -37,6 +40,8 @@ def _pip_uninstall(pkg: str) -> None:
         [sys.executable, "-m", "pip", "uninstall", "-y", pkg],
         cwd=str(_ROOT),
         text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
@@ -76,7 +81,19 @@ def _expected_dist_version(base_version: str) -> str:
     return f"{base_version}+g{_git(['rev-parse', '--short', 'HEAD'])}"
 
 
-@pytest.mark.parametrize("editable", [True, False], ids=["editable", "wheel"])
+@pytest.mark.parametrize(
+    "editable",
+    [
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(
+                _IS_WINDOWS, reason="Windows file locking prevents editable re-install"
+            ),
+            id="editable",
+        ),
+        pytest.param(False, id="wheel"),
+    ],
+)
 def test_install_no_deps_has_nonzero_version(editable: bool, tmp_path: Path):
     # Requires git checkout.
     if not (_ROOT / ".git").exists():
@@ -127,7 +144,18 @@ except Exception as err:
 print(json.dumps(out))
 """
     out = _run([sys.executable, "-c", code], cwd=probe_dir, timeout=5 * 60)
-    info = json.loads(out.strip())
+    # Warnings or deprecation notices may be printed to stdout (stderr is
+    # merged), so extract only the JSON object which is always the last line.
+    json_line = ""
+    for line in reversed(out.strip().splitlines()):
+        if line.strip().startswith("{"):
+            json_line = line.strip()
+            break
+    if not json_line:
+        raise RuntimeError(
+            f"Probe script produced no JSON output.\nFull output:\n{out}"
+        )
+    info = json.loads(json_line)
 
     dist_version = str(info["dist_version"]).strip()
     assert dist_version != "0.0.0"

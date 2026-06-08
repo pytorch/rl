@@ -13,6 +13,7 @@ from collections.abc import Callable
 from functools import partial
 
 from tensordict import TensorDict, TensorDictBase
+from tensordict.utils import NestedKey
 from torch import optim
 
 from torchrl.collectors import BaseCollector
@@ -33,6 +34,9 @@ from torchrl.trainers.trainers import (
 
 class SACTrainer(Trainer):
     """A trainer class for Soft Actor-Critic (SAC) algorithm.
+
+    See also :class:`~torchrl.trainers.algorithms.configs.SACTrainerConfig` for the
+    Hydra configuration counterpart.
 
     This trainer implements the SAC algorithm, an off-policy actor-critic method that
     optimizes a stochastic policy in an off-policy way, forming a bridge between
@@ -68,6 +72,13 @@ class SACTrainer(Trainer):
         log_actions (bool, optional): Whether to log action statistics. Defaults to True.
         log_observations (bool, optional): Whether to log observation statistics. Defaults to False.
         target_net_updater (TargetNetUpdater, optional): Target network updater for soft updates. Defaults to None.
+        done_key (NestedKey, optional): Done key used by losses and logging. Defaults to "done".
+        terminated_key (NestedKey, optional): Terminated key used by losses and logging. Defaults to "terminated".
+        reward_key (NestedKey, optional): Reward key used by losses and logging. Defaults to "reward".
+        episode_reward_key (NestedKey, optional): Episode reward key used for cumulative reward logging.
+            Defaults to "reward_sum".
+        action_key (NestedKey, optional): Action key used by losses and logging. Defaults to "action".
+        observation_key (NestedKey, optional): Observation key used for logging. Defaults to "observation".
 
     Example:
         >>> from torchrl.collectors import Collector
@@ -126,6 +137,13 @@ class SACTrainer(Trainer):
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
+        done_key: NestedKey = "done",
+        terminated_key: NestedKey = "terminated",
+        reward_key: NestedKey = "reward",
+        episode_reward_key: NestedKey = "reward_sum",
+        action_key: NestedKey = "action",
+        observation_key: NestedKey = "observation",
     ) -> None:
         warnings.warn(
             "SACTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -153,6 +171,7 @@ class SACTrainer(Trainer):
             save_trainer_file=save_trainer_file,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection
@@ -187,6 +206,20 @@ class SACTrainer(Trainer):
         self.log_rewards = log_rewards
         self.log_actions = log_actions
         self.log_observations = log_observations
+        self.done_key = done_key
+        self.terminated_key = terminated_key
+        self.reward_key = reward_key
+        self.episode_reward_key = episode_reward_key
+        self.action_key = action_key
+        self.observation_key = observation_key
+
+        if hasattr(self.loss_module, "set_keys"):
+            self.loss_module.set_keys(
+                reward=reward_key,
+                done=done_key,
+                terminated=terminated_key,
+                action=action_key,
+            )
 
         # Set up comprehensive logging for SAC training
         if self.enable_logging:
@@ -222,7 +255,7 @@ class SACTrainer(Trainer):
         """
         # Always log done states as percentage (episode completion rate)
         log_done_percentage = LogScalar(
-            key=("next", "done"),
+            key=("next", self.done_key),
             logname="done_percentage",
             log_pbar=True,
             include_std=False,  # No std for binary values
@@ -237,7 +270,7 @@ class SACTrainer(Trainer):
         if self.log_rewards:
             # 1. Log training rewards (most important metric for SAC)
             log_rewards = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_training",
                 log_pbar=True,  # Show in progress bar
                 include_std=True,
@@ -251,7 +284,7 @@ class SACTrainer(Trainer):
 
             # 2. Log maximum reward in batch (for monitoring best performance)
             log_max_reward = LogScalar(
-                key=("next", "reward"),
+                key=("next", self.reward_key),
                 logname="r_max",
                 log_pbar=False,
                 include_std=False,
@@ -264,7 +297,7 @@ class SACTrainer(Trainer):
 
             # 3. Log total reward in batch (for monitoring cumulative performance)
             log_total_reward = LogScalar(
-                key=("next", "reward_sum"),
+                key=("next", self.episode_reward_key),
                 logname="r_total",
                 log_pbar=False,
                 include_std=False,
@@ -279,7 +312,7 @@ class SACTrainer(Trainer):
         if self.log_actions:
             # 4. Log action norms (useful for monitoring policy behavior)
             log_action_norm = LogScalar(
-                key="action",
+                key=self.action_key,
                 logname="action_norm",
                 log_pbar=False,
                 include_std=True,
@@ -294,7 +327,7 @@ class SACTrainer(Trainer):
         if self.log_observations:
             # 5. Log observation statistics (for monitoring state distributions)
             log_obs_norm = LogScalar(
-                key="observation",
+                key=self.observation_key,
                 logname="obs_norm",
                 log_pbar=False,
                 include_std=True,

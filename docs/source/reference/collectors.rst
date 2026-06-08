@@ -12,8 +12,10 @@ making it easy to collect high-quality training data efficiently.
 TorchRL provides several collector implementations optimized for different scenarios:
 
 - :class:`Collector`: Single-process collection on the training worker
+- :class:`AsyncBatchedCollector`: Async environments + auto-batching inference server (see :class:`AsyncBatchedCollector`)
 - :class:`MultiCollector`: Parallel collection across multiple workers (see below)
-- **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`DistributedCollector` / :class:`RPCCollector`)
+- :class:`Evaluator`: Sync or async evaluation during training (see :ref:`evaluation <collectors_eval>`)
+- **Distributed collectors**: For multi-node setups using Ray, RPC, or distributed backends (see :class:`~torchrl.collectors.distributed.DistributedCollector` / :class:`~torchrl.collectors.distributed.RPCCollector`)
 
 MultiCollector API
 ------------------
@@ -55,7 +57,31 @@ Key Features
 - **Device management**: Control where environments and policies execute
 - **Weight synchronization**: Keep inference policies up-to-date with training weights
 - **Replay buffer integration**: Seamless compatibility with TorchRL's replay buffers
+- **Trajectory assembly**: Collect complete trajectories with ``trajs_per_batch`` for
+  clean :class:`~torchrl.data.replay_buffers.SliceSampler` sampling — see :ref:`collectors_replay_trajs`
 - **Batching strategies**: Multiple ways to organize collected data
+- **Profiler-ready**: Set ``TORCHRL_PROFILING=1`` to emit named ranges on the
+  collector, env, and policy hot paths — see :ref:`ref_profiling`
+
+Collection hooks
+----------------
+
+Collectors accept optional hooks for per-rollout side effects:
+``pre_collect_hook`` is called before a rollout starts, and
+``post_collect_hook`` is called with the :class:`~tensordict.TensorDictBase`
+batch that will be yielded by iteration.  Hook return values are ignored, and
+exceptions raised by hooks propagate to the caller and stop collection.
+
+Hooks are intended for instrumentation and worker-local side effects, such as
+stepping a profiler or recording rollout metrics.  Use ``postproc`` when the
+collected data itself should be transformed before training.
+
+For :class:`MultiCollector`, :class:`MultiSyncCollector`, and
+:class:`MultiAsyncCollector`, hooks run in each worker process.  The helper
+methods :meth:`~torchrl.collectors.BaseCollector.map_fn` and
+:meth:`~torchrl.collectors.BaseCollector.get_distant_attr` broadcast to each
+worker for multi-process collectors and to each actor for
+:class:`~torchrl.collectors.distributed.RayCollector`.
 
 Quick Example
 -------------
@@ -90,15 +116,12 @@ Quick Example
     
     collector.shutdown()
 
-Legacy names
-------------
+Removed legacy names
+--------------------
 
-The following names are kept for backward compatibility:
-
-- ``SyncDataCollector`` → ``Collector``
-- ``MultiSyncDataCollector`` → ``MultiCollector(sync=True)``
-- ``MultiaSyncDataCollector`` → ``MultiCollector(sync=False)``
-- ``DataCollectorBase`` → ``BaseCollector``
+The deprecated collector aliases were removed in v0.13. Use the canonical
+collector classes directly: ``Collector``, ``MultiCollector``,
+``MultiSyncCollector``, ``MultiAsyncCollector``, and ``BaseCollector``.
 
 Documentation Sections
 ----------------------
@@ -108,6 +131,8 @@ Documentation Sections
 
    collectors_basics
    collectors_single
+   collectors_internals
+   collectors_eval
    collectors_distributed
    collectors_weightsync
    collectors_replay

@@ -1,3 +1,5 @@
+:orphan:
+
 .. currentmodule:: torchrl.envs.llm
 
 LLM Environments
@@ -10,6 +12,8 @@ The environment layer orchestrates data loading, tool execution, reward computat
     :template: rl_template.rst
 
     ChatEnv
+    CountdownEnv
+    CountdownRewardParser
     DatasetChatEnv
     GSM8KEnv
     make_gsm8k_env
@@ -18,6 +22,8 @@ The environment layer orchestrates data loading, tool execution, reward computat
     IFEvalEnv
     IfEvalScorer
     IFEvalScoreData
+    MATHEnv
+    MATHRewardParser
     LLMEnv
     LLMHashingEnv
     make_mlgym

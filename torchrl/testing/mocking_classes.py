@@ -1236,11 +1236,13 @@ class MultiAgentCountingEnv(EnvBase):
         | dict[str, list[str]] = MarlGroupMapType.ALL_IN_ONE_GROUP,
         max_steps: int = 5,
         start_val: int = 0,
+        env_done_key: str = "env_done",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.max_steps = max_steps
         self.start_val = start_val
+        self.env_done_key = env_done_key
         self.n_agents = n_agents
         self.agent_names = [f"agent_{idx}" for idx in range(n_agents)]
 
@@ -1308,6 +1310,12 @@ class MultiAgentCountingEnv(EnvBase):
         self.observation_spec = Composite(observation_specs)
         self.reward_spec = Composite(reward_specs)
         self.done_spec = Composite(done_specs)
+        self.done_spec[env_done_key] = Categorical(
+            2,
+            dtype=torch.bool,
+            shape=(*self.batch_size, 1),
+            device=self.device,
+        )
         self.action_spec = Composite(action_specs)
         self.register_buffer(
             "count",
@@ -1344,6 +1352,8 @@ class MultiAgentCountingEnv(EnvBase):
                     device=self.device,
                 )
 
+        source[self.env_done_key] = self.count > self.max_steps
+
         tensordict = TensorDict(source, batch_size=self.batch_size, device=self.device)
         return tensordict
 
@@ -1377,6 +1387,7 @@ class MultiAgentCountingEnv(EnvBase):
                     batch_size=self.batch_size,
                     device=self.device,
                 )
+        source[self.env_done_key] = self.count > self.max_steps
         tensordict = TensorDict(source, batch_size=self.batch_size, device=self.device)
         return tensordict
 
@@ -2718,3 +2729,70 @@ class EnvThatErrorsBecauseOfStack(EnvBase):
 
     def _set_seed(self, seed: int | None) -> None:
         return 0
+
+
+class FastImageEnv(EnvBase):
+    """Fast environment with image observations for benchmarking.
+
+    This environment uses pre-allocated tensors to minimize step overhead,
+    making it ideal for benchmarking collector and storage performance.
+
+    Args:
+        img_shape: Shape of the image observation (C, H, W). Default: (4, 84, 84).
+        device: Device to create tensors on. Default: None (CPU).
+        batch_size: Batch size of the environment. Default: ().
+    """
+
+    def __init__(self, img_shape=(4, 84, 84), device=None, batch_size=()):
+        super().__init__(device=device, batch_size=batch_size)
+        self.img_shape = img_shape
+        self._make_spec()
+        # Pre-allocate to minimize step overhead
+        self._obs = torch.rand(*batch_size, *img_shape, device=device)
+
+    def _make_spec(self):
+        self.observation_spec = Composite(
+            pixels=Unbounded(
+                shape=(*self.batch_size, *self.img_shape), dtype=torch.float32
+            ),
+            shape=self.batch_size,
+        )
+        self.action_spec = Bounded(
+            -1, 1, shape=(*self.batch_size, 4), dtype=torch.float32
+        )
+        self.reward_spec = Unbounded(shape=(*self.batch_size, 1), dtype=torch.float32)
+        self.done_spec = Unbounded(shape=(*self.batch_size, 1), dtype=torch.bool)
+
+    def _reset(self, tensordict):
+        return TensorDict(
+            {
+                "pixels": self._obs.clone(),
+                "done": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+                "terminated": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+            },
+            batch_size=self.batch_size,
+        )
+
+    def _step(self, tensordict):
+        return TensorDict(
+            {
+                "pixels": self._obs.clone(),
+                "reward": torch.ones(
+                    *self.batch_size, 1, dtype=torch.float32, device=self.device
+                ),
+                "done": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+                "terminated": torch.zeros(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                ),
+            },
+            batch_size=self.batch_size,
+        )
+
+    def _set_seed(self, seed):
+        torch.manual_seed(seed)

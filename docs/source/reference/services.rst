@@ -590,7 +590,7 @@ For complete examples, see:
 See Also
 --------
 
-- :ref:`ref_llms` - LLM API documentation
+- :doc:`llms` - LLM API documentation
 - :ref:`ref_collectors` - Collector documentation
 - `Ray Documentation <https://docs.ray.io/>`_ - Ray distributed framework documentation
 

@@ -12,6 +12,7 @@ dependencies:
     - pytest-mock
     - pytest-instafail
     - pytest-rerunfailures
+    - pytest-json-report
     - pytest-error-for-skips
     - pytest-asyncio
     - expecttest

@@ -5,16 +5,16 @@ torchrl.trainers package
 
 .. _ref_trainers:
 
-The trainer package provides utilities to write re-usable training scripts. The core idea is to use a
+The trainer package provides utilities to write reusable training scripts. The core idea is to use a
 trainer that implements a nested loop, where the outer loop runs the data collection steps and the inner
 loop the optimization steps.
 
 Key Features
 ------------
 
-- **Modular hook system**: Customize training at 10 different points in the loop
-- **Checkpointing support**: Save and restore training state with torch or torchsnapshot
-- **Algorithm trainers**: High-level trainers for PPO, SAC with Hydra configuration
+- **Modular hook system**: Customize training at 18 different points in the loop
+- **Checkpointing support**: Save and restore training state with ``torch``, ``torchsnapshot``, or ``memmap`` (set via the ``CKPT_BACKEND`` environment variable)
+- **Algorithm trainers**: High-level trainers for PPO, SAC, DQN, DDPG, IQL, CQL with Hydra configuration
 - **Builder helpers**: Utilities for constructing collectors, losses, and replay buffers
 
 Quick Example

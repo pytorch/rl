@@ -108,21 +108,14 @@ We will cover six crucial components of TorchRL:
 # sphinx_gallery_start_ignore
 import warnings
 
+from torch import multiprocessing as _multiprocessing
+
 warnings.filterwarnings("ignore")
-from torch import multiprocessing
+# Set multiprocessing start method to fork if not already set
+# This allows the tutorial to run as a script without if __name__ == "__main__"
 
-# TorchRL prefers spawn method, that restricts creation of  ``~torchrl.envs.ParallelEnv`` inside
-# `__main__` method call, but for the easy of reading the code switch to fork
-# which is also a default spawn method in Google's Colaboratory
-try:
-    is_sphinx = __sphinx_build__
-except NameError:
-    is_sphinx = False
-
-try:
-    multiprocessing.set_start_method("spawn" if is_sphinx else "fork")
-except RuntimeError:
-    pass
+if _multiprocessing.get_start_method(allow_none=True) is None:
+    _multiprocessing.set_start_method("fork")
 
 # sphinx_gallery_end_ignore
 
@@ -132,9 +125,9 @@ import matplotlib.pyplot as plt
 import torch
 from tensordict.nn import TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
-from torch import nn
+from torch import multiprocessing, nn
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data.replay_buffers import ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -159,10 +152,6 @@ from tqdm import tqdm
 # We set the hyperparameters for our algorithm. Depending on the resources
 # available, one may choose to execute the policy on GPU or on another
 # device.
-# The ``frame_skip`` will control how for how many frames is a single
-# action being executed. The rest of the arguments that count frames
-# must be corrected for this value (since one environment step will
-# actually return ``frame_skip`` frames).
 #
 
 is_fork = multiprocessing.get_start_method() == "fork"
@@ -310,8 +299,8 @@ print("normalization constant shape:", env.transform[0].loc.shape)
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`~torchrl.envs.libs.gym.GymWrapper` and
-# :class:`~torchrl.envs.libs.gym.GymEnv` that inherits
+# In our example, the :class:`~torchrl.envs.GymWrapper` and
+# :class:`~torchrl.envs.GymEnv` that inherits
 # from it already take care of setting the proper specs for your environment so
 # you should not have to care about this.
 #
@@ -329,7 +318,7 @@ print("input_spec:", env.input_spec)
 print("action_spec (as defined by input_spec):", env.action_spec)
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -490,12 +479,12 @@ print("Running value:", value_module(env.reset()))
 # on which ``device`` the policy should be executed, etc. They are also
 # designed to work efficiently with batched and multiprocessed environments.
 #
-# The simplest data collector is the :class:`~torchrl.collectors.SyncDataCollector`:
+# The simplest data collector is the :class:`~torchrl.collectors.Collector`:
 # it is an iterator that you can use to get batches of data of a given length, and
 # that will stop once a total number of frames (``total_frames``) have been
 # collected.
-# Other data collectors (:class:`~torchrl.collectors.MultiSyncDataCollector` and
-# :class:`~torchrl.collectors.MultiaSyncDataCollector`) will execute
+# Other data collectors (:class:`~torchrl.collectors.MultiSyncCollector` and
+# :class:`~torchrl.collectors.MultiAsyncCollector`) will execute
 # the same operations in synchronous and asynchronous manner over a
 # set of multiprocessed workers.
 #
@@ -505,7 +494,7 @@ print("Running value:", value_module(env.reset()))
 # training loop allows you to write data loading pipelines
 # that are 100% oblivious to the actual specificities of the rollout content.
 #
-collector = SyncDataCollector(
+collector = Collector(
     env,
     policy_module,
     frames_per_batch=frames_per_batch,
@@ -571,9 +560,9 @@ loss_module = ClipPPOLoss(
     critic_network=value_module,
     clip_epsilon=clip_epsilon,
     entropy_bonus=bool(entropy_eps),
-    entropy_coef=entropy_eps,
+    entropy_coeff=entropy_eps,
     # these keys match by default but we set this for completeness
-    critic_coef=1.0,
+    critic_coeff=1.0,
     loss_critic_type="smooth_l1",
 )
 

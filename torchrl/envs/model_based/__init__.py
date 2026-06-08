@@ -5,5 +5,6 @@
 
 from .common import ModelBasedEnvBase
 from .dreamer import DreamerDecoder, DreamerEnv
+from .imagined import ImaginedEnv
 
-__all__ = ["ModelBasedEnvBase", "DreamerDecoder", "DreamerEnv"]
+__all__ = ["DreamerDecoder", "DreamerEnv", "ImaginedEnv", "ModelBasedEnvBase"]
