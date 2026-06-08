@@ -330,10 +330,16 @@ class _EnvPostInit(abc.ABCMeta):
         # Auto-append a FrameSkipTransform for envs that accept a ``frame_skip``
         # argument but do not implement frame-skipping in their own ``_step``.
         # Envs that handle it natively (e.g. gym-like envs) set
-        # ``_has_frame_skip = True`` and are left untouched here. We read
-        # ``frame_skip`` off the instance (set by ``_EnvWrapper.__init__``);
-        # native envs without that attribute default to 1 and are skipped.
-        frame_skip = getattr(instance, "frame_skip", 1)
+        # ``_has_frame_skip = True`` and are left untouched here.
+        #
+        # We read ``frame_skip`` straight from ``__dict__`` (it is set by
+        # ``_EnvWrapper.__init__``) instead of ``getattr``: a plain ``getattr``
+        # would fall through to ``__getattr__`` on batched envs
+        # (``ParallelEnv`` / ``SerialEnv``), which for a lazy (non-started) env
+        # *starts the workers and raises* rather than returning a value. Envs
+        # without the attribute (batched envs, native ``EnvBase`` subclasses)
+        # default to 1 and are skipped.
+        frame_skip = instance.__dict__.get("frame_skip", 1)
         if (
             frame_skip
             and frame_skip > 1

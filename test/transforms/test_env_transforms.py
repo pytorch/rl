@@ -1350,6 +1350,27 @@ class TestFrameSkipTransform(TransformBase):
         env = _NativeFrameSkipEnv(max_steps=100, frame_skip=skip)
         assert not isinstance(env, TransformedEnv)
 
+    def test_frame_skip_metaclass_leaves_batched_envs_untouched(self):
+        """Regression: the metaclass must read ``frame_skip`` from ``__dict__``
+        and never via ``getattr`` -- otherwise constructing a (lazy) batched
+        env triggers ``__getattr__`` delegation, which starts the workers and
+        raises ``RuntimeError`` for a non-started env."""
+        # SerialEnv: constructs without error and is not frame-skip-wrapped
+        serial = SerialEnv(2, lambda: CountingEnv(max_steps=10))
+        try:
+            assert isinstance(serial, SerialEnv)
+            assert not isinstance(serial, TransformedEnv)
+        finally:
+            serial.close()
+        # ParallelEnv: constructs lazily, stays closed, no spurious worker start
+        parallel = ParallelEnv(2, lambda: CountingEnv(max_steps=10))
+        try:
+            assert isinstance(parallel, ParallelEnv)
+            assert not isinstance(parallel, TransformedEnv)
+            assert parallel.is_closed
+        finally:
+            parallel.close()
+
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for FrameSkipTransform")
 
