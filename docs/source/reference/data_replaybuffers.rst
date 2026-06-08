@@ -85,3 +85,29 @@ a flat, storage-friendly representation when serializing or restoring a buffer:
 
     TED2Flat
     Flat2TED
+
+Video-backed replay buffers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Video-backed datasets are dominated by frames; materializing every decoded frame
+as a dense tensor throws away the video codec's compression. :class:`VideoClipRef`
+is a lightweight, picklable reference to frames inside an encoded video (mp4, ...):
+it stores only *where* the frames are (a source path/URI plus a ``frame_index``),
+so indexing the whole buffer stays cheap. Frames are decoded on-demand with
+torchcodec by :class:`~torchrl.envs.transforms.DecodeVideoTransform`, appended on
+the replay-buffer sample path, so ``rb.sample()`` returns decoded frames aligned to
+the sampled steps. It composes with :class:`SliceSampler`: a contiguous window of
+sampled steps maps to consecutive frame indices and decodes as a single ranged
+read. Decoders are opened lazily and cached per worker process (see
+:func:`set_video_decoder_cache_size` and :func:`clear_video_decoder_cache`); the
+references stored in the buffer never hold an open decoder.
+
+.. currentmodule:: torchrl.data
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    VideoClipRef
+    clear_video_decoder_cache
+    set_video_decoder_cache_size

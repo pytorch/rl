@@ -1,0 +1,392 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+"""Lazy, picklable references to frames inside encoded videos.
+
+This module provides :class:`VideoClipRef`, a small :class:`~tensordict.TensorClass`
+that stores *where* frames live (a video path/URI plus per-frame indices) without
+materializing or decoding them. Indexing a reference is cheap and stays lazy;
+decoding to a dense ``uint8`` tensor happens explicitly via
+:meth:`VideoClipRef.decode` (or implicitly, see ``auto_decode``) using torchcodec.
+
+It is dataset-agnostic on purpose: anything whose rows carry ``(video file, frame
+position)`` can populate a :class:`VideoClipRef`, and decoding never needs to know
+which dataset it came from.
+"""
+from __future__ import annotations
+
+import importlib.util
+import os
+import threading
+from collections import defaultdict, OrderedDict
+from typing import Any
+
+import torch
+from tensordict import TensorClass
+
+__all__ = [
+    "VideoClipRef",
+    "clear_video_decoder_cache",
+    "set_video_decoder_cache_size",
+]
+
+_has_torchcodec = importlib.util.find_spec("torchcodec") is not None
+
+_TORCHCODEC_ERROR = (
+    "This feature requires torchcodec >= 0.10.0. When running TorchRL from this "
+    "repository with uv, use `uv run --extra video <command>` so torchcodec is "
+    "installed in the command environment. Otherwise install it with "
+    "`pip install 'torchcodec>=0.10.0'`."
+)
+
+# --- Per-process decoder cache ------------------------------------------------
+# A torchcodec ``VideoDecoder`` holds C++ state + an open file descriptor: it is
+# neither picklable nor safe to share across processes. We therefore NEVER store a
+# decoder on a ``VideoClipRef`` (the reference carries only the address). Decoders
+# are opened lazily and cached at module level, so the cache is naturally
+# per-process: it is rebuilt independently in every collector / replay-buffer
+# prefetch / DataLoader worker, and is never part of any pickled state.
+_DECODER_CACHE: OrderedDict[tuple, Any] = OrderedDict()
+_DECODER_CACHE_LOCK = threading.Lock()
+_DECODER_CACHE_MAXSIZE = 8
+
+
+def set_video_decoder_cache_size(maxsize: int) -> None:
+    """Sets the maximum number of open torchcodec decoders cached per process.
+
+    The cache is keyed by ``(source, stream, device)``; least-recently-used
+    decoders are evicted (and closed) once the limit is exceeded.
+
+    Args:
+        maxsize (int): the maximum number of decoders to keep open per process.
+    """
+    global _DECODER_CACHE_MAXSIZE
+    _DECODER_CACHE_MAXSIZE = int(maxsize)
+    with _DECODER_CACHE_LOCK:
+        while len(_DECODER_CACHE) > _DECODER_CACHE_MAXSIZE:
+            _DECODER_CACHE.popitem(last=False)
+
+
+def clear_video_decoder_cache() -> None:
+    """Closes and clears all cached torchcodec decoders in the current process."""
+    with _DECODER_CACHE_LOCK:
+        _DECODER_CACHE.clear()
+
+
+def _get_decoder(source: Any, stream: int | None, device: Any):
+    key = (source, stream, str(device) if device is not None else None)
+    with _DECODER_CACHE_LOCK:
+        decoder = _DECODER_CACHE.get(key)
+        if decoder is not None:
+            _DECODER_CACHE.move_to_end(key)
+            return decoder
+    if not _has_torchcodec:
+        raise ModuleNotFoundError(_TORCHCODEC_ERROR)
+    try:
+        from torchcodec.decoders import VideoDecoder
+    except Exception as err:  # pragma: no cover - import-time environment issue
+        raise ImportError(_TORCHCODEC_ERROR) from err
+    kwargs: dict[str, Any] = {}
+    if stream is not None:
+        kwargs["stream_index"] = int(stream)
+    if device is not None:
+        kwargs["device"] = str(device)
+    decoder = VideoDecoder(source, **kwargs)
+    with _DECODER_CACHE_LOCK:
+        _DECODER_CACHE[key] = decoder
+        _DECODER_CACHE.move_to_end(key)
+        while len(_DECODER_CACHE) > _DECODER_CACHE_MAXSIZE:
+            _DECODER_CACHE.popitem(last=False)
+    return decoder
+
+
+def _num_frames(decoder) -> int:
+    num = getattr(decoder.metadata, "num_frames", None)
+    if num is None:
+        num = len(decoder)
+    return int(num)
+
+
+def _flatten(value: Any) -> list:
+    """Flattens nested non-tensor leaves (lists / NonTensorStack / LinkedList)."""
+    if isinstance(value, (str, bytes)):
+        return [value]
+    if isinstance(value, os.PathLike):
+        return [os.fspath(value)]
+    if hasattr(value, "tolist") and not torch.is_tensor(value):
+        # NonTensorStack and similar expose a python view via tolist()
+        return _flatten(value.tolist())
+    if torch.is_tensor(value):
+        return value.reshape(-1).tolist()
+    try:
+        iterator = iter(value)
+    except TypeError:
+        return [value]
+    out: list = []
+    for element in iterator:
+        out.extend(_flatten(element))
+    return out
+
+
+def _first(value: Any, default: Any = None) -> Any:
+    flat = _flatten(value)
+    for element in flat:
+        return element
+    return default
+
+
+def _is_contiguous_run(indices: list[int]) -> bool:
+    return len(indices) > 0 and indices == list(
+        range(indices[0], indices[0] + len(indices))
+    )
+
+
+class VideoClipRef(TensorClass["nocast"]):
+    """A lazy, picklable reference to frames inside an encoded video.
+
+    A ``VideoClipRef`` stores only the *address* of frames -- a video ``source``
+    (path / URI / file id) plus a ``frame_index`` tensor -- never an open decoder
+    and never the decoded pixels. Its batch dimensions are the frames, so indexing
+    behaves like a tensor of frames but stays lazy::
+
+        video[50:100]   # -> VideoClipRef with 50 frames, no decoding happened
+
+    Decoding to a dense ``uint8`` tensor is explicit, batched and seek-friendly via
+    :meth:`decode` (grouping by source, using ranged reads for contiguous indices),
+    which makes it compose naturally with :class:`~torchrl.data.SliceSampler` (a
+    contiguous window of steps becomes a single ranged decode). Use the companion
+    :class:`~torchrl.envs.transforms.DecodeVideoTransform` to decode on the
+    replay-buffer sample path.
+
+    Args:
+        source (str): the video path / URI / file id. Required.
+        frame_index (torch.Tensor): a ``long`` tensor of frame positions whose
+            shape is the batch size.
+
+    Keyword Args:
+        stream (int, optional): the video stream index to decode from. ``None``
+            (default) lets torchcodec pick the best video stream.
+        auto_decode (bool, optional): if ``True``, indexing the reference
+            (``ref[...]``) returns decoded frames directly instead of a narrowed
+            reference. Intended for standalone / interactive use; keep it ``False``
+            for references stored in a replay buffer and rely on
+            :class:`~torchrl.envs.transforms.DecodeVideoTransform` instead.
+            Defaults to ``False``.
+        out_device (torch.device or str, optional): default device for decoded
+            frames. A CUDA device enables GPU (NVDEC) decoding. Defaults to ``None``
+            (CPU).
+        out_dtype (torch.dtype, optional): default dtype for decoded frames.
+            Defaults to ``None`` (``uint8``).
+
+    .. note:: A torchcodec ``VideoDecoder`` is not picklable nor process-safe.
+        ``VideoClipRef`` is fully picklable because it stores no decoder; decoders
+        are opened lazily and cached per process (see
+        :func:`set_video_decoder_cache_size`).
+
+    Examples:
+        >>> import tempfile, os, torch
+        >>> from torchcodec.encoders import VideoEncoder
+        >>> from torchrl.data import VideoClipRef
+        >>> frames = torch.arange(16, dtype=torch.uint8).reshape(16, 1, 1, 1)
+        >>> frames = frames.expand(16, 3, 8, 8).contiguous()
+        >>> path = os.path.join(tempfile.mkdtemp(), "clip.mp4")
+        >>> VideoEncoder(frames=frames, frame_rate=10).to_file(path)
+        >>> ref = VideoClipRef.from_file(path)
+        >>> ref.batch_size
+        torch.Size([16])
+        >>> clip = ref[4:8]            # lazy, no decoding
+        >>> clip.batch_size
+        torch.Size([4])
+        >>> decoded = clip.decode()    # uint8 [4, 3, 8, 8]
+        >>> decoded.shape
+        torch.Size([4, 3, 8, 8])
+
+    .. seealso:: :class:`~torchrl.envs.transforms.DecodeVideoTransform`.
+    """
+
+    source: str
+    frame_index: torch.Tensor
+    stream: int | None = None
+    auto_decode: bool = False
+    out_device: Any = None
+    out_dtype: Any = None
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str | os.PathLike,
+        *,
+        stream: int | None = None,
+        num_frames: int | None = None,
+        frame_index: torch.Tensor | None = None,
+        auto_decode: bool = False,
+        device: Any = None,
+        dtype: Any = None,
+    ) -> VideoClipRef:
+        """Builds a reference to (by default) every frame of a video file.
+
+        Args:
+            path (str or PathLike): the video path / URI / file id.
+
+        Keyword Args:
+            stream (int, optional): stream index to decode from. Defaults to
+                ``None`` (best video stream).
+            num_frames (int, optional): number of frames. If ``None`` and
+                ``frame_index`` is also ``None``, the count is read from the file
+                metadata (this opens the file once).
+            frame_index (torch.Tensor, optional): explicit frame positions. If
+                given, ``num_frames`` is ignored and no metadata read is performed.
+            auto_decode (bool, optional): see :class:`VideoClipRef`. Defaults to
+                ``False``.
+            device (torch.device or str, optional): default decode device. A CUDA
+                device enables GPU decoding. Defaults to ``None``.
+            dtype (torch.dtype, optional): default decode dtype. Defaults to
+                ``None`` (``uint8``).
+
+        Returns:
+            VideoClipRef: a reference whose batch size is the number of frames.
+        """
+        if isinstance(path, os.PathLike):
+            path = os.fspath(path)
+        if frame_index is None:
+            if num_frames is None:
+                num_frames = _num_frames(_get_decoder(path, stream, None))
+            frame_index = torch.arange(int(num_frames))
+        frame_index = torch.as_tensor(frame_index, dtype=torch.long)
+        return cls(
+            source=path,
+            frame_index=frame_index,
+            stream=stream,
+            auto_decode=auto_decode,
+            out_device=device,
+            out_dtype=dtype,
+            batch_size=frame_index.shape,
+        )
+
+    @classmethod
+    def from_timestamps(
+        cls,
+        path: str | os.PathLike,
+        timestamps: torch.Tensor,
+        *,
+        stream: int | None = None,
+        fps: float | None = None,
+        auto_decode: bool = False,
+        device: Any = None,
+        dtype: Any = None,
+    ) -> VideoClipRef:
+        """Builds a reference from timestamps (seconds), for fps-mismatched streams.
+
+        Timestamps are converted to the nearest frame index using the stream's
+        average fps (read from the file unless ``fps`` is given), so cameras that
+        run at a different rate than the control loop can still be addressed.
+
+        Args:
+            path (str or PathLike): the video path / URI / file id.
+            timestamps (torch.Tensor): timestamps in seconds.
+
+        Keyword Args:
+            stream (int, optional): stream index. Defaults to ``None``.
+            fps (float, optional): frames-per-second to use for the conversion.
+                Defaults to ``None`` (read from metadata).
+            auto_decode (bool, optional): see :class:`VideoClipRef`.
+            device (torch.device or str, optional): default decode device.
+            dtype (torch.dtype, optional): default decode dtype.
+
+        Returns:
+            VideoClipRef: a reference addressing the nearest frames to ``timestamps``.
+        """
+        if isinstance(path, os.PathLike):
+            path = os.fspath(path)
+        decoder = _get_decoder(path, stream, None)
+        if fps is None:
+            fps = float(decoder.metadata.average_fps)
+        num_frames = _num_frames(decoder)
+        timestamps = torch.as_tensor(timestamps, dtype=torch.float)
+        frame_index = (timestamps * fps).round().long().clamp_(0, num_frames - 1)
+        return cls.from_file(
+            path,
+            stream=stream,
+            frame_index=frame_index,
+            auto_decode=auto_decode,
+            device=device,
+            dtype=dtype,
+        )
+
+    def _source_list(self, n: int) -> list:
+        sources = _flatten(self.source)
+        if len(sources) == 1 and n > 1:
+            sources = sources * n
+        return sources
+
+    def decode(self, *, device: Any = None, dtype: Any = None) -> torch.Tensor:
+        """Decodes the referenced frames to a dense tensor.
+
+        Frames are grouped by ``source`` and decoded with a per-process decoder
+        cache; contiguous index runs use a single ranged read. The output keeps the
+        reference's batch shape: a scalar reference yields ``[C, H, W]`` and a
+        reference with batch size ``[*B]`` yields ``[*B, C, H, W]``.
+
+        Keyword Args:
+            device (torch.device or str, optional): device for the decoded frames,
+                overriding ``out_device``. A CUDA device enables GPU decoding.
+            dtype (torch.dtype, optional): dtype for the decoded frames, overriding
+                ``out_dtype``. Defaults to ``uint8``.
+
+        Returns:
+            torch.Tensor: the decoded frames (``uint8`` by default).
+        """
+        if not _has_torchcodec:
+            raise ModuleNotFoundError(_TORCHCODEC_ERROR)
+        if device is None:
+            device = _first(self.out_device)
+        if dtype is None:
+            dtype = _first(self.out_dtype)
+        stream = _first(self.stream)
+
+        frame_index = self.frame_index.reshape(-1).cpu().tolist()
+        n = len(frame_index)
+        sources = self._source_list(n)
+        if len(sources) != n:
+            raise RuntimeError(
+                f"VideoClipRef.decode found {len(sources)} sources for {n} frame "
+                "indices; source and frame_index must describe the same elements."
+            )
+
+        groups: dict[Any, list[tuple[int, int]]] = defaultdict(list)
+        for position, (src, idx) in enumerate(zip(sources, frame_index)):
+            groups[src].append((position, int(idx)))
+
+        out: list[torch.Tensor | None] = [None] * n
+        for src, items in groups.items():
+            decoder = _get_decoder(src, stream, device)
+            positions = [p for p, _ in items]
+            indices = [i for _, i in items]
+            if _is_contiguous_run(indices):
+                data = decoder.get_frames_in_range(
+                    start=indices[0], stop=indices[-1] + 1
+                ).data
+            else:
+                data = decoder.get_frames_at(indices=indices).data
+            for offset, position in enumerate(positions):
+                out[position] = data[offset]
+
+        stacked = torch.stack(out)  # type: ignore[arg-type]
+        if dtype is not None:
+            stacked = stacked.to(dtype)
+        if device is not None:
+            stacked = stacked.to(device)
+        frame_shape = stacked.shape[1:]
+        return stacked.reshape(*self.batch_size, *frame_shape)
+
+    @property
+    def frames(self) -> torch.Tensor:
+        """Decoded frames for this reference (shorthand for :meth:`decode`)."""
+        return self.decode()
+
+    def __getitem__(self, index):
+        out = super().__getitem__(index)
+        if isinstance(out, VideoClipRef) and bool(_first(out.auto_decode, False)):
+            return out.decode()
+        return out

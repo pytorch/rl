@@ -99,6 +99,7 @@ from .tensor_specs import (
     UnboundedDiscrete,
 )
 from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
+from .video import clear_video_decoder_cache, set_video_decoder_cache_size, VideoClipRef
 
 __all__ = [
     "AdaptiveKLController",
@@ -185,11 +186,14 @@ __all__ = [
     "Unbounded",
     "UnboundedContinuous",
     "UnboundedDiscrete",
+    "VideoClipRef",
     "Writer",
     "WriterEnsemble",
     "check_no_exclusive_keys",
+    "clear_video_decoder_cache",
     "consolidate_spec",
     "contains_lazy_spec",
     "create_infinite_iterator",
     "get_dataloader",
+    "set_video_decoder_cache_size",
 ]

@@ -106,6 +106,7 @@ from torchrl.envs.transforms._tensor import (
     UnaryTransform,
 )
 from torchrl.envs.transforms._timer import Timer
+from torchrl.envs.transforms._video import DecodeVideoTransform
 
 __all__ = [
     "ActionDiscretizer",
@@ -125,6 +126,7 @@ __all__ = [
     "ConditionalSkip",
     "Crop",
     "DTypeCastTransform",
+    "DecodeVideoTransform",
     "DeviceCastTransform",
     "DiscreteActionProjection",
     "DoubleToFloat",
