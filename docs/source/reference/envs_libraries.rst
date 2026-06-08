@@ -100,6 +100,8 @@ Available wrappers
     MOGymWrapper
     MujocoPlaygroundEnv
     MujocoPlaygroundWrapper
+    MujocoPlaygroundAgentMapping
+    MujocoPlaygroundAgentSpec
     MultiThreadedEnv
     MultiThreadedEnvWrapper
     OpenMLEnv

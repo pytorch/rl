@@ -346,19 +346,28 @@ KNOWN_MARL_MAPPINGS: dict[str, MujocoPlaygroundAgentMapping] = {
 }
 
 
-def _get_envs():
+# Cache the (immutable) registry listing: enumerating the suites is cheap but
+# `available_envs` is a classproperty that can be hit repeatedly, so we build
+# the list once per process.
+_ALL_ENVS_CACHE: list[str] | None = None
+
+
+def _get_envs() -> list[str]:
     if not _has_mujoco_playground:
         raise ImportError(
             "mujoco_playground is not installed in your virtual environment."
         )
 
-    from mujoco_playground import dm_control_suite, locomotion, manipulation
+    global _ALL_ENVS_CACHE
+    if _ALL_ENVS_CACHE is None:
+        from mujoco_playground import dm_control_suite, locomotion, manipulation
 
-    return (
-        list(dm_control_suite.ALL_ENVS)
-        + list(locomotion.ALL_ENVS)
-        + list(manipulation.ALL_ENVS)
-    )
+        _ALL_ENVS_CACHE = (
+            list(dm_control_suite.ALL_ENVS)
+            + list(locomotion.ALL_ENVS)
+            + list(manipulation.ALL_ENVS)
+        )
+    return list(_ALL_ENVS_CACHE)
 
 
 class _MujocoPlaygroundMeta(_EnvPostInit):
@@ -431,6 +440,24 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         registration. As a consequence, the output ``TensorDict`` only
         contains ``observation`` (or per-key obs for dict-obs envs),
         ``reward``, ``done`` and ``terminated`` — there is no ``state`` key.
+
+    .. warning::
+        Because the JAX state is held on the instance rather than carried in
+        the ``TensorDict``, **partial resets are not supported**: any call to
+        :meth:`reset` re-initialises the *entire* vmapped batch, ignoring the
+        ``"_reset"`` mask. For a ``batch_size`` greater than one whose
+        sub-environments terminate at different steps (e.g. early-terminating
+        locomotion tasks driven by a data collector), prefer scaling with
+        ``num_workers`` (one scalar env per worker) over a single large
+        vmapped ``batch_size``. This matches the behaviour of
+        :class:`~torchrl.envs.BraxWrapper`.
+
+    .. note::
+        ``terminated`` is set equal to ``done``; this wrapper does not expose a
+        separate time-limit ``truncated`` signal. For finite-horizon tasks
+        where bootstrapping at the episode boundary matters, append a
+        :class:`~torchrl.envs.transforms.StepCounter` (with ``max_steps``) or
+        otherwise track truncations yourself.
 
     Examples:
         >>> from mujoco_playground import dm_control_suite
@@ -644,6 +671,26 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         else:  # concat
             obs_dims = [env.observation_size] * n_agents
 
+        # Cache the per-agent dims (and a per-agent index tensor for flat obs)
+        # so the hot-path helpers `_split_obs_for_agents` /
+        # `_reconstruct_global_action` don't recompute them on every step.
+        self._marl_n_agents = n_agents
+        self._marl_obs_dims = obs_dims
+        self._marl_action_dims = action_dims
+        if not obs_is_dict:
+            self._marl_obs_index = [
+                torch.as_tensor(
+                    a.observation_indices, dtype=torch.long, device=self.device
+                )
+                for a in agents
+            ]
+        else:
+            self._marl_obs_index = None
+        self._marl_action_index = [
+            torch.as_tensor(a.action_indices, dtype=torch.long, device=self.device)
+            for a in agents
+        ]
+
         # Build per-agent specs
         action_spec_dict = {}
         obs_spec_dict = {}
@@ -729,7 +776,7 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
         """
         mapping = self._agent_mapping
         agents = mapping.agents
-        n_agents = len(agents)
+        n_agents = self._marl_n_agents
         mode = mapping.homogenization_mode
         obs_is_dict = self._obs_is_dict()
 
@@ -751,35 +798,26 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
                     parts.append(obs_raw[key][..., idxs])
                 obs_tensor = torch.cat(parts, dim=-1)
             else:
-                # Flat obs
-                raw = obs_raw[..., agent.observation_indices]
+                # Flat obs: gather the agent's own observation slice (index
+                # tensor and target sizes are cached in `_make_marl_specs`).
+                raw = obs_raw[..., self._marl_obs_index[i]]
                 if mode == "none":
                     obs_tensor = raw
-                elif mode == "max":
-                    raw_sizes = [len(a.observation_indices) for a in agents]
-                    max_obs = max(raw_sizes)
-                    padded_size = max_obs + n_agents
+                else:
+                    # "max" and "concat" both scatter `raw` into a zero tensor
+                    # sized to the agent's cached observation spec.
                     obs_tensor = torch.zeros(
                         *self.batch_size,
-                        padded_size,
+                        self._marl_obs_dims[i],
                         dtype=obs_raw.dtype,
                         device=self.device,
                     )
-                    # One-hot agent ID in first n_agents positions
-                    obs_tensor[..., i] = 1.0
-                    # Raw obs in next len(obs_indices) positions
-                    obs_tensor[
-                        ..., n_agents : n_agents + len(agent.observation_indices)
-                    ] = raw
-                else:  # concat
-                    total_obs = self._env.observation_size
-                    obs_tensor = torch.zeros(
-                        *self.batch_size,
-                        total_obs,
-                        dtype=obs_raw.dtype,
-                        device=self.device,
-                    )
-                    obs_tensor[..., agent.observation_indices] = raw
+                    if mode == "max":
+                        # layout: [one-hot id (n_agents) | raw obs | zero pad]
+                        obs_tensor[..., i] = 1.0
+                        obs_tensor[..., n_agents : n_agents + raw.shape[-1]] = raw
+                    else:  # concat: scatter raw at the agent's own obs indices
+                        obs_tensor[..., self._marl_obs_index[i]] = raw
 
             result[agent.name] = TensorDict(
                 {"observation": obs_tensor},
@@ -807,17 +845,17 @@ class MujocoPlaygroundWrapper(_EnvWrapper):
             dtype=torch.float32,
             device=self.device,
         )
-        for agent in mapping.agents:
+        for i, agent in enumerate(mapping.agents):
             a = tensordict.get((agent.name, "action"))
-            n = len(agent.action_indices)
+            idx = self._marl_action_index[i]
             if mode == "none":
-                global_action[..., agent.action_indices] = a
+                global_action[..., idx] = a
             elif mode == "max":
                 # Policy outputs up to max_action_size; only first n are real
-                global_action[..., agent.action_indices] = a[..., :n]
+                global_action[..., idx] = a[..., : idx.shape[0]]
             else:  # concat
                 # Policy outputs full global action; take only this agent's slice
-                global_action[..., agent.action_indices] = a[..., agent.action_indices]
+                global_action[..., idx] = a[..., idx]
         return global_action
 
     def _reset(self, tensordict: TensorDictBase = None, **kwargs) -> TensorDictBase:
@@ -1053,7 +1091,10 @@ class MujocoPlaygroundEnv(MujocoPlaygroundWrapper, metaclass=_MujocoPlaygroundMe
         if kwargs:
             raise ValueError(f"Unsupported kwargs: {sorted(kwargs)}")
 
-        self.wrapper_frame_skip = 1
+        # ``frame_skip`` is not implemented in this wrapper's ``_step``; when
+        # ``frame_skip > 1`` the ``EnvBase`` metaclass auto-appends a
+        # :class:`~torchrl.envs.transforms.FrameSkipTransform` (see
+        # ``EnvBase._has_frame_skip``), so there is nothing to do here.
         env = registry.load(env_name, config=config, config_overrides=config_overrides)
         return super()._build_env(env, from_pixels=from_pixels)
 

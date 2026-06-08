@@ -12,7 +12,7 @@ import pytest
 import torch
 from tensordict import assert_allclose_td, TensorDict
 
-from torchrl.envs import SerialEnv
+from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.libs.mujoco_playground import (
     _has_mujoco_playground,
@@ -22,6 +22,7 @@ from torchrl.envs.libs.mujoco_playground import (
     MujocoPlaygroundEnv,
     MujocoPlaygroundWrapper,
 )
+from torchrl.envs.transforms import FrameSkipTransform
 from torchrl.envs.utils import check_env_specs
 from torchrl.testing import get_available_devices
 
@@ -812,3 +813,47 @@ class TestMujocoPlaygroundDictObs:
                 agent_mapping=mapping,
                 config_overrides=_JAX_CONFIG,
             )
+
+
+@pytest.mark.skipif(
+    not _has_mujoco_playground, reason="mujoco_playground not installed"
+)
+@pytest.mark.parametrize("device", get_available_devices())
+class TestMujocoPlaygroundFrameSkip:
+    """frame_skip is not implemented natively; the EnvBase metaclass should
+    auto-append a FrameSkipTransform (see ``EnvBase._has_frame_skip``)."""
+
+    def test_no_frame_skip_is_plain_env(self, device):
+        env = MujocoPlaygroundEnv(
+            _FLAT_OBS_ENV, device=device, config_overrides=_JAX_CONFIG
+        )
+        try:
+            assert not isinstance(env, TransformedEnv)
+        finally:
+            env.close()
+
+    @pytest.mark.parametrize("skip", [2, 3])
+    def test_frame_skip_auto_transform(self, device, skip):
+        env = MujocoPlaygroundEnv(
+            _FLAT_OBS_ENV,
+            device=device,
+            frame_skip=skip,
+            config_overrides=_JAX_CONFIG,
+        )
+        try:
+            assert isinstance(env, TransformedEnv)
+            assert isinstance(env.transform, FrameSkipTransform)
+            assert env.transform.frame_skip == skip
+            env.set_seed(0)
+            check_env_specs(env)
+            td = env.rollout(3)
+            assert td.shape[-1] == 3
+        finally:
+            env.close()
+
+
+if __name__ == "__main__":
+    import argparse
+
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
