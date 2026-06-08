@@ -1306,6 +1306,50 @@ class TestFrameSkipTransform(TransformBase):
             for key in td1.keys():
                 torch.testing.assert_close(td1[key], td2[key])
 
+    @pytest.mark.parametrize("skip", [2, 3])
+    def test_frame_skip_auto_append_metaclass(self, skip):
+        """The EnvBase metaclass auto-appends a FrameSkipTransform to an env
+        that declares ``frame_skip`` but does not implement it natively
+        (``_has_frame_skip = False``), and leaves alone an env that sets
+        ``_has_frame_skip = True``."""
+
+        class _NoFrameSkipEnv(CountingEnv):
+            # does not loop over frame_skip in `_step` -> metaclass must wrap
+            _has_frame_skip = False
+
+            def __init__(self, *args, frame_skip: int = 1, **kwargs):
+                super().__init__(*args, **kwargs)
+                # read by the EnvBase metaclass after construction
+                self.frame_skip = frame_skip
+
+        class _NativeFrameSkipEnv(_NoFrameSkipEnv):
+            # claims native frame_skip handling -> metaclass must NOT wrap
+            _has_frame_skip = True
+
+        # frame_skip == 1: no wrapping at all
+        env = _NoFrameSkipEnv(frame_skip=1)
+        assert not isinstance(env, TransformedEnv)
+
+        # frame_skip > 1 and not implemented natively -> auto FrameSkipTransform
+        env = _NoFrameSkipEnv(max_steps=100, frame_skip=skip)
+        assert isinstance(env, TransformedEnv)
+        assert isinstance(env.transform, FrameSkipTransform)
+        assert env.transform.frame_skip == skip
+        # one outer step advances the underlying CountingEnv by `skip` counts,
+        # proving the transform actually repeats the base env's `_step`.
+        env.set_seed(0)
+        td = env.reset()
+        td["action"] = torch.ones_like(env.action_spec.zero())
+        td = env.step(td)
+        torch.testing.assert_close(
+            td["next", "observation"],
+            torch.full_like(td["next", "observation"], skip),
+        )
+
+        # frame_skip > 1 but implemented natively -> NOT auto-wrapped
+        env = _NativeFrameSkipEnv(max_steps=100, frame_skip=skip)
+        assert not isinstance(env, TransformedEnv)
+
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for FrameSkipTransform")
 

@@ -319,6 +319,25 @@ class _EnvPostInit(abc.ABCMeta):
         _ = instance.reward_keys
         # _ = instance.action_keys
         _ = instance.state_spec
+        # Auto-append a FrameSkipTransform for envs that accept a ``frame_skip``
+        # argument but do not implement frame-skipping in their own ``_step``.
+        # Envs that handle it natively (e.g. gym-like envs) set
+        # ``_has_frame_skip = True`` and are left untouched here. We read
+        # ``frame_skip`` off the instance (set by ``_EnvWrapper.__init__``);
+        # native envs without that attribute default to 1 and are skipped.
+        frame_skip = getattr(instance, "frame_skip", 1)
+        if (
+            frame_skip
+            and frame_skip > 1
+            and not getattr(type(instance), "_has_frame_skip", False)
+        ):
+            from torchrl.envs.transforms._env import FrameSkipTransform
+            from torchrl.envs.transforms.transforms import TransformedEnv
+
+            # The transform now owns the frame-skipping; neutralize any
+            # bookkeeping on the wrapped env to avoid double-counting.
+            instance.wrapper_frame_skip = 1
+            instance = TransformedEnv(instance, FrameSkipTransform(frame_skip))
         if auto_reset:
             from torchrl.envs.transforms.transforms import (
                 AutoResetEnv,
@@ -578,6 +597,13 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
     # the transition ``FutureWarning`` and the ``NotImplementedError`` raised by
     # :meth:`reset` when ``set_state=True`` on an env that does not support it.
     _supports_set_state: bool = False
+    # Whether this env implements ``frame_skip`` natively in its own ``_step``
+    # (e.g. :class:`~torchrl.envs.GymLikeEnv` loops over ``wrapper_frame_skip``).
+    # When ``False`` (the default) and a ``frame_skip > 1`` is requested, the
+    # ``EnvBase`` metaclass automatically wraps the env in a
+    # :class:`~torchrl.envs.transforms.FrameSkipTransform` so that the same
+    # behaviour is obtained without each wrapper re-implementing it.
+    _has_frame_skip: bool = False
 
     def __init__(
         self,
