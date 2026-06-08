@@ -9,6 +9,7 @@ import functools
 import warnings
 from collections.abc import Callable
 from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import wraps
 
@@ -34,6 +35,8 @@ from torchrl.objectives.utils import (
     _pseudo_vmap,
     _vmap_func,
     hold_out_net,
+    register_value_estimator,
+    ValueEstimators,
 )
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -119,6 +122,31 @@ class ValueEstimatorBase(TensorDictModuleBase):
             boundary without dropping samples, and so on. Defaults to ``1``.
 
     """
+
+    @classmethod
+    def for_loss(cls, loss_module, **hyperparams):
+        """Construct an instance configured against ``loss_module``.
+
+        Used by the value-estimator registry
+        (:func:`~torchrl.objectives.utils.build_value_estimator`) to keep
+        per-estimator wiring quirks out of every loss class. The default
+        implementation picks up ``loss_module.critic_network`` if present,
+        falling back to ``loss_module.value_network``, and forwards the
+        remaining ``hyperparams`` to the constructor.
+
+        A loss that owns a value module under a non-standard name can pass
+        ``value_network=<the module>`` through
+        :func:`~torchrl.objectives.utils.dispatch_value_estimator` — it
+        wins over the auto-detected one. Estimator subclasses with
+        additional dependencies (e.g. :class:`VTrace` needing the actor)
+        override this method.
+        """
+        if "value_network" not in hyperparams:
+            value_network = getattr(loss_module, "critic_network", None)
+            if value_network is None:
+                value_network = getattr(loss_module, "value_network", None)
+            hyperparams["value_network"] = value_network
+        return cls(**hyperparams)
 
     @dataclass
     class _AcceptedKeys:
@@ -446,7 +474,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if self.value_network is not None:
             with hold_out_net(
                 self.value_network
-            ) if target_params is None else target_params.to_module(self.value_network):
+            ) if target_params is None else target_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
@@ -522,6 +552,17 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         Operates on a shallow copy so the caller's ``tensordict`` is not
         mutated.
+
+        .. seealso::
+
+            :class:`~torchrl.collectors.Collector` (``compact_obs``)
+            and :class:`~torchrl.envs.transforms.NextStateReconstructor` are
+            the typical producers of ``NaN`` next-observations at trajectory
+            ends. :class:`~torchrl.envs.transforms.NextObservationDelta`
+            is an alternative env-side compression that *avoids* the
+            ``NaN``-at-boundary case (at the cost of a smaller memory
+            saving). The *Memory-efficient RL training* tutorial wires the
+            knobs together end-to-end.
         """
         copied = False
         for k in in_keys:
@@ -686,7 +727,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             data_in.set(key, data_value)
         if params is not None:
-            with params.to_module(value_net):
+            with params.to_module(value_net, preserve_module_state=False):
                 values_full = _call_value_net(data_in)
         else:
             values_full = _call_value_net(data_in)
@@ -880,6 +921,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
             tensordict.set(key, value.masked_fill(~mask, 0))
 
 
+@register_value_estimator(
+    ValueEstimators.TD0,
+    default_kwargs={"gamma": 0.99, "differentiable": True},
+)
 class TD0Estimator(ValueEstimatorBase):
     """Temporal Difference (TD(0)) estimate of advantage function.
 
@@ -1155,6 +1200,10 @@ class TD0Estimator(ValueEstimatorBase):
         return value_target
 
 
+@register_value_estimator(
+    ValueEstimators.TD1,
+    default_kwargs={"gamma": 0.99, "differentiable": True},
+)
 class TD1Estimator(ValueEstimatorBase):
     r""":math:`\infty`-Temporal Difference (TD(1)) estimate of advantage function.
 
@@ -1443,6 +1492,10 @@ class TD1Estimator(ValueEstimatorBase):
         return value_target
 
 
+@register_value_estimator(
+    ValueEstimators.TDLambda,
+    default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+)
 class TDLambdaEstimator(ValueEstimatorBase):
     r"""TD(:math:`\lambda`) estimate of advantage function.
 
@@ -1765,6 +1818,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         return val
 
 
+@register_value_estimator(
+    ValueEstimators.GAE,
+    default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+)
 class GAE(ValueEstimatorBase):
     """A class wrapper around the generalized advantage estimate functional.
 
@@ -2264,6 +2321,10 @@ class GAE(ValueEstimatorBase):
         return value_target
 
 
+@register_value_estimator(
+    ValueEstimators.MAGAE,
+    default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+)
 class MultiAgentGAE(GAE):
     """Multi-agent Generalized Advantage Estimator.
 
@@ -2366,6 +2427,10 @@ class MultiAgentGAE(GAE):
         return (adv - loc) / scale
 
 
+@register_value_estimator(
+    ValueEstimators.VTrace,
+    default_kwargs={"gamma": 0.99, "differentiable": True},
+)
 class VTrace(ValueEstimatorBase):
     """A class wrapper around V-Trace estimate functional.
 
@@ -2469,6 +2534,33 @@ class VTrace(ValueEstimatorBase):
       network (if any) and use the provided value instead.
 
     """
+
+    @classmethod
+    def for_loss(cls, loss_module, **hyperparams):
+        """V-Trace needs both the critic *and* the actor.
+
+        When the loss is functional, the actor stored on the loss module is
+        a stateless template — we deep-copy it and bake the current params
+        in, since V-Trace doesn't support a functional actor call.
+        """
+        value_network = hyperparams.pop("value_network", None)
+        if value_network is None:
+            value_network = getattr(loss_module, "critic_network", None)
+            if value_network is None:
+                value_network = getattr(loss_module, "value_network", None)
+        actor_network = hyperparams.pop("actor_network", None)
+        if actor_network is None:
+            actor_network = loss_module.actor_network
+        if getattr(loss_module, "functional", False):
+            actor_network = deepcopy(actor_network)
+            loss_module.actor_network_params.to_module(
+                actor_network, preserve_module_state=False
+            )
+        return cls(
+            value_network=value_network,
+            actor_network=actor_network,
+            **hyperparams,
+        )
 
     def __init__(
         self,

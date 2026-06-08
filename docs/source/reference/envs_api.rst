@@ -124,7 +124,7 @@ Limitations:
   inspected without instantiation, so auto-wrapping is skipped for them.
   Either build the policy once and pass it via ``policy=``, or attach
   transforms manually with
-  :func:`~torchrl.modules.utils.get_env_transforms_from_module`.
+  :func:`~torchrl.modules.get_env_transforms_from_module`.
 
 .. _Environment-compile-arg:
 
@@ -132,7 +132,7 @@ Compiling envs via the ``compile=`` constructor argument
 --------------------------------------------------------
 
 Every concrete :class:`~torchrl.envs.EnvBase` subclass and
-:class:`~torchrl.envs.TransformedEnv` inherit a ``compile`` keyword argument
+:class:`~torchrl.envs.transforms.TransformedEnv` inherit a ``compile`` keyword argument
 on their constructors. When provided, the :class:`~torchrl.envs.EnvBase`
 metaclass post-init hook calls :meth:`~torchrl.envs.EnvBase.compile` on the
 fully-built env (after spec locking, after auto-reset wrapping if any, after
@@ -211,7 +211,7 @@ With these, the following methods are implemented:
   environments if it needs to. It returns the updated input with a ``"next"``
   key containing the data of the next step, as well as a tensordict containing
   the input data for the next step (ie, reset or result or
-  :func:`~torchrl.envs.utils.step_mdp`)
+  :func:`~torchrl.envs.step_mdp`)
   This is done by reading the ``done_keys`` and
   assigning a ``"_reset"`` signal to each done state. This method allows
   to code non-stopping rollout functions with little effort:
@@ -247,7 +247,7 @@ In brief, a TensorDict is created by the :meth:`~.EnvBase.reset` method,
 then populated with an action by the policy before being passed to the
 :meth:`~.EnvBase.step` method which writes the observations, done flag(s) and
 reward under the ``"next"`` entry. The result of this call is stored for
-delivery and the ``"next"`` entry is gathered by the :func:`~.utils.step_mdp`
+delivery and the ``"next"`` entry is gathered by the :func:`~torchrl.envs.step_mdp`
 function.
 
 .. note::
@@ -280,7 +280,7 @@ function.
 .. note::
 
   In some contexts, it can be useful to mark the first step of a trajectory.
-  TorchRL provides such functionality through the :class:`~torchrl.envs.InitTracker`
+  TorchRL provides such functionality through the :class:`~torchrl.envs.transforms.InitTracker`
   transform.
 
 

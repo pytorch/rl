@@ -40,7 +40,7 @@ requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
     "pyvers",
-    "hoptorch>=0.1.1",
+    "hoptorch>=0.1.4",
     "numpy",
     "packaging",
     "cloudpickle",

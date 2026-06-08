@@ -280,14 +280,17 @@ class Collector(BaseCollector):
         compact_obs (bool, optional): if ``True``, the collector drops the
             observation and state keys from the ``("next", ...)`` sub-tensordict
             before stacking per-step data. Those keys are bit-for-bit identical
-            to the root keys of the next step (modulo the last frame of the
-            rollout), so storing both copies wastes memory. ``("next", "reward")``,
-            ``("next", "done")`` and ``("next", "truncated")`` are preserved
-            because they cannot be reconstructed from the root keys. The dropped
-            keys can be re-hydrated at sampling time with
-            :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
-            when consuming a :class:`~torchrl.data.SliceSampler`-backed replay
-            buffer.
+            to the root keys of the next step (modulo the last frame of each
+            trajectory), so storing both copies roughly doubles the observation
+            footprint for nothing. ``("next", "reward")``, ``("next", "done")``
+            and ``("next", "truncated")`` are preserved because they cannot be
+            reconstructed from the root keys. The dropped keys can be
+            re-hydrated at sampling time with
+            :class:`~torchrl.envs.transforms.NextStateReconstructor`; trajectory
+            ends will carry ``NaN`` for the missing ``("next", obs)`` and the
+            value-estimator forward pass substitutes a finite placeholder so
+            GAE / TD targets stay numerically defined (see
+            :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`).
 
             ``compact_obs=True`` composes cleanly with
             :class:`~torchrl.objectives.value.advantages.GAE` configured with
@@ -295,7 +298,19 @@ class Collector(BaseCollector):
             advantage pass without rehydrating every per-step
             ``("next", "observation")`` mirror. For vectorized environments
             with large observations this is typically a sizeable GPU-memory
-            win at near-zero CPU cost. Defaults to ``False``.
+            win at near-zero CPU cost.
+
+            Default is ``False`` because the canonical ``("next", obs)`` is
+            still required by some downstream losses — most notably
+            :class:`~torchrl.envs.transforms.MultiStepTransform`, which uses
+            the n-step ``("next", obs)`` (and its in-trajectory fallback at
+            the last ``n - 1`` frames) and cannot reconstruct that from root
+            obs alone. For a lossy-precision alternative that *does* preserve
+            boundary transitions (at the cost of a smaller memory saving), see
+            :class:`~torchrl.envs.transforms.NextObservationDelta`. See also
+            the *Memory-efficient RL training* tutorial for an end-to-end
+            pipeline. Defaults to ``False``.
+
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -2001,7 +2016,11 @@ class Collector(BaseCollector):
                 # Stop the background thread if one is running (from .start())
                 # before tearing down the env it may still be using.
                 self._stop = True
-                if hasattr(self, "_thread") and self._thread.is_alive():
+                if (
+                    hasattr(self, "_thread")
+                    and self._thread.is_alive()
+                    and threading.current_thread() is not self._thread
+                ):
                     self._thread.join(timeout=timeout)
                 self.closed = True
                 del self._carrier

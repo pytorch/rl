@@ -94,12 +94,17 @@ inference_model:
     enabled: false  # Enable 4-bit quantization for base model
   attn_implementation: flash_attention_2
   torch_dtype: bfloat16
+  enable_fp32_lm_head: false
+  disable_cuda_graph: false
+  disable_piecewise_cuda_graph: false
+  disable_overlap_schedule: false
   gpu_memory_utilization: 0.9  # Limit GPU memory usage
   temperature: 1.0
   top_p: 1.0
   max_tokens: 1024
   include_stop_str_in_output: true
   enforce_eager: false
+  enable_prefix_caching: false
   # compile: false  # Whether to enable model compilation (disabled by default for GRPO)
   # verbose: true   # Whether to show vLLM throughput statistics (enabled by default)
 
@@ -121,6 +126,7 @@ ref_model:
 optimizer:
   name: AdamW
   lr: 1e-5
+  eps: 1e-5
   clip_grad_norm: 1.0
   weight_decay: 0.0
 

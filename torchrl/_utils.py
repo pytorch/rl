@@ -1346,6 +1346,172 @@ def safe_is_current_stream_capturing():
         return False
 
 
+_GB = 1024**3
+_EMPTY_CUDA_STATS = {
+    "allocated_gb": 0.0,
+    "reserved_gb": 0.0,
+    "max_allocated_gb": 0.0,
+    "max_reserved_gb": 0.0,
+}
+
+
+def _cuda_memory_device(device: torch.device | int | str | None) -> torch.device | None:
+    """Normalize a user CUDA memory device, or return ``None`` for no-op devices."""
+    if not torch.cuda.is_available():
+        return None
+    if device is None:
+        return _make_ordinal_device(torch.device("cuda"))
+    if isinstance(device, int):
+        return torch.device("cuda", device)
+    device = torch.device(device)
+    if device.type != "cuda":
+        return None
+    return _make_ordinal_device(device)
+
+
+def cuda_memory_stats(
+    device: torch.device | int | str | None = None,
+) -> dict[str, float]:
+    """Return current CUDA memory statistics for ``device`` in gigabytes.
+
+    Wraps :func:`torch.cuda.memory_allocated`, :func:`torch.cuda.memory_reserved`,
+    :func:`torch.cuda.max_memory_allocated` and :func:`torch.cuda.max_memory_reserved`
+    into a single dict suitable for logging or comparing phases of a training loop.
+
+    Args:
+        device: CUDA device to query. ``None`` (default) targets the current
+            CUDA device. CPU/MPS/unset devices return zeros (no warning) so the
+            helper can be called unconditionally from device-agnostic code.
+
+    Returns:
+        Mapping with keys ``"allocated_gb"``, ``"reserved_gb"``,
+        ``"max_allocated_gb"``, ``"max_reserved_gb"``. Values are floats in
+        gigabytes. When CUDA is not available, all values are ``0.0``.
+
+    Examples:
+        >>> from torchrl import cuda_memory_stats
+        >>> stats = cuda_memory_stats()
+        >>> sorted(stats)
+        ['allocated_gb', 'max_allocated_gb', 'max_reserved_gb', 'reserved_gb']
+
+    .. seealso::
+        :func:`reset_cuda_peak_stats`, :class:`cuda_memory_profile`.
+    """
+    dev = _cuda_memory_device(device)
+    if dev is None:
+        return dict(_EMPTY_CUDA_STATS)
+    return {
+        "allocated_gb": torch.cuda.memory_allocated(dev) / _GB,
+        "reserved_gb": torch.cuda.memory_reserved(dev) / _GB,
+        "max_allocated_gb": torch.cuda.max_memory_allocated(dev) / _GB,
+        "max_reserved_gb": torch.cuda.max_memory_reserved(dev) / _GB,
+    }
+
+
+def reset_cuda_peak_stats(
+    device: torch.device | int | str | None = None,
+) -> None:
+    """Reset the peak-memory counters for ``device``.
+
+    Thin wrapper around :func:`torch.cuda.reset_peak_memory_stats`. No-op when
+    CUDA is unavailable or ``device`` is non-CUDA.
+
+    Args:
+        device: CUDA device whose peaks should be cleared. ``None`` (default)
+            targets the current CUDA device.
+
+    Examples:
+        >>> from torchrl import reset_cuda_peak_stats
+        >>> reset_cuda_peak_stats()  # safe even without CUDA
+
+    .. seealso::
+        :func:`cuda_memory_stats`, :class:`cuda_memory_profile`.
+    """
+    dev = _cuda_memory_device(device)
+    if dev is None:
+        return
+    torch.cuda.reset_peak_memory_stats(dev)
+
+
+class cuda_memory_profile(_DecoratorContextManager):
+    """Context manager / decorator that reports CUDA memory deltas for a code block.
+
+    On ``__enter__`` (optionally) clears the peak-memory counters; on
+    ``__exit__`` reads :func:`cuda_memory_stats` and logs the delta (current -
+    pre-block) plus the new peaks. The collected stats are stored on the
+    ``stats`` attribute for programmatic access after the block exits.
+
+    Args:
+        label: Short identifier prepended to the log line and stored on the
+            instance for downstream metric routing.
+        device: CUDA device to profile. ``None`` (default) targets the current
+            CUDA device. On non-CUDA devices the manager is a no-op.
+        log: When ``True`` (default), emit a single ``INFO`` line via
+            :data:`torchrl.torchrl_logger` at exit. When ``False`` only the
+            ``stats`` attribute is populated.
+        reset_peaks: When ``True`` (default), reset peak counters on enter so
+            the reported ``max_*`` values reflect the block only.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl import cuda_memory_profile
+        >>> with cuda_memory_profile("warmup", log=False) as prof:
+        ...     if torch.cuda.is_available():
+        ...         _ = torch.zeros(1, device="cuda")
+        >>> sorted(prof.stats)
+        ['allocated_gb', 'max_allocated_gb', 'max_reserved_gb', 'reserved_gb']
+
+    .. seealso::
+        :func:`cuda_memory_stats`, :func:`reset_cuda_peak_stats`, :class:`timeit`.
+    """
+
+    def __init__(
+        self,
+        label: str,
+        *,
+        device: torch.device | int | str | None = None,
+        log: bool = True,
+        reset_peaks: bool = True,
+    ) -> None:
+        self.label = label
+        self.device = device
+        self.log = log
+        self.reset_peaks = reset_peaks
+        self.stats: dict[str, float] = dict(_EMPTY_CUDA_STATS)
+        self._pre: dict[str, float] = dict(_EMPTY_CUDA_STATS)
+
+    def clone(self) -> cuda_memory_profile:
+        return type(self)(
+            self.label,
+            device=self.device,
+            log=self.log,
+            reset_peaks=self.reset_peaks,
+        )
+
+    def __enter__(self) -> cuda_memory_profile:
+        if self.reset_peaks:
+            reset_cuda_peak_stats(self.device)
+        self._pre = cuda_memory_stats(self.device)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.stats = cuda_memory_stats(self.device)
+        if self.log:
+            delta_alloc = self.stats["allocated_gb"] - self._pre["allocated_gb"]
+            delta_reserved = self.stats["reserved_gb"] - self._pre["reserved_gb"]
+            logger.info(
+                "cuda_memory_profile[%s]: alloc=%.3f GB (Δ%+.3f), "
+                "reserved=%.3f GB (Δ%+.3f), max_alloc=%.3f GB, max_reserved=%.3f GB",
+                self.label,
+                self.stats["allocated_gb"],
+                delta_alloc,
+                self.stats["reserved_gb"],
+                delta_reserved,
+                self.stats["max_allocated_gb"],
+                self.stats["max_reserved_gb"],
+            )
+
+
 class _RayServiceMetaClass(type):
     """Metaclass that enables dynamic class selection based on use_ray_service parameter.
 

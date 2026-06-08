@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import abc
+import copy
 import threading
 import warnings
 import weakref
@@ -183,9 +184,7 @@ class WeightStrategy:
             # Extract as state_dict
             if isinstance(source, nn.Module):
                 if hasattr(source, "merge_and_unload"):
-                    # LoRA model: merge weights to get clean parameter names
-                    # that match vLLM's expected format
-                    return source.merge_and_unload().state_dict()
+                    return _merged_lora_state_dict(source)
                 return source.state_dict()
             elif isinstance(source, dict):
                 return source
@@ -304,6 +303,15 @@ def _get_strategy(strategy: Literal["tensordict", "state_dict"]) -> WeightStrate
             f"Unknown strategy: {strategy}. Must be 'tensordict' or 'state_dict'."
         )
     return WeightStrategy(extract_as=strategy)
+
+
+def _merged_lora_state_dict(source: nn.Module) -> dict[str, torch.Tensor]:
+    """Return merged PEFT weights without mutating the live training module."""
+    source_copy = copy.deepcopy(source)
+    try:
+        return source_copy.merge_and_unload().state_dict()
+    finally:
+        del source_copy
 
 
 # ============================================================================

@@ -9,13 +9,13 @@ Recurrent policies are not a special or dangerous path in TorchRL. In the
 standard collection setup, most of the wiring is automated: passing a policy
 to an environment, or constructing a collector with
 ``auto_register_policy_transforms=True``, lets TorchRL inspect the policy,
-append :class:`~torchrl.envs.InitTracker`, and add the recurrent-state
+append :class:`~torchrl.envs.transforms.InitTracker`, and add the recurrent-state
 primer required by :class:`~torchrl.modules.LSTMModule` or
 :class:`~torchrl.modules.GRUModule`.
 
 The main rule to keep in mind is simple: if the loss should replay
 sequences, sample sequences. For replay-buffer training, use
-:class:`~torchrl.data.SliceSampler` or another trajectory-aware sampler so
+:class:`~torchrl.data.replay_buffers.SliceSampler` or another trajectory-aware sampler so
 the loss receives contiguous time chunks with ``is_init`` boundaries
 preserved. The rest of this page explains what the automated path wires up,
 and what to check when building a custom loop, custom replay transform, or
@@ -36,7 +36,7 @@ multi-epoch training so the data path stays visible.
     from tensordict.nn import TensorDictModule, TensorDictSequential
     from torch import nn
 
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers import SliceSampler
     from torchrl.envs import GymEnv
@@ -101,7 +101,7 @@ multi-epoch training so the data path stays visible.
     # Thanks to auto_register_policy_transforms=True below, the collector sees
     # both RNNs and appends InitTracker + TensorDictPrimers.
     collector_policy = TensorDictSequential(actor, critic)
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         collector_policy,
         frames_per_batch=frames_per_batch,
@@ -174,7 +174,7 @@ The path at a glance
             └─ writes next-step hidden into ("next", "rs_h"), ("next", "rs_c")
             │
             ▼
-    SyncDataCollector
+    Collector
             │
             ├─ step_mdp moves ("next", "rs_*") to the root for step t+1
             └─ emits a batched TensorDict of shape (B, T, ...)
@@ -198,12 +198,12 @@ What ``is_init`` means
 ----------------------
 
 ``is_init`` is a boolean key shaped like the env's batch (``(*B, 1)``),
-set by :class:`~torchrl.envs.InitTracker` to ``True`` on the *first* step
+set by :class:`~torchrl.envs.transforms.InitTracker` to ``True`` on the *first* step
 of every trajectory and ``False`` everywhere else. A trajectory begins
 at an explicit :meth:`~torchrl.envs.EnvBase.reset` or right after a
 ``done`` from the previous step.
 
-If you do not append :class:`~torchrl.envs.InitTracker` to your env,
+If you do not append :class:`~torchrl.envs.transforms.InitTracker` to your env,
 ``is_init`` will be absent and :class:`~torchrl.modules.LSTMModule` will
 raise a ``KeyError``. If the key is present but always ``False`` (or if a
 custom replay buffer / transform drops or rewrites the true boundary
@@ -232,7 +232,7 @@ collection):
       hidden1 = torch.where(is_init_expand, zeros, hidden1)
 
 - The new hidden is written under the ``("next", ...)`` keys and
-  :meth:`~torchrl.envs.utils.step_mdp` promotes it to the root for the
+  :func:`~torchrl.envs.step_mdp` promotes it to the root for the
   following step. This is how the carry-forward happens between
   non-boundary steps.
 
@@ -243,7 +243,7 @@ TorchRL loss / advantage code):
 - With the default eager ``"pad"`` backend, if any ``is_init`` in time
   positions ``1..T-1`` is true, the batch contains multiple trajectories
   packed together. The module calls ``_get_num_per_traj_init`` (see
-  :func:`torchrl.objectives.value.utils._get_num_per_traj_init`) to count
+  ``torchrl.objectives.value.utils._get_num_per_traj_init``) to count
   per-trajectory lengths, then ``_split_and_pad_sequence`` to break the
   batch into shape ``(N, T')`` with one trajectory per row.
 - :class:`torch.nn.LSTM` is run on each clean row, then results are
@@ -278,7 +278,7 @@ checkpoints at trajectory ends, not as valid per-step hidden states at every
 position.
 
 With the pad backend, :class:`torch.nn.LSTM` only returns the final hidden
-state for a sequence. :meth:`LSTMModule._lstm` therefore fills hidden slots
+state for a sequence. ``LSTMModule._lstm`` therefore fills hidden slots
 at non-terminal positions with zeros and writes the real final hidden at the
 sequence end. If a batch contains multiple trajectories, the split path
 packs or masks padded steps and writes the final hidden state back at each
@@ -306,7 +306,7 @@ Common debugging symptoms
 -------------------------
 
 **Symptom: reward looks fine but the policy never learns long-horizon behaviour.**
-    Check that :class:`~torchrl.envs.InitTracker` is actually appended to
+    Check that :class:`~torchrl.envs.transforms.InitTracker` is actually appended to
     the environment, and that ``is_init`` appears in the collected
     tensordict with true values at episode starts. A missing key usually
     raises quickly; a present-but-wrong all-false ``is_init`` signal is the
@@ -314,22 +314,22 @@ Common debugging symptoms
 
 **Symptom: training loss diverges or oscillates when you raise the batch's time horizon.**
     Likely hidden-state leakage across trajectory boundaries inside the
-    replay batch. Use :class:`~torchrl.data.SliceSampler` or another
+    replay batch. Use :class:`~torchrl.data.replay_buffers.SliceSampler` or another
     sequence-aware sampler, verify that the recurrent loss path is wrapped
     in ``with set_recurrent_mode(True):``, and check that ``is_init`` is
     preserved through your replay buffer (some transforms drop unknown
     keys).
 
-**Symptom: shapes mismatch in** :meth:`LSTMModule._lstm` **with cryptic transpose errors.**
+**Symptom: shapes mismatch in** ``LSTMModule._lstm`` **with cryptic transpose errors.**
     The module expects the tensordict-native hidden layout
     ``(batch, steps, num_layers, hidden_size)``. A custom
     :class:`~torchrl.envs.transforms.TensorDictPrimer` with a different
     shape, or a manually-constructed hidden, will fail here. Prefer
-    :meth:`LSTMModule.make_tensordict_primer` to avoid drift.
+    :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer` to avoid drift.
 
 **Symptom: "fresh" trajectory inherits the previous episode's behaviour.**
     Either ``is_init`` is not being set at the right step (check
-    :class:`InitTracker`'s placement relative to other transforms that
+    :class:`~torchrl.envs.transforms.InitTracker`'s placement relative to other transforms that
     might reset state), or you are reusing a final hidden as a starting
     state across rollouts (see the previous section).
 
@@ -349,8 +349,8 @@ What to check, in order
 3. ``is_init`` is present in the collected tensordict and is ``True`` on
    reset / immediately after a ``done``.
 4. The recurrent state keys you pass to the LSTM module match the
-   primer's keys (use :meth:`LSTMModule.make_tensordict_primer`).
-5. Replay-buffer training uses :class:`~torchrl.data.SliceSampler` or
+   primer's keys (use :meth:`~torchrl.modules.LSTMModule.make_tensordict_primer`).
+5. Replay-buffer training uses :class:`~torchrl.data.replay_buffers.SliceSampler` or
    another trajectory-aware sampler when the loss consumes sequences.
 6. Loss / advantage code runs under ``with set_recurrent_mode(True):``.
 7. The replay buffer preserves ``is_init`` (and any custom recurrent
@@ -365,7 +365,7 @@ See also
   state.
 - :class:`~torchrl.modules.set_recurrent_mode` — context manager for
   switching execution paths.
-- :class:`~torchrl.envs.InitTracker` — the source of ``is_init``.
-- :func:`torchrl.objectives.value.utils._get_num_per_traj_init` and
-  :func:`torchrl.objectives.value.functional._split_and_pad_sequence` —
+- :class:`~torchrl.envs.transforms.InitTracker` — the source of ``is_init``.
+- ``torchrl.objectives.value.utils._get_num_per_traj_init`` and
+  ``torchrl.objectives.value.functional._split_and_pad_sequence`` —
   the trajectory-boundary plumbing.

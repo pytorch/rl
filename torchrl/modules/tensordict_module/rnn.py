@@ -8,15 +8,18 @@ import contextvars
 import importlib.metadata
 import importlib.util
 import typing
+from collections.abc import Iterable
 from typing import Any
 
 import torch
 import torch.nn.functional as F
+import torch.utils.checkpoint as _torch_checkpoint
 from packaging import version
+
 from tensordict import TensorDict, TensorDictBase, unravel_key_list
 from tensordict.base import NO_DEFAULT
 from tensordict.nn import dispatch, TensorDictModuleBase as ModuleBase
-from tensordict.utils import expand_as_right, set_lazy_legacy
+from tensordict.utils import expand_as_right, NestedKey, set_lazy_legacy
 from torch import nn, Tensor
 from torch.nn.modules.rnn import RNNCellBase
 
@@ -29,6 +32,21 @@ from torchrl._utils import (
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.tensordict_module._rnn_precision import _validate_user_precision
 
+try:
+    # ``torch.compiler`` was added in torch 2.0; on older builds (exercised by
+    # the olddeps CI job) the module import below would otherwise raise
+    # ``AttributeError: module 'torch' has no attribute 'compiler'``.
+    from torch.compiler import disable as _compiler_disable
+except (ImportError, AttributeError):
+
+    def _compiler_disable(fn=None, *args, **kwargs):
+        # No-op passthrough: on torch builds without ``torch.compiler`` there is
+        # no graph to break out of, and the wrapped helpers run eagerly anyway.
+        if fn is None:
+            return lambda inner: inner
+        return fn
+
+
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
 _hoptorch_scan = None
 _ensure_scan_backward = None
@@ -39,7 +57,7 @@ def _get_hoptorch_scan() -> tuple[Any, Any]:
     if not _has_hoptorch:
         raise NotImplementedError(
             "recurrent_backend='scan' requires hoptorch. Install it with "
-            "`pip install hoptorch>=0.1.1`."
+            "`pip install hoptorch>=0.1.4`."
         )
     if _hoptorch_scan is None or _ensure_scan_backward is None:
         # Optional dependency: keep the import lazy because CI jobs install
@@ -101,6 +119,40 @@ def _canonical_contiguous(value: Tensor) -> Tensor:
     return result.copy_(value)
 
 
+def _split_gru_gate_param(
+    param: Tensor | None,
+    hidden_size: int,
+) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
+    if param is None:
+        return None, None, None
+    gate_chunks = (hidden_size, hidden_size, hidden_size)
+    return tuple(gate.clone() for gate in param.split(gate_chunks, 0))
+
+
+def _gru_cell_from_gate_params(
+    x: Tensor,
+    hx: Tensor,
+    weight_ih: tuple[Tensor, Tensor, Tensor],
+    bias_ih: tuple[Tensor | None, Tensor | None, Tensor | None],
+    weight_hh: tuple[Tensor, Tensor, Tensor],
+    bias_hh: tuple[Tensor | None, Tensor | None, Tensor | None],
+) -> Tensor:
+    x = x.view(-1, x.size(1))
+
+    i_r = F.linear(x, weight_ih[0], bias_ih[0])
+    i_i = F.linear(x, weight_ih[1], bias_ih[1])
+    i_n = F.linear(x, weight_ih[2], bias_ih[2])
+    h_r = F.linear(hx, weight_hh[0], bias_hh[0])
+    h_i = F.linear(hx, weight_hh[1], bias_hh[1])
+    h_n = F.linear(hx, weight_hh[2], bias_hh[2])
+
+    resetgate = (i_r + h_r).sigmoid()
+    inputgate = (i_i + h_i).sigmoid()
+    newgate = (i_n + (resetgate * h_n)).tanh()
+
+    return newgate + inputgate * (hx - newgate)
+
+
 @implement_for("torch", None, "2.6.0", compilable=True)
 def _scan(*args: Any, **kwargs: Any) -> Any:
     raise NotImplementedError(
@@ -113,6 +165,53 @@ def _scan(*args: Any, **kwargs: Any) -> Any:
 def _scan(*args: Any, **kwargs: Any) -> Any:  # noqa: F811
     scan, _ = _get_hoptorch_scan()
     return scan(*args, **kwargs)
+
+
+@_compiler_disable
+def _split_and_pad_for_reset(
+    tensordict_shaped: TensorDictBase,
+    in_keys: list,
+) -> tuple[TensorDictBase | None, torch.Tensor | None, torch.Size | None]:
+    """Split a flattened rollout into per-trajectory padded windows on reset.
+
+    Returns ``(padded_td, splits, original_shape)`` when ``is_init`` fires
+    mid-row (so the rollout must be cut into per-trajectory windows of shape
+    ``[N, T']`` before the RNN runs), or ``(None, None, None)`` otherwise.
+
+    This is an eager island under :func:`torch.compile` (``compiler.disable``):
+    the per-trajectory lengths are data-dependent, so both the padded shape and
+    the boolean-mask reconstruction in :func:`_inv_pad_for_reset`
+    (``tensor[mask]``) produce data-dependent shapes that FakeTensor tracing
+    cannot represent -- Inductor otherwise raises ``torch.Size() takes an
+    iterable of 'int' (item 0 is 'FakeTensor')`` from ``broadcast_shapes``. The
+    surrounding RNN compute still compiles; only this glue runs eagerly.
+    """
+    from torchrl.objectives.value.utils import (
+        _get_num_per_traj_init,
+        _split_and_pad_sequence,
+    )
+
+    is_init = tensordict_shaped["is_init"].squeeze(-1)
+    if not is_init[..., 1:].any():
+        return None, None, None
+    splits = _get_num_per_traj_init(is_init)
+    original_shape = tensordict_shaped.shape
+    padded = _split_and_pad_sequence(
+        tensordict_shaped.select(*in_keys, strict=False), splits
+    )
+    return padded, splits, original_shape
+
+
+@_compiler_disable
+def _inv_pad_for_reset(
+    tensordict_shaped: TensorDictBase,
+    splits: torch.Tensor,
+    shape: torch.Size,
+) -> TensorDictBase:
+    """Inverse of :func:`_split_and_pad_for_reset` (eager island, see there)."""
+    from torchrl.objectives.value.utils import _inv_pad_sequence
+
+    return _inv_pad_sequence(tensordict_shaped, splits).reshape(shape)
 
 
 def _place_at_traj_end(
@@ -602,6 +701,17 @@ class LSTMModule(ModuleBase):
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
             Ignored by the other backends. Default: ``torch.float32``.
+        recurrent_recompute: when set to ``"full"``, trade extra compute for
+            lower backward activation memory. For ``recurrent_backend="triton"``
+            this drops the per-step gate buffers (``save_i/f/g/o/save_tanhc``)
+            from the autograd save set and replays the forward kernel during
+            backward. For ``recurrent_backend="scan"`` this swaps the
+            ``torch._higher_order_ops.scan`` HOP for a python time-loop wrapped
+            with :func:`torch.utils.checkpoint.checkpoint`; gradients then
+            match the ``"pad"`` (cuDNN) backend to float precision. Only
+            ``"none"`` (default) and ``"full"`` are accepted today; the
+            ``"pad"`` backend rejects non-``"none"`` values because cuDNN
+            manages its own backward workspace. Default: ``"none"``.
         recurrent_matmul_precision: precision used by ``tl.dot`` inside the
             ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
             calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
@@ -713,6 +823,7 @@ class LSTMModule(ModuleBase):
         python_based=False,
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
+        recurrent_recompute: typing.Literal["none", "full"] = "none",
         recurrent_matmul_precision: typing.Literal[
             "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
         ] = "auto",
@@ -735,6 +846,18 @@ class LSTMModule(ModuleBase):
             raise RuntimeError(
                 "recurrent_backend='triton' requires the triton package. "
                 "Install it with `pip install triton`."
+            )
+        if recurrent_recompute not in {"none", "full"}:
+            raise ValueError(
+                "recurrent_recompute must be one of 'none' or 'full'. "
+                f"Got {recurrent_recompute}."
+            )
+        if recurrent_recompute != "none" and recurrent_backend in {"pad", "auto"}:
+            raise ValueError(
+                "recurrent_recompute is only supported for recurrent_backend "
+                "'scan' and 'triton'. Set recurrent_backend explicitly: "
+                "'auto' may select cuDNN's 'pad' backend, which manages its "
+                "own backward workspace."
             )
         _validate_user_precision(recurrent_matmul_precision)
         if lstm is not None:
@@ -811,6 +934,7 @@ class LSTMModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
+        self.recurrent_recompute = recurrent_recompute
         self.recurrent_matmul_precision = recurrent_matmul_precision
         if recurrent_backend == "scan":
             param = next(lstm.parameters(), None)
@@ -945,6 +1069,68 @@ class LSTMModule(ModuleBase):
         )
 
     @property
+    def canonical_keys(self) -> list[NestedKey]:
+        """Return TensorDict keys whose canonical layout matters for this module.
+
+        The result is the union of ``self.in_keys`` and ``self.out_keys`` --
+        the minimal subset a caller needs to canonicalize before invoking the
+        module, so unrelated leaves (rewards, advantages, log-probs, ...) can
+        keep whatever layout the data pipeline produces.
+
+        .. seealso:: :meth:`canonicalize`,
+            :func:`~torchrl.modules.canonicalize_rnn_subset`.
+        """
+        return list(self.in_keys) + list(self.out_keys)
+
+    def canonicalize(
+        self, data: TensorDictBase, *, inplace: bool = False
+    ) -> TensorDictBase:
+        """Canonicalize only the RNN-relevant leaves of ``data``.
+
+        Equivalent to ``data.contiguous(canonical=True)`` restricted to
+        :attr:`canonical_keys`. Other leaves are left untouched, avoiding the
+        transient full-batch copy a top-level canonicalization would create.
+
+        Args:
+            data: TensorDict to canonicalize. Missing keys in
+                :attr:`canonical_keys` are skipped silently.
+            inplace: When ``True``, mutates ``data`` in place and returns it.
+                Defaults to ``False`` (returns a shallow copy with the
+                canonicalized leaves replaced).
+
+        Returns:
+            A TensorDict with canonical layout on the RNN keys.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.modules import LSTMModule
+            >>> module = LSTMModule(input_size=3, hidden_size=4, in_key="obs",
+            ...                     out_key="out")
+            >>> td = TensorDict(
+            ...     {"obs": torch.zeros(2, 5, 3),
+            ...      "reward": torch.zeros(2, 5, 1)},
+            ...     batch_size=[2, 5],
+            ... )
+            >>> td_canon = module.canonicalize(td)
+            >>> td_canon["obs"].is_contiguous()
+            True
+        """
+        keys = [
+            key for key in self.canonical_keys if key in data.keys(include_nested=True)
+        ]
+        if not keys:
+            return data
+        sub = data.select(*keys, strict=False)
+        try:
+            sub = sub.contiguous(canonical=True)
+        except TypeError:
+            sub = sub.contiguous()
+        out = data if inplace else data.copy()
+        out.update(sub)
+        return out
+
+    @property
     def recurrent_mode(self):
         rm = recurrent_mode()
         if rm is None:
@@ -995,11 +1181,6 @@ class LSTMModule(ModuleBase):
         env side; without that transform there is no signal for boundary
         resets and hidden state will silently leak across episodes.
         """
-        from torchrl.objectives.value.functional import (
-            _inv_pad_sequence,
-            _split_and_pad_sequence,
-        )
-
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None, None]
         shape = tensordict.shape
@@ -1034,24 +1215,20 @@ class LSTMModule(ModuleBase):
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        if (
-            self.recurrent_mode
-            and not use_scan
-            and not use_triton
-            and is_init[..., 1:].any()
-        ):
-            from torchrl.objectives.value.utils import _get_num_per_traj_init
-
+        if self.recurrent_mode and not use_scan and not use_triton:
             # Multi-trajectory rollouts under the pad backend: split each row
             # into per-trajectory windows of shape [N, T'], run the LSTM on
             # the padded result, then stitch them back. Required for correctness
-            # whenever ``is_init`` fires mid-row.
-            splits = _get_num_per_traj_init(is_init)
-            tensordict_shaped_shape = tensordict_shaped.shape
-            tensordict_shaped = _split_and_pad_sequence(
-                tensordict_shaped.select(*self.in_keys, strict=False), splits
+            # whenever ``is_init`` fires mid-row. The split/unpad runs as an
+            # eager island so the pad backend stays usable under torch.compile
+            # (see _split_and_pad_for_reset).
+            padded, splits_maybe, tensordict_shaped_shape = _split_and_pad_for_reset(
+                tensordict_shaped, self.in_keys
             )
-            is_init = tensordict_shaped["is_init"].squeeze(-1)
+            if padded is not None:
+                tensordict_shaped = padded
+                splits = splits_maybe
+                is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden0, hidden1 = (
             tensordict_shaped.get(key, default)
@@ -1091,8 +1268,8 @@ class LSTMModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[1], hidden0)
         tensordict_shaped.set(self.out_keys[2], hidden1)
         if splits is not None:
-            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
-                tensordict_shaped_shape
+            tensordict_shaped = _inv_pad_for_reset(
+                tensordict_shaped, splits, tensordict_shaped_shape
             )
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
@@ -1282,6 +1459,7 @@ class LSTMModule(ModuleBase):
                 b_hh,
                 is_init,
                 compute_dtype=self.recurrent_compute_dtype,
+                recompute=self.recurrent_recompute == "full",
                 input_precision=self.recurrent_matmul_precision,
             )
             hidden0_layers.append(h_steps)
@@ -1385,24 +1563,34 @@ class LSTMModule(ModuleBase):
                 "LSTMModule(recurrent_backend='scan') does not support bidirectional LSTMs yet."
             )
 
+        recompute = self.recurrent_recompute == "full"
+        # Under recompute we run a python time-loop with per-step activation
+        # checkpointing. Parameters and step outputs are accessed via closure
+        # by name, so the .clone()s required to satisfy ``_scan``'s HOP aliasing
+        # rules can be dropped along that path.
         # nn.LSTM with cuDNN flattens its parameters: weight_ih_l*,
         # weight_hh_l*, bias_ih_l*, bias_hh_l* are views into a single
         # flat storage. Closing the scan body over them as-is fails with
         # "input-to-input aliasing" under torch.compile (the HOP tracer
         # walks the FakeTensor graph and rejects shared storage on inputs).
-        # Cloning produces independent allocations; gradients still flow
-        # back to the parameters.
+        # Cloning produces independent allocations when recompute is disabled;
+        # gradients still flow back to the parameters.
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.lstm.num_layers):
             weights = self.lstm._all_weights[layer]
-            weight_ihs.append(getattr(self.lstm, weights[0]).clone())
-            weight_hhs.append(getattr(self.lstm, weights[1]).clone())
-            bias_ihs.append(
-                getattr(self.lstm, weights[2]).clone() if self.lstm.bias else None
-            )
-            bias_hhs.append(
-                getattr(self.lstm, weights[3]).clone() if self.lstm.bias else None
-            )
+            w_ih = getattr(self.lstm, weights[0])
+            w_hh = getattr(self.lstm, weights[1])
+            b_ih = getattr(self.lstm, weights[2]) if self.lstm.bias else None
+            b_hh = getattr(self.lstm, weights[3]) if self.lstm.bias else None
+            if not recompute:
+                w_ih = w_ih.clone()
+                w_hh = w_hh.clone()
+                b_ih = b_ih.clone() if b_ih is not None else None
+                b_hh = b_hh.clone() if b_hh is not None else None
+            weight_ihs.append(w_ih)
+            weight_hhs.append(w_hh)
+            bias_ihs.append(b_ih)
+            bias_hhs.append(b_hh)
 
         input = _canonical_contiguous(input.transpose(0, 1))
         is_init = _canonical_contiguous(is_init.transpose(0, 1))
@@ -1449,12 +1637,56 @@ class LSTMModule(ModuleBase):
             hidden1_out = new_c.transpose(0, 1).flatten(1).clone()
             return (new_h, new_c), (x_t.clone(), hidden0_out, hidden1_out)
 
-        _, (outputs, hidden0_steps, hidden1_steps) = _scan(
-            step,
-            initial_hidden,
-            (input, is_init, reset_hidden0, reset_hidden1),
-            dim=0,
-        )
+        def step_unpacked(
+            h_layers,
+            c_layers,
+            x_t,
+            init_t,
+            reset_hidden0_t,
+            reset_hidden1_t,
+        ):
+            (new_h, new_c), (out_t, h0_out, h1_out) = step(
+                (h_layers, c_layers),
+                (x_t, init_t, reset_hidden0_t, reset_hidden1_t),
+            )
+            return new_h, new_c, out_t, h0_out, h1_out
+
+        if recompute:
+            h_carry, c_carry = initial_hidden
+            outputs_list: list[torch.Tensor] = []
+            hidden0_list: list[torch.Tensor] = []
+            hidden1_list: list[torch.Tensor] = []
+            time_steps = input.shape[0]
+            for t in range(time_steps):
+                (
+                    h_carry,
+                    c_carry,
+                    out_t,
+                    h0_out,
+                    h1_out,
+                ) = _torch_checkpoint.checkpoint(
+                    step_unpacked,
+                    h_carry,
+                    c_carry,
+                    input[t],
+                    is_init[t],
+                    reset_hidden0[t],
+                    reset_hidden1[t],
+                    use_reentrant=False,
+                )
+                outputs_list.append(out_t)
+                hidden0_list.append(h0_out)
+                hidden1_list.append(h1_out)
+            outputs = torch.stack(outputs_list, 0)
+            hidden0_steps = torch.stack(hidden0_list, 0)
+            hidden1_steps = torch.stack(hidden1_list, 0)
+        else:
+            _, (outputs, hidden0_steps, hidden1_steps) = _scan(
+                step,
+                initial_hidden,
+                (input, is_init, reset_hidden0, reset_hidden1),
+                dim=0,
+            )
         outputs = outputs.transpose(0, 1)
         hidden0_steps = hidden0_steps.unflatten(
             -1, (self.lstm.num_layers, self.lstm.hidden_size)
@@ -1665,14 +1897,25 @@ class GRU(GRUBase):
             _maybe_warm_scan_backward(device)
 
     @staticmethod
-    def _gru_cell(x, hx, weight_ih, bias_ih, weight_hh, bias_hh):
+    def _gru_cell(
+        x, hx, weight_ih, bias_ih, weight_hh, bias_hh, hidden_size: int | None = None
+    ):
         x = x.view(-1, x.size(1))
 
         gate_x = F.linear(x, weight_ih, bias_ih)
         gate_h = F.linear(hx, weight_hh, bias_hh)
 
-        i_r, i_i, i_n = gate_x.chunk(3, 1)
-        h_r, h_i, h_n = gate_h.chunk(3, 1)
+        if hidden_size is None:
+            i_r, i_i, i_n = gate_x.chunk(3, 1)
+            h_r, h_i, h_n = gate_h.chunk(3, 1)
+        else:
+            # In scan's compiled backward, ``chunk(3, dim)`` derives gate sizes
+            # from a symbolic ``3 * hidden_size`` dim, while ``split(hidden_size)``
+            # can leak that composite SymInt through the HOP partitioner. Passing
+            # explicit sections keeps the sections concrete and the graph valid.
+            gate_chunks = (hidden_size, hidden_size, hidden_size)
+            i_r, i_i, i_n = gate_x.split(gate_chunks, 1)
+            h_r, h_i, h_n = gate_h.split(gate_chunks, 1)
 
         resetgate = (i_r + h_r).sigmoid()
         inputgate = (i_i + h_i).sigmoid()
@@ -1728,6 +1971,7 @@ class GRU(GRUBase):
                     bias_ih[layer],
                     weight_hh[layer],
                     bias_hh[layer],
+                    self.hidden_size,
                 )
                 if m_t is not None:
                     # Freeze hidden state for batch entries whose trajectory
@@ -1758,13 +2002,26 @@ class GRU(GRUBase):
                 "GRU(use_scan=True) does not support dropout yet."
             )
 
+        hidden_size = self.hidden_size
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.num_layers):
             weights = self._all_weights[layer]
-            weight_ihs.append(getattr(self, weights[0]).clone())
-            weight_hhs.append(getattr(self, weights[1]).clone())
-            bias_ihs.append(getattr(self, weights[2]).clone() if self.bias else None)
-            bias_hhs.append(getattr(self, weights[3]).clone() if self.bias else None)
+            weight_ihs.append(
+                _split_gru_gate_param(getattr(self, weights[0]), hidden_size)
+            )
+            weight_hhs.append(
+                _split_gru_gate_param(getattr(self, weights[1]), hidden_size)
+            )
+            bias_ihs.append(
+                _split_gru_gate_param(
+                    getattr(self, weights[2]) if self.bias else None, hidden_size
+                )
+            )
+            bias_hhs.append(
+                _split_gru_gate_param(
+                    getattr(self, weights[3]) if self.bias else None, hidden_size
+                )
+            )
 
         if self.batch_first:
             x = x.transpose(0, 1)
@@ -1783,7 +2040,7 @@ class GRU(GRUBase):
             h_unbound = h_layers.unbind(0)
             for layer in range(num_layers):
                 h_prev = h_unbound[layer]
-                h_new = self._gru_cell(
+                h_new = _gru_cell_from_gate_params(
                     x_t,
                     h_prev,
                     weight_ihs[layer],
@@ -1877,6 +2134,16 @@ class GRUModule(ModuleBase):
             ``"triton"`` backend (``torch.float32`` -> TF32 on H100, default;
             ``torch.bfloat16`` -> bigger SMEM margin, lower precision).
             Ignored by the other backends. Default: ``torch.float32``.
+        recurrent_recompute: when set to ``"full"``, trade extra compute for
+            lower backward activation memory. For ``recurrent_backend="triton"``
+            this drops the per-step gate buffers (``save_r/z/n/save_gh_n``)
+            from the autograd save set and replays the forward kernel during
+            backward. For ``recurrent_backend="scan"`` this swaps the
+            ``torch._higher_order_ops.scan`` HOP for a python time-loop wrapped
+            with :func:`torch.utils.checkpoint.checkpoint`. Only ``"none"``
+            (default) and ``"full"`` are accepted; the ``"pad"`` backend rejects
+            non-``"none"`` values because cuDNN manages its own backward
+            workspace. Default: ``"none"``.
         recurrent_matmul_precision: precision used by ``tl.dot`` inside the
             ``"triton"`` backend's recurrent matmul (and the matching cuBLAS
             calls in the autograd wrapper). Concrete modes: ``"ieee"`` (full
@@ -2013,6 +2280,7 @@ class GRUModule(ModuleBase):
         python_based=False,
         recurrent_backend: typing.Literal["auto", "pad", "scan", "triton"] = "pad",
         recurrent_compute_dtype: torch.dtype = torch.float32,
+        recurrent_recompute: typing.Literal["none", "full"] = "none",
         recurrent_matmul_precision: typing.Literal[
             "auto", "fast", "high-prec", "ieee", "tf32", "tf32x3"
         ] = "auto",
@@ -2035,6 +2303,18 @@ class GRUModule(ModuleBase):
             raise RuntimeError(
                 "recurrent_backend='triton' requires the triton package. "
                 "Install it with `pip install triton`."
+            )
+        if recurrent_recompute not in {"none", "full"}:
+            raise ValueError(
+                "recurrent_recompute must be one of 'none' or 'full'. "
+                f"Got {recurrent_recompute}."
+            )
+        if recurrent_recompute != "none" and recurrent_backend in {"pad", "auto"}:
+            raise ValueError(
+                "recurrent_recompute is only supported for recurrent_backend "
+                "'scan' and 'triton'. Set recurrent_backend explicitly: "
+                "'auto' may select cuDNN's 'pad' backend, which manages its "
+                "own backward workspace."
             )
         _validate_user_precision(recurrent_matmul_precision)
         if gru is not None:
@@ -2108,6 +2388,7 @@ class GRUModule(ModuleBase):
         self._recurrent_mode = default_recurrent_mode
         self.recurrent_backend = recurrent_backend
         self.recurrent_compute_dtype = recurrent_compute_dtype
+        self.recurrent_recompute = recurrent_recompute
         self.recurrent_matmul_precision = recurrent_matmul_precision
         if recurrent_backend == "scan":
             param = next(gru.parameters(), None)
@@ -2238,6 +2519,52 @@ class GRUModule(ModuleBase):
         )
 
     @property
+    def canonical_keys(self) -> list[NestedKey]:
+        """Return TensorDict keys whose canonical layout matters for this module.
+
+        The result is the union of ``self.in_keys`` and ``self.out_keys``.
+
+        .. seealso:: :meth:`canonicalize`,
+            :func:`~torchrl.modules.canonicalize_rnn_subset`.
+        """
+        return list(self.in_keys) + list(self.out_keys)
+
+    def canonicalize(
+        self, data: TensorDictBase, *, inplace: bool = False
+    ) -> TensorDictBase:
+        """Canonicalize only the RNN-relevant leaves of ``data``.
+
+        See :meth:`LSTMModule.canonicalize` for details.
+
+        Args:
+            data: TensorDict to canonicalize.
+            inplace: When ``True``, mutates ``data`` in place.
+
+        Examples:
+            >>> import torch
+            >>> from tensordict import TensorDict
+            >>> from torchrl.modules import GRUModule
+            >>> module = GRUModule(input_size=3, hidden_size=4, in_key="obs",
+            ...                    out_key="out")
+            >>> td = TensorDict({"obs": torch.zeros(2, 5, 3)}, batch_size=[2, 5])
+            >>> module.canonicalize(td)["obs"].is_contiguous()
+            True
+        """
+        keys = [
+            key for key in self.canonical_keys if key in data.keys(include_nested=True)
+        ]
+        if not keys:
+            return data
+        sub = data.select(*keys, strict=False)
+        try:
+            sub = sub.contiguous(canonical=True)
+        except TypeError:
+            sub = sub.contiguous()
+        out = data if inplace else data.copy()
+        out.update(sub)
+        return out
+
+    @property
     def recurrent_mode(self):
         rm = recurrent_mode()
         if rm is None:
@@ -2266,11 +2593,6 @@ class GRUModule(ModuleBase):
     @dispatch
     @set_lazy_legacy(False)
     def forward(self, tensordict: TensorDictBase):
-        from torchrl.objectives.value.functional import (
-            _inv_pad_sequence,
-            _split_and_pad_sequence,
-        )
-
         # we want to get an error if the value input is missing, but not the hidden states
         defaults = [NO_DEFAULT, None]
         shape = tensordict.shape
@@ -2299,20 +2621,19 @@ class GRUModule(ModuleBase):
             backend = "scan" if is_compiling() else "pad"
         use_scan = self.recurrent_mode and backend == "scan"
         use_triton = self.recurrent_mode and backend == "triton"
-        if (
-            self.recurrent_mode
-            and not use_scan
-            and not use_triton
-            and is_init[..., 1:].any()
-        ):
-            from torchrl.objectives.value.utils import _get_num_per_traj_init
-
-            splits = _get_num_per_traj_init(is_init)
-            tensordict_shaped_shape = tensordict_shaped.shape
-            tensordict_shaped = _split_and_pad_sequence(
-                tensordict_shaped.select(*self.in_keys, strict=False), splits
+        if self.recurrent_mode and not use_scan and not use_triton:
+            # Multi-trajectory rollouts under the pad backend: split each row
+            # into per-trajectory windows, run the GRU on the padded result,
+            # then stitch them back. The split/unpad runs as an eager island so
+            # the pad backend stays usable under torch.compile (see
+            # _split_and_pad_for_reset).
+            padded, splits_maybe, tensordict_shaped_shape = _split_and_pad_for_reset(
+                tensordict_shaped, self.in_keys
             )
-            is_init = tensordict_shaped["is_init"].squeeze(-1)
+            if padded is not None:
+                tensordict_shaped = padded
+                splits = splits_maybe
+                is_init = tensordict_shaped["is_init"].squeeze(-1)
 
         value, hidden = (
             tensordict_shaped.get(key, default)
@@ -2338,8 +2659,8 @@ class GRUModule(ModuleBase):
         tensordict_shaped.set(self.out_keys[0], val)
         tensordict_shaped.set(self.out_keys[1], hidden)
         if splits is not None:
-            tensordict_shaped = _inv_pad_sequence(tensordict_shaped, splits).reshape(
-                tensordict_shaped_shape
+            tensordict_shaped = _inv_pad_for_reset(
+                tensordict_shaped, splits, tensordict_shaped_shape
             )
 
         if shape != tensordict_shaped.shape or tensordict_shaped is not tensordict:
@@ -2455,6 +2776,7 @@ class GRUModule(ModuleBase):
                 b_hh,
                 is_init,
                 compute_dtype=self.recurrent_compute_dtype,
+                recompute=self.recurrent_recompute == "full",
                 input_precision=self.recurrent_matmul_precision,
             )
             hidden_layers.append(h_steps)
@@ -2535,19 +2857,35 @@ class GRUModule(ModuleBase):
                 "GRUModule(recurrent_backend='scan') does not support bidirectional GRUs yet."
             )
 
-        # See _lstm_scan_with_resets: cuDNN flattens GRU parameters into a
-        # single storage, so the views alias each other and the scan tracer
-        # rejects them as inputs. Cloning produces independent allocations.
+        recompute = self.recurrent_recompute == "full"
+        # Split the packed GRU gate parameters outside the scan body. This keeps
+        # the scan step from producing intermediate tensors whose width is the
+        # composite symbolic expression ``3 * hidden_size`` and avoids the
+        # chunk/split-on-activations path in scan's compiled backward. Each gate
+        # clone is an independent allocation, preserving the existing scan
+        # input-aliasing workaround for cuDNN-flattened RNN parameters while
+        # keeping gradients connected to the packed parameters.
+        hidden_size = self.gru.hidden_size
         weight_ihs, weight_hhs, bias_ihs, bias_hhs = [], [], [], []
         for layer in range(self.gru.num_layers):
             weights = self.gru._all_weights[layer]
-            weight_ihs.append(getattr(self.gru, weights[0]).clone())
-            weight_hhs.append(getattr(self.gru, weights[1]).clone())
+            weight_ihs.append(
+                _split_gru_gate_param(getattr(self.gru, weights[0]), hidden_size)
+            )
+            weight_hhs.append(
+                _split_gru_gate_param(getattr(self.gru, weights[1]), hidden_size)
+            )
             bias_ihs.append(
-                getattr(self.gru, weights[2]).clone() if self.gru.bias else None
+                _split_gru_gate_param(
+                    getattr(self.gru, weights[2]) if self.gru.bias else None,
+                    hidden_size,
+                )
             )
             bias_hhs.append(
-                getattr(self.gru, weights[3]).clone() if self.gru.bias else None
+                _split_gru_gate_param(
+                    getattr(self.gru, weights[3]) if self.gru.bias else None,
+                    hidden_size,
+                )
             )
 
         input = _canonical_contiguous(input.transpose(0, 1))
@@ -2563,7 +2901,7 @@ class GRUModule(ModuleBase):
             h_unbound = h_layers.unbind(0)
             new_h = []
             for layer in range(num_layers):
-                h_new = GRU._gru_cell(
+                h_new = _gru_cell_from_gate_params(
                     x_t,
                     h_unbound[layer],
                     weight_ihs[layer],
@@ -2582,9 +2920,32 @@ class GRUModule(ModuleBase):
             hidden_out = new_h.transpose(0, 1).flatten(1).clone()
             return new_h, (x_t.clone(), hidden_out)
 
-        _, (outputs, hidden_steps) = _scan(
-            step, initial_hidden, (input, is_init, reset_hidden), dim=0
-        )
+        def step_unpacked(h_layers, x_t, init_t, reset_hidden_t):
+            new_h, (out_t, hidden_out) = step(h_layers, (x_t, init_t, reset_hidden_t))
+            return new_h, out_t, hidden_out
+
+        if recompute:
+            h_carry = initial_hidden
+            outputs_list: list[torch.Tensor] = []
+            hidden_list: list[torch.Tensor] = []
+            time_steps = input.shape[0]
+            for t in range(time_steps):
+                h_carry, out_t, hidden_out = _torch_checkpoint.checkpoint(
+                    step_unpacked,
+                    h_carry,
+                    input[t],
+                    is_init[t],
+                    reset_hidden[t],
+                    use_reentrant=False,
+                )
+                outputs_list.append(out_t)
+                hidden_list.append(hidden_out)
+            outputs = torch.stack(outputs_list, 0)
+            hidden_steps = torch.stack(hidden_list, 0)
+        else:
+            _, (outputs, hidden_steps) = _scan(
+                step, initial_hidden, (input, is_init, reset_hidden), dim=0
+            )
         outputs = outputs.transpose(0, 1)
         hidden_steps = hidden_steps.unflatten(
             -1, (self.gru.num_layers, self.gru.hidden_size)
@@ -2695,3 +3056,60 @@ class set_recurrent_mode(_DecoratorContextManager):
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         recurrent_mode_state_manager.set_mode(self.prev)
+
+
+def canonicalize_rnn_subset(
+    data: TensorDictBase,
+    modules: Iterable[LSTMModule | GRUModule],
+    *,
+    inplace: bool = False,
+) -> TensorDictBase:
+    """Canonicalize only the union of RNN keys used by ``modules``.
+
+    Convenience wrapper around :meth:`LSTMModule.canonicalize` /
+    :meth:`GRUModule.canonicalize` for pipelines that feed several recurrent
+    modules from the same TensorDict (e.g. a recurrent actor and a recurrent
+    critic). The union of every module's :attr:`canonical_keys` is collected,
+    canonicalized once, and merged back. Other leaves are untouched.
+
+    Args:
+        data: TensorDict to canonicalize.
+        modules: Iterable of :class:`LSTMModule` / :class:`GRUModule` whose
+            :attr:`canonical_keys` define the subset to canonicalize.
+        inplace: When ``True``, mutates ``data`` in place and returns it.
+            Defaults to ``False``.
+
+    Returns:
+        A TensorDict with canonical layout on the RNN-relevant leaves.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.modules import LSTMModule, canonicalize_rnn_subset
+        >>> actor = LSTMModule(input_size=3, hidden_size=4, in_key="obs",
+        ...                    out_key="actor_h")
+        >>> critic = LSTMModule(input_size=3, hidden_size=4, in_key="obs",
+        ...                     out_key="critic_h")
+        >>> td = TensorDict({"obs": torch.zeros(2, 5, 3)}, batch_size=[2, 5])
+        >>> canonicalize_rnn_subset(td, [actor, critic])["obs"].is_contiguous()
+        True
+    """
+    seen: set[tuple] = set()
+    keys: list[NestedKey] = []
+    for module in modules:
+        for key in module.canonical_keys:
+            tup = (key,) if isinstance(key, str) else tuple(key)
+            if tup not in seen:
+                seen.add(tup)
+                keys.append(key)
+    keys = [key for key in keys if key in data.keys(include_nested=True)]
+    if not keys:
+        return data
+    sub = data.select(*keys, strict=False)
+    try:
+        sub = sub.contiguous(canonical=True)
+    except TypeError:
+        sub = sub.contiguous()
+    out = data if inplace else data.copy()
+    out.update(sub)
+    return out

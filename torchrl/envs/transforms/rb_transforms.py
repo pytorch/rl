@@ -331,6 +331,24 @@ class NextStateReconstructor(Transform):
         ... }, batch_size=[8])
         >>> rb.extend(data)
         >>> sample = rb.sample()  # ('next', 'observation') is reconstructed
+
+    .. seealso::
+
+        :class:`~torchrl.collectors.Collector`'s ``compact_obs`` flag
+        is the producer side of this transform — it drops the duplicated
+        ``("next", obs)`` before stacking. Trajectory ends carry ``NaN`` after
+        rehydration; the value-estimator pipeline keeps GAE / TD targets
+        numerically defined via
+        :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`.
+        :class:`~torchrl.envs.transforms.MultiStepTransform` is **not**
+        compatible with the compact path: it needs the canonical ``("next", obs)``
+        to read the n-step neighbour (and to keep working at the last
+        ``n - 1`` frames of every trajectory, where the n-step lookup falls
+        back to the in-trajectory neighbours). For a lossy alternative that
+        reconstructs the *real* boundary transition (smaller memory saving,
+        no ``NaN``), see
+        :class:`~torchrl.envs.transforms.NextObservationDelta`. See the
+        *Memory-efficient RL training* tutorial for an end-to-end pipeline.
     """
 
     def __init__(

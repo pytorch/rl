@@ -39,6 +39,7 @@ from torchrl.envs import (
 )
 from torchrl.envs.utils import step_mdp
 from torchrl.modules import (
+    canonicalize_rnn_subset,
     ConsistentDropoutModule,
     get_recurrent_matmul_precision,
     GRU,
@@ -52,6 +53,11 @@ from torchrl.modules import (
     set_recurrent_matmul_precision,
     set_recurrent_mode,
     ValueOperator,
+)
+from torchrl.modules.tensordict_module._rnn_triton import _resolve_save_gates
+from torchrl.modules.tensordict_module.rnn import (
+    _canonical_contiguous,
+    _canonical_stride,
 )
 from torchrl.modules.utils import (
     get_env_transforms_from_module,
@@ -884,7 +890,7 @@ class TestLSTMModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
-    @pytest.mark.parametrize("H", [16, 64])
+    @pytest.mark.parametrize("H", [16, 64, 512])
     def test_lstm_module_triton_backend_matches_pad(self, H, compute_dtype):
         torch.manual_seed(0)
         device = torch.device("cuda")
@@ -1033,7 +1039,13 @@ class TestLSTMModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_lstm_module_triton_backward(self):
-        """Backward path: gradients match pad backend within tolerance."""
+        """Backward path: gradients match pad backend within tolerance.
+
+        Uses the fused path (H below ``_FWD_TILED_H_MIN``). The autotuned fused
+        backward at large H exceeds the unit-test timeout on CI GPUs, and the
+        tiled backward is only reachable via recompute (see #3752), so large-H
+        backward parity is left to the benchmark/recompute paths.
+        """
         torch.manual_seed(0)
         device = torch.device("cuda")
         B, T, F, H = 4, 7, 3, 64
@@ -1256,6 +1268,206 @@ class TestLSTMModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.parametrize("nested_in_key", [False, True])
+    def test_lstm_canonicalize_subset(self, nested_in_key):
+        in_key = ("obs", "value") if nested_in_key else "obs"
+        module = LSTMModule(
+            input_size=3,
+            hidden_size=4,
+            in_key=in_key,
+            out_key="out",
+        )
+        # obs is canonical, reward is not. canonicalize should touch obs only.
+        obs = torch.randn(2, 5, 3)
+        reward = torch.randn(2, 5, 1).transpose(0, 1).transpose(0, 1)
+        td = TensorDict({in_key: obs, "reward": reward}, batch_size=[2, 5])
+        reward_ptr = td["reward"].data_ptr()
+        out = module.canonicalize(td)
+        assert out["obs" if not nested_in_key else ("obs", "value")].is_contiguous()
+        # Unrelated key untouched (same storage).
+        assert out["reward"].data_ptr() == reward_ptr
+
+    def test_lstm_canonicalize_inplace(self):
+        module = LSTMModule(input_size=3, hidden_size=4, in_key="obs", out_key="out")
+        obs = torch.randn(2, 5, 3)
+        td = TensorDict({"obs": obs}, batch_size=[2, 5])
+        out = module.canonicalize(td, inplace=True)
+        assert out is td
+
+    def test_canonicalize_rnn_subset_free_fn(self):
+        lstm = LSTMModule(input_size=3, hidden_size=4, in_key="obs", out_key="lstm_out")
+        gru = GRUModule(input_size=3, hidden_size=4, in_key="obs", out_key="gru_out")
+        td = TensorDict(
+            {"obs": torch.randn(2, 5, 3), "reward": torch.randn(2, 5, 1)},
+            batch_size=[2, 5],
+        )
+        reward_ptr = td["reward"].data_ptr()
+        out = canonicalize_rnn_subset(td, [lstm, gru])
+        assert out["obs"].is_contiguous()
+        assert out["reward"].data_ptr() == reward_ptr
+
+    @pytest.mark.parametrize("backend", ["auto", "pad"])
+    def test_lstm_recompute_rejected_for_non_recompute_backend(self, backend):
+        with pytest.raises(ValueError, match="recurrent_recompute"):
+            LSTMModule(
+                input_size=3,
+                hidden_size=4,
+                in_key="obs",
+                out_key="out",
+                recurrent_backend=backend,
+                recurrent_recompute="full",
+            )
+
+    def test_lstm_recompute_invalid_value(self):
+        with pytest.raises(ValueError, match="recurrent_recompute"):
+            LSTMModule(
+                input_size=3,
+                hidden_size=4,
+                in_key="obs",
+                out_key="out",
+                recurrent_backend="scan",
+                recurrent_recompute="partial",
+            )
+
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_lstm_scan_recompute_matches_pad(self, num_layers):
+        """Scan + recompute uses a python time-loop, which matches cuDNN to fp precision."""
+        torch.manual_seed(0)
+        B, T, F, H = 4, 7, 3, 8
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+        }
+        pad_module = LSTMModule(**kwargs)
+        rc_module = LSTMModule(
+            **kwargs, recurrent_backend="scan", recurrent_recompute="full"
+        )
+        rc_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F)
+        hidden0 = torch.zeros(B, T, num_layers, H)
+        hidden1 = torch.zeros(B, T, num_layers, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+        is_init[2, 5] = True
+
+        def loss_and_grads(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            obs_leaf = obs.detach().clone().requires_grad_(True)
+            d = TensorDict(
+                {
+                    "obs": obs_leaf,
+                    "hidden0": hidden0,
+                    "hidden1": hidden1,
+                    "is_init": is_init,
+                },
+                [B, T],
+            )
+            out = mod(d)
+            loss = (
+                out["feat"].pow(2).sum()
+                + out["next", "hidden0"].pow(2).sum()
+                + out["next", "hidden1"].pow(2).sum()
+            )
+            loss.backward()
+            return {
+                "feat": out["feat"].detach(),
+                "h0": out["next", "hidden0"].detach(),
+                "h1": out["next", "hidden1"].detach(),
+                "obs_grad": obs_leaf.grad.clone(),
+                "params": {k: v.grad.clone() for k, v in mod.named_parameters()},
+            }
+
+        with set_recurrent_mode(True):
+            torch.manual_seed(1)
+            pad_res = loss_and_grads(pad_module)
+            torch.manual_seed(1)
+            rc_res = loss_and_grads(rc_module)
+        torch.testing.assert_close(
+            pad_res["feat"], rc_res["feat"], atol=1e-5, rtol=1e-5
+        )
+        torch.testing.assert_close(
+            pad_res["obs_grad"], rc_res["obs_grad"], atol=1e-5, rtol=1e-5
+        )
+        for k in pad_res["params"]:
+            torch.testing.assert_close(
+                pad_res["params"][k], rc_res["params"][k], atol=1e-5, rtol=1e-5
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    def test_lstm_triton_recompute_parity(self):
+        """Triton recompute matches non-recompute on outputs and grads."""
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 16
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": 1,
+            "in_keys": ["obs", "hidden0", "hidden1"],
+            "out_keys": ["feat", ("next", "hidden0"), ("next", "hidden1")],
+            "device": device,
+            "recurrent_backend": "triton",
+        }
+        m_full = LSTMModule(**kwargs)
+        m_rc = LSTMModule(**kwargs, recurrent_recompute="full")
+        m_rc.load_state_dict(m_full.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden0 = torch.zeros(B, T, 1, H, device=device)
+        hidden1 = torch.zeros(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[1, 3] = True
+        data = TensorDict(
+            {"obs": obs, "hidden0": hidden0, "hidden1": hidden1, "is_init": is_init},
+            [B, T],
+        )
+
+        def loss_and_grads(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            out = mod(data.clone())
+            (out["feat"].pow(2).sum()).backward()
+            return out["feat"].detach().clone(), {
+                k: p.grad.detach().clone() for k, p in mod.named_parameters()
+            }
+
+        with set_recurrent_mode(True):
+            out_full, grads_full = loss_and_grads(m_full)
+            out_rc, grads_rc = loss_and_grads(m_rc)
+        torch.testing.assert_close(out_full, out_rc, atol=1e-6, rtol=1e-6)
+        for k in grads_full:
+            torch.testing.assert_close(grads_full[k], grads_rc[k], atol=1e-5, rtol=1e-5)
+
+    def test_resolve_save_gates(self):
+        """Save_gates must be False under recompute / no_grad / no-track inputs.
+
+        Avoids the dead allocation of save_i/f/g/o/save_tanhc buffers that
+        would otherwise be captured by the CUDA caching allocator / cudagraph
+        private pool even when backward will never read them.
+        """
+        x = torch.randn(2, 3, 4, requires_grad=True)
+        x_nograd = x.detach()
+        assert _resolve_save_gates(False, x) is True
+        assert _resolve_save_gates(True, x) is False
+        assert _resolve_save_gates(False, x_nograd) is False
+        with torch.no_grad():
+            assert _resolve_save_gates(False, x) is False
+        # ``None`` entries (optional biases) must not break the check.
+        assert _resolve_save_gates(False, x, None) is True
+
     @pytest.mark.parametrize("rnn_type", ["lstm", "gru"])
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.7.0"),
@@ -1417,11 +1629,6 @@ class TestLSTMModule:
         # _canonical_contiguous must be a no-op when the input strides match
         # the C-canonical layout, and must materialize a fresh canonical
         # tensor when they don't (the size-1-dim quirk).
-        from torchrl.modules.tensordict_module.rnn import (
-            _canonical_contiguous,
-            _canonical_stride,
-        )
-
         canonical = torch.randn(3, 4, 5)
         assert _canonical_stride(canonical.shape) == (20, 5, 1)
         out = _canonical_contiguous(canonical)
@@ -1531,6 +1738,67 @@ class TestLSTMModule:
         finally:
             torch._dynamo.config.capture_scalar_outputs = prev
         assert "feat" in out.keys(True, True)
+
+    @pytest.mark.parametrize("rnn_type", ["gru", "lstm"])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch.compile recurrent path requires Torch >= 2.6.0",
+    )
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="torch.compile tests need a C compiler"
+    )
+    def test_module_pad_backend_compile_with_resets(self, rnn_type):
+        # Regression: the pad (cuDNN) backend cuts multi-trajectory rollouts via
+        # the data-dependent _split_and_pad_sequence / _inv_pad_sequence. Under
+        # torch.compile the boolean-mask reconstruction (tensor[mask]) produced
+        # a data-dependent shape and crashed with "torch.Size() takes an
+        # iterable of 'int' (item 0 is 'FakeTensor')". _split_and_pad_for_reset /
+        # _inv_pad_for_reset now run those as eager islands so the pad backend
+        # compiles; the compiled output must still match eager. Note there is no
+        # capture_scalar_outputs toggle here: the pad path must compile under the
+        # default config.
+        torch.manual_seed(0)
+        B, T, F_in, H, L = 4, 8, 3, 8, 1
+        obs = torch.randn(B, T, F_in)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[:, 0] = True
+        is_init[1, 4] = True  # mid-row reset -> exercises split/pad/unpad
+        if rnn_type == "gru":
+            module = GRUModule(
+                input_size=F_in,
+                hidden_size=H,
+                num_layers=L,
+                in_keys=["obs", "hidden"],
+                out_keys=["feat", ("next", "hidden")],
+                recurrent_backend="pad",
+            )
+            hidden = {"hidden": torch.zeros(B, T, L, H)}
+        else:
+            module = LSTMModule(
+                input_size=F_in,
+                hidden_size=H,
+                num_layers=L,
+                in_keys=["obs", "hidden0", "hidden1"],
+                out_keys=["feat", ("next", "hidden0"), ("next", "hidden1")],
+                recurrent_backend="pad",
+            )
+            hidden = {
+                "hidden0": torch.zeros(B, T, L, H),
+                "hidden1": torch.zeros(B, T, L, H),
+            }
+        data = TensorDict({"obs": obs, "is_init": is_init, **hidden}, [B, T])
+
+        with set_recurrent_mode(True), torch.no_grad():
+            ref = module(data.clone())
+
+        @torch.compile
+        def call(td):
+            with set_recurrent_mode(True):
+                return module(td)
+
+        with torch.no_grad():
+            out = call(data.clone())
+        torch.testing.assert_close(out["feat"], ref["feat"])
 
     @pytest.mark.skipif(
         TORCH_VERSION < version.parse("2.6.0"),
@@ -1663,8 +1931,6 @@ class TestLSTMModule:
         # sanity check that the runtime path does see a non-canonical view
         probe = hidden_buf[:, 0].transpose(-3, -2)
         assert probe.is_contiguous()
-        from torchrl.modules.tensordict_module.rnn import _canonical_stride
-
         assert tuple(probe.stride()) != _canonical_stride(probe.shape)
         is_init = torch.zeros(B, T, 1, dtype=torch.bool)
         is_init[:, 0] = True
@@ -2449,7 +2715,7 @@ class TestGRUModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("compute_dtype", [torch.float32, torch.bfloat16])
-    @pytest.mark.parametrize("H", [16, 64])
+    @pytest.mark.parametrize("H", [16, 64, 512])
     def test_gru_module_triton_backend_matches_pad(self, H, compute_dtype):
         torch.manual_seed(0)
         device = torch.device("cuda")
@@ -2576,7 +2842,13 @@ class TestGRUModule:
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     def test_gru_module_triton_backward(self):
-        """Backward path: gradients match pad backend within tolerance."""
+        """Backward path: gradients match pad backend within tolerance.
+
+        Uses the fused path (H below ``_FWD_TILED_H_MIN``). The autotuned fused
+        backward at large H exceeds the unit-test timeout on CI GPUs, and the
+        tiled backward is only reachable via recompute (see #3752), so large-H
+        backward parity is left to the benchmark/recompute paths.
+        """
         torch.manual_seed(0)
         device = torch.device("cuda")
         B, T, F, H = 4, 7, 3, 64
@@ -2769,6 +3041,136 @@ class TestGRUModule:
                 pad_out[key], triton_out[key], atol=5e-3, rtol=5e-3
             )
 
+    @pytest.mark.parametrize("nested_in_key", [False, True])
+    def test_gru_canonicalize_subset(self, nested_in_key):
+        in_key = ("obs", "value") if nested_in_key else "obs"
+        module = GRUModule(
+            input_size=3,
+            hidden_size=4,
+            in_key=in_key,
+            out_key="out",
+        )
+        obs = torch.randn(2, 5, 3)
+        reward = torch.randn(2, 5, 1)
+        td = TensorDict({in_key: obs, "reward": reward}, batch_size=[2, 5])
+        reward_ptr = td["reward"].data_ptr()
+        out = module.canonicalize(td)
+        assert out["obs" if not nested_in_key else ("obs", "value")].is_contiguous()
+        assert out["reward"].data_ptr() == reward_ptr
+
+    @pytest.mark.parametrize("backend", ["auto", "pad"])
+    def test_gru_recompute_rejected_for_non_recompute_backend(self, backend):
+        with pytest.raises(ValueError, match="recurrent_recompute"):
+            GRUModule(
+                input_size=3,
+                hidden_size=4,
+                in_key="obs",
+                out_key="out",
+                recurrent_backend=backend,
+                recurrent_recompute="full",
+            )
+
+    @pytest.mark.parametrize("num_layers", [1, 2])
+    @pytest.mark.skipif(
+        TORCH_VERSION < version.parse("2.6.0"),
+        reason="torch._higher_order_ops.scan requires Torch >= 2.6.0",
+    )
+    def test_gru_scan_recompute_matches_pad(self, num_layers):
+        torch.manual_seed(0)
+        B, T, F, H = 4, 7, 3, 8
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": num_layers,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+        }
+        pad_module = GRUModule(**kwargs)
+        rc_module = GRUModule(
+            **kwargs, recurrent_backend="scan", recurrent_recompute="full"
+        )
+        rc_module.load_state_dict(pad_module.state_dict())
+
+        obs = torch.randn(B, T, F)
+        hidden = torch.zeros(B, T, num_layers, H)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool)
+        is_init[0, 3] = True
+        is_init[1, 2] = True
+
+        def loss_and_grads(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            obs_leaf = obs.detach().clone().requires_grad_(True)
+            d = TensorDict(
+                {"obs": obs_leaf, "hidden": hidden, "is_init": is_init}, [B, T]
+            )
+            out = mod(d)
+            (out["feat"].pow(2).sum() + out["next", "hidden"].pow(2).sum()).backward()
+            return {
+                "feat": out["feat"].detach(),
+                "obs_grad": obs_leaf.grad.clone(),
+                "params": {k: v.grad.clone() for k, v in mod.named_parameters()},
+            }
+
+        with set_recurrent_mode(True):
+            torch.manual_seed(1)
+            pad_res = loss_and_grads(pad_module)
+            torch.manual_seed(1)
+            rc_res = loss_and_grads(rc_module)
+        torch.testing.assert_close(
+            pad_res["feat"], rc_res["feat"], atol=1e-5, rtol=1e-5
+        )
+        torch.testing.assert_close(
+            pad_res["obs_grad"], rc_res["obs_grad"], atol=1e-5, rtol=1e-5
+        )
+        for k in pad_res["params"]:
+            torch.testing.assert_close(
+                pad_res["params"][k], rc_res["params"][k], atol=1e-5, rtol=1e-5
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
+    def test_gru_triton_recompute_parity(self):
+        torch.manual_seed(0)
+        device = torch.device("cuda")
+        B, T, F, H = 4, 7, 3, 16
+        kwargs = {
+            "input_size": F,
+            "hidden_size": H,
+            "num_layers": 1,
+            "in_keys": ["obs", "hidden"],
+            "out_keys": ["feat", ("next", "hidden")],
+            "device": device,
+            "recurrent_backend": "triton",
+        }
+        m_full = GRUModule(**kwargs)
+        m_rc = GRUModule(**kwargs, recurrent_recompute="full")
+        m_rc.load_state_dict(m_full.state_dict())
+
+        obs = torch.randn(B, T, F, device=device)
+        hidden = torch.zeros(B, T, 1, H, device=device)
+        is_init = torch.zeros(B, T, 1, dtype=torch.bool, device=device)
+        is_init[1, 3] = True
+        data = TensorDict({"obs": obs, "hidden": hidden, "is_init": is_init}, [B, T])
+
+        def loss_and_grads(mod):
+            for p in mod.parameters():
+                if p.grad is not None:
+                    p.grad = None
+            out = mod(data.clone())
+            out["feat"].pow(2).sum().backward()
+            return out["feat"].detach().clone(), {
+                k: p.grad.detach().clone() for k, p in mod.named_parameters()
+            }
+
+        with set_recurrent_mode(True):
+            out_full, grads_full = loss_and_grads(m_full)
+            out_rc, grads_rc = loss_and_grads(m_rc)
+        torch.testing.assert_close(out_full, out_rc, atol=1e-6, rtol=1e-6)
+        for k in grads_full:
+            torch.testing.assert_close(grads_full[k], grads_rc[k], atol=1e-5, rtol=1e-5)
+
     @pytest.mark.gpu
     @pytest.mark.skipif(not _has_triton, reason=_triton_skip_reason)
     @pytest.mark.parametrize("backend", ["scan", "triton"])
@@ -2861,8 +3263,6 @@ class TestGRUModule:
         hidden_buf[:, 0] = h_storage.view(B, L, H)
         probe = hidden_buf[:, 0].transpose(-3, -2)
         assert probe.is_contiguous()
-        from torchrl.modules.tensordict_module.rnn import _canonical_stride
-
         assert tuple(probe.stride()) != _canonical_stride(probe.shape)
         is_init = torch.zeros(B, T, 1, dtype=torch.bool)
         is_init[:, 0] = True

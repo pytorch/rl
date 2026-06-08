@@ -107,7 +107,11 @@ import torch.distributed
 from tensordict import TensorDictBase
 
 from torchrl._utils import logger as torchrl_logger
-from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme
+from torchrl.weight_update.weight_sync_schemes import (
+    _merged_lora_state_dict,
+    WeightStrategy,
+    WeightSyncScheme,
+)
 
 # ============================================================================
 # vLLM Transport using Collective Communication
@@ -383,6 +387,11 @@ class VLLMCollectiveTransport:
         """Check if the communication group is initialized."""
         return self._initialized
 
+    def shutdown(self) -> None:
+        """Release trainer-side resources used for weight synchronization."""
+        self._trainer_nccl_group = None
+        self._initialized = False
+
 
 # ============================================================================
 # vLLM Weight Synchronization Components
@@ -655,6 +664,16 @@ class VLLMWeightSender:
         for hook in self._post_hooks:
             hook()
 
+    def shutdown(self) -> None:
+        """Release resources held by the sender."""
+        if self._transport is not None:
+            shutdown = getattr(self._transport, "shutdown", None)
+            if shutdown is not None:
+                shutdown()
+            self._transport = None
+        self._collectors.clear()
+        self._post_hooks.clear()
+
 
 class VLLMWeightReceiver:
     """Receives weights in a vLLM worker using collective communication.
@@ -772,8 +791,7 @@ def get_model_metadata(model) -> dict[str, tuple[torch.dtype, torch.Size]]:
     # This ensures keys match what extract_weights() will produce
     if hasattr(model, "state_dict"):
         if hasattr(model, "merge_and_unload"):
-            # LoRA model
-            sd = model.merge_and_unload().state_dict()
+            sd = _merged_lora_state_dict(model)
         else:
             sd = model.state_dict()
     else:

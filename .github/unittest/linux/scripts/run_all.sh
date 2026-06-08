@@ -250,7 +250,7 @@ else
   uv_pip_install -e . --no-build-isolation --no-deps
 fi
 
-# install torchcodec (from source for nightly, from PyPI for stable)
+# install torchcodec (from source for nightly, from the PyTorch wheel index for stable)
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   torchcodec_dir=$(mktemp -d)
   git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
@@ -260,7 +260,7 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
     uv_pip_install --no-build-isolation "$torchcodec_dir"
   rm -rf "$torchcodec_dir"
 else
-  uv_pip_install torchcodec
+  uv_pip_install --index-url "https://download.pytorch.org/whl/${CU_VERSION}" torchcodec
 fi
 
 if [ "${CU_VERSION:-}" != cpu ] ; then

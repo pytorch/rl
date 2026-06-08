@@ -23,13 +23,13 @@ terms with the minimum context needed to find the relevant code.
       A TorchRL environment that owns more than one environment instance under
       a single :class:`~torchrl.envs.EnvBase` interface. The common
       implementations are :class:`~torchrl.envs.SerialEnv` and
-      :class:`~torchrl.envs.ParallelEnv`, both subclasses of
-      :class:`~torchrl.envs.batched_envs.BatchedEnvBase`. Their ``batch_size`` is the
+      :class:`~torchrl.envs.ParallelEnv`, both subclasses of the internal
+      ``BatchedEnvBase``. Their ``batch_size`` is the
       leading shape of reset, step, and collector outputs.
 
    carrier
       The :class:`~tensordict.TensorDictBase` stored as ``self._carrier`` inside
-      :meth:`~torchrl.collectors.SyncDataCollector.rollout`. It persists across
+      :meth:`~torchrl.collectors.Collector.rollout`. It persists across
       collector batches and holds the post-reset environment output that the
       next policy call consumes. See :ref:`ref_collectors_internals` for the
       full lifecycle.
@@ -37,9 +37,7 @@ terms with the minimum context needed to find the relevant code.
    Collector
       The single-process data collector, exposed as
       :class:`~torchrl.collectors.Collector`. It alternates policy calls and
-      environment steps to produce rollout tensordicts; the legacy name
-      :class:`~torchrl.collectors.SyncDataCollector` aliases the same
-      implementation.
+      environment steps to produce rollout tensordicts.
 
    compact_obs
       Collector setting that drops observation and state keys from the
@@ -48,7 +46,7 @@ terms with the minimum context needed to find the relevant code.
       the root keys of the following step. At trajectory boundaries or in
       non-contiguous random samples, reconstruction must use the configured fill
       value; see :class:`~torchrl.envs.transforms.NextStateReconstructor` and the
-      ``compact_obs`` argument on :class:`~torchrl.collectors.SyncDataCollector`.
+      ``compact_obs`` argument on :class:`~torchrl.collectors.Collector`.
 
    Composite
    CompositeSpec
@@ -62,8 +60,8 @@ terms with the minimum context needed to find the relevant code.
       Short for environment: an object implementing the
       :class:`~torchrl.envs.EnvBase` API, including ``reset``, ``step``, specs,
       device handling, and a tensordict-based input/output contract. TorchRL env
-      wrappers usually subclass :class:`~torchrl.envs.Transform` or compose a
-      :class:`~torchrl.envs.TransformedEnv` rather than following the Gym
+      wrappers usually subclass :class:`~torchrl.envs.transforms.Transform` or compose a
+      :class:`~torchrl.envs.transforms.TransformedEnv` rather than following the Gym
       wrapper API directly.
 
    env batch size
@@ -106,7 +104,7 @@ terms with the minimum context needed to find the relevant code.
 
    is_init
       A boolean key (default name: ``"is_init"``) written by
-      :class:`~torchrl.envs.InitTracker` immediately after every env reset.
+      :class:`~torchrl.envs.transforms.InitTracker` immediately after every env reset.
       Recurrent modules and advantage estimators read this key to know where
       trajectories begin so they can zero out stale hidden state or reset the
       bootstrap target.
@@ -166,26 +164,26 @@ terms with the minimum context needed to find the relevant code.
       :meth:`~torchrl.objectives.LossModule.set_keys` to modify them.
 
    TensorDictPrimer
-      A :class:`~torchrl.envs.Transform` that injects keys into the
+      A :class:`~torchrl.envs.transforms.Transform` that injects keys into the
       environment's reset / step output that the policy needs but the env does
       not natively produce, most commonly RNN hidden states. Without a primer,
       the first call to a recurrent policy after reset would have no hidden
-      state to read. See :class:`~torchrl.envs.TensorDictPrimer` and
+      state to read. See :class:`~torchrl.envs.transforms.TensorDictPrimer` and
       :meth:`torchrl.modules.LSTMModule.make_tensordict_primer`.
 
    trajectory ID
       An integer that uniquely identifies which trajectory each frame belongs
-      to. Written by :class:`~torchrl.collectors.SyncDataCollector` as
+      to. Written by :class:`~torchrl.collectors.Collector` as
       ``("collector", "traj_ids")`` when ``track_traj_ids=True``. Used by
-      :class:`~torchrl.data.SliceSampler` to draw whole trajectories from a
+      :class:`~torchrl.data.replay_buffers.SliceSampler` to draw whole trajectories from a
       buffer and by :func:`~torchrl.collectors.utils.split_trajectories` to
       slice a flat batch into per-trajectory chunks.
 
    Transform
       TorchRL's tensordict-native environment transform abstraction,
-      :class:`~torchrl.envs.Transform`. A transform can modify input specs,
+      :class:`~torchrl.envs.transforms.Transform`. A transform can modify input specs,
       output specs, reset data, step data, or inverse action data, and is
-      usually installed through :class:`~torchrl.envs.TransformedEnv`. This is
+      usually installed through :class:`~torchrl.envs.transforms.TransformedEnv`. This is
       distinct from a Gym wrapper, which operates on non-tensordict values.
 
 See also

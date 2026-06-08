@@ -15,7 +15,7 @@ For general IsaacLab installation and cluster setup (not specific to TorchRL), s
 IsaacLabWrapper
 ---------------
 
-Use :class:`~torchrl.envs.libs.isaac_lab.IsaacLabWrapper` to wrap a gymnasium
+Use :class:`~torchrl.envs.IsaacLabWrapper` to wrap a gymnasium
 IsaacLab environment into a TorchRL-compatible :class:`~torchrl.envs.EnvBase`:
 
 .. code-block:: python
@@ -244,7 +244,7 @@ If you need distributed collection across multiple GPUs/nodes, use
 Replay Buffer
 -------------
 
-The :class:`~torchrl.data.SliceSampler` needs enough sequential data.  With
+The :class:`~torchrl.data.replay_buffers.SliceSampler` needs enough sequential data.  With
 ``batch_length=50``, you need at least 50 time steps per trajectory before
 sampling::
 
@@ -253,7 +253,7 @@ sampling::
                         = 204,800
 
 For GPU-resident replay buffers, use
-:class:`~torchrl.data.LazyTensorStorage` with the target CUDA device.
+:class:`~torchrl.data.replay_buffers.LazyTensorStorage` with the target CUDA device.
 This avoids CPU→GPU transfer at sample time (but adds it at extend time).
 
 TorchRL-Specific Gotchas
@@ -268,7 +268,7 @@ TorchRL-Specific Gotchas
 
 3. **``TensorDictPrimer`` ``expand_specs``**: When adding primers (e.g.,
    ``state``, ``belief``) to a pre-vectorized env, you MUST pass
-   ``expand_specs=True`` to :class:`~torchrl.envs.TensorDictPrimer`.
+   ``expand_specs=True`` to :class:`~torchrl.envs.transforms.TensorDictPrimer`.
    Otherwise the primer shapes ``()`` conflict with the env's ``batch_size``
    ``(4096,)``.
 

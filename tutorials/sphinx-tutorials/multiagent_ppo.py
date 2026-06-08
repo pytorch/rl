@@ -249,7 +249,7 @@ env = VmasEnv(
 # For efficiency purposes, TorchRL is quite stringent when it comes to
 # environment specs, but you can easily check that your environment specs are
 # adequate.
-# In our example, the :class:`~.envs.libs.vmas.VmasEnv` takes care of setting the proper specs for your env so
+# In our example, the :class:`~torchrl.envs.VmasEnv` takes care of setting the proper specs for your env so
 # you should not have to care about this.
 #
 # There are four specs to look at:
@@ -315,7 +315,7 @@ env = TransformedEnv(
 
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -434,17 +434,17 @@ policy_module = TensorDictModule(
 )
 
 ######################################################################
-# **Third**: wrap the :class:`TensorDictModule` in a :class:`ProbabilisticActor`
+# **Third**: wrap the :class:`TensorDictModule` in a :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
 #
 # We now need to build a distribution out of the location and scale of our
-# normal distribution. To do so, we instruct the :class:`ProbabilisticActor`
-# class to build a :class:`TanhNormal` out of the location and scale
+# normal distribution. To do so, we instruct the :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
+# class to build a :class:`~torchrl.modules.TanhNormal` out of the location and scale
 # parameters. We also provide the minimum and maximum values of this
 # distribution, which we gather from the environment specs.
 #
 # The name of the ``in_keys`` (and hence the name of the ``out_keys`` from
 # the :class:`TensorDictModule` above) has to end with the
-# :class:`TanhNormal` distribution constructor keyword arguments (loc and scale).
+# :class:`~torchrl.modules.TanhNormal` distribution constructor keyword arguments (loc and scale).
 #
 
 policy = ProbabilisticActor(
@@ -577,7 +577,7 @@ replay_buffer = ReplayBuffer(
 # -------------
 #
 # The PPO loss can be directly imported from TorchRL for convenience using the
-# :class:`~.objectives.ClipPPOLoss` class. This is the easiest way of utilising PPO:
+# :class:`~torchrl.objectives.ClipPPOLoss` class. This is the easiest way of utilising PPO:
 # it hides away the mathematical operations of PPO and the control flow that
 # goes with it.
 #
@@ -591,7 +591,7 @@ replay_buffer = ReplayBuffer(
 # ``"value_target"`` entries.
 # The ``"value_target"`` is a gradient-free tensor that represents the empirical
 # value that the value network should represent with the input observation.
-# Both of these will be used by :class:`ClipPPOLoss` to
+# Both of these will be used by :class:`~torchrl.objectives.ClipPPOLoss` to
 # return the policy and value losses.
 #
 

@@ -25,7 +25,7 @@ import os.path
 import sys
 import warnings
 
-import pytorch_sphinx_theme
+import pytorch_sphinx_theme2
 import torchrl
 
 # Suppress warnings
@@ -161,7 +161,12 @@ napoleon_google_docstring = True
 autosectionlabel_prefix_document = True
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ["_templates"]
+# The theme's templates dir must be on the path so its tutorial
+# call-to-action header (Colab / notebook / GitHub) is available.
+templates_path = [
+    "_templates",
+    os.path.join(os.path.dirname(pytorch_sphinx_theme2.__file__), "templates"),
+]
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -183,23 +188,67 @@ exclude_patterns = []
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "pytorch_sphinx_theme"
-html_theme_path = [pytorch_sphinx_theme.get_html_theme_path()]
+html_theme = "pytorch_sphinx_theme2"
+html_theme_path = [pytorch_sphinx_theme2.get_html_theme_path()]
 html_theme_options = {
-    "pytorch_project": "torchrl",
-    "collapse_navigation": False,
-    "display_version": True,
-    "logo_only": False,
+    "navigation_with_keys": False,
     "analytics_id": "UA-117752657-2",
+    "pytorch_project": "torchrl",
+    "display_version": True,
+    "logo": {"text": "TorchRL"},
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/pytorch/rl",
+            "icon": "fa-brands fa-github",
+        },
+        {
+            "name": "X",
+            "url": "https://x.com/PyTorch",
+            "icon": "fa-brands fa-x-twitter",
+        },
+        {
+            "name": "PyPi",
+            "url": "https://pypi.org/project/torchrl/",
+            "icon": "fa-brands fa-python",
+        },
+    ],
+    "use_edit_page_button": True,
+    "header_links_before_dropdown": 7,
+    "navbar_start": ["navbar-logo", "pytorch_version"],
+    "navbar_center": "navbar-nav",
+    "canonical_url": "https://docs.pytorch.org/rl/",
 }
-# Workaround for pytorch_sphinx_theme compatibility with newer Sphinx versions
-# The theme's layout.html references 'style' which was removed in Sphinx 7.0
+
+theme_variables = pytorch_sphinx_theme2.get_theme_variables()
+
+# ``github_*`` powers both the "Edit this page" button and the tutorial
+# call-to-action links (Run in Colab / Download Notebook / View on GitHub),
+# which the theme renders as server-side anchors and wires up via JS.
 html_context = {
-    "style": "pytorch.css",
+    "theme_variables": theme_variables,
+    # Reveals the tutorial call-to-action header on gallery pages. The theme
+    # gate is ``pytorch_project == 'tutorials' or has_sphinx_gallery``; our
+    # project name is ``torchrl``, so opt in explicitly.
+    "has_sphinx_gallery": True,
+    "display_github": True,
+    "github_url": "https://github.com",
+    "github_user": "pytorch",
+    "github_repo": "rl",
+    "github_version": "main",
+    # gh-pages stores the gallery downloads under ``main/_downloads``.
+    "colab_branch": "gh-pages/main",
+    "feedback_url": "https://github.com/pytorch/rl",
+    "doc_path": "docs/source",
+    "library_links": theme_variables.get("library_links", []),
 }
 html_css_files = [
-    "https://cdn.jsdelivr.net/npm/katex@0.10.0-beta/dist/katex.min.css",
     "css/custom.css",
+]
+html_js_files = [
+    # Rewrites the tutorial "View on GitHub" link to TorchRL's
+    # tutorials/sphinx-tutorials/ source layout (see the file for details).
+    "js/torchrl_tutorial_links.js",
 ]
 
 # Output file base name for HTML help builder.

@@ -161,7 +161,15 @@ class EnvMetaData:
 
     @tensordict.setter
     def tensordict(self, value: TensorDictBase):
-        self._tensordict = value.to("cpu")
+        # ``tensordict.to("cpu")`` issues a ``torch.cuda.Stream.record()`` sync
+        # whenever a CUDA context exists -- even for a CPU->CPU move -- so only
+        # move when the value actually lives on a non-CPU device. This keeps env
+        # metadata capture from spuriously touching CUDA for CPU/deviceless envs
+        # (which otherwise fails on a busy/unavailable GPU). The getter handles
+        # any device conversion, so the stored value's behavior is unchanged.
+        if value.device is not None and value.device.type != "cpu":
+            value = value.to("cpu")
+        self._tensordict = value
 
     @specs.setter
     def specs(self, value: Composite):
