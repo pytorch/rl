@@ -9,6 +9,7 @@ import typing
 from collections.abc import Callable
 from typing import Any, Union
 
+import cloudpickle
 import numpy as np
 import torch
 from torch import Tensor
@@ -246,15 +247,11 @@ class CloudpickleWrapper(metaclass=_CloudpickleWrapperMeta):
         functools.update_wrapper(self, getattr(fn, "forward", fn))
 
     def __getstate__(self):
-        import cloudpickle
-
         return cloudpickle.dumps((self.fn, self.kwargs))
 
     def __setstate__(self, ob: bytes):
-        import pickle
-
-        self.fn, self.kwargs = pickle.loads(ob)
-        functools.update_wrapper(self, self.fn)
+        self.fn, self.kwargs = cloudpickle.loads(ob)
+        functools.update_wrapper(self, getattr(self.fn, "forward", self.fn))
 
     def __call__(self, *args, **kwargs) -> Any:
         kwargs.update(self.kwargs)

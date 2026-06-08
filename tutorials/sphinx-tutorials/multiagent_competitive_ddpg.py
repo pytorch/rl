@@ -111,7 +111,7 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import multiprocessing
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import LazyMemmapStorage, RandomSampler, ReplayBuffer
 
 from torchrl.envs import (
@@ -201,7 +201,7 @@ polyak_tau = 0.005  # Tau for the soft-update of the target network
 # tensordict. The data of agents within a group is stacked together. Therefore, by choosing how to group your agents,
 # you can decide which data is stacked/kept as separate entries.
 # The grouping strategy can be specified at construction in environments like VMAS and PettingZoo.
-# For more info on grouping, see :class:`~torchrl.envs.utils.MarlGroupMapType`.
+# For more info on grouping, see :class:`~torchrl.envs.MarlGroupMapType`.
 #
 # In the *simple_tag* environment
 # there are two teams of agents: the chasers (or "adversaries") (red circles) and the evaders (or "agents") (green circles).
@@ -352,7 +352,7 @@ env = TransformedEnv(
 
 
 ######################################################################
-# the :func:`check_env_specs` function runs a small rollout and compares its output against the environment
+# the :func:`~torchrl.envs.check_env_specs` function runs a small rollout and compares its output against the environment
 # specs. If no error is raised, we can be confident that the specs are properly defined:
 #
 check_env_specs(env)
@@ -415,7 +415,7 @@ print("Shape of the rollout TensorDict:", rollout.batch_size)
 # Another important decision we need to make is whether we want the agents within a team to **share the policy parameters**.
 # On the one hand, sharing parameters means that they will all share the same policy, which will allow them to benefit from
 # each other's experiences. This will also result in faster training.
-# On the other hand, it will make them behaviorally *homogenous*, as they will in fact share the same model.
+# On the other hand, it will make them behaviorally *homogeneous*, as they will in fact share the same model.
 # For this example, we will enable sharing as we do not mind the homogeneity and can benefit from the computational
 # speed, but it is important to always think about this decision in your own problems!
 #
@@ -464,10 +464,10 @@ for group, agents in env.group_map.items():
 
 
 ######################################################################
-# **Second**: wrap the :class:`~tensodrdict.nn.TensorDictModule` in a :class:`~torchrl.modules.ProbabilisticActor`
+# **Second**: wrap the :class:`~tensodrdict.nn.TensorDictModule` in a :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
 #
 # We now need to build the TanhDelta distribution.
-# We instruct the :class:`~torchrl.modules.ProbabilisticActor`
+# We instruct the :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`
 # class to build a :class:`~torchrl.modules.TanhDelta` out of the policy action
 # parameters. We also provide the minimum and maximum values of this
 # distribution, which we gather from the environment specs.
@@ -639,7 +639,7 @@ for group, _agents in env.group_map.items():
 # Put exploration policies from each group in a sequence
 agents_exploration_policy = TensorDictSequential(*exploration_policies.values())
 
-collector = SyncDataCollector(
+collector = Collector(
     env,
     agents_exploration_policy,
     device=device,
@@ -655,9 +655,9 @@ collector = SyncDataCollector(
 # There are many types of buffers, in this tutorial we use a basic buffer to store and sample tensordict
 # data randomly.
 #
-# This buffer uses :class:`~.data.LazyMemmapStorage`, which stores data on disk.
+# This buffer uses :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`, which stores data on disk.
 # This allows to use the disk memory, but can result in slower sampling as it requires data to be cast to the training device.
-# To store your buffer on the GPU, you can use :class:`~.data.LazyTensorStorage`, passing the desired device.
+# To store your buffer on the GPU, you can use :class:`~torchrl.data.replay_buffers.LazyTensorStorage`, passing the desired device.
 # This will result in faster sampling but is subject to the memory constraints of the selected device.
 #
 
@@ -684,7 +684,7 @@ for group, _agents in env.group_map.items():
 # -------------
 #
 # The DDPG loss can be directly imported from TorchRL for convenience using the
-# :class:`~.objectives.DDPGLoss` class. This is the easiest way of utilising DDPG:
+# :class:`~torchrl.objectives.DDPGLoss` class. This is the easiest way of utilising DDPG:
 # it hides away the mathematical operations of DDPG and the control flow that
 # goes with it.
 #

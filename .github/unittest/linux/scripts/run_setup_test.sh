@@ -79,4 +79,7 @@ else
   uv_pip_install tensordict
 fi
 
+bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
+
 pytest -q test/test_setup.py -vv

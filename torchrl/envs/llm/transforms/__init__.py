@@ -14,7 +14,7 @@ from .format import TemplateTransform
 from .kl import KLComputation, KLRewardTransform, RetrieveKL, RetrieveLogProb
 from .policy_version import PolicyVersion
 from .reason import AddThinkingPrompt
-from .tokenizer import Tokenizer
+from .tokenizer import IncrementalTokenizer, Tokenizer
 from .tools import (
     ExecuteToolsInOrder,
     JSONCallParser,
@@ -33,6 +33,7 @@ __all__ = [
     "BrowserTransform",
     "DataLoadingPrimer",
     "ExecuteToolsInOrder",
+    "IncrementalTokenizer",
     "JSONCallParser",
     "KLComputation",
     "KLRewardTransform",

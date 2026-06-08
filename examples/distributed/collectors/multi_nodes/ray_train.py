@@ -149,9 +149,9 @@ if __name__ == "__main__":
         advantage_key="advantage",
         clip_epsilon=clip_epsilon,
         entropy_bonus=bool(entropy_eps),
-        entropy_coef=entropy_eps,  # these keys match by default but we set this for completeness
+        entropy_coeff=entropy_eps,  # these keys match by default but we set this for completeness
         value_target_key=advantage_module.value_target_key,
-        critic_coef=1.0,
+        critic_coeff=1.0,
         loss_critic_type="smooth_l1",
     )
     loss_module.make_value_estimator(gamma=0.99)

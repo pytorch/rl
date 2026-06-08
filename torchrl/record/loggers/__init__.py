@@ -7,6 +7,7 @@ from .common import Logger
 
 from .csv import CSVLogger
 from .mlflow import MLFlowLogger
+from .ray import RayLogger
 from .tensorboard import TensorboardLogger
 from .utils import generate_exp_name, get_logger
 
@@ -14,6 +15,7 @@ from .wandb import WandbLogger
 
 __all__ = [
     "Logger",
+    "RayLogger",
     "CSVLogger",
     "MLFlowLogger",
     "TensorboardLogger",

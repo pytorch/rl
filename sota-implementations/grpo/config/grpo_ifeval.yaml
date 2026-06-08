@@ -83,22 +83,27 @@ train_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 # Inference model configuration
 inference_model:
+  backend: "vllm"  # Inference backend: "vllm" or "sglang"
   num_devices: 2  # Number of devices to use
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
+  enable_fp32_lm_head: false
+  disable_cuda_graph: false
+  disable_piecewise_cuda_graph: false
   gpu_memory_utilization: 0.9  # Limit GPU memory usage
   temperature: 1.0
-  top_p: 0.95
+  top_p: 1.0
   max_tokens: 2048
   include_stop_str_in_output: true
   enforce_eager: false
+  enable_prefix_caching: false
   # compile: false  # Whether to enable model compilation (disabled by default for GRPO)
   # verbose: true   # Whether to show vLLM throughput statistics (enabled by default)
 
@@ -113,13 +118,14 @@ ref_model:
     dropout: 0.1  # Dropout probability for LoRA layers
   quantization:
     enabled: false  # Enable 4-bit quantization for base model
-  attn_implementation: sdpa  # Using flash attention for memory efficiency
+  attn_implementation: flash_attention_2
   torch_dtype: bfloat16
 
 # Optimizer configuration
 optimizer:
   name: AdamW
   lr: 1e-5
+  eps: 1e-5
   clip_grad_norm: 10.0
   weight_decay: 0.0
 
@@ -133,7 +139,7 @@ ray:
     _temp_dir: "/tmp/ray_grpo"  # Custom temp directory
     _system_config:
       object_spilling_threshold: 0.8  # Spill when 80% full
-      max_direct_memory_size: 10 * 1024 * 1024 * 1024  # 10GB limit
+      max_direct_memory_size: 10737418240  # 10GB limit
       object_store_full_delay_ms: 100  # Delay when store is full
       object_store_full_max_retries: 3  # Max retries when store is full
   collector_config:

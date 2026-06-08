@@ -8,7 +8,6 @@ from tensordict import TensorDictBase
 from torch import multiprocessing as mp, nn
 from torchrl.weight_update._shared import SharedMemWeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
-
 from torchrl.weight_update.weight_sync_schemes import TransportBackend
 
 
@@ -177,9 +176,9 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
             "params_map": params_map,
             "devices": devices,
             "device_map_fn": device_map_fn,
-            "num_workers": num_workers
-            if num_workers is not None
-            else len(params_map_result),
+            "num_workers": (
+                num_workers if num_workers is not None else len(params_map_result)
+            ),
         }
 
         # Create per-worker queues for weight distribution
@@ -472,7 +471,11 @@ class MultiProcessWeightSyncScheme(SharedMemWeightSyncScheme):
                         )
 
                         if weights is not None:
-                            # Cascade weight update to sub-collectors if context supports it
+                            # Cascade weight update to sub-collectors if context supports it.
+                            # When the context is a leaf Collector, its
+                            # update_policy_weights_ also bumps the local
+                            # PolicyVersion transform — so we don't need a
+                            # separate increment_version() call here.
                             model_id = self._model_id or "policy"
                             if self.context is not None and hasattr(
                                 self.context, "update_policy_weights_"

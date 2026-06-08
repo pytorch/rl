@@ -1,0 +1,164 @@
+# TD3 Trainer Configuration for HalfCheetah-v4
+
+defaults:
+  - transform@transform0: step_counter
+  - transform@transform1: init_tracker
+  - transform@transform2: double_to_float
+  - transform@transform3: reward_sum
+
+  - replay_buffer@replay_buffer: tensordict
+  - storage@replay_buffer.storage: lazy_tensor
+  - sampler@replay_buffer.sampler: random
+  - writer@replay_buffer.writer: round_robin
+
+  - trainer@trainer: td3
+  - collector@collector: sync
+  - env@training_env: transformed_env
+  - transform@training_env.transform: compose
+  - env@training_env.base_env: batched_env
+  - env@training_env.base_env.create_env_fn: gym
+  - network@models.policy_model: tensordict_sequential
+  - network@networks.policy_network: mlp
+  - network@networks.qvalue_network: mlp
+  - network@policy_module1: tensordict_module
+  - model@policy_module2: tanh_module
+  - model@models.qvalue_model: value
+  - exploration@exploration_module: additive_gaussian
+
+  - loss@loss: td3
+  - target_net_updater@target_net_updater: soft
+  - optimizer@optimizer: adam
+  - logger@logger: csv
+  - _self_
+
+# Network configurations
+networks:
+  policy_network:
+    in_features: 17
+    out_features: 6
+    num_cells: [256, 256]
+    activation_class:
+      _target_: torch.nn.ReLU
+    device: mps
+
+  qvalue_network:
+    in_features: 23
+    out_features: 1
+    num_cells: [256, 256]
+    activation_class:
+      _target_: torch.nn.ReLU
+    device: mps
+
+# Model building blocks
+policy_module1:
+  module: ${networks.policy_network}
+  in_keys: ["observation"]
+  out_keys: ["param"]
+
+policy_module2:
+  in_keys: ["param"]
+  out_keys: ["action"]
+  low: -1
+  high: 1
+
+# Models
+models:
+  policy_model:
+    modules:
+      - ${policy_module1}
+      - ${policy_module2}
+
+  qvalue_model:
+    network: ${networks.qvalue_network}
+    in_keys: ["observation", "action"]
+    out_keys: ["state_action_value"]
+
+# Exploration module configuration.
+exploration_module:
+  sigma_init: 1.0
+  sigma_end: 1.0
+  annealing_num_steps: 1000
+  mean: 0.0
+  std: 0.1
+  action_key: action
+
+# Environment configuration
+transform1:
+  init_key: is_init
+
+training_env:
+  base_env:
+    create_env_fn:
+      env_name: HalfCheetah-v4
+    num_workers: 8
+  transform:
+    transforms:
+      - ${transform0}
+      - ${transform1}
+      - ${transform2}
+      - ${transform3}
+  _partial_: true
+
+# Loss configuration
+loss:
+  _partial_: true
+  actor_network: null
+  qvalue_network: null
+  num_qvalue_nets: 2
+  loss_function: l2
+  delay_actor: true
+  delay_qvalue: true
+  policy_noise: 0.2
+  noise_clip: 0.5
+
+target_net_updater:
+  eps: 0.995
+  tau: null
+
+optimizer:
+  lr: 3.0e-4
+  eps: 1.0e-4
+  weight_decay: 0.0
+
+# Collector configuration
+collector:
+  create_env_fn: ${training_env}
+  total_frames: 1_000_000
+  frames_per_batch: 1024
+  device: ${networks.policy_network.device}
+  env_device: ${networks.policy_network.device}
+  policy_device: ${networks.policy_network.device}
+  use_buffers: true
+  _partial_: true
+
+# Replay buffer configuration
+replay_buffer:
+  batch_size: 256
+  prefetch: 3
+  storage:
+    max_size: 1_000_000
+    device: ${networks.policy_network.device}
+
+logger:
+  exp_name: td3_half_cheetah_v4
+
+# Trainer configuration
+trainer:
+  collector: ${collector}
+  optimizer: ${optimizer}
+  logger: ${logger}
+  total_frames: ${collector.total_frames}
+  optim_steps_per_batch: ${collector.frames_per_batch}
+  loss_module: ${loss}
+  actor_network: ${models.policy_model}
+  qvalue_network: ${models.qvalue_model}
+  exploration_module: ${exploration_module}
+  target_net_updater: ${target_net_updater}
+  value_estimator_gamma: 0.99
+  seed: 42
+  clip_grad_norm: true
+  clip_norm: null
+  replay_buffer: ${replay_buffer}
+  save_trainer_file: null
+  async_collection: false
+  policy_update_delay: 2

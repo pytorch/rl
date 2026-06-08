@@ -11,8 +11,8 @@ set -v
 this_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 apt-get update && apt-get upgrade -y
-printf "* Installing vim - git - wget\n"
-apt-get install -y vim git wget
+printf "* Installing vim - git - wget - cmake\n"
+apt-get install -y vim git wget cmake
 
 printf "* Installing glfw - glew - osmesa part 1\n"
 apt-get install -y libglvnd0 libgl1 libglx0 libegl1 libgles2 xvfb libx11-dev \
@@ -115,11 +115,3 @@ conda deactivate && conda activate "${env_dir}"
 
 conda env update --file "${this_dir}/environment.yml" --prune
 #conda install -c conda-forge fltk -y
-
-# ROM licence for Atari
-wget https://www.rarlab.com/rar/rarlinux-x64-5.7.1.tar.gz
-tar -xzvf rarlinux-x64-5.7.1.tar.gz
-mkdir Roms
-wget http://www.atarimania.com/roms/Roms.rar
-./rar/unrar e Roms.rar ./Roms -y
-python -m atari_py.import_roms Roms

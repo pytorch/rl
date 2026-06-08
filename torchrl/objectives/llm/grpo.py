@@ -70,7 +70,8 @@ class CISPOLossOutput(LLMLossOutput):
 class GRPOLoss(LossModule):
     """GRPO loss.
 
-    The clipped importance weighted loss is computed as follows:
+    The clipped importance weighted loss is computed as follows::
+
         loss = -min( weight * advantage, min(max(weight, 1-eps), 1+eps) * advantage)
 
     Args:
@@ -191,6 +192,8 @@ class GRPOLoss(LossModule):
             An instance of _AcceptedKeys containing all configurable tensordict keys.
         """
         return self._tensor_keys
+
+    _schedulable_buffers = frozenset({"clip_epsilon_low", "clip_epsilon_high"})
 
     def __init__(
         self,
@@ -329,7 +332,7 @@ class GRPOLoss(LossModule):
             (ProbabilisticTensorDictSequential, ProbabilisticTensorDictModule),
         ) or hasattr(self.actor_network, "get_dist"):
             # Use the specified masking strategy
-            #  dists are always defined over the whole sequence, so we can re-use the mask as the dist will always
+            #  dists are always defined over the whole sequence, so we can reuse the mask as the dist will always
             #  be a MaskedCategorical
             # TODO: eventually, we want to always use `get_dist` and just pass the key of the mask
             #  Masks should contain: prompt and response masks, assistant, and attention.
@@ -526,7 +529,8 @@ class GRPOLoss(LossModule):
             return sample_mean.mean(dim=0, keepdim=False)
 
         # token_mean (global masked mean)
-        return _reduce(value, reduction="mean", mask=mask).squeeze(-1)
+        mask_exp = expand_as_right(mask, value)
+        return _reduce(value, reduction="mean", mask=mask_exp).squeeze(-1)
 
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
@@ -722,7 +726,8 @@ class CISPOLoss(GRPOLoss):
     """CISPO (Clipped Importance Sampling Policy Optimization).
 
     Inherits the GRPO pipeline (masking, ESS, entropy, optional KL penalties) but
-    replaces the PPO-style min with a clipped-importance objective:
+    replaces the PPO-style min with a clipped-importance objective::
+
         loss = - clip(weight, [1 - eps_low, 1 + eps_high]) * advantage
 
     See the `MiniMax-M1 (CISPO) <https://arxiv.org/html/2506.13585>`_ paper.

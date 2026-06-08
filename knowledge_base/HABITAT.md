@@ -29,7 +29,7 @@ Instructions can be found on [habitat github repo](https://github.com/facebookre
 
 ### Installing TorchRL
 
-Follow the instructions on the [README.md](../README.md).
+Follow the instructions on the [README.md](README.md).
 
 ### Using Habitat
 To get the list of available Habitat envs, simply run the following command:

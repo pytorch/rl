@@ -46,7 +46,7 @@ class Tree(TensorClass["nocast"]):
         hash (torch.Tensor): A hash value for this node.
             It may be the case that ``hash`` is ``None`` in the specific case where the root of the tree
             has more than one action associated. In that case, each subtree branch will have a different action
-            associated and a hash correspoding to the ``(observation, action)`` pair.
+            associated and a hash corresponding to the ``(observation, action)`` pair.
         node_id (int): A unique identifier for this node.
         rollout (TensorDict): Rollout data following the observation encoded in this node, in a TED format.
             If there are multiple actions taken at this node, subtrees are stored in the corresponding

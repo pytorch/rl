@@ -8,6 +8,7 @@ import importlib.util
 import math
 from collections.abc import Callable, Sequence
 from copy import copy
+from typing import Any
 
 import numpy as np
 import torch
@@ -21,6 +22,7 @@ from torchrl.envs.transforms import ObservationTransform, Transform
 from torchrl.record.loggers import Logger
 
 _has_tv = importlib.util.find_spec("torchvision", None) is not None
+_has_matplotlib = importlib.util.find_spec("matplotlib", None) is not None
 
 
 class VideoRecorder(ObservationTransform):
@@ -174,13 +176,18 @@ class VideoRecorder(ObservationTransform):
         if self.count % self.skip == 0:
             if (
                 observation_trsf.ndim >= 3
-                and observation_trsf.shape[-3] == 3
+                and observation_trsf.shape[-3] in (1, 3)
                 and observation_trsf.shape[-2] > 3
                 and observation_trsf.shape[-1] > 3
             ):
                 # permute the channels to the last dim
                 observation_trsf = observation_trsf.permute(
                     *range(observation_trsf.ndim - 3), -2, -1, -3
+                )
+            # Handle grayscale (1-channel) by expanding to 3-channel for video
+            if observation_trsf.ndim >= 3 and observation_trsf.shape[-1] == 1:
+                observation_trsf = observation_trsf.expand(
+                    *observation_trsf.shape[:-1], 3
                 )
             if not (
                 observation_trsf.shape[-1] == 3 or observation_trsf.ndimension() == 2
@@ -235,13 +242,85 @@ class VideoRecorder(ObservationTransform):
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         return self._call(tensordict)
 
-    def dump(self, suffix: str | None = None) -> None:
+    def to_animation(
+        self,
+        *,
+        title: str | None = None,
+        interval: int = 50,
+        repeat_delay: int = 1000,
+        clear: bool = False,
+    ) -> Any:
+        """Convert recorded frames to a Matplotlib animation.
+
+        This helper is intended for tutorials and notebooks where the recorded
+        frames should be rendered inline by Sphinx-Gallery or IPython instead of
+        being written through a logger. Frames are read from the same internal
+        buffer used by :meth:`dump`.
+
+        Args:
+            title: optional title for the rendered figure.
+            interval: delay between frames, in milliseconds.
+            repeat_delay: delay before repeating the animation, in milliseconds.
+            clear: if ``True``, clear the recorded frame buffer after creating
+                the animation.
+
+        Returns:
+            A :class:`matplotlib.animation.ArtistAnimation` built from the
+            frames currently stored by the recorder.
+
+        Examples:
+            >>> import torch
+            >>> from torchrl.record import VideoRecorder
+            >>> recorder = VideoRecorder(None, None)
+            >>> recorder._apply_transform(torch.zeros(3, 8, 8, dtype=torch.uint8))
+            >>> animation = recorder.to_animation()  # doctest: +SKIP
+        """
+        if not self.obs:
+            raise RuntimeError(
+                "VideoRecorder.to_animation() requires at least one recorded frame."
+            )
+        if not _has_matplotlib:
+            raise ImportError(
+                "VideoRecorder.to_animation() requires matplotlib to be installed."
+            )
+        import matplotlib.animation as mpl_animation
+        import matplotlib.pyplot as plt
+
+        fig, axis = plt.subplots()
+        axis.set_axis_off()
+        if title is not None:
+            axis.set_title(title)
+
+        artists = []
+        for frame in self.obs:
+            frame = frame.detach().cpu()
+            if frame.ndim == 3 and frame.shape[0] in (1, 3):
+                frame = frame.permute(1, 2, 0)
+            if frame.ndim == 3 and frame.shape[-1] == 1:
+                frame = frame.expand(*frame.shape[:-1], 3)
+            artists.append([axis.imshow(frame.numpy(), animated=True)])
+
+        out = mpl_animation.ArtistAnimation(
+            fig,
+            artists,
+            interval=interval,
+            blit=True,
+            repeat_delay=repeat_delay,
+        )
+        if clear:
+            self.obs.clear()
+            self.count = 0
+        return out
+
+    def dump(self, suffix: str | None = None, step: int | None = None) -> None:
         """Writes the video to the ``self.logger`` attribute.
 
         Calling ``dump`` when no image has been stored in a no-op.
 
         Args:
-            suffix (str, optional): a suffix for the video to be recorded
+            suffix (str, optional): a suffix for the video to be recorded.
+            step (int, optional): the step to log the video at. If not provided,
+                uses an internal counter that increments with each dump call.
         """
         if self.obs:
             obs = torch.stack(self.obs, 0).unsqueeze(0).cpu()
@@ -257,7 +336,7 @@ class VideoRecorder(ObservationTransform):
                 self.logger.log_video(
                     name=tag,
                     video=obs,
-                    step=self.iter,
+                    step=step if step is not None else self.iter,
                     **self.video_kwargs,
                 )
         self.iter += 1

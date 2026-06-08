@@ -80,7 +80,7 @@ def _collate_fn(batch):
 
 
 def make_gsm8k_env(
-    dataset: str = "gsm8k",
+    dataset: str = "openai/gsm8k",
     num_envs: int = 1,
     repeats: int | None = None,
     batch_size_dl: int = 1,
@@ -259,7 +259,6 @@ class GSM8KEnv(DatasetChatEnv):
                             is_shared=False),
                         reward: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         reward_answer: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
-                        reward_contained: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         reward_right: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         reward_think: Tensor(shape=torch.Size([1, 1, 1]), device=cpu, dtype=torch.float32, is_shared=False),
                         step_count: Tensor(shape=torch.Size([1, 1]), device=cpu, dtype=torch.int64, is_shared=False),
@@ -293,7 +292,7 @@ class GSM8KEnv(DatasetChatEnv):
             device=None,
             is_shared=False,
             stack_dim=0)
-        >>> assert s["next", "reward"] >= 10
+        >>> assert s["next", "reward"] > 0
         >>> assert s["next", "done"].all()
 
     """
@@ -306,7 +305,7 @@ i.e., <think>reasoning process here</think> <answer>answer here</answer>. The an
     def __init__(
         self,
         *,
-        dataset: str = "gsm8k",
+        dataset: str = "openai/gsm8k",
         shuffle: bool = True,
         num_envs: int = 1,
         repeats: int | None = None,
