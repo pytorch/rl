@@ -1,13 +1,12 @@
 #!/bin/bash
 
-_torchrl_build_version="${BUILD_VERSION:-0.13.1}"
+export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.13.1}"
 # PyPI rejects local versions such as 0.13.1+cpu.  CPU wheels are the
 # default PyPI artifacts, so strip only the CPU build suffix while keeping
 # CUDA/ROCm suffixes for the extra-index wheels.
-if [[ "${_torchrl_build_version}" == *+cpu ]]; then
-    _torchrl_build_version="${_torchrl_build_version%+cpu}"
+if [[ "${TORCHRL_BUILD_VERSION}" == *+cpu ]]; then
+    export TORCHRL_BUILD_VERSION="${TORCHRL_BUILD_VERSION%+cpu}"
 fi
-export TORCHRL_BUILD_VERSION="${_torchrl_build_version}"
 ${CONDA_RUN} pip install --upgrade setuptools packaging
 
 # Always install pybind11 - required for building C++ extensions
