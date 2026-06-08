@@ -3,15 +3,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from .generic import (
-    DEFAULT_SLURM_CONF,
-    DistributedCollector,
-    DistributedDataCollector,
-    DistributedWeightUpdater,
-)
+from .generic import DEFAULT_SLURM_CONF, DistributedCollector, DistributedWeightUpdater
 from .ray import RayCollector
-from .rpc import RPCCollector, RPCDataCollector, RPCWeightUpdater
-from .sync import DistributedSyncCollector, DistributedSyncDataCollector
+from .ray_eval_worker import RayEvalWorker
+from .rpc import RPCCollector, RPCWeightUpdater
+from .sync import DistributedSyncCollector
 from .utils import submitit_delayed_launcher
 
 __all__ = [
@@ -20,13 +16,10 @@ __all__ = [
     "DistributedCollector",
     "DistributedSyncCollector",
     "RPCCollector",
-    # Legacy names (backward-compatible aliases)
-    "DistributedDataCollector",
-    "DistributedSyncDataCollector",
-    "RPCDataCollector",
     # Other exports
     "DistributedWeightUpdater",
     "RPCWeightUpdater",
     "RayCollector",
+    "RayEvalWorker",
     "submitit_delayed_launcher",
 ]

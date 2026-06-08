@@ -1,4 +1,4 @@
-# Knowledge base
+## Knowledge base
 
 This knowledge base is aimed at helping you solving common issues that you might encounter on your RL journey.
 It is a more practical guide than what one might usually gather from a textbook or a repo.

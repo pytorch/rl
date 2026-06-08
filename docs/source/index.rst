@@ -29,7 +29,7 @@ data utilities (e.g. collectors and containers), etc.
 TorchRL aims at having as few dependencies as possible (python standard library, numpy and pytorch).
 Common environment libraries (e.g. OpenAI gym) are only optional.
 
-On the low-level end, torchrl comes with a set of highly re-usable functionals
+On the low-level end, torchrl comes with a set of highly reusable functionals
 for :ref:`cost functions <ref_objectives>`, :ref:`returns <ref_returns>` and data processing.
 
 TorchRL aims at a high modularity and good runtime performance.
@@ -116,9 +116,12 @@ Intermediate
    tutorials/torchrl_envs
    tutorials/pretrained_models
    tutorials/dqn_with_rnn
+   tutorials/mujoco_cube_bowl_macros
+   tutorials/collector_trajectory_assembly
+   tutorials/evaluator
    tutorials/rb_tutorial
+   tutorials/memory_efficient_rl
    tutorials/export
-   tutorials/llm_browser
 
 Advanced
 --------

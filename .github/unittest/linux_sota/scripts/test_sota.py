@@ -15,6 +15,16 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
+  optim.gradient_steps=55 \
+  replay_buffer.dataset= \
+  replay_buffer.demo_episodes=5 \
+  env.name=Pendulum-v1 \
+  env.max_episode_steps=200 \
+  network.num_steps=5 \
+  logger.backend= \
+  logger.eval_iter=50
+""",
     "td3_bc": """python sota-implementations/td3_bc/td3_bc.py \
   optim.gradient_steps=55 \
   logger.backend=
@@ -278,23 +288,42 @@ commands = {
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
+    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100 --dataset=synthetic
 """,
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
-  collector.total_frames=600 \
-  collector.init_random_frames=10 \
+  optimization.total_optim_steps=2 \
+  optimization.log_every=1 \
+  optimization.compile.enabled=False \
+  collector.init_random_frames=32 \
   collector.frames_per_batch=200 \
   collector.num_collectors=1 \
   env.n_parallel_envs=1 \
-  optimization.optim_steps_per_batch=1 \
-  optimization.compile=False \
+  logger.eval_every=1000000 \
   logger.video=False \
   logger.backend=csv \
   replay_buffer.buffer_size=120 \
-  replay_buffer.batch_size=24 \
-  replay_buffer.batch_length=12 \
+  replay_buffer.batch_size=8 \
+  replay_buffer.batch_length=8 \
   replay_buffer.prefetch=1 \
   networks.rssm_hidden_dim=17
+""",
+    "dreamer_v3": """python sota-implementations/dreamer_v3/dreamer_v3.py \
+  collector.total_frames=400 \
+  collector.frames_per_batch=200 \
+  replay_buffer.batch_size=2 \
+  replay_buffer.seq_len=4 \
+  replay_buffer.warmup_factor=1 \
+  optimization.updates_per_batch=1 \
+  logger.eval_every=200 \
+  logger.eval_episodes=1 \
+  logger.output_plot= \
+  networks.hidden_dim=8 \
+  networks.depth=1 \
+  networks.num_categoricals=2 \
+  networks.num_classes=2 \
+  networks.num_reward_bins=11 \
+  networks.rnn_hidden_dim=8 \
+  networks.obs_embed_dim=8
 """,
 }
 

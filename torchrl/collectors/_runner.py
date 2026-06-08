@@ -9,9 +9,8 @@ from typing import Any
 import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
-
 from torchrl import logger as torchrl_logger
-from torchrl._utils import VERBOSE
+from torchrl._utils import timeit, VERBOSE
 from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     _MAX_IDLE_COUNT,
@@ -20,7 +19,6 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
 )
 from torchrl.collectors._single import Collector
-
 from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
@@ -31,6 +29,7 @@ from torchrl.data import ReplayBuffer
 from torchrl.envs import EnvBase, EnvCreator
 from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
+from torchrl.weight_update.utils import _resolve_model
 
 
 def _main_async_collector(
@@ -64,7 +63,21 @@ def _main_async_collector(
     postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
     weight_sync_schemes: dict[str, WeightSyncScheme] | None = None,
     worker_idx: int | None = None,
+    init_random_frames: int | None = None,
+    trajs_per_batch: int | None = None,
+    trajs_per_write: int | None = None,
+    init_fn: Callable[[], None] | None = None,
+    auto_register_policy_transforms: bool | None = None,
+    track_policy_version: bool = False,
+    pre_collect_hook: Callable[[], None] | None = None,
+    post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+    compact_obs: bool = False,
 ) -> None:
+    # Process-level initialisation hook (e.g. Isaac Lab ``AppLauncher``).
+    # Runs before any CUDA/torchrl work in the child process.
+    if init_fn is not None:
+        init_fn()
+
     if collector_class is None:
         collector_class = Collector
     # init variables that will be cleared when closing
@@ -75,15 +88,22 @@ def _main_async_collector(
         _make_policy_factory,
         policy=policy,
         policy_factory=policy_factory,
-        weight_sync_scheme=weight_sync_schemes.get("policy")
-        if weight_sync_schemes
-        else None,
+        weight_sync_scheme=(
+            weight_sync_schemes.get("policy") if weight_sync_schemes else None
+        ),
         worker_idx=worker_idx,
         pipe=pipe_child,
     )
     policy = None
+    # Store the original init_random_frames for run_free mode logic
+    original_init_random_frames = (
+        init_random_frames if init_random_frames is not None else 0
+    )
     try:
-        collector_class._ignore_rb = extend_buffer
+        # When trajs_per_batch is set, _iter_by_trajectories() handles RB writes
+        # (with proper padding stripping for 1-D storage). Set _ignore_rb=False so
+        # it detects the RB. When trajs_per_batch is None, keep existing behavior.
+        collector_class._ignore_rb = extend_buffer if trajs_per_batch is None else False
         inner_collector = collector_class(
             create_env_fn,
             create_env_kwargs=create_env_kwargs,
@@ -105,7 +125,7 @@ def _main_async_collector(
             set_truncated=set_truncated,
             use_buffers=use_buffers,
             replay_buffer=replay_buffer,
-            extend_buffer=False,
+            extend_buffer=extend_buffer,
             traj_pool=traj_pool,
             trust_policy=trust_policy,
             compile_policy=compile_policy,
@@ -114,15 +134,35 @@ def _main_async_collector(
             # We don't pass the weight sync scheme as only the sender has the weight sync scheme within.
             # weight_sync_schemes=weight_sync_schemes,
             worker_idx=worker_idx,
+            # init_random_frames is passed; inner collector will use _should_use_random_frames()
+            # which checks replay_buffer.write_count when replay_buffer is provided
+            init_random_frames=init_random_frames,
+            trajs_per_batch=trajs_per_batch,
+            trajs_per_write=trajs_per_write,
+            auto_register_policy_transforms=auto_register_policy_transforms,
+            track_policy_version=track_policy_version,
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
+            compact_obs=compact_obs,
         )
         # Set up weight receivers for worker process using the standard register_scheme_receiver API.
         # This properly initializes the schemes on the receiver side and stores them in _receiver_schemes.
         if weight_sync_schemes:
             inner_collector.register_scheme_receiver(weight_sync_schemes)
+            # Fix stale model reference: init_on_receiver was called in _make_policy_factory
+            # with the original policy object, but _get_policy_and_device may have deepcopied
+            # the policy to a new device. Update the scheme's model ref to the actual policy
+            # used by the collector, otherwise weight updates go to the wrong (unused) object.
+            for model_id, scheme in weight_sync_schemes.items():
+                actual_model = _resolve_model(inner_collector, model_id)
+                _scheme_model = scheme.model
+                if actual_model is not None and _scheme_model is not actual_model:
+                    scheme.model = actual_model
 
         use_buffers = inner_collector._use_buffers
         if verbose:
             torchrl_logger.debug("Sync data collector created")
+
         dc_iter = iter(inner_collector)
         j = 0
         pipe_child.send("instantiated")
@@ -214,15 +254,28 @@ def _main_async_collector(
                     msg = "continue"
             else:
                 data_in = None
-                # TODO: this does not work with random frames
-                msg = "continue"
+                # In run_free mode, determine msg based on replay_buffer.write_count for random frames
+                if (
+                    replay_buffer is not None
+                    and original_init_random_frames > 0
+                    and replay_buffer.write_count < original_init_random_frames
+                ):
+                    msg = "continue_random"
+                else:
+                    msg = "continue"
         # Note: Weight updates are handled by background threads in weight sync schemes.
         # The scheme's background receiver thread listens for "receive" instructions.
 
         if msg == "update":
             # Legacy - weight updater
-            torchrl_logger.debug(f"mp worker {idx} updating the params...")
-            inner_collector.update_policy_weights_(policy_weights=data_in)
+            with timeit(f"worker/{idx}/update") as update_timer:
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Received weight update request..."
+                )
+                inner_collector.update_policy_weights_(policy_weights=data_in)
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Weight update completed in {update_timer.elapsed():.3f}s"
+                )
             pipe_child.send((j, "updated"))
             has_timed_out = False
             continue
@@ -232,12 +285,25 @@ def _main_async_collector(
         # applies weights automatically. No explicit message handling needed here.
 
         if msg in ("continue", "continue_random"):
-            if msg == "continue_random":
-                inner_collector.init_random_frames = float("inf")
-            else:
-                inner_collector.init_random_frames = -1
+            # When in run_free mode with a replay_buffer, the inner collector uses
+            # _should_use_random_frames() which checks replay_buffer.write_count.
+            # So we don't override init_random_frames. Otherwise, we use the message
+            # to control whether random frames are used.
+            if not run_free or replay_buffer is None:
+                if msg == "continue_random":
+                    inner_collector.init_random_frames = float("inf")
+                else:
+                    inner_collector.init_random_frames = -1
 
-            next_data = next(dc_iter)
+            # Debug logging for rollout timing
+            with timeit(f"worker/{idx}/rollout") as rollout_timer:
+                torchrl_logger.debug(f"mp worker {idx}: Starting rollout (j={j})...")
+                next_data = next(dc_iter)
+                torchrl_logger.debug(
+                    f"mp worker {idx}: Rollout completed in {rollout_timer.elapsed():.3f}s, "
+                    f"frames={next_data.numel() if hasattr(next_data, 'numel') else 'N/A'}"
+                )
+
             if pipe_child.poll(_MIN_TIMEOUT):
                 # in this case, main send a message to the worker while it was busy collecting trajectories.
                 # In that case, we skip the collected trajectory and get the message from main. This is faster than
@@ -245,7 +311,7 @@ def _main_async_collector(
                 continue
 
             if replay_buffer is not None:
-                if extend_buffer:
+                if extend_buffer and next_data is not None:
                     next_data.names = None
                     replay_buffer.extend(next_data)
 
@@ -299,7 +365,7 @@ def _main_async_collector(
                             if x.device.type in ("cpu",):
                                 x.share_memory_()
                             if x.device.type in ("mps",):
-                                RuntimeError(MPS_ERROR)
+                                raise RuntimeError(MPS_ERROR)
 
                         collected_tensordict.apply(cast_tensor, filter_empty=True)
                 data = (collected_tensordict, idx)
@@ -377,7 +443,43 @@ def _main_async_collector(
             has_timed_out = False
             continue
 
+        elif msg == "cascade_execute":
+            attr_path, args, kwargs = data_in
+            try:
+                result = inner_collector.cascade_execute(attr_path, *args, **kwargs)
+                pipe_child.send((result, "cascade_execute"))
+            except Exception as e:
+                pipe_child.send((e, "cascade_execute"))
+            has_timed_out = False
+            continue
+
+        elif msg == "get_distant_attr":
+            attr_name = data_in
+            try:
+                result = inner_collector.get_distant_attr(attr_name)
+                pipe_child.send((result, "get_distant_attr"))
+            except Exception as e:
+                pipe_child.send((e, "get_distant_attr"))
+            has_timed_out = False
+            continue
+
+        elif msg == "setattr":
+            attr_name, value = data_in
+            try:
+                setattr(inner_collector, attr_name, value)
+                pipe_child.send((None, "setattr"))
+            except Exception as e:
+                pipe_child.send((e, "setattr"))
+            has_timed_out = False
+            continue
+
         elif msg == "close":
+            # Stop any active profiler hook installed via collector.enable_profile()
+            hook = getattr(inner_collector, "_post_collect_hook", None)
+            if hook is not None:
+                stop = getattr(hook, "stop", None)
+                if callable(stop):
+                    stop()
             del collected_tensordict, data, next_data, data_in
             inner_collector.shutdown()
             del inner_collector, dc_iter

@@ -5,15 +5,23 @@
 
 from .chat import ChatEnv, DatasetChatEnv
 from .datasets import (
+    CountdownEnv,
     GSM8KEnv,
     GSM8KPrepareQuestion,
     IFEvalData,
     IFEvalEnv,
     make_gsm8k_env,
+    MATHEnv,
 )
 from .envs import LLMEnv, LLMHashingEnv
 from .libs import make_mlgym, MLGymWrapper
-from .reward import GSM8KRewardParser, IFEvalScoreData, IfEvalScorer
+from .reward import (
+    CountdownRewardParser,
+    GSM8KRewardParser,
+    IFEvalScoreData,
+    IfEvalScorer,
+    MATHRewardParser,
+)
 from .transforms import (
     AddThinkingPrompt,
     as_nested_tensor,
@@ -58,6 +66,10 @@ __all__ = [
     "Tokenizer",
     "as_nested_tensor",
     "as_padded_tensor",
+    "CountdownEnv",
+    "CountdownRewardParser",
     "make_gsm8k_env",
     "make_mlgym",
+    "MATHEnv",
+    "MATHRewardParser",
 ]

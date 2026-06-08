@@ -22,6 +22,39 @@ _NON_NN_POLICY_WEIGHTS = (
 )
 
 
+def _log_prob_key_from_sample_key(key: NestedKey) -> NestedKey:
+    if isinstance(key, tuple):
+        return (*key[:-1], f"{key[-1]}_log_prob")
+    return f"{key}_log_prob"
+
+
+def _ensure_derived_policy_output_keys(policy: Callable | None) -> None:
+    """Restore derived policy-output metadata after policy serialization.
+
+    Collectors already discover declared policy-produced keys, including
+    arbitrary non-action metadata, with the initial policy dry-run. Some
+    modules derive additional output-key metadata at construction time. If
+    serialization drops that metadata, the first dry-run cannot see those
+    outputs, so restore the known derived keys before collection starts.
+    """
+    if policy is None:
+        return
+    modules = policy.modules() if isinstance(policy, nn.Module) else (policy,)
+    for module in modules:
+        if not getattr(module, "return_log_prob", False):
+            continue
+        try:
+            log_prob_keys = module.log_prob_keys
+        except AttributeError:
+            continue
+        if log_prob_keys:
+            continue
+        out_keys = getattr(module, "out_keys", None)
+        if not out_keys:
+            continue
+        module.log_prob_keys = [_log_prob_key_from_sample_key(key) for key in out_keys]
+
+
 def _stack_output(fun) -> Callable:
     def stacked_output_fun(*args, **kwargs):
         out = fun(*args, **kwargs)
@@ -369,7 +402,11 @@ def _make_meta_params(param):
 class _TrajectoryPool:
     def __init__(self, ctx=None, lock: bool = False):
         self.ctx = ctx
-        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int).share_memory_()
+        self._traj_id = torch.zeros((), device="cpu", dtype=torch.int)
+        # Only use shared memory when multiprocessing context is provided
+        # This avoids issues with shared memory when the mp subsystem is in a bad state
+        if ctx is not None:
+            self._traj_id = self._traj_id.share_memory_()
         if ctx is None:
             self.lock = contextlib.nullcontext() if not lock else mp.RLock()
         else:
@@ -402,6 +439,73 @@ def _map_weight(
     return weight
 
 
+def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
+    """Return ``True`` if the last step of *chunk* carries a done/terminated signal."""
+    for key in (("next", "done"), ("next", "terminated")):
+        signal = chunk.get(key, None)
+        if signal is not None and signal[-1].any().item():
+            return True
+    return False
+
+
+def _traj_ingest(
+    batch: TensorDictBase,
+    partial_trajs: dict,
+    complete_trajs: list,
+) -> None:
+    """Route steps from *batch* into per-trajectory buffers.
+
+    Completed trajectories are moved from *partial_trajs* into *complete_trajs*.
+    """
+    flat = batch.reshape(-1)
+    traj_ids = flat.get(("collector", "traj_ids"), None)
+    if traj_ids is None:
+        raise KeyError(
+            "trajs_per_batch requires ('collector', 'traj_ids') in every "
+            "collector batch.  Make sure the collector is initialized with "
+            "split_trajs=False (the default)."
+        )
+
+    order = torch.argsort(traj_ids.reshape(-1), stable=True)
+    flat = flat[order]
+    traj_ids = traj_ids.reshape(-1)[order]
+    unique_ids, counts = traj_ids.unique_consecutive(return_counts=True)
+    start = 0
+    for tid_tensor, count in zip(unique_ids, counts):
+        tid = tid_tensor.item()
+        stop = start + count.item()
+        chunk = flat[start:stop]
+        start = stop
+
+        if tid in partial_trajs:
+            partial_trajs[tid].append(chunk)
+        else:
+            partial_trajs[tid] = [chunk]
+
+        if _traj_chunk_ends_done(chunk):
+            chunks = partial_trajs.pop(tid)
+            complete = torch.cat(chunks, dim=0) if len(chunks) > 1 else chunks[0]
+            complete_trajs.append(complete)
+
+
+def _traj_emit(complete_trajs: list, num_trajectories: int) -> TensorDictBase:
+    """Dequeue *num_trajectories* complete trajectories as a zero-padded batch."""
+    trajs = complete_trajs[:num_trajectories]
+    del complete_trajs[:num_trajectories]
+
+    max_len = max(t.shape[0] for t in trajs)
+    padded = []
+    for traj in trajs:
+        traj = traj.copy()
+        traj.set(
+            ("collector", "mask"),
+            torch.ones(traj.shape[0], dtype=torch.bool, device=traj.device),
+        )
+        padded.append(pad(traj, [0, max_len - traj.shape[0]]))
+
+    return torch.stack(padded, 0)
+
+
 def _make_policy_factory(
     *, policy: Callable, policy_factory, weight_sync_scheme, worker_idx, pipe=None
 ):
@@ -413,7 +517,8 @@ def _make_policy_factory(
         raise ValueError("policy cannot be used with policy_factory")
     elif has_policy_factory:
         if isinstance(policy_factory, Sequence):
-            return policy_factory
+            # Use worker_idx to get the correct factory for this worker
+            policy = policy_factory[worker_idx]()
         else:
             policy = policy_factory()
 
@@ -426,4 +531,5 @@ def _make_policy_factory(
         )
         # Synchronize initial weights
         weight_sync_scheme.connect(worker_idx=worker_idx)
+    _ensure_derived_policy_output_keys(policy)
     return policy

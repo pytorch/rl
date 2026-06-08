@@ -13,14 +13,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase, TensorDictParams
-from tensordict.nn import dispatch, TensorDictModule
+from tensordict.nn import dispatch, ProbabilisticTensorDictSequential, TensorDictModule
 from tensordict.utils import NestedKey, unravel_key
 from torch import Tensor
 
 from torchrl.data.tensor_specs import Composite
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules.tensordict_module.actors import ProbabilisticActor, QValueActor
+from torchrl.modules.tensordict_module.actors import QValueActor
 from torchrl.modules.tensordict_module.common import ensure_tensordict_compatible
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -28,11 +28,11 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     _vmap_func,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class CQLLoss(LossModule):
@@ -41,7 +41,7 @@ class CQLLoss(LossModule):
     Presented in "Conservative Q-Learning for Offline Reinforcement Learning" https://arxiv.org/abs/2006.04779
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
         qvalue_network (TensorDictModule or list of TensorDictModule): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``N``
@@ -49,7 +49,7 @@ class CQLLoss(LossModule):
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
     Keyword args:
@@ -261,6 +261,9 @@ class CQLLoss(LossModule):
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
+    _schedulable_buffers = frozenset(
+        {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
+    )
 
     actor_network: TensorDictModule
     qvalue_network: TensorDictModule
@@ -271,7 +274,7 @@ class CQLLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         *,
         loss_function: str = "smooth_l1",
@@ -293,6 +296,7 @@ class CQLLoss(LossModule):
         lagrange_thresh: float = 0.0,
         reduction: str | None = None,
         deactivate_vmap: bool = False,
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._out_keys = None
         if reduction is None:
@@ -376,6 +380,23 @@ class CQLLoss(LossModule):
             )
         self._make_vmap()
         self.reduction = reduction
+
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "CQLLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
         _ = self.target_entropy
 
     def _make_vmap(self):
@@ -443,46 +464,33 @@ class CQLLoss(LossModule):
                 terminated=self.tensor_keys.terminated,
             )
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-        self.value_type = value_type
-
-        # we will take care of computing the next value inside this module
-        value_net = None
-
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value_target": "value_target",
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=None,
+            **hyperparams,
+        )
 
     @property
     def in_keys(self):
@@ -536,18 +544,28 @@ class CQLLoss(LossModule):
         tensordict.set(
             self.tensor_keys.priority, metadata.pop("td_error").detach().max(0).values
         )
+        entropy = -actor_metadata.get(self.tensor_keys.log_prob)
         out = {
             "loss_actor": loss_actor,
             "loss_actor_bc": loss_actor_bc,
             "loss_qvalue": q_loss,
             "loss_cql": cql_loss,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": -actor_metadata.get(self.tensor_keys.log_prob).mean().detach(),
         }
         if self.with_lagrange:
             out["loss_alpha_prime"] = alpha_prime_loss.mean()
-        td_loss = TensorDict(out)
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            td_loss = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                td_loss.set_non_tensor("alpha", self._alpha)
+                td_loss.set_non_tensor("entropy", entropy.detach().mean())
+        else:
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_loss = TensorDict(out)
         self._clear_weakrefs(
             tensordict,
             td_loss,
@@ -566,7 +584,9 @@ class CQLLoss(LossModule):
     def actor_bc_loss(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
@@ -589,7 +609,9 @@ class CQLLoss(LossModule):
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
@@ -639,7 +661,7 @@ class CQLLoss(LossModule):
             filter_and_repeat, batch_size=batch_size, filter_empty=True
         )
         with set_exploration_type(ExplorationType.RANDOM), actor_params.data.to_module(
-            self.actor_network
+            self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
             action = dist.rsample()
@@ -657,14 +679,18 @@ class CQLLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         # TODO: wait for compile to handle this properly
-        actor_data = actor_params.data.to_module(self.actor_network)
+        actor_data = actor_params.data.to_module(
+            self.actor_network, preserve_module_state=False
+        )
         with set_exploration_type(ExplorationType.RANDOM):
             next_tensordict = tensordict.get("next").clone(False)
             next_dist = self.actor_network.get_dist(next_tensordict)
             next_action = next_dist.rsample()
             next_tensordict.set(self.tensor_keys.action, next_action)
             next_sample_log_prob = next_dist.log_prob(next_action)
-        actor_data.to_module(self.actor_network, return_swap=False)
+        actor_data.to_module(
+            self.actor_network, return_swap=False, preserve_module_state=False
+        )
 
         # get q-values
         if not self.max_q_backup:
@@ -1167,47 +1193,39 @@ class DiscreteCQLLoss(LossModule):
         }
         self._in_keys = sorted(in_keys, key=str)
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-        self.value_type = value_type
-
-        # we will take care of computing the next value inside this module
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+        # DiscreteCQL needs a stateful copy of the value network so the
+        # estimator can be called without re-attaching params.
         value_net = deepcopy(self.value_network)
-        self.value_network_params.to_module(value_net, return_swap=False)
-
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        self.value_network_params.to_module(
+            value_net, return_swap=False, preserve_module_state=False
+        )
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value_target": "value_target",
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=value_net,
+            **hyperparams,
+        )
 
     @property
     def in_keys(self):
@@ -1225,7 +1243,9 @@ class DiscreteCQLLoss(LossModule):
         tensordict: TensorDictBase,
     ) -> tuple[torch.Tensor, dict]:
         td_copy = tensordict.clone(False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)

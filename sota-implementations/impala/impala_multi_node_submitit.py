@@ -24,8 +24,8 @@ def main(cfg: DictConfig):  # noqa: F821
     import tqdm
 
     from tensordict import TensorDict
-    from torchrl.collectors import SyncDataCollector
-    from torchrl.collectors.distributed import DistributedDataCollector
+    from torchrl.collectors import Collector
+    from torchrl.collectors.distributed import DistributedCollector
     from torchrl.data import LazyMemmapStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -80,14 +80,14 @@ def main(cfg: DictConfig):  # noqa: F821
         raise NotImplementedError(
             f"device assignment not implemented for backend {cfg.collector.backend}"
         )
-    collector = DistributedDataCollector(
+    collector = DistributedCollector(
         create_env_fn=[make_env(cfg.env.env_name, device, gym_backend=cfg.env.backend)]
         * num_workers,
         policy=actor,
         num_workers_per_collector=1,
         frames_per_batch=frames_per_batch,
         total_frames=total_frames,
-        collector_class=SyncDataCollector,
+        collector_class=Collector,
         collector_kwargs=collector_kwargs,
         slurm_kwargs=slurm_kwargs,
         storing_device="cuda:0" if cfg.collector.backend == "nccl" else "cpu",
@@ -115,8 +115,8 @@ def main(cfg: DictConfig):  # noqa: F821
         actor_network=actor,
         critic_network=critic,
         loss_critic_type=cfg.loss.loss_critic_type,
-        entropy_coef=cfg.loss.entropy_coef,
-        critic_coef=cfg.loss.critic_coef,
+        entropy_coeff=cfg.loss.entropy_coeff,
+        critic_coeff=cfg.loss.critic_coeff,
     )
     loss_module.set_keys(done="eol", terminated="eol")
 
@@ -181,8 +181,7 @@ def main(cfg: DictConfig):  # noqa: F821
         if len(accumulator) < batch_size:
             accumulator.append(data)
             if logger:
-                for key, value in metrics_to_log.items():
-                    logger.log_scalar(key, value, collected_frames)
+                logger.log_metrics(metrics_to_log, collected_frames)
             continue
 
         losses = TensorDict(batch_size=[sgd_updates])
@@ -267,8 +266,7 @@ def main(cfg: DictConfig):  # noqa: F821
                 actor.train()
 
         if logger:
-            for key, value in metrics_to_log.items():
-                logger.log_scalar(key, value, collected_frames)
+            logger.log_metrics(metrics_to_log, collected_frames)
 
         collector.update_policy_weights_()
         sampling_start = time.time()

@@ -15,10 +15,11 @@ import torch
 from tensordict import NestedKey, set_list_to_stack, TensorDictBase, unravel_key
 from tensordict.utils import _zip_strict, is_seq_of_nested_key, logger as torchrl_logger
 from torch.nn.utils.rnn import pad_sequence
+from torchrl._utils import _RayServiceMetaClass
 from torchrl.data import Composite, Unbounded
 from torchrl.data.tensor_specs import DEVICE_TYPING
 from torchrl.envs import EnvBase, Transform
-from torchrl.envs.transforms.ray_service import _RayServiceMetaClass, RayTransform
+from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
 from torchrl.modules.llm.policies.common import LLMWrapperBase
@@ -163,6 +164,7 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
     which provides better modularity and integration with the new wrapper design.
 
     **Recent Changes:**
+
     - **Legacy Status**: This transform is now considered legacy and may not work optimally
       with the new modular wrapper design.
     - **ChatHistory Integration**: Limited support for the new :class:`~torchrl.modules.llm.policies.ChatHistory` objects.
@@ -581,7 +583,7 @@ class RetrieveLogProb(Transform):
         tokenizer_kwargs (dict): the keyword arguments to pass to the tokenizer to be used to apply the chat template to the history when `assistant_only` is `True`.
             To control the tokenization in the ref_model, pass the tokenizer kwargs to the ref_model constructor.
             Defaults to `{"return_assistant_tokens_mask": True, "tokenize": True, "return_dict": True, "padding": False, "add_generation_prompt": False}`.
-        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `ref_model`.
         detach (bool): whether to exclude the log-probs from the gradient computation. Defaults to `True`.
         device (torch.device): the device to use for tensor creation. Defaults to `None`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
@@ -913,7 +915,9 @@ class RayRetrieveKL(RayTransform):
         )(RetrieveKL)
 
         if self._actor_name is not None:
-            RemoteRetrieveKL = RemoteRetrieveKL.options(name=self._actor_name)
+            RemoteRetrieveKL = RemoteRetrieveKL.options(
+                name=self._actor_name, lifetime="detached"
+            )
 
         # Determine how to create models on the remote actor
         gen_model_arg = self._gen_model
@@ -991,7 +995,7 @@ class RetrieveKL(Compose, metaclass=_RayServiceMetaClass):
             onto which the tensors will be moved. It allows to keep the model on a different device
             than the upcoming data itself. When using Ray service, this device will be used on the remote actor.
             Defaults to `None`.
-        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assitant mask. If not provided, the tokenizer will be inferred from the `actor`.
+        tokenizer (transformers.AutoTokenizer): the tokenizer to be used to tokenize the input and compute the assistant mask. If not provided, the tokenizer will be inferred from the `actor`.
         padding_side (str): the side of the padding when using pad_sequence. Defaults to `"left"`.
         kl_key (NestedKey): the key where the KL divergence is stored. Defaults to `"kl_penalty"`.
         add_to_reward (bool): whether to add the KL divergence to the reward. Defaults to `True`.

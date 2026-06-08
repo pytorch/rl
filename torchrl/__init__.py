@@ -58,15 +58,20 @@ from torchrl._utils import (  # noqa: E402
     _get_default_mp_start_method,
     auto_unwrap_transformed_env,
     compile_with_warmup,
+    cuda_memory_profile,
+    cuda_memory_stats,
     get_ray_default_runtime_env,
     implement_for,
     logger,
     merge_ray_runtime_env,
+    reset_cuda_peak_stats,
     set_auto_unwrap_transformed_env,
+    set_profiling_enabled,
     timeit,
 )
 
 logger = logger
+torchrl_logger = logger
 
 # TorchRL's multiprocessing default.
 _preferred_start_method = _get_default_mp_start_method()
@@ -133,11 +138,14 @@ ComposeTransform.inv = _inv
 __all__ = [
     "auto_unwrap_transformed_env",
     "compile_with_warmup",
+    "cuda_memory_profile",
+    "cuda_memory_stats",
     "get_ray_default_runtime_env",
     "implement_for",
+    "logger",
     "merge_ray_runtime_env",
+    "reset_cuda_peak_stats",
     "set_auto_unwrap_transformed_env",
     "timeit",
-    "logger",
-    "logger",
+    "torchrl_logger",
 ]

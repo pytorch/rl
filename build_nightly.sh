@@ -56,10 +56,10 @@ echo "Installing build dependencies..."
 PYTHON_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 if python -c "import sys; exit(0 if sys.version_info < (3, 11) else 1)"; then
     echo "Using setuptools 65.3.0 for Python $PYTHON_VERSION (compatibility mode)"
-    python -m pip install wheel setuptools==65.3.0
+    python -m pip install wheel setuptools==65.3.0 "pybind11[global]"
 else
     echo "Using latest setuptools for Python $PYTHON_VERSION (modern mode)"
-    python -m pip install wheel setuptools
+    python -m pip install wheel setuptools "pybind11[global]"
 fi
 
 python setup.py bdist_wheel

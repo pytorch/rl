@@ -28,10 +28,13 @@ from torchrl.testing.gym_helpers import (
     PONG_VERSIONED,
 )
 from torchrl.testing.llm_mocks import (
+    DummyStrDataLoader,
+    DummyTensorDataLoader,
     MockTransformerConfig,
     MockTransformerModel,
     MockTransformerOutput,
 )
+from torchrl.testing.mocking_classes import FastImageEnv
 from torchrl.testing.modules import (
     BiasModule,
     call_value_nets,
@@ -75,9 +78,13 @@ __all__ = [
     "PENDULUM_VERSIONED",
     "PONG_VERSIONED",
     # LLM mocks
+    "DummyStrDataLoader",
+    "DummyTensorDataLoader",
     "MockTransformerConfig",
     "MockTransformerModel",
     "MockTransformerOutput",
+    # Mocking classes
+    "FastImageEnv",
     # Modules
     "BiasModule",
     "call_value_nets",

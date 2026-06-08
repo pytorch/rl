@@ -272,7 +272,9 @@ class RayTransport:
         if strategy is not None:
             strategy.apply_weights(model, weights_buffer)
         else:
-            weights_buffer.to_module(model)
+            WeightStrategy(extract_as="tensordict").apply_weights(
+                model, weights_buffer, inplace=False
+            )
 
         return weights_buffer
 
@@ -659,6 +661,8 @@ class RayWeightSyncScheme(WeightSyncScheme):
         # Note: Workers will call init_process_group in their transport's
         # setup_connection_and_weights_on_receiver. The init_process_group is
         # a collective operation, so all ranks must call it together.
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
         torch.distributed.init_process_group(
             backend=self._backend,
             rank=0,
@@ -977,6 +981,8 @@ class RayModuleTransformScheme(RayWeightSyncScheme):
 
         # Now initialize process group on sender (rank 0)
         # The receiver is concurrently joining via the Ray call above
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
         torch.distributed.init_process_group(
             backend=self._backend,
             rank=0,

@@ -1,0 +1,6 @@
+defaults:
+  - maddpg
+  - _self_
+
+model:
+  centralized_critic: false

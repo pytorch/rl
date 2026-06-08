@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import collections
-
 import importlib.util
 import threading
 import warnings
@@ -29,7 +28,6 @@ from torch.nn.utils.rnn import pad_sequence
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
     _batching,
-    _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
     LogProbs,
@@ -44,11 +42,22 @@ _HAS_VLLM = importlib.util.find_spec("vllm") is not None
 _HAS_TRANSFORMERS = importlib.util.find_spec("transformers") is not None
 
 if TYPE_CHECKING:
+    from vllm.inputs import TokensPrompt  # type: ignore[import-not-found]
     from vllm.outputs import RequestOutput  # type: ignore[import-not-found]
     from vllm.sampling_params import SamplingParams  # type: ignore[import-not-found]
+elif _HAS_VLLM:
+    from vllm.outputs import RequestOutput
+    from vllm.sampling_params import SamplingParams
+
+    try:
+        from vllm.inputs import TokensPrompt
+    except ImportError:
+        # Fallback for older vLLM versions
+        TokensPrompt = None
 else:
-    SamplingParams = Any  # type: ignore
-    RequestOutput = Any  # type: ignore
+    SamplingParams = None  # Will error at usage if vLLM not available
+    RequestOutput = None
+    TokensPrompt = None
 
 
 def _require_transformers() -> None:
@@ -121,7 +130,7 @@ class vLLMWrapper(LLMWrapperBase):
             - `("tokens", "prompt")` for `"tokens"` when `generate=True`, `("tokens", "full")` for `"tokens"` when `generate=False`
         attention_mask_key (str, optional): The key for attention masks (used in `"tokens"` mode). Defaults to `"attention_mask"`.
 
-                    .. warning:: This argument is under development and may change in the future.
+            .. warning:: This argument is under development and may change in the future.
 
         generate (bool, optional): Whether to enable text generation. If `True`, the model will generate text based on the input.
             If `False`, only log probabilities will be computed. Defaults to `True`.
@@ -194,13 +203,20 @@ class vLLMWrapper(LLMWrapperBase):
         tokens_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Tokens` object. Defaults to `"tokens"`.
         masks_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.Masks` object. Defaults to `"masks"`.
         history_key (NestedKey | None, optional): The key for the action :class:`~torchrl.modules.llm.policies.ChatHistory` object. Defaults to `"history"`.
-        batching (bool, optional): Whether to enable batching. Defaults to `False`. See :ref:`ref_batching` below for more details.
-        min_batch_size (int | None, optional): The minimum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        max_batch_size (int | None, optional): The maximum batch size to use for batching. See :ref:`ref_batching` below for more details.
-        batching_timeout (float, optional): The timeout for batching. See :ref:`ref_batching` below for more details.
+        batching (bool, optional): Whether to enable batching. Defaults to `False`. See `Batching`_ below for more details.
+        min_batch_size (int | None, optional): The minimum batch size to use for batching. See `Batching`_ below for more details.
+        max_batch_size (int | None, optional): The maximum batch size to use for batching. See `Batching`_ below for more details.
+        batching_timeout (float, optional): The timeout for batching. See `Batching`_ below for more details.
+        prefer_tokens (bool, optional): If ``True`` and ``tokens.prompt`` exists in the input tensordict,
+            use those tokens directly instead of re-tokenizing from history. This enables KV cache
+            consistency when used with :class:`~torchrl.envs.llm.ChatEnv` with ``with_tokenizer=True``
+            or :class:`~torchrl.envs.llm.transforms.IncrementalTokenizer`. Defaults to ``False``.
 
-    .. _ref_batching:
-        Batching is a feature that allows the module to process multiple inputs in a single call.
+    .. _Batching:
+
+    **Batching**
+
+    Batching is a feature that allows the module to process multiple inputs in a single call.
         It is designed to work in a multi-threaded environment.
         To enable batching, it suffices to set `batching=True` which will set `min_batch_size` to 1 if not provided.
         If you want to set a different value for `min_batch_size` or `max_batch_size` for a fine-grained control,
@@ -233,16 +249,15 @@ class vLLMWrapper(LLMWrapperBase):
         - **Masks**: Always returned (`masks_key`, defaults to `"masks"`)
         - **Log Probs**: Returned when `return_log_probs=True` (`log_probs_key`, defaults to `"log_probs"`)
 
-        Example output structure for `input_mode="history"`:
-        ```
-        TensorDict(
-            text=Text(prompt=..., response=..., full=...),
-            masks=Masks(all_attention_mask=..., all_assistant_mask=...),
-            tokens=Tokens(prompt=..., response=..., full=...),
-            log_probs=LogProbs(prompt=..., response=..., full=...),
-            history=ChatHistory(prompt=..., response=..., full=...)
-        )
-        ```
+        Example output structure for `input_mode="history"`::
+
+            TensorDict(
+                text=Text(prompt=..., response=..., full=...),
+                masks=Masks(all_attention_mask=..., all_assistant_mask=...),
+                tokens=Tokens(prompt=..., response=..., full=...),
+                log_probs=LogProbs(prompt=..., response=..., full=...),
+                history=ChatHistory(prompt=..., response=..., full=...)
+            )
 
     Example:
         >>> from vllm import LLM
@@ -282,8 +297,8 @@ class vLLMWrapper(LLMWrapperBase):
         collector: The collector associated with the module, if it exists.
 
     .. seealso::
-        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase` (see :ref:`ref_categorical_sequential`)
-        - :class:`~torchrl.modules.llm.policies.TransformersWrapper` (see :ref:`ref_transformers_wrapper`)
+        - :class:`~torchrl.modules.llm.policies.LLMWrapperBase`
+        - :class:`~torchrl.modules.llm.policies.TransformersWrapper`
     """
 
     def __init__(
@@ -315,8 +330,10 @@ class vLLMWrapper(LLMWrapperBase):
         min_batch_size: int | None = None,
         max_batch_size: int | None = None,
         batching_timeout: float = 10.0,
+        prefer_tokens: bool = False,
     ):
         super().__init__()
+        self.prefer_tokens = prefer_tokens
 
         if batching and min_batch_size is None:
             min_batch_size = 1
@@ -546,6 +563,9 @@ class vLLMWrapper(LLMWrapperBase):
                 elif key == "stop_sequences":
                     vllm_kwargs["stop"] = value
                 elif key == "logprobs":
+                    # vLLM expects int for logprobs, not bool
+                    if isinstance(value, bool):
+                        value = 1 if value else None
                     vllm_kwargs["logprobs"] = value
                 elif key == "do_sample":
                     # do_sample is handled through the sampling parameters
@@ -554,10 +574,7 @@ class vLLMWrapper(LLMWrapperBase):
                     if not value:
                         vllm_kwargs["temperature"] = 0.0
                     # If do_sample=True, we keep the existing temperature/top_p/top_k values
-                elif key == "num_beams":
-                    # vLLM uses best_of instead of num_beams
-                    vllm_kwargs["best_of"] = value
-                elif key in ["length_penalty", "early_stopping"]:
+                elif key in ["length_penalty", "early_stopping", "num_beams"]:
                     # These parameters are not supported by vLLM, skip them
                     pass
                 else:
@@ -589,7 +606,8 @@ class vLLMWrapper(LLMWrapperBase):
 
         self.inplace = inplace
 
-        prompt_logprobs = return_log_probs
+        # vLLM expects int for logprobs, not bool. Use 1 if True, None if False.
+        prompt_logprobs = 1 if return_log_probs else None
 
         if not generate:
             # We want only the log-probs, we generate a single token (that we then discard)
@@ -600,7 +618,7 @@ class vLLMWrapper(LLMWrapperBase):
 
         vllm_kwargs.setdefault("detokenize", not pad_output)
         vllm_kwargs.setdefault("prompt_logprobs", prompt_logprobs)
-        vllm_kwargs.setdefault("logprobs", return_log_probs)
+        vllm_kwargs.setdefault("logprobs", 1 if return_log_probs else None)
         vllm_kwargs.setdefault("include_stop_str_in_output", True)
         vllm_kwargs.setdefault("skip_special_tokens", False)
 
@@ -741,6 +759,11 @@ class vLLMWrapper(LLMWrapperBase):
         elif hasattr(self, "log_probs_key"):
             constructor_kwargs["log_probs_key"] = self.log_probs_key
 
+        if "prefer_tokens" in kwargs:
+            constructor_kwargs["prefer_tokens"] = kwargs["prefer_tokens"]
+        elif hasattr(self, "prefer_tokens"):
+            constructor_kwargs["prefer_tokens"] = self.prefer_tokens
+
         # Create and return new instance
         return type(self)(**constructor_kwargs)
 
@@ -791,7 +814,30 @@ class vLLMWrapper(LLMWrapperBase):
             return None
 
     def _call_generate(self, *args, **kwargs):
-        """Call generate method based on model type."""
+        """Call generate method based on model type.
+
+        In vLLM 0.14+, prompt_token_ids should be passed as TokensPrompt objects
+        rather than as a keyword argument.
+        """
+        # Convert prompt_token_ids to TokensPrompt format for vLLM 0.14+ compatibility
+        prompt_token_ids = kwargs.pop("prompt_token_ids", None)
+        if prompt_token_ids is not None and TokensPrompt is not None:
+            # Convert list of token ID lists to TokensPrompt objects
+            if isinstance(prompt_token_ids, list) and len(prompt_token_ids) > 0:
+                if isinstance(prompt_token_ids[0], list):
+                    # List of token ID lists -> list of TokensPrompt
+                    prompts = [
+                        TokensPrompt(prompt_token_ids=tids) for tids in prompt_token_ids
+                    ]
+                else:
+                    # Single token ID list -> single TokensPrompt
+                    prompts = TokensPrompt(prompt_token_ids=prompt_token_ids)
+                # Insert prompts as the first positional argument
+                args = (prompts,) + args
+        elif prompt_token_ids is not None:
+            # Fallback for older vLLM versions that still support prompt_token_ids kwarg
+            kwargs["prompt_token_ids"] = prompt_token_ids
+
         if self._model_type == "ray_actor":
             import ray
 
@@ -940,35 +986,84 @@ class vLLMWrapper(LLMWrapperBase):
                 f"Expected History object for '{self.input_key}', got {type(history)}"
             )
 
-        # Apply chat template
-        tokenizer_kwargs = {}
-        if self.chat_template_name is not None:
-            tokenizer_kwargs.setdefault("chat_template_name", self.chat_template_name)
-        if self.chat_template is not None:
-            tokenizer_kwargs.setdefault("chat_template", self.chat_template)
-        tokenizer_kwargs.setdefault("add_generation_prompt", True)
-        text_prompt = history.apply_chat_template(
-            tokenizer=self.tokenizer, **tokenizer_kwargs
-        )
+        # Check for existing tokens when prefer_tokens=True
+        # This enables token-first inference for KV cache consistency
+        existing_tokens = None
+        if self.prefer_tokens:
+            # Primary: tokens.prompt (from IncrementalTokenizer)
+            existing_tokens = tensordict_input.get((self.tokens_key, "prompt"), None)
+            if existing_tokens is None:
+                # Fallback: tokens.full (for backward compatibility)
+                existing_tokens = tensordict_input.get((self.tokens_key, "full"), None)
 
-        tokenizer_kwargs.setdefault("return_assistant_tokens_mask", False)
-        tokenizer_kwargs.setdefault("tokenize", True)
-        tokenizer_kwargs.setdefault("padding", False)
-        tokenizer_kwargs.setdefault("return_dict", True)
-        response_struct = history.apply_chat_template(
-            tokenizer=self.tokenizer, **tokenizer_kwargs
-        )
         tokens_prompt_padded = None
         tokens_prompt_unpadded = None
-        if self.pad_output:
-            tokens_prompt_padded = response_struct.get(
-                "input_ids",
-                as_padded_tensor=True,
-                padding_value=self.padding_value,
-                padding_side="left",
+
+        if existing_tokens is not None:
+            # Use existing tokens directly - skip tokenization for KV cache consistency
+            # Handle different token storage formats:
+            # - list: from manual construction or as_list=True retrieval
+            # - nested tensor: from IncrementalTokenizer (torch.nested.as_nested_tensor)
+            # - regular tensor: padded tensor
+            if isinstance(existing_tokens, list):
+                tokens_list = existing_tokens
+            elif (
+                isinstance(existing_tokens, torch.Tensor) and existing_tokens.is_nested
+            ):
+                # Unbind nested tensor to get list of tensors
+                tokens_list = list(existing_tokens.unbind(0))
+            else:
+                # Already a padded tensor - extract non-padded sequences
+                tokens_list = [
+                    tokens[tokens != self.padding_value] for tokens in existing_tokens
+                ]
+
+            if self.pad_output:
+                tokens_prompt_padded = pad_sequence(
+                    tokens_list,
+                    batch_first=True,
+                    padding_value=self.padding_value,
+                    padding_side="left",
+                )
+            else:
+                tokens_prompt_unpadded = tokens_list
+
+            # Still need text_prompt for output, but we can derive it from tokens
+            text_prompt = self.tokenizer.batch_decode(
+                tokens_list,
+                skip_special_tokens=False,
             )
         else:
-            tokens_prompt_unpadded = response_struct.get("input_ids", as_list=True)
+            # Fall back to tokenizing from history (original behavior)
+            # Apply chat template
+            tokenizer_kwargs = {}
+            if self.chat_template_name is not None:
+                tokenizer_kwargs.setdefault(
+                    "chat_template_name", self.chat_template_name
+                )
+            if self.chat_template is not None:
+                tokenizer_kwargs.setdefault("chat_template", self.chat_template)
+            tokenizer_kwargs.setdefault("add_generation_prompt", True)
+            text_prompt = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+
+            tokenizer_kwargs.setdefault("return_assistant_tokens_mask", False)
+            tokenizer_kwargs.setdefault("tokenize", True)
+            tokenizer_kwargs.setdefault("padding", False)
+            tokenizer_kwargs.setdefault("return_dict", True)
+            response_struct = history.apply_chat_template(
+                tokenizer=self.tokenizer, **tokenizer_kwargs
+            )
+            if self.pad_output:
+                tokens_prompt_padded = response_struct.get(
+                    "input_ids",
+                    as_padded_tensor=True,
+                    padding_value=self.padding_value,
+                    padding_side="left",
+                )
+            else:
+                tokens_prompt_unpadded = response_struct.get("input_ids", as_list=True)
 
         result = self._generate_from_tokens(
             tokens_prompt_padded=tokens_prompt_padded,
@@ -1000,33 +1095,48 @@ class vLLMWrapper(LLMWrapperBase):
             for r in result.unbind(1):
                 r[self.text_key, "prompt"] = text_prompt
         with result.view(-1) as result_flat:
-            if self.pad_output:
-                tokens_full_padded = result_flat.get(
-                    (self.tokens_key, "full"),
-                    as_padded_tensor=True,
-                    padding_side="right",
-                    padding_value=self.padding_value,
+            tokens_full_padded = result_flat.get(
+                (self.tokens_key, "full"),
+                as_padded_tensor=True,
+                padding_side="right",
+                padding_value=self.padding_value,
+            )
+            attention_mask_padded = result_flat.get(
+                (self.masks_key, "all_attention_mask"),
+                as_padded_tensor=True,
+                padding_side="right",
+                padding_value=0,
+            )
+            assistant_mask_padded = result_flat.get(
+                (self.masks_key, "all_assistant_mask"),
+                as_padded_tensor=True,
+                padding_side="right",
+                padding_value=0,
+            )
+            if tokens_full_padded is None:
+                raise ValueError("tokens_full_padded is None")
+            if attention_mask_padded is None:
+                raise ValueError("attention_mask_padded is None")
+            if assistant_mask_padded is None:
+                raise ValueError("assistant_mask_padded is None")
+            text_full_tokens = [
+                tokens[mask.bool()].long()
+                for tokens, mask in _zip_strict(
+                    tokens_full_padded, attention_mask_padded
                 )
-                if tokens_full_padded is None:
-                    raise ValueError("tokens_full_padded is None")
-                text_full = self.tokenizer.batch_decode(
-                    tokens_full_padded, skip_special_tokens=False
-                )
-            else:
-                tokens_full_unpadded = result_flat.get(
-                    (self.tokens_key, "full"), as_list=True
-                )
-                # print("shapes of assistant masks", [t.shape for t in result_flat.get(("masks", "all_assistant_mask"), as_list=True)])
-                if tokens_full_unpadded is None:
-                    raise ValueError("tokens_full_unpadded is None")
-                text_full = self.tokenizer.batch_decode(
-                    tokens_full_unpadded, skip_special_tokens=False
-                )
-            text_prompt = result_flat[self.text_key, "prompt"]
-            text_response = [
-                txt[len(prompt) :]
-                for txt, prompt in _zip_strict(text_full, text_prompt)
             ]
+            text_response_tokens = [
+                tokens[mask.bool()].long()
+                for tokens, mask in _zip_strict(
+                    tokens_full_padded, assistant_mask_padded
+                )
+            ]
+            text_full = self.tokenizer.batch_decode(
+                text_full_tokens, skip_special_tokens=False
+            )
+            text_response = self.tokenizer.batch_decode(
+                text_response_tokens, skip_special_tokens=False
+            )
             result_flat.set((self.text_key, "full"), text_full)
             result_flat.set((self.text_key, "response"), text_response)
 
@@ -1040,14 +1150,19 @@ class vLLMWrapper(LLMWrapperBase):
                 h.prompt = history
         with history_chat.view(-1) as history_chat_flat:
             prompt_histories = history_chat_flat.prompt
-            # Extract response histories from full text
-            h_responses = _extract_responses_from_full_histories(
-                text_full, prompt_histories, self.chat_template_name, self.tokenizer
-            )
+            response_histories = [
+                History(role="assistant", content=response_text)
+                for response_text in text_response
+            ]
+            h_responses = lazy_stack(response_histories)
             history_chat_flat.response = h_responses
-            history_chat_flat.full = history_chat_flat.prompt.extend(
-                h_responses, inplace=False, dim=-1
-            )
+            full_histories = [
+                prompt_history.append(response_history, inplace=False, dim=-1)
+                for prompt_history, response_history in _zip_strict(
+                    prompt_histories.unbind(0), response_histories
+                )
+            ]
+            history_chat_flat.full = lazy_stack(full_histories)
         result.set(self.history_key, history_chat)
         return result
 
@@ -1526,10 +1641,12 @@ class vLLMWrapper(LLMWrapperBase):
 
     def _cat_tensors(
         self,
-        tokens: list[torch.Tensor] | torch.Tensor,
-        response_tokens: list[torch.Tensor] | torch.Tensor,
-    ) -> list[torch.Tensor] | torch.Tensor:
+        tokens: list[torch.Tensor] | torch.Tensor | None,
+        response_tokens: list[torch.Tensor] | torch.Tensor | None,
+    ) -> list[torch.Tensor] | torch.Tensor | None:
         """Concatenate tokens and response tokens."""
+        if tokens is None or response_tokens is None:
+            return None
         if isinstance(tokens, list) or isinstance(response_tokens, list):
             return [
                 self._cat_tensors(t, t_)
@@ -1638,21 +1755,61 @@ class vLLMWrapper(LLMWrapperBase):
 
         masks_obj = Masks._from_tensordict(out.empty())
         # self.return_tokens must be True
-        if self.pad_output:
-            # Get "real" attention masks
-            full_attention_mask_padded = tokens_obj.get("full") != self.padding_value
-            masks_obj.all_attention_mask = full_attention_mask_padded.bool()
-        else:
-            # Get "real" attention masks
-            # We can use select to avoid batch-size problems
-            _td = torch.ones_like(
-                out.select(("tokens", "full"))
-                .copy()
-                .rename_key_(("tokens", "full"), "all_attention_mask")
-            ).bool()
-            del _td["tokens"]
-            masks_obj.update(_td)
-        masks_obj.all_assistant_mask = None
+        with masks_obj.view(-1) as masks_obj_flat, out.view(-1) as out_flat:
+            if self.pad_output:
+                # Get "real" attention masks
+                if empirical_attention_mask is not None:
+                    prompt_mask = empirical_attention_mask.bool()
+                    if self.num_samples is not None:
+                        prompt_mask = (
+                            prompt_mask.unsqueeze(1)
+                            .expand(-1, self.num_samples, -1)
+                            .reshape(-1, prompt_mask.shape[-1])
+                        )
+                else:
+                    prompt_mask = tokens_obj_flat.prompt != self.padding_value
+                response_lengths = torch.tensor(
+                    [response.numel() for response in tokens_response_unpadded],
+                    device=tokens_response_padded.device,
+                )
+                response_mask = torch.arange(
+                    tokens_response_padded.shape[-1],
+                    device=tokens_response_padded.device,
+                ).expand(response_lengths.shape[0], -1) < response_lengths.unsqueeze(-1)
+                full_attention_mask_padded = torch.cat(
+                    [prompt_mask.bool(), response_mask.bool()], dim=-1
+                )
+                masks_obj_flat.all_attention_mask = full_attention_mask_padded
+                masks_obj_flat.all_assistant_mask = torch.cat(
+                    [
+                        torch.zeros_like(prompt_mask, dtype=torch.bool),
+                        response_mask.bool(),
+                    ],
+                    dim=-1,
+                )
+            else:
+                # Get "real" attention masks
+                # We can use select to avoid batch-size problems
+                _td = torch.ones_like(
+                    out_flat.select(("tokens", "full"))
+                    .copy()
+                    .rename_key_(("tokens", "full"), "all_attention_mask")
+                ).bool()
+                del _td["tokens"]
+                masks_obj_flat.update(_td)
+                prompt_list = tokens_obj_flat.get("prompt", as_list=True)
+                masks_obj_flat.all_assistant_mask = [
+                    torch.cat(
+                        [
+                            torch.zeros_like(prompt, dtype=torch.bool),
+                            torch.ones_like(response, dtype=torch.bool),
+                        ],
+                        dim=-1,
+                    )
+                    for prompt, response in _zip_strict(
+                        prompt_list, tokens_response_unpadded
+                    )
+                ]
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
 
@@ -1706,27 +1863,83 @@ class vLLMWrapper(LLMWrapperBase):
             if self.pad_output:
                 self._check_padded(log_probs_padded)
                 if self.num_samples is None:
-                    self._check_padded(prompt_logprobs_padded)
-                    log_probs_obj.prompt = prompt_logprobs_padded
+                    # Only set prompt log-probs if they actually contain
+                    # data (vLLM V1 may produce all-zero padded tensors
+                    # from empty per-request prompt_logprobs).
+                    if (
+                        prompt_logprobs_padded is not None
+                        and prompt_logprobs_padded.any()
+                    ):
+                        self._check_padded(prompt_logprobs_padded)
+                        log_probs_obj.prompt = prompt_logprobs_padded
             else:
                 self._check_not_padded(log_probs_list)
-                if self.num_samples is None:
-                    self._check_not_padded(prompt_logprobs_list)
-                    log_probs_obj.prompt = prompt_logprobs_list
+                if self.num_samples is None and prompt_logprobs_list is not None:
+                    # Check that prompt_logprobs actually contain data.
+                    # vLLM V1 may return prompt_logprobs=None per request,
+                    # which from_request_output converts to empty tensors.
+                    # A list of empty tensors is not useful as prompt
+                    # log-probs and must be treated as absent so the
+                    # zero-fill path below creates proper placeholders.
+                    _has_prompt_lp = any(
+                        t.numel() > 0
+                        for t in (
+                            prompt_logprobs_list
+                            if isinstance(prompt_logprobs_list, list)
+                            else [prompt_logprobs_list]
+                        )
+                    )
+                    if _has_prompt_lp:
+                        self._check_not_padded(prompt_logprobs_list)
+                        log_probs_obj.prompt = prompt_logprobs_list
             with log_probs_obj.view(-1) as log_probs_obj_flat:
                 log_probs_obj_flat.response = (
                     log_probs_padded if self.pad_output else log_probs_list
                 )
                 if self.num_samples is None:
-                    if self.pad_output:
+                    prompt_lp = (
+                        log_probs_obj_flat.prompt
+                        if self.pad_output
+                        else log_probs_obj_flat.get("prompt", as_list=True)
+                    )
+                    response_lp = (
+                        log_probs_padded if self.pad_output else log_probs_list
+                    )
+                    if prompt_lp is None and response_lp is not None:
+                        # Prompt logprobs not available (vLLM V1 may not
+                        # return them). Create zero-filled placeholders
+                        # matching prompt token shapes so that "full" can
+                        # be constructed. The loss function masks prompt
+                        # positions anyway.
+                        tokens_prompt = out.get(
+                            (self.tokens_key, "prompt"), as_list=True
+                        )
+                        if tokens_prompt is None:
+                            tokens_prompt = (
+                                tokens_prompt_padded
+                                if self.pad_output
+                                else tokens_prompt_unpadded
+                            )
+                        if tokens_prompt is not None:
+                            if isinstance(tokens_prompt, list):
+                                prompt_lp = [
+                                    torch.zeros_like(t, dtype=response_lp[0].dtype)
+                                    for t in tokens_prompt
+                                ]
+                            else:
+                                prompt_lp = torch.zeros(
+                                    tokens_prompt.shape,
+                                    dtype=response_lp.dtype,
+                                    device=response_lp.device,
+                                )
+                    if prompt_lp is not None and response_lp is not None:
                         log_probs_obj_flat.full = self._cat_tensors(
-                            log_probs_obj_flat.prompt, log_probs_padded
+                            prompt_lp, response_lp
                         )
                     else:
-                        log_probs_obj_flat.full = self._cat_tensors(
-                            log_probs_obj_flat.get("prompt", as_list=True),
-                            log_probs_list,
-                        )
+                        # Last resort: use response as full to avoid
+                        # missing key downstream
+                        log_probs_obj_flat.full = response_lp
                 else:
                     log_probs_obj_flat.full = None
             log_probs_obj.padded = MetaData(self.pad_output)
@@ -1773,6 +1986,9 @@ class vLLMWrapper(LLMWrapperBase):
                 padding_value=False,
                 padding_side="left",
             ).bool()
+            tokens_full_unpadded = _unpad_tensors(
+                tokens_full_padded, attention_mask_full_padded, as_nested=False
+            )
             attention_mask_full_unpadded = _unpad_tensors(
                 attention_mask_full_padded, attention_mask_full_padded, as_nested=False
             )
@@ -2084,6 +2300,70 @@ class vLLMWrapper(LLMWrapperBase):
         )
 
 
+def _extract_logprob(entry):
+    """Extract logprob value from a vLLM logprob entry (dict or Logprob dataclass)."""
+    if isinstance(entry, dict):
+        lp = entry.get("logprob", 0.0)
+    else:
+        lp = getattr(entry, "logprob", 0.0)
+    return lp if lp is not None else 0.0
+
+
+def _build_prompt_logprobs(request):
+    """Build prompt logprobs tensor from a vLLM RequestOutput.
+
+    Handles prefix caching: when vLLM caches prompt tokens, it returns
+    fewer prompt_logprobs than prompt_token_ids.  We zero-pad the prefix
+    so the returned tensor always matches len(prompt_token_ids).
+    """
+    if request.prompt_logprobs is None:
+        return torch.tensor([])
+    values = [
+        _extract_logprob(v[int(tid)]) if v is not None else 0.0
+        for v, tid in zip(request.prompt_logprobs, request.prompt_token_ids)
+    ]
+    num_missing = len(request.prompt_token_ids) - len(values)
+    if num_missing > 0:
+        values = [0.0] * num_missing + values
+    return torch.tensor(values)
+
+
+def _build_num_cached_tokens(request) -> torch.Tensor:
+    """Build a tensor for ``num_cached_tokens`` with a stable default."""
+    num_cached_tokens = getattr(request, "num_cached_tokens", None)
+    if num_cached_tokens is None:
+        return torch.tensor(0)
+    return torch.as_tensor(num_cached_tokens)
+
+
+def _completion_output_to_tc(output, CompletionOutput_tc):
+    """Convert a vLLM CompletionOutput dataclass to CompletionOutput_tc.
+
+    This avoids ``from_dataclass`` / ``dataclasses.asdict`` which recursively
+    converts all fields to plain Python types and chokes on edge-cases such as
+    empty lists that tensordict cannot stack.
+
+    Dynamically forwards all fields from the dataclass to handle new fields
+    added in newer vLLM versions (e.g. ``routed_experts``).
+    """
+    import dataclasses as _dc
+
+    kwargs = {}
+    for f in _dc.fields(output):
+        val = getattr(output, f.name, None)
+        # Special handling: falsy logprobs → None so tensordict can stack
+        if f.name == "logprobs":
+            val = val if val else None
+        elif f.name == "token_ids":
+            val = (
+                torch.as_tensor(val).long()
+                if val is not None
+                else torch.tensor([], dtype=torch.long)
+            )
+        kwargs[f.name] = val
+    return CompletionOutput_tc(**kwargs)
+
+
 class _RequestOutput_tc(TensorClass["nocast"]):
     """TensorClass wrapper for vLLM RequestOutput."""
 
@@ -2109,21 +2389,31 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                 if isinstance(token_ids, torch.Tensor):
                     token_ids = token_ids.tolist()
                 for v, tid in zip(output.logprobs, token_ids):
-                    t.append(
-                        v[tid]["logprob"] if v[tid].get("logprob") is not None else 0.0
-                    )
+                    t.append(_extract_logprob(v[tid]))
                 return torch.tensor(t)
 
-            if output.logprobs:
+            logprobs = output.logprobs
+            if isinstance(logprobs, torch.Tensor):
+                has_logprobs = logprobs.numel() > 0
+            elif isinstance(logprobs, list):
+                has_logprobs = len(logprobs) > 0
+            else:
+                has_logprobs = logprobs is not None
+            if has_logprobs:
                 output.logprobs = get_logprob(output)
-            output.token_ids = torch.as_tensor(output.token_ids)
+            else:
+                output.logprobs = torch.tensor([], dtype=torch.float)
+            output.token_ids = (
+                torch.as_tensor(output.token_ids).long()
+                if output.token_ids is not None
+                else torch.tensor([], dtype=torch.long)
+            )
             return output
 
         if isinstance(self.outputs, list):
-            outputs = self.outputs
             outputs = [
-                postproc(from_dataclass(output, dest_cls=CompletionOutput_tc))
-                for output in outputs
+                postproc(_completion_output_to_tc(output, CompletionOutput_tc))
+                for output in self.outputs
             ]
             if len(outputs) == 1:
                 self.outputs = outputs[0]
@@ -2145,6 +2435,21 @@ class _RequestOutput_tc(TensorClass["nocast"]):
             requests, (RequestOutput, list)
         ), f"requests must be RequestOutput or list, got {type(requests)}"
 
+        if isinstance(requests, RequestOutput):
+            return cls(
+                request_id=requests.request_id,
+                prompt=requests.prompt,
+                prompt_token_ids=torch.as_tensor(requests.prompt_token_ids),
+                prompt_logprobs=_build_prompt_logprobs(requests),
+                outputs=requests.outputs,
+                finished=requests.finished,
+                metrics=requests.metrics,
+                lora_request=requests.lora_request,
+                encoder_prompt=requests.encoder_prompt,
+                encoder_prompt_token_ids=requests.encoder_prompt_token_ids,
+                num_cached_tokens=_build_num_cached_tokens(requests),
+            )
+
         # Check if we can stack the outputs
         try:
             out = lazy_stack(
@@ -2153,23 +2458,14 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                         request_id=request.request_id,
                         prompt=request.prompt,
                         prompt_token_ids=torch.as_tensor(request.prompt_token_ids),
-                        prompt_logprobs=torch.tensor(
-                            [
-                                v[int(tid)].logprob if v is not None else 0.0
-                                for v, tid in _zip_strict(
-                                    request.prompt_logprobs, request.prompt_token_ids
-                                )
-                            ]
-                        )
-                        if request.prompt_logprobs is not None
-                        else torch.tensor([]),
+                        prompt_logprobs=_build_prompt_logprobs(request),
                         outputs=request.outputs,
                         finished=request.finished,
                         metrics=request.metrics,
                         lora_request=request.lora_request,
                         encoder_prompt=request.encoder_prompt,
                         encoder_prompt_token_ids=request.encoder_prompt_token_ids,
-                        num_cached_tokens=torch.as_tensor(request.num_cached_tokens),
+                        num_cached_tokens=_build_num_cached_tokens(request),
                     )
                     for request in requests
                 ]
@@ -2182,23 +2478,14 @@ class _RequestOutput_tc(TensorClass["nocast"]):
                     request_id=request.request_id,
                     prompt=request.prompt,
                     prompt_token_ids=torch.as_tensor(request.prompt_token_ids),
-                    prompt_logprobs=torch.tensor(
-                        [
-                            v[int(tid)].logprob if v is not None else 0.0
-                            for v, tid in _zip_strict(
-                                request.prompt_logprobs, request.prompt_token_ids
-                            )
-                        ]
-                    )
-                    if request.prompt_logprobs is not None
-                    else torch.tensor([]),
+                    prompt_logprobs=_build_prompt_logprobs(request),
                     outputs=request.outputs,
                     finished=request.finished,
                     metrics=request.metrics,
                     lora_request=request.lora_request,
                     encoder_prompt=request.encoder_prompt,
                     encoder_prompt_token_ids=request.encoder_prompt_token_ids,
-                    num_cached_tokens=torch.as_tensor(request.num_cached_tokens),
+                    num_cached_tokens=_build_num_cached_tokens(request),
                 )
                 for request in requests
             ]

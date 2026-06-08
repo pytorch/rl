@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import abc
 import itertools
+import json
+import math
 import pathlib
 import time
 import warnings
@@ -18,7 +20,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch.nn
-from tensordict import NestedKey, pad, TensorDict, TensorDictBase
+from tensordict import NestedKey, NonTensorData, pad, TensorDict, TensorDictBase
 from tensordict._tensorcollection import TensorCollection
 from tensordict.nn import TensorDictModule
 from tensordict.utils import expand_right
@@ -60,6 +62,7 @@ try:
 except ImportError:
     _has_ts = False
 
+
 REPLAY_BUFFER_CLASS = {
     "prioritized": TensorDictPrioritizedReplayBuffer,
     "circular": TensorDictReplayBuffer,
@@ -74,6 +77,31 @@ LOGGER_METHODS = {
 # Format strings for different data types in progress bar display
 TYPE_DESCR = {float: "4.4f", int: ""}
 REWARD_KEY = ("next", "reward")
+
+
+def _state_dict_to_td(sd: dict) -> TensorDict:
+    """Convert a state dict to a :class:`~tensordict.TensorDict`.
+
+    Tensor values are stored directly; everything else is wrapped in
+    :class:`~tensordict.NonTensorData` so that :meth:`~tensordict.TensorDict.dumps`
+    can persist the whole state without pickle dependencies.
+    """
+    return TensorDict(
+        {
+            k: v if isinstance(v, torch.Tensor) else NonTensorData(v)
+            for k, v in sd.items()
+        },
+        [],
+    )
+
+
+def _td_to_state_dict(td: TensorDict) -> dict:
+    """Inverse of :func:`_state_dict_to_td`.
+
+    Unwraps :class:`~tensordict.NonTensorData` back to plain Python values and
+    leaves tensors (including :class:`~tensordict.MemoryMappedTensor`) as-is.
+    """
+    return {k: v.data if isinstance(v, NonTensorData) else v for k, v in td.items()}
 
 
 class TrainerHookBase:
@@ -101,6 +129,122 @@ class TrainerHookBase:
 
         """
         raise NotImplementedError
+
+
+class OptimizationStepper(TrainerHookBase):
+    """Performs a single optimization step in a Trainer.
+
+    The optimization stepper encapsulates the logic executed for each ``sub_batch``
+    during training. This is useful for algorithms that require multiple optimizers,
+    delayed updates (e.g. TD3, where critics are updated every step while the actor
+    and target networks are updated less frequently), or multiple backward passes
+    within one training iteration.
+
+    The :class:`~torchrl.trainers.Trainer` calls :meth:`step` inside its optimization
+    loop and handles post-optimization hooks (e.g. target network updates, priority
+    updates, schedulers) and logging around this call.
+
+    Subclasses should return a :class:`~tensordict.TensorDictBase` of detached scalar
+    values suitable for logging.
+    """
+
+    _trainer: Trainer
+
+    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+        """Perform one optimization step on a ``sub_batch``.
+
+        Args:
+            trainer (Trainer): The trainer executing the optimization loop.
+            sub_batch (TensorDictBase): Batch used for this optimization step.
+
+        Returns:
+            A TensorDict containing detached scalar metrics for logging.
+        """
+        raise NotImplementedError
+
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        return
+
+    def register(self, trainer: Trainer, name: str = "optimization_stepper") -> None:
+        """Register the stepper with a Trainer for checkpointing."""
+        # Register as a module so it is included in Trainer checkpoints.
+        # This is not a hook stage (i.e., it is not registered via ``register_op``).
+        trainer.register_module(name, self)
+        self._trainer = trainer
+
+
+class DefaultOptimizationStepper(OptimizationStepper):
+    """Default optimization step implementation.
+
+    This stepper computes losses via ``trainer.loss_module(sub_batch)`` and applies a
+    single optimizer update with ``trainer.optimizer`` (including gradient clipping
+    when configured).
+
+    Optionally, a subset of loss entries can be selected via ``loss_components``.
+    In that case, only the selected keys contribute to the backward pass.
+    """
+
+    def __init__(self, loss_components: Sequence[str] | None = None) -> None:
+        if loss_components is not None and not loss_components:
+            raise ValueError(
+                "loss_components list cannot be empty. "
+                "Set to None to act on all components of the loss."
+            )
+        self.loss_components = (
+            set(loss_components) if loss_components is not None else None
+        )
+
+    @staticmethod
+    def _compute_and_clip_grad_norm(
+        optimizer: optim.Optimizer,
+        clip_grad_norm: bool,
+        clip_norm: float | None,
+    ) -> float:
+        params = []
+        for param_group in optimizer.param_groups:
+            params += param_group["params"]
+
+        if clip_grad_norm and clip_norm is not None:
+            gn = nn.utils.clip_grad_norm_(params, clip_norm)
+        else:
+            gn = sum([p.grad.pow(2).sum() for p in params if p.grad is not None]).sqrt()
+            if clip_norm is not None:
+                nn.utils.clip_grad_value_(params, clip_norm)
+        return float(gn)
+
+    def step(self, trainer: Trainer, sub_batch: TensorDictBase) -> TensorDictBase:
+        losses_td = trainer.loss_module(sub_batch)
+
+        if trainer.optimizer is None:
+            raise RuntimeError(
+                "DefaultOptimizationStepper requires an optimizer. "
+                "Pass `optimizer=` to Trainer or use a custom "
+                "OptimizationStepper that owns its optimizer(s)."
+            )
+
+        if self.loss_components is not None:
+            items = [
+                item for key, item in losses_td.items() if key in self.loss_components
+            ]
+        else:
+            items = [item for key, item in losses_td.items() if key.startswith("loss")]
+        loss = sum(items)
+        loss.backward()
+
+        gn = self._compute_and_clip_grad_norm(
+            trainer.optimizer,
+            trainer.clip_grad_norm,
+            trainer.clip_norm,
+        )
+        losses_td["grad_norm"] = torch.tensor(gn)
+
+        trainer.optimizer.step()
+        trainer.optimizer.zero_grad()
+
+        return losses_td
 
 
 class Trainer:
@@ -148,13 +292,17 @@ class Trainer:
         save_trainer_file (path, optional): path where to save the trainer.
             Default is None (no saving)
         async_collection (bool, optional): Whether to collect data asynchronously.
-            This will only work if the replay buffer is registed within the data collector.
+            This will only work if the replay buffer is registered within the data collector.
             If using this, the UTD ratio (Update to Data) will be logged under the key "utd_ratio".
             Default is False.
         log_timings (bool, optional): If True, automatically register a LogTiming hook to log
             timing information for all hooks to the logger (e.g., wandb, tensorboard).
             Timing metrics will be logged with prefix "time/" (e.g., "time/hook/UpdateWeights").
             Default is False.
+        auto_log_optim_steps (bool, optional): If True, automatically log ``optim_steps`` and the
+            keys of the averaged loss TensorDict at the end of every optimization loop, in addition
+            to anything ``post_optim_complete_log`` hooks return. Set to False to fully delegate
+            this logging to user-registered hooks. Default is True.
     """
 
     @classmethod
@@ -181,6 +329,7 @@ class Trainer:
         optim_steps_per_batch: int,
         loss_module: LossModule | Callable[[TensorDictBase], TensorDictBase],
         optimizer: optim.Optimizer | None = None,
+        optimization_stepper: OptimizationStepper | None = None,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -192,8 +341,8 @@ class Trainer:
         num_epochs: int = 1,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
-
         # objects
         self.frame_skip = frame_skip
         self.collector = collector
@@ -224,8 +373,11 @@ class Trainer:
         self.progress_bar = progress_bar and _has_tqdm
         self.save_trainer_interval = save_trainer_interval
         self.save_trainer_file = save_trainer_file
+        self.auto_log_optim_steps = auto_log_optim_steps
 
         self._log_dict = defaultdict(list)
+        self._stop_training = False
+        self._stop_reason = None
 
         # Hook collections for different stages of the training loop
         self._batch_process_ops = (
@@ -249,6 +401,9 @@ class Trainer:
         self._post_epoch_log_ops = (
             []
         )  # After each epoch logging (e.g., epoch completion metrics)
+        self._post_optim_complete_log_ops = (
+            []
+        )  # After all optimization steps for a batch (e.g., logging average_losses)
 
         # Regular hook collections for non-logging operations
         self._pre_epoch_ops = (
@@ -271,11 +426,23 @@ class Trainer:
             []
         )  # Process batches for optimization (e.g., subsampling)
         self._post_optim_ops = []  # After optimization (e.g., weight syncing)
+        self._setup_ops = []  # Before training starts (e.g., warmups, lazy init)
+        self._shutdown_ops = []  # At training end (e.g., final eval, publish)
 
         self._modules = {}
 
-        if self.optimizer is not None:
-            optimizer_hook = OptimizerHook(self.optimizer)
+        self.optimization_stepper = optimization_stepper
+        if self.optimization_stepper is not None:
+            self.optimization_stepper.register(self, name="optimization_stepper")
+
+        if self.optimizer is not None and self.optimization_stepper is None:
+            # Only auto-create the OptimizerHook when no stepper is
+            # provided.  When a stepper is present it may access
+            # trainer.optimizer directly, so creating the hook would leave a
+            # dead hook in _optimizer_ops that never fires.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                optimizer_hook = OptimizerHook(self.optimizer)
             optimizer_hook.register(self)
 
         if log_timings:
@@ -368,6 +535,11 @@ class Trainer:
         self._last_save = state_dict["state"]["_last_save"]
         self._optim_count = state_dict["state"]["_optim_count"]
 
+    def request_stop(self, reason: str | None = None) -> None:
+        """Signal that training should stop at the next loop boundary."""
+        self._stop_training = True
+        self._stop_reason = reason
+
     def _save_trainer(self) -> None:
         if _CKPT_BACKEND == "torchsnapshot":
             if not _has_ts:
@@ -378,6 +550,21 @@ class Trainer:
             Snapshot.take(app_state=self.app_state, path=self.save_trainer_file)
         elif _CKPT_BACKEND == "torch":
             torch.save(self.state_dict(), self.save_trainer_file)
+        elif _CKPT_BACKEND == "memmap":
+            state = self.state_dict()
+            path = pathlib.Path(self.save_trainer_file)
+            path.mkdir(parents=True, exist_ok=True)
+            # Persist all module state dicts using TensorDict memmap.
+            # Non-tensor values (scalars, bools, nested dicts) are wrapped in
+            # NonTensorData automatically by _state_dict_to_td, so no pickle
+            # dependency is needed.
+            for key in ("loss_module", "collector", *self._modules):
+                sd = state[key]
+                if sd:
+                    _state_dict_to_td(sd).dumps(str(path / key))
+            # Persist non-tensor training counters as JSON.
+            with open(path / "state.json", "w") as f:
+                json.dump(dict(state["state"]), f)
         else:
             raise NotImplementedError(
                 f"CKPT_BACKEND should be one of {_CKPT_BACKEND.backends}, got {_CKPT_BACKEND}."
@@ -396,14 +583,36 @@ class Trainer:
         """Loads a file and its state-dict in the trainer.
 
         Keyword arguments are passed to the :func:`~torch.load` function.
+        They are ignored when ``CKPT_BACKEND=memmap``.
+
+        .. note::
+            When ``CKPT_BACKEND=torch``, ``weights_only=True`` is set by
+            default for safer deserialization. Pass ``weights_only=False``
+            explicitly only if you have custom (non-stdlib) objects in your
+            state dict.
 
         """
         if _CKPT_BACKEND == "torchsnapshot":
             snapshot = Snapshot(path=file)
             snapshot.restore(app_state=self.app_state)
         elif _CKPT_BACKEND == "torch":
+            kwargs.setdefault("weights_only", True)
             loaded_dict: OrderedDict = torch.load(file, **kwargs)
             self.load_state_dict(loaded_dict)
+        elif _CKPT_BACKEND == "memmap":
+            path = pathlib.Path(file)
+            state: dict = {}
+            for key in ("loss_module", "collector", *self._modules):
+                key_path = path / key
+                if key_path.exists():
+                    state[key] = _td_to_state_dict(
+                        TensorDict.load_memmap(str(key_path))
+                    )
+                else:
+                    state[key] = {}
+            with open(path / "state.json") as f:
+                state["state"] = json.load(f)
+            self.load_state_dict(state)
         return self
 
     def set_seed(self):
@@ -435,8 +644,11 @@ class Trainer:
             "post_optim_log",
             "pre_epoch_log",
             "post_epoch_log",
+            "post_optim_complete_log",
             "pre_epoch",
             "post_epoch",
+            "setup",
+            "shutdown",
         ],
         op: Callable,
         **kwargs,
@@ -468,18 +680,39 @@ class Trainer:
             self._process_optim_batch_ops.append((timed_op, kwargs))
 
         elif dest == "post_loss":
+            warnings.warn(
+                "The 'post_loss' hook stage will be replaced by OptimizationStepper "
+                "in a future release. Use 'post_optim' for post-optimization hooks "
+                "(e.g. priority updates), or provide a custom OptimizationStepper.",
+                FutureWarning,
+                stacklevel=2,
+            )
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
             self._post_loss_ops.append((timed_op, kwargs))
 
         elif dest == "process_loss":
+            warnings.warn(
+                "The 'process_loss' hook stage will be replaced by OptimizationStepper "
+                "in a future release. Move loss-transformation logic into a custom "
+                "OptimizationStepper.",
+                FutureWarning,
+                stacklevel=2,
+            )
             _check_input_output_typehint(
                 op, input=TensorDictBase, output=TensorDictBase
             )
             self._process_loss_ops.append((timed_op, kwargs))
 
         elif dest == "optimizer":
+            warnings.warn(
+                "The 'optimizer' hook stage will be replaced by OptimizationStepper "
+                "in a future release. Use DefaultOptimizationStepper for equivalent "
+                "behaviour.",
+                FutureWarning,
+                stacklevel=2,
+            )
             _check_input_output_typehint(
                 op, input=[TensorDictBase, bool, float, int], output=TensorDictBase
             )
@@ -523,6 +756,12 @@ class Trainer:
             )
             self._post_epoch_log_ops.append((timed_op, kwargs))
 
+        elif dest == "post_optim_complete_log":
+            _check_input_output_typehint(
+                op, input=[int, TensorDictBase | None], output=tuple[str, float]
+            )
+            self._post_optim_complete_log_ops.append((timed_op, kwargs))
+
         elif dest == "pre_epoch":
             _check_input_output_typehint(op, input=None, output=None)
             self._pre_epoch_ops.append((timed_op, kwargs))
@@ -531,13 +770,21 @@ class Trainer:
             _check_input_output_typehint(op, input=None, output=None)
             self._post_epoch_ops.append((timed_op, kwargs))
 
+        elif dest == "setup":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._setup_ops.append((timed_op, kwargs))
+
+        elif dest == "shutdown":
+            _check_input_output_typehint(op, input=None, output=None)
+            self._shutdown_ops.append((timed_op, kwargs))
+
         else:
             raise RuntimeError(
                 f"The hook collection {dest} is not recognised. Choose from:"
                 f"(batch_process, pre_optim_steps, process_optim_batch, post_loss, "
                 f"process_loss, optimizer, post_steps, post_optim, pre_steps_log, "
                 f"post_steps_log, post_optim_log, pre_epoch_log, post_epoch_log, "
-                f"pre_epoch, post_epoch)"
+                f"post_optim_complete_log, setup, shutdown, pre_epoch, post_epoch)"
             )
 
     register_hook = register_op
@@ -651,6 +898,24 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _post_optim_complete_log_hook(
+        self, optim_steps: int, average_losses: TensorDictBase | None
+    ) -> None:
+        """Execute logging hooks that run AFTER all steps in the optimization loop.
+
+        These hooks log metrics that use the total step count and averaged loss TensorDict.
+        Called once per optimization loop.
+        """
+        for op, kwargs in self._post_optim_complete_log_ops:
+            result = op(optim_steps, average_losses, **kwargs)
+            if result is not None:
+                self._log(**result)
+        if self.auto_log_optim_steps:
+            if average_losses is not None:
+                self._log(optim_steps=optim_steps, **average_losses)
+            else:
+                self._log(optim_steps=optim_steps)
+
     def _post_epoch_hook(self) -> None:
         """Execute regular hooks that run AFTER each epoch of optimization.
 
@@ -684,6 +949,14 @@ class Trainer:
             if result is not None:
                 self._log(**result)
 
+    def _setup_hook(self) -> None:
+        for op, kwargs in self._setup_ops:
+            op(**kwargs)
+
+    def _shutdown_hook(self) -> None:
+        for op, kwargs in self._shutdown_ops:
+            op(**kwargs)
+
     def train(self):
         if self.progress_bar:
             self._pbar = tqdm(total=self.total_frames)
@@ -698,6 +971,8 @@ class Trainer:
             iterator = self._async_iterator()
         else:
             iterator = self.collector
+
+        self._setup_hook()
 
         for batch in iterator:
             if not self.async_collection:
@@ -726,6 +1001,12 @@ class Trainer:
             # LOGGING POINT 2: Post-optimization logging (e.g., validation rewards, evaluation metrics)
             self._post_steps_log_hook(batch)
 
+            if self._stop_training:
+                if self._stop_reason and VERBOSE:
+                    torchrl_logger.info(f"Trainer stopping early: {self._stop_reason}")
+                self.save_trainer(force_save=True)
+                break
+
             if self.progress_bar:
                 self._pbar.update(current_frames)
                 self._pbar_description()
@@ -735,6 +1016,7 @@ class Trainer:
                 break
             self.save_trainer()
 
+        self._shutdown_hook()
         self.collector.shutdown()
 
     def _async_iterator(self):
@@ -789,13 +1071,19 @@ class Trainer:
                     break
                 if sub_batch is None:
                     break
-                losses_td = self.loss_module(sub_batch)
-                self._post_loss_hook(sub_batch)
 
-                losses_td = self._process_loss_hook(sub_batch, losses_td)
+                if self.optimization_stepper is not None:
+                    losses_detached = self.optimization_stepper.step(self, sub_batch)
+                    self._post_optim_hook()
+                else:
+                    losses_td = self.loss_module(sub_batch)
+                    self._post_loss_hook(sub_batch)
 
-                losses_detached = self._optimizer_hook(losses_td)
-                self._post_optim_hook()
+                    losses_td = self._process_loss_hook(sub_batch, losses_td)
+
+                    losses_detached = self._optimizer_hook(losses_td)
+                    self._post_optim_hook()
+                    del losses_td
 
                 # LOGGING POINT 4: Post-optimization step logging (e.g., gradient norms, step-specific metrics)
                 self._post_optim_log(sub_batch)
@@ -806,7 +1094,7 @@ class Trainer:
                     for key, item in losses_detached.items():
                         val = average_losses.get(key)
                         average_losses.set(key, val * j / (j + 1) + item / (j + 1))
-                del sub_batch, losses_td, losses_detached
+                del sub_batch, losses_detached
 
             # LOGGING POINT 5: Post-epoch logging (e.g., epoch completion metrics)
             self._post_epoch_log_hook(batch)
@@ -814,12 +1102,8 @@ class Trainer:
             self._post_epoch_hook()
 
         if j >= 0:
-            # Log optimization statistics and average losses after completing all optimization steps
-            # This is the main logging point for training metrics like loss values and optimization step count
-            self._log(
-                optim_steps=self._optim_count,
-                **average_losses,
-            )
+            # LOGGING POINT 6: After all optimization for this batch (e.g., logging average_losses)
+            self._post_optim_complete_log_hook(self._optim_count, average_losses)
 
     def _log(self, log_pbar=False, **kwargs) -> None:
         """Main logging method that handles both logger output and progress bar updates.
@@ -848,6 +1132,12 @@ class Trainer:
 
             # Log to external logger (e.g., tensorboard, wandb) if conditions are met
             if _log and self.logger is not None:
+                if (
+                    method == "log_scalar"
+                    and isinstance(item, torch.Tensor)
+                    and item.ndim > 0
+                ):
+                    continue
                 getattr(self.logger, method)(key, item, step=collected_frames)
 
             # Update progress bar if requested and method is scalar
@@ -866,7 +1156,7 @@ class Trainer:
             self._pbar.set_description(
                 ", ".join(
                     [
-                        f"{key}: {self._pbar_str[key] :{TYPE_DESCR.get(type(self._pbar_str[key]), '4.4f')}}"
+                        f"{key}: {self._pbar_str[key]:{TYPE_DESCR.get(type(self._pbar_str[key]), '4.4f')}}"
                         for key in sorted(self._pbar_str.keys())
                     ]
                 )
@@ -1074,6 +1364,10 @@ class ReplayBufferTrainer(TrainerHookBase):
 class OptimizerHook(TrainerHookBase):
     """Add an optimizer for one or more loss components.
 
+    .. deprecated::
+        ``OptimizerHook`` will be replaced by
+        :class:`~torchrl.trainers.DefaultOptimizationStepper` in a future release.
+
     Args:
         optimizer (optim.Optimizer): An optimizer to apply to the loss_components.
         loss_components (Sequence[str], optional): The keys in the loss TensorDict
@@ -1092,6 +1386,12 @@ class OptimizerHook(TrainerHookBase):
         optimizer: optim.Optimizer,
         loss_components: Sequence[str] | None = None,
     ):
+        warnings.warn(
+            "OptimizerHook will be replaced by DefaultOptimizationStepper "
+            "in a future release.",
+            FutureWarning,
+            stacklevel=2,
+        )
         if loss_components is not None and not loss_components:
             raise ValueError(
                 "loss_components list cannot be empty. "
@@ -1168,6 +1468,16 @@ class ClearCudaCache(TrainerHookBase):
         self.count += 1
         if self.count % self.interval == 0:
             torch.cuda.empty_cache()
+
+    def state_dict(self) -> dict[str, Any]:
+        return {"count": self.count}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.count = state_dict["count"]
+
+    def register(self, trainer: Trainer, name: str = "clear_cuda_cache"):
+        trainer.register_module(name, self)
+        trainer.register_op("pre_optim_steps", self)
 
 
 class LogTiming(TrainerHookBase):
@@ -1340,31 +1650,17 @@ class LogScalar(TrainerHookBase):
 
         return result
 
+    def state_dict(self) -> dict[str, Any]:
+        return {}
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        pass
+
     def register(self, trainer: Trainer, name: str | None = None):
         if name is None:
             name = f"log_{self.logname}"
         trainer.register_op("pre_steps_log", self)
         trainer.register_module(name, self)
-
-
-class LogReward(LogScalar):
-    """Deprecated class. Use LogScalar instead."""
-
-    def __init__(
-        self,
-        logname="r_training",
-        log_pbar: bool = False,
-        reward_key: str | tuple = None,
-    ):
-        warnings.warn(
-            "The 'LogReward' class is deprecated and will be removed in v0.9. Please use 'LogScalar' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # Convert old API to new API
-        if reward_key is None:
-            reward_key = REWARD_KEY
-        super().__init__(key=reward_key, logname=logname, log_pbar=log_pbar)
 
 
 class RewardNormalizer(TrainerHookBase):
@@ -1761,44 +2057,6 @@ class LogValidationReward(TrainerHookBase):
         )
 
 
-class Recorder(LogValidationReward):
-    """Deprecated class. Use LogValidationReward instead."""
-
-    def __init__(
-        self,
-        *,
-        record_interval: int,
-        record_frames: int,
-        frame_skip: int = 1,
-        policy_exploration: TensorDictModule,
-        environment: EnvBase = None,
-        exploration_type: ExplorationType = ExplorationType.RANDOM,
-        log_keys: list[str | tuple[str]] | None = None,
-        out_keys: dict[str | tuple[str], str] | None = None,
-        suffix: str | None = None,
-        log_pbar: bool = False,
-        recorder: EnvBase = None,
-    ) -> None:
-        warnings.warn(
-            "The 'Recorder' class is deprecated and will be removed in v0.9. Please use 'LogValidationReward' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(
-            record_interval=record_interval,
-            record_frames=record_frames,
-            frame_skip=frame_skip,
-            policy_exploration=policy_exploration,
-            environment=environment,
-            exploration_type=exploration_type,
-            log_keys=log_keys,
-            out_keys=out_keys,
-            suffix=suffix,
-            log_pbar=log_pbar,
-            recorder=recorder,
-        )
-
-
 def _resolve_module(trainer: Trainer, path: str):
     """Resolve a module from a trainer using a string path.
 
@@ -1840,8 +2098,7 @@ class UpdateWeights(TrainerHookBase):
             weight_update_map are provided, weight_update_map takes precedence.
         weight_update_map (dict[str, str], optional): A mapping from destination paths
             (keys in collector's weight_sync_schemes) to source paths on the trainer.
-            Example: {"policy": "loss_module.actor_network",
-                     "replay_buffer.transforms[0]": "loss_module.critic_network"}
+            Example: ``{"policy": "loss_module.actor_network", "replay_buffer.transforms[0]": "loss_module.critic_network"}``.
         trainer (Trainer, optional): The trainer instance, required when using
             weight_update_map to resolve source paths.
 
@@ -2110,3 +2367,143 @@ class UTDRHook(TrainerHookBase):
 
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Load state from dictionary."""
+
+
+class EarlyStopping(TrainerHookBase):
+    """Early stopping hook for :class:`~torchrl.trainers.Trainer`.
+
+    This hook monitors a scalar metric and stops training when that metric
+    does not improve according to a configured criterion.
+
+    By default, the hook monitors ``"r_evaluation"``.
+
+    Args:
+        monitor (NestedKey, optional): Metric name to monitor.
+            Defaults to ``"r_evaluation"``.
+        mode (Literal["min", "max"], optional): One of ``"min"`` or ``"max"``.
+            In ``"max"`` mode, larger metric values are considered better.
+            Defaults to ``"max"``.
+        min_delta (float, optional): Minimum absolute improvement required to
+            qualify as better. Defaults to ``0.0``.
+        patience (int, optional): Maximum number of non-improving frames
+            allowed before stopping. Defaults to ``100_000``.
+        wait_for (int, optional): Number of initial frames to ignore before
+            checking the stopping criterion. Defaults to ``1_000_000``.
+        check_finite (bool, optional): If ``True``, non-finite metric values
+            (NaN or inf) trigger early stopping. Defaults to ``True``.
+
+    Examples:
+        >>> LogScalar(("next", "reward"), "r_training").register(trainer)
+        >>> EarlyStopping(monitor="r_training", patience=10_000).register(trainer)
+    """
+
+    def __init__(
+        self,
+        *,
+        monitor: NestedKey = "r_evaluation",
+        mode: Literal["min", "max"] = "max",
+        min_delta: float = 0.0,
+        patience: int = 100_000,
+        wait_for: int = 1_000_000,
+        check_finite: bool = True,
+    ) -> None:
+        if mode not in {"min", "max"}:
+            raise ValueError(f"mode must be either 'min' or 'max', got {mode}.")
+        if patience < 0:
+            raise ValueError(f"patience must be >= 0, got {patience}.")
+        if wait_for < 0:
+            raise ValueError(f"wait_for must be >= 0, got {wait_for}.")
+
+        self.monitor = monitor
+        self.mode = mode
+        self.min_delta = float(min_delta)
+        self.patience = int(patience)
+        self.wait_for = int(wait_for)
+        self.check_finite = check_finite
+
+        self.best_score: float | None = None
+        self.stop_reason: str | None = None
+        self._trainer: Trainer | None = None
+        self._last_improvement_frame: int | None = None
+
+    def _resolve_metric(self, trainer: Trainer) -> float:
+        metric_values = trainer._log_dict.get(self.monitor, None)
+        if not metric_values:
+            raise RuntimeError(
+                "EarlyStopping could not find monitored metric "
+                f"'{self.monitor}' in trainer._log_dict."
+            )
+
+        metric = metric_values[-1]
+        if isinstance(metric, torch.Tensor):
+            if metric.numel() != 1:
+                raise RuntimeError(
+                    "EarlyStopping expects scalar metrics, "
+                    f"got shape {tuple(metric.shape)} for '{self.monitor}'."
+                )
+            metric = float(metric.item())
+        else:
+            metric = float(metric)
+        return metric
+
+    def _is_improvement(self, score: float, best_score: float) -> bool:
+        if self.mode == "max":
+            return score > (best_score + self.min_delta)
+        return score < (best_score - self.min_delta)
+
+    def _stop(self, trainer: Trainer, reason: str) -> None:
+        self.stop_reason = reason
+        trainer.request_stop(reason)
+
+    def __call__(self, batch: TensorDictBase | None = None) -> None:
+        if self._trainer is not None and self._trainer._stop_training:
+            return
+        if self._trainer is None:
+            raise RuntimeError("EarlyStopping is not attached to a trainer.")
+
+        trainer = self._trainer
+        score = self._resolve_metric(trainer)
+
+        current_frame = int(trainer.collected_frames)
+        if current_frame < self.wait_for:
+            return
+
+        if self.check_finite and not math.isfinite(score):
+            self._stop(
+                trainer,
+                f"Monitored metric '{self.monitor}' became non-finite ({score}).",
+            )
+            return
+
+        if self.best_score is None:
+            self.best_score = score
+            self._last_improvement_frame = current_frame
+            return
+
+        if self._is_improvement(score, self.best_score):
+            self.best_score = score
+            self._last_improvement_frame = current_frame
+        else:
+            if current_frame - self._last_improvement_frame >= self.patience:
+                self._stop(
+                    trainer,
+                    f"Monitored metric '{self.monitor}' did not improve for "
+                    f"{current_frame - self._last_improvement_frame} frames.",
+                )
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "best_score": self.best_score,
+            "stop_reason": self.stop_reason,
+            "_last_improvement_frame": self._last_improvement_frame,
+        }
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self.best_score = state_dict.get("best_score", None)
+        self.stop_reason = state_dict.get("stop_reason", None)
+        self._last_improvement_frame = state_dict.get("_last_improvement_frame", None)
+
+    def register(self, trainer: Trainer, name: str = "early_stopping") -> None:
+        self._trainer = trainer
+        trainer.register_op("post_steps_log", self)
+        trainer.register_module(name, self)

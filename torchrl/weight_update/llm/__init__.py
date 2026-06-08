@@ -3,6 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .sglang_nccl import (
+    get_model_metadata as get_sglang_model_metadata,
+    SGLangCollectiveTransport,
+    SGLangWeightSender,
+    SGLangWeightSyncScheme,
+)
 from .vllm_double_buffer import (
     VLLMDoubleBufferSyncScheme,
     VLLMDoubleBufferTransport,
@@ -29,4 +35,9 @@ __all__ = [
     "VLLMDoubleBufferWeightSender",
     "VLLMDoubleBufferWeightReceiver",
     "VLLMDoubleBufferTransport",
+    # SGLang NCCL-based weight sync
+    "SGLangWeightSyncScheme",
+    "SGLangWeightSender",
+    "SGLangCollectiveTransport",
+    "get_sglang_model_metadata",
 ]

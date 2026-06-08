@@ -82,7 +82,6 @@ def main():
         storing_device="cpu",
         weight_sync_schemes=weight_sync_schemes,
         replay_buffer=rb,
-        local_init_rb=True,
         # extend_buffer=True is the default for MultiSyncCollector
     )
 

@@ -14,14 +14,25 @@ from torchrl._utils import logger as torchrl_logger
 try:
     from vllm.distributed.device_communicators.pynccl import PyNcclCommunicator
     from vllm.distributed.utils import StatelessProcessGroup
-    from vllm.utils import get_open_port
 
     _has_vllm = True
 except ImportError:
     PyNcclCommunicator = None
     StatelessProcessGroup = None
-    get_open_port = None
     _has_vllm = False
+
+# get_open_port may not be available in all vLLM versions
+try:
+    from vllm.utils import get_open_port
+except ImportError:
+
+    def get_open_port():
+        """Fallback get_open_port using standard library."""
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            return s.getsockname()[1]
 
 
 def stateless_init_process_group(

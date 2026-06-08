@@ -360,9 +360,9 @@ class VanillaWeightUpdater(WeightUpdaterBase):
 
     Keyword Args:
         weight_getter (Callable[[], TensorDictBase], optional): a callable that returns the weights from the server.
-            If not provided, the weights must be passed to :meth:`~.update_weights` directly.
+            If not provided, the weights must be passed to ``push_weights`` directly.
         policy_weights (TensorDictBase): a TensorDictBase containing the policy weights to be updated
-            in-place.
+            in-place. Use ``push_weights`` to update the weights.
     """
 
     @classmethod

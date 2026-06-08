@@ -164,21 +164,21 @@ class VIPTransform(Compose):
 
     VIP provides pre-trained ResNet weights aimed at facilitating visual
     embedding and reward for robotic tasks. The models are trained using Ego4d.
-    See the paper:
-        VIP: Towards Universal Visual Reward and Representation via Value-Implicit Pre-Training (Jason Ma
-            Shagun Sodhani, Dinesh Jayaraman, Osbert Bastani, Vikash Kumar*, Amy Zhang*)
+
+    See the paper: VIP: Towards Universal Visual Reward and Representation via Value-Implicit Pre-Training
+    (Jason Ma, Shagun Sodhani, Dinesh Jayaraman, Osbert Bastani, Vikash Kumar*, Amy Zhang*)
 
     Args:
         model_name (str): one of resnet50
         in_keys (list of str, optional): list of input keys. If left empty, the
             "pixels" key is assumed.
         out_keys (list of str, optional): list of output keys. If left empty,
-             "vip_vec" is assumed.
+            "vip_vec" is assumed.
         size (int, optional): Size of the image to feed to resnet.
             Defaults to 244.
         stack_images (bool, optional): if False, the images given in the :obj:`in_keys`
-             argument will be treaded separately and each will be given a single,
-             separated entry in the output tensordict. Defaults to ``True``.
+            argument will be treaded separately and each will be given a single,
+            separated entry in the output tensordict. Defaults to ``True``.
         download (bool, torchvision Weights config or corresponding string):
             if ``True``, the weights will be downloaded using the torch.hub download
             API (i.e. weights will be cached for future use).

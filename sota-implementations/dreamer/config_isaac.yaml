@@ -1,0 +1,86 @@
+env:
+  name: Isaac-Velocity-Flat-Anymal-C-v0
+  seed: 0
+  backend: isaaclab
+  from_pixels: True
+  image_size: 64
+  grayscale: False
+  # Number of parallel envs.  Rendering is expensive so we use fewer
+  # than the default 4096 used for state-based training.
+  num_envs: 256
+  horizon: 1000
+
+collector:
+  # 256 envs x 50 steps = 12 800 frames per batch.
+  frames_per_batch: 12800
+  init_random_frames: 12800
+  # More gradient steps per collection to compensate for fewer frames.
+  optim_steps_per_collect: 50
+
+optimization:
+  total_optim_steps: 100_000
+  log_every: 100
+  grad_clip: 100
+
+  world_model_lr: 6e-4
+  actor_lr: 8e-5
+  value_lr: 8e-5
+  # Linear warmup for actor/value LRs.  During the first `warmup_steps`
+  # optimisation steps the LR ramps linearly from 0 -> target.  Set to 0
+  # to disable warmup.
+  actor_value_warmup_steps: 0
+  kl_scale: 1.0
+  free_nats: 3.0
+  gamma: 0.99
+  lmbda: 0.95
+  imagination_horizon: 15
+  compile:
+    # Loss-level compile disabled: TensorDict output from compiled loss modules
+    # hits 'TensorDict has no attribute _tensordict' with the IsaacLab container's
+    # bundled tensordict. The RSSM rollout compile (networks.rssm_rollout.compile)
+    # still works because it compiles the step function internally.
+    enabled: False
+    backend: inductor
+    cudagraphs: False
+    losses: []
+  autocast: bfloat16
+
+networks:
+  exploration_noise: 0.3
+  device:
+  state_dim: 30
+  rssm_hidden_dim: 200
+  hidden_dim: 400
+  encoder_channels: 32
+  activation: "elu"
+  use_scan: False
+  rssm_rollout:
+    compile: True
+    compile_backend: inductor
+    # "default" instead of "reduce-overhead": reduce-overhead uses CUDAGraphs
+    # which re-record for every new batch size, causing massive slowdowns when
+    # the sampler returns varying batch sizes (strict_length=False).
+    compile_mode: default
+
+replay_buffer:
+  # Pixel data is large (64x64x3 float32 ~ 48 KB/frame).
+  # 8000 frames x 50 batch_length -> 160 trajectories per batch.
+  batch_size: 8000
+  buffer_size: 500000
+  batch_length: 50
+  scratch_dir: null
+  prefetch: 16
+  gpu_storage: false
+
+logger:
+  backend: wandb
+  project: dreamer-isaac
+  exp_name: ${env.name}-${env.seed}
+  mode: online
+  eval_every: 1000
+  eval_rollout_steps: 500
+  # Number of parallel envs in the eval actor (fewer = less GPU memory).
+  eval_num_envs: 4
+  # Enable async eval with viewport rendering (requires >= 3 GPUs).
+  video: True
+  video_skip: 1

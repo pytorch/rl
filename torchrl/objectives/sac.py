@@ -17,6 +17,7 @@ from tensordict.nn import (
     composite_lp_aggregate,
     CompositeDistribution,
     dispatch,
+    ProbabilisticTensorDictSequential,
     set_composite_lp_aggregate,
     TensorDictModule,
 )
@@ -26,7 +27,6 @@ from torch import Tensor
 from torchrl.data.tensor_specs import Composite, TensorSpec
 from torchrl.data.utils import _find_action_space
 from torchrl.envs.utils import ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor
 from torchrl.modules.tensordict_module.actors import ActorCriticWrapper
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
@@ -34,11 +34,11 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _reduce,
     _vmap_func,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _delezify(func):
@@ -67,15 +67,18 @@ class SACLoss(LossModule):
     and "Soft Actor-Critic Algorithms and Applications" https://arxiv.org/abs/1812.05905
 
     Args:
-        actor_network (ProbabilisticActor): stochastic actor
-        qvalue_network (TensorDictModule): Q(s, a) parametric model.
+        actor_network (ProbabilisticTensorDictSequential): stochastic actor
+        qvalue_network (TensorDictModule | list[TensorDictModule]): Q(s, a) parametric model.
             This module typically outputs a ``"state_action_value"`` entry.
             If a single instance of `qvalue_network` is provided, it will be duplicated ``num_qvalue_nets``
             times. If a list of modules is passed, their
             parameters will be stacked unless they share the same identity (in which case
             the original parameter will be expanded).
+            When a list is provided, the first module is used as the functional forward
+            reference (its ``in_keys``/``out_keys`` are used), so all modules must share
+            the same signature.
 
-            .. warning:: When a list of parameters if passed, it will __not__ be compared against the policy parameters
+            .. warning:: When a list of parameters if passed, it will **not** be compared against the policy parameters
               and all the parameters will be considered as untied.
 
         value_network (TensorDictModule, optional): V(s) parametric model.
@@ -304,6 +307,9 @@ class SACLoss(LossModule):
     default_keys = _AcceptedKeys
     tensor_keys: _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
+    _schedulable_buffers = frozenset(
+        {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
+    )
 
     actor_network: TensorDictModule
     qvalue_network: TensorDictModule
@@ -317,7 +323,7 @@ class SACLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule | list[TensorDictModule],
         value_network: TensorDictModule | None = None,
         *,
@@ -339,6 +345,7 @@ class SACLoss(LossModule):
         skip_done_states: bool = False,
         deactivate_vmap: bool = False,
         use_prioritized_weights: str | bool = "auto",
+        scalar_output_mode: str | None = None,
     ) -> None:
         self._in_keys = None
         self._out_keys = None
@@ -443,6 +450,22 @@ class SACLoss(LossModule):
         self.reduction = reduction
         self.skip_done_states = skip_done_states
 
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "SACLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
         log_prob_keys = getattr(self.actor_network, "log_prob_keys", [])
         action_keys = getattr(self.actor_network, "dist_sample_keys", [])
         if len(log_prob_keys) > 1:
@@ -498,11 +521,25 @@ class SACLoss(LossModule):
                 action_container_shape = action_spec[self.tensor_keys.action[:-1]].shape
             else:
                 action_container_shape = action_spec.shape
-            target_entropy = -float(
-                action_spec[self.tensor_keys.action]
-                .shape[len(action_container_shape) :]
-                .numel()
-            )
+            action_spec_leaf = action_spec[self.tensor_keys.action]
+            if action_spec_leaf is None:
+                raise RuntimeError(
+                    "Cannot infer the dimensionality of the action. The action spec "
+                    f"for key '{self.tensor_keys.action}' is None. This can happen when "
+                    "using composite action distributions. Consider providing the "
+                    "'action_spec' or 'target_entropy' argument explicitly to the loss."
+                )
+            if isinstance(action_spec_leaf, Composite):
+                # For composite action specs, sum the numel of all leaf specs
+                target_entropy = -float(
+                    self._compute_composite_spec_numel(
+                        action_spec_leaf, action_container_shape
+                    )
+                )
+            else:
+                target_entropy = -float(
+                    action_spec_leaf.shape[len(action_container_shape) :].numel()
+                )
         delattr(self, "_target_entropy")
         self.register_buffer(
             "_target_entropy", torch.tensor(target_entropy, device=device)
@@ -511,6 +548,24 @@ class SACLoss(LossModule):
 
     state_dict = _delezify(LossModule.state_dict)
     load_state_dict = _delezify(LossModule.load_state_dict)
+
+    def _compute_composite_spec_numel(
+        self, spec: Composite, container_shape: torch.Size
+    ) -> int:
+        """Compute the total number of action elements in a Composite spec.
+
+        This handles composite action distributions where multiple sub-actions
+        are grouped together.
+        """
+        total = 0
+        for subspec in spec.values():
+            if subspec is None:
+                continue
+            if isinstance(subspec, Composite):
+                total += self._compute_composite_spec_numel(subspec, container_shape)
+            else:
+                total += subspec.shape[len(container_shape) :].numel()
+        return total
 
     def _forward_value_estimator_keys(self, **kwargs) -> None:
         if self._value_estimator is not None:
@@ -522,54 +577,40 @@ class SACLoss(LossModule):
             )
         self._set_in_keys()
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-        self.value_type = value_type
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
-            # we will take care of computing the next value inside this module
             value_net = None
         else:
-            # unreachable
             raise NotImplementedError
-
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value_target": "value_target",
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=value_net,
+            deactivate_vmap=self.deactivate_vmap,
+            **hyperparams,
+        )
 
     @property
     def device(self) -> torch.device:
@@ -636,16 +677,30 @@ class SACLoss(LossModule):
                 f"Losses shape mismatch: {loss_actor.shape}, {loss_qvalue.shape} and {loss_value.shape}"
             )
         entropy = -metadata_actor["log_prob"]
+        # Build output dict with losses
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
         }
         if self._version == 1:
             out["loss_value"] = loss_value
-        td_out = TensorDict(out)
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            # Create TensorDict with losses only
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                # Include scalars as non-tensor data
+                td_out.set_non_tensor("alpha", self._alpha)
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+            # else "exclude": scalars are not included (warning was raised in __init__)
+        else:
+            batch_size = []
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_out = TensorDict(out, batch_size=batch_size)
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -669,7 +724,9 @@ class SACLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
         log_prob = compute_log_prob(dist, a_reparm, self.tensor_keys.log_prob)
@@ -783,7 +840,9 @@ class SACLoss(LossModule):
         with torch.no_grad():
             with set_exploration_type(
                 ExplorationType.RANDOM
-            ), self.actor_network_params.to_module(self.actor_network):
+            ), self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ):
                 next_tensordict = tensordict.get("next").copy()
                 if self.skip_done_states:
                     # Check done state and avoid passing these to the actor
@@ -874,10 +933,14 @@ class SACLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.value).squeeze(-1)
-        with self.target_actor_network_params.to_module(self.actor_network):
+        with self.target_actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             action_dist = self.actor_network.get_dist(td_copy)  # resample an action
         action = action_dist.rsample()
 
@@ -920,7 +983,7 @@ class DiscreteSACLoss(LossModule):
     """Discrete SAC Loss module.
 
     Args:
-        actor_network (ProbabilisticActor): the actor to be trained
+        actor_network (ProbabilisticTensorDictSequential): the actor to be trained
         qvalue_network (TensorDictModule): a single Q-value network that will be multiplicated as many times as needed.
         action_space (str or TensorSpec): Action space. Must be one of
             ``"one-hot"``, ``"mult_one_hot"``, ``"binary"`` or ``"categorical"``,
@@ -940,7 +1003,9 @@ class DiscreteSACLoss(LossModule):
             Default is None (no maximum value).
         fixed_alpha (bool, optional): whether alpha should be trained to match a target entropy. Default is ``False``.
         target_entropy_weight (:obj:`float`, optional): weight for the target entropy term.
-        target_entropy (Union[str, Number], optional): Target entropy for the stochastic policy. Default is "auto".
+        target_entropy (Union[str, Number], optional): Target entropy for the
+            stochastic policy. Default is "auto", where target entropy is
+            computed as :obj:`-target_entropy_weight * log(1 / num_actions)`.
         delay_qvalue (bool, optional): Whether to separate the target Q value networks from the Q value networks used
             for data collection. Default is ``False``.
         priority_key (str, optional): [Deprecated, use .set_keys(priority_key=priority_key) instead]
@@ -1014,8 +1079,7 @@ class DiscreteSACLoss(LossModule):
     the expected keyword arguments are:
     ``["action", "next_reward", "next_done", "next_terminated"]`` + in_keys of the actor and qvalue network.
     The return value is a tuple of tensors in the following order:
-    ``["loss_actor", "loss_qvalue", "loss_alpha",
-       "alpha", "entropy"]``
+    ``["loss_actor", "loss_qvalue", "loss_alpha", "alpha", "entropy"]``.
     The output keys can also be filtered using :meth:`DiscreteSACLoss.select_out_keys` method.
 
     Examples:
@@ -1098,6 +1162,9 @@ class DiscreteSACLoss(LossModule):
     tensor_keys: _AcceptedKeys
     default_keys = _AcceptedKeys
     default_value_estimator = ValueEstimators.TD0
+    _schedulable_buffers = frozenset(
+        {"alpha_init", "min_log_alpha", "max_log_alpha", "log_alpha"}
+    )
     delay_actor: bool = False
     out_keys = [
         "loss_actor",
@@ -1119,7 +1186,7 @@ class DiscreteSACLoss(LossModule):
 
     def __init__(
         self,
-        actor_network: ProbabilisticActor,
+        actor_network: ProbabilisticTensorDictSequential,
         qvalue_network: TensorDictModule,
         *,
         action_space: str | TensorSpec = None,
@@ -1139,6 +1206,7 @@ class DiscreteSACLoss(LossModule):
         skip_done_states: bool = False,
         deactivate_vmap: bool = False,
         use_prioritized_weights: str | bool = "auto",
+        scalar_output_mode: str | None = None,
     ):
         if reduction is None:
             reduction = "mean"
@@ -1225,6 +1293,22 @@ class DiscreteSACLoss(LossModule):
         self.reduction = reduction
         self.skip_done_states = skip_done_states
 
+        # Handle scalar_output_mode for reduction="none"
+        if reduction == "none" and scalar_output_mode is None:
+            warnings.warn(
+                "DiscreteSACLoss with reduction='none' cannot include scalar values (alpha, entropy) "
+                "in the output TensorDict without changing their shape. These values will be "
+                "excluded from the output. You can access them via `loss_module._alpha` and "
+                "compute entropy from the log_prob in the actor loss metadata. "
+                "To suppress this warning, pass `scalar_output_mode='exclude'` to the constructor. "
+                "Alternatively, pass `scalar_output_mode='non_tensor'` to include them as non-tensor data. "
+                "This is a known limitation we're working on improving.",
+                category=UserWarning,
+                stacklevel=2,
+            )
+            scalar_output_mode = "exclude"
+        self.scalar_output_mode = scalar_output_mode
+
     def _make_vmap(self):
         self._vmap_qnetworkN0 = _vmap_func(
             self.qvalue_network,
@@ -1281,14 +1365,29 @@ class DiscreteSACLoss(LossModule):
                 f"Losses shape mismatch: {loss_actor.shape}, and {loss_qvalue.shape}"
             )
         entropy = -metadata_actor["log_prob"]
+        # Build output dict with losses
         out = {
             "loss_actor": loss_actor,
             "loss_qvalue": loss_qvalue,
             "loss_alpha": loss_alpha,
-            "alpha": self._alpha,
-            "entropy": entropy.detach().mean(),
         }
-        td_out = TensorDict(out, [])
+
+        # Handle batch_size and scalar values (alpha, entropy) based on reduction mode
+        if self.reduction == "none":
+            batch_size = tensordict.batch_size
+            # Create TensorDict with losses only
+            td_out = TensorDict(out, batch_size=batch_size)
+            if self.scalar_output_mode == "non_tensor":
+                # Include scalars as non-tensor data
+                td_out.set_non_tensor("alpha", self._alpha)
+                td_out.set_non_tensor("entropy", entropy.detach().mean())
+            # else "exclude": scalars are not included (warning was raised in __init__)
+        else:
+            batch_size = []
+            out["alpha"] = self._alpha
+            out["entropy"] = entropy.detach().mean()
+            td_out = TensorDict(out, batch_size=batch_size)
+
         self._clear_weakrefs(
             tensordict,
             td_out,
@@ -1326,7 +1425,9 @@ class DiscreteSACLoss(LossModule):
                     next_tensordict_select = next_tensordict
 
                 # get probs and log probs for actions computed from "next"
-                with self.actor_network_params.to_module(self.actor_network):
+                with self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                ):
                     next_dist = self.actor_network.get_dist(next_tensordict_select)
                 next_log_prob = next_dist.logits
                 next_prob = next_log_prob.exp()
@@ -1352,7 +1453,9 @@ class DiscreteSACLoss(LossModule):
                     ).masked_scatter_(mask, next_state_value)
             else:
                 # get probs and log probs for actions computed from "next"
-                with self.actor_network_params.to_module(self.actor_network):
+                with self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                ):
                     next_dist = self.actor_network.get_dist(next_tensordict)
                 next_prob = next_dist.probs
                 next_log_prob = torch.log(torch.where(next_prob == 0, 1e-8, next_prob))
@@ -1422,7 +1525,9 @@ class DiscreteSACLoss(LossModule):
     ) -> tuple[Tensor, dict[str, Tensor]]:
         weights = self._maybe_get_priority_weight(tensordict)
         # get probs and log probs for actions
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict.clone(False))
         prob = dist.probs
         log_prob = dist.logits
@@ -1485,44 +1590,31 @@ class DiscreteSACLoss(LossModule):
     def _cached_detached_qvalue_params(self):
         return self.qvalue_network_params.detach()
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=None,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=None,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=None,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value": self.tensor_keys.value,
-            "value_target": "value_target",
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value": self.tensor_keys.value,
+                "value_target": "value_target",
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=None,
+            deactivate_vmap=self.deactivate_vmap,
+            **hyperparams,
+        )

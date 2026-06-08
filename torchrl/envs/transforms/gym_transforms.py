@@ -136,8 +136,12 @@ class EndOfLifeTransform(Transform):
                 lives = getattr(lives, att)
         if callable(lives):
             lives = lives()
+            if isinstance(lives, list):
+                lives = torch.as_tensor(lives)
         elif isinstance(lives, list) and all(callable(_lives) for _lives in lives):
             lives = torch.as_tensor([_lives() for _lives in lives])
+        elif isinstance(lives, list):
+            lives = torch.as_tensor(lives)
         return lives
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:

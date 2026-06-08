@@ -25,7 +25,7 @@ on:
 concurrency:
   # Documentation suggests ${{ github.head_ref }}, but that's only available on pull_request/pull_request_target triggers, so using ${{ github.ref }}.
   # On master, we want all builds to complete even if merging happens faster to make it easier to discover at which point something broke.
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  group: nightly-build-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
   cancel-in-progress: true
 
 permissions:
@@ -68,9 +68,6 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -mpip install build wheel
           ./build_nightly.sh
-          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
-      # pytorch/pytorch binaries are also manylinux_2_17 compliant but they
-      # pretend that they're manylinux1 compliant so we do the same.
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
@@ -139,7 +136,7 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
-          python scripts/verify_nightly_version.py
+          python packaging/verify_nightly_version.py
       - name: Run tests
         run: |
           set -e
@@ -147,6 +144,8 @@ jobs:
           mkdir test-reports
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -m torch.utils.collect_env
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly nightly
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
@@ -185,6 +184,10 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "${PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not set; skipping PyPI upload."
+            exit 0
+          fi
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -mpip install twine
           python -m twine upload \
@@ -292,7 +295,7 @@ jobs:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
-          python scripts/verify_nightly_version.py
+          python packaging/verify_nightly_version.py
       - name: Run tests
         shell: bash
         run: |
@@ -300,6 +303,8 @@ jobs:
           export IN_CI=1
           mkdir test-reports
           python -m torch.utils.collect_env
+          bash .github/unittest/helpers/assert_torch_version.sh nightly
+          bash .github/unittest/helpers/assert_torch_tensordict_versions.sh nightly nightly
           python -c "import torchrl; print(torchrl.__version__);from torchrl.data import ReplayBuffer"
           EXIT_STATUS=0
           pytest test/smoke_test.py -v --durations 200
@@ -333,6 +338,10 @@ jobs:
         env:
             PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          if [ -z "${PYPI_TOKEN:-}" ]; then
+            echo "PYPI_TOKEN is not set; skipping PyPI upload."
+            exit 0
+          fi
           python -mpip install twine
           python -m twine upload \
               --username __token__ \
