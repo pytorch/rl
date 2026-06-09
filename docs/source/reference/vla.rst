@@ -121,6 +121,13 @@ policy for tests and tutorials.
     TinyVLA
     LeRobotPolicyWrapper
 
+At inference a chunk policy predicts ``H`` actions while the environment consumes
+one per step. :class:`~torchrl.modules.ActionChunkExecutor` -- a general
+chunk-execution policy wrapper documented alongside the other actor modules --
+wraps any chunk-predicting policy, emits one action per step and re-plans every
+``replan_interval`` steps (receding horizon); it complements
+:class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`.
+
 Objectives
 ----------
 

@@ -11,7 +11,7 @@ import pytest
 import torch
 from _modules_common import _has_transformers
 from tensordict import NonTensorData, NonTensorStack, TensorDict
-from tensordict.nn import CompositeDistribution, TensorDictModule
+from tensordict.nn import CompositeDistribution, TensorDictModule, TensorDictModuleBase
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
@@ -19,6 +19,7 @@ from torch import distributions as dist, nn
 from torchrl.data import Bounded, Composite
 from torchrl.envs import CatFrames, Compose, InitTracker, SerialEnv, TransformedEnv
 from torchrl.modules import (
+    ActionChunkExecutor,
     DiffusionActor,
     MultiStepActorWrapper,
     ProbabilisticActor,
@@ -894,6 +895,102 @@ class TestLeRobotPolicyWrapper:
             LeRobotPolicyWrapper.from_pretrained(
                 "fake/repo", action_dim=7, chunk_size=4
             )
+
+
+class _FakeChunkPolicy(TensorDictModuleBase):
+    """A policy writing a known chunk: chunk[b, h, :] = calls*10 + h."""
+
+    def __init__(self, chunk_size, action_dim):
+        super().__init__()
+        self.in_keys = [("observation", "image")]
+        self.out_keys = ["action_chunk"]
+        self.chunk_size = chunk_size
+        self.action_dim = action_dim
+        self.calls = 0
+
+    def forward(self, tensordict):
+        b = tensordict.get(("observation", "image")).shape[0]
+        h = torch.arange(self.chunk_size).view(1, self.chunk_size, 1)
+        chunk = (
+            (self.calls * 10 + h).expand(b, self.chunk_size, self.action_dim).float()
+        )
+        self.calls += 1
+        tensordict.set("action_chunk", chunk)
+        return tensordict
+
+
+def _exec_obs(batch=2, is_init=None):
+    data = {"observation": {"image": torch.zeros(batch, 3, 8, 8)}}
+    if is_init is not None:
+        data["is_init"] = is_init
+    return TensorDict(data, batch_size=[batch])
+
+
+class TestActionChunkExecutor:
+    def test_one_action_per_step(self):
+        ex = ActionChunkExecutor(_FakeChunkPolicy(4, 3))
+        out = ex(_exec_obs(batch=2))
+        assert out["action"].shape == torch.Size([2, 3])
+
+    def test_declares_is_init_dependency(self):
+        ex = ActionChunkExecutor(_FakeChunkPolicy(4, 3))
+        assert "is_init" in ex.in_keys
+
+    def test_receding_horizon_and_skips_policy(self):
+        ex = ActionChunkExecutor(_FakeChunkPolicy(4, 3), replan_interval=2)
+        served = [ex(_exec_obs())["action"][0, 0].item() for _ in range(5)]
+        # serve chunk0[0], chunk0[1], replan -> chunk1[0], chunk1[1], replan -> chunk2[0]
+        assert served == [0.0, 1.0, 10.0, 11.0, 20.0]
+        assert ex.policy.calls == 3  # the policy is skipped on the in-between steps
+
+    def test_open_loop_default(self):
+        ex = ActionChunkExecutor(
+            _FakeChunkPolicy(4, 2)
+        )  # replan_interval defaults to 4
+        served = [ex(_exec_obs())["action"][0, 0].item() for _ in range(4)]
+        assert served == [0.0, 1.0, 2.0, 3.0]
+        assert ex.policy.calls == 1
+
+    def test_reset_via_is_init(self):
+        ex = ActionChunkExecutor(_FakeChunkPolicy(4, 3), replan_interval=4)
+        ex(_exec_obs())
+        ex(_exec_obs())
+        out = ex(_exec_obs(is_init=torch.tensor([[True], [False]])))["action"][:, 0]
+        assert out[0].item() == 10.0  # env 0 was reset -> replanned (new chunk[0])
+        assert out[1].item() == 2.0  # env 1 continues the cached chunk
+
+    def test_reset_method(self):
+        ex = ActionChunkExecutor(_FakeChunkPolicy(4, 3), replan_interval=4)
+        ex(_exec_obs())
+        ex.reset()
+        assert ex._chunk is None and ex._t is None
+        assert ex(_exec_obs())["action"][0, 0].item() == 10.0  # fresh plan
+
+    def test_invalid_replan_interval(self):
+        with pytest.raises(ValueError, match="replan_interval"):
+            ActionChunkExecutor(_FakeChunkPolicy(4, 3), replan_interval=5)
+
+    def test_chunk_size_required(self):
+        policy = TensorDictModuleBase()
+        policy.in_keys = [("observation", "image")]
+        policy.out_keys = ["action_chunk"]
+        with pytest.raises(ValueError, match="chunk_size"):
+            ActionChunkExecutor(policy)
+
+    def test_with_tinyvla(self):
+        policy = TinyVLA(action_dim=7, chunk_size=4)
+        ex = ActionChunkExecutor(policy, replan_interval=2)
+        td = TensorDict(
+            {
+                "observation": {
+                    "image": torch.zeros(2, 3, 16, 16, dtype=torch.uint8),
+                    "state": torch.zeros(2, 5),
+                },
+                "language_instruction": NonTensorStack("a", "b"),
+            },
+            batch_size=[2],
+        )
+        assert ex(td)["action"].shape == torch.Size([2, 7])
 
 
 if __name__ == "__main__":
