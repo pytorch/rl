@@ -21,7 +21,7 @@ example (data, chunking, behavior cloning, chunked inference and RL fine-tuning)
     imported lazily; ``import torchrl`` stays lightweight.
 
 Canonical TensorDict schema
-----------------------------
+---------------------------
 
 VLA components agree on a single :class:`~tensordict.utils.NestedKey` layout so
 that datasets, transforms, policies and losses interoperate without lossy
