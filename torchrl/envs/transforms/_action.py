@@ -32,19 +32,30 @@ from torchrl.data.tensor_specs import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from torchrl.data.vla import RobotDatasetMetadata
 
 if TYPE_CHECKING:
     from typing import Self
 else:
     Self = Any
 
+from torchrl.data.vla.schema import (
+    ACTION_CHUNK_KEY,
+    ACTION_IS_PAD_KEY,
+    ACTION_KEY,
+    ACTION_TOKENS_KEY,
+)
+from torchrl.data.vla.tokenizers import ActionTokenizerBase
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
+    "ActionNormalize",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "DiscreteActionProjection",
     "FlattenAction",
     "MultiAction",
@@ -940,6 +951,12 @@ class ActionScaling(Transform):
         tensor([-1., -1., -1., -1., -1., -1., -1.])
         >>> env.action_spec.space.high
         tensor([1., 1., 1., 1., 1., 1., 1.])
+
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionNormalize` -- the
+        forward-only, dataset-statistics-driven action normalizer for the
+        offline / replay-buffer training path (with an explicit ``denormalize``
+        for execution), as opposed to this bidirectional, spec-coupled env-side
+        scaler.
     """
 
     invertible = True
@@ -1468,3 +1485,400 @@ class FlattenAction(Transform):
             f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)}, "
             f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
+
+
+class ActionChunkTransform(Transform):
+    """Build fixed-length action chunks from a trajectory window.
+
+    Action *chunking* is the defining trait of modern VLA policies (ACT,
+    OpenVLA-OFT, pi0, SmolVLA): instead of predicting a single action, the
+    policy predicts a short horizon ``H`` of future actions. This transform
+    turns a per-step action tensor ``[*B, T, action_dim]`` into the
+    corresponding training target ``action_chunk`` of shape
+    ``[*B, T, H, action_dim]`` -- for each time step ``t`` it gathers the
+    actions ``a[t], a[t+1], ..., a[t+H-1]`` -- together with a boolean
+    ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
+    end of the window (and were filled by repeating the last available action).
+
+    It is a replay-buffer / offline transform that operates on **time-structured**
+    data: the action tensor must be shaped ``[*B, T, action_dim]`` and each row
+    along ``time_dim`` must be a single contiguous trajectory window. Chunks are
+    built independently per row and never cross a row boundary; the downstream
+    chunked behavior-cloning loss masks the padded steps out using
+    ``action_is_pad``.
+
+    .. note::
+        A :class:`~torchrl.data.SliceSampler` returns a *flat* ``[B * T, ...]``
+        batch -- reshape it to ``[num_slices, slice_len, ...]`` before applying
+        this transform, otherwise chunks would span across trajectory boundaries.
+        Datasets that store one trajectory window per item (e.g.
+        :class:`~torchrl.data.datasets.OpenXExperienceReplay`) already yield
+        time-structured ``[batch, T, ...]`` samples and can use this transform
+        directly. This transform cannot be used as a
+        :class:`~torchrl.envs.TransformedEnv` transform.
+
+    Args:
+        chunk_size (int): the horizon ``H`` of the action chunk.
+
+    Keyword Args:
+        action_key (NestedKey): the per-step action to read.
+            Defaults to ``"action"``.
+        chunk_key (NestedKey): where to write the action chunk.
+            Defaults to ``"action_chunk"``.
+        pad_key (NestedKey): where to write the padding mask.
+            Defaults to ``"action_is_pad"``.
+        time_dim (int): the time dimension of the action tensor (the action
+            dimension must come right after it). Defaults to ``-2``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import ActionChunkTransform
+        >>> t = ActionChunkTransform(chunk_size=3)
+        >>> td = TensorDict(
+        ...     {"action": torch.arange(4).view(1, 4, 1).float()}, batch_size=[1, 4]
+        ... )
+        >>> td = t(td)
+        >>> td["action_chunk"].shape
+        torch.Size([1, 4, 3, 1])
+        >>> td["action_chunk"][0, :, :, 0]
+        tensor([[0., 1., 2.],
+                [1., 2., 3.],
+                [2., 3., 3.],
+                [3., 3., 3.]])
+        >>> td["action_is_pad"][0]
+        tensor([[False, False, False],
+                [False, False, False],
+                [False, False,  True],
+                [False,  True,  True]])
+    """
+
+    ENV_ERR = (
+        "ActionChunkTransform is a replay-buffer / offline transform and cannot "
+        "be used as an environment transform."
+    )
+
+    def __init__(
+        self,
+        chunk_size: int,
+        *,
+        action_key: NestedKey = ACTION_KEY,
+        chunk_key: NestedKey = ACTION_CHUNK_KEY,
+        pad_key: NestedKey = ACTION_IS_PAD_KEY,
+        time_dim: int = -2,
+    ) -> None:
+        if chunk_size < 1:
+            raise ValueError(f"chunk_size must be >= 1, got {chunk_size}.")
+        self.chunk_size = int(chunk_size)
+        self.time_dim = int(time_dim)
+        super().__init__(in_keys=[action_key], out_keys=[chunk_key, pad_key])
+
+    @property
+    def action_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    @property
+    def chunk_key(self) -> NestedKey:
+        return self.out_keys[0]
+
+    @property
+    def pad_key(self) -> NestedKey:
+        return self.out_keys[1]
+
+    def _build_chunk(self, action: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        H = self.chunk_size
+        dim = self.time_dim if self.time_dim >= 0 else action.dim() + self.time_dim
+        if dim != action.dim() - 2:
+            raise ValueError(
+                f"{type(self).__name__} expects the action dimension to immediately "
+                f"follow the time dimension (action shaped [..., T, action_dim]); got "
+                f"action.shape={tuple(action.shape)} with time_dim={self.time_dim}."
+            )
+        T = action.shape[dim]
+        device = action.device
+        # idx[t, h] = t + h, clamped to the last valid step; is_pad marks h that
+        # ran past the end of the window.
+        idx = torch.arange(T, device=device).unsqueeze(-1) + torch.arange(
+            H, device=device
+        ).unsqueeze(0)
+        is_pad = idx >= T
+        idx = idx.clamp_max(T - 1).reshape(-1)
+        chunk = action.index_select(dim, idx).unflatten(dim, (T, H))
+        is_pad = is_pad.expand(chunk.shape[:-1]).contiguous()
+        return chunk, is_pad
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = tensordict.get(self.action_key, default=None)
+        if action is None:
+            if self.missing_tolerance:
+                return tensordict
+            raise KeyError(
+                f"{type(self).__name__}: '{self.action_key}' not found in tensordict "
+                f"{tensordict}."
+            )
+        chunk, is_pad = self._build_chunk(action)
+        tensordict.set(self.chunk_key, chunk)
+        tensordict.set(self.pad_key, is_pad)
+        return tensordict
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def set_container(self, container) -> None:
+        if (
+            isinstance(container, EnvBase)
+            or getattr(container, "parent", None) is not None
+        ):
+            raise ValueError(self.ENV_ERR)
+        super().set_container(container)
+
+
+class ActionNormalize(Transform):
+    """Affine action normalization for VLA training and execution.
+
+    The action-space analogue of :class:`~torchrl.envs.transforms.ObservationNorm`.
+    On the forward (data) path it normalizes expert actions, so the policy is
+    trained to predict normalized actions::
+
+        normalized = (action - loc) / scale
+
+    A policy operating in this normalized space is mapped back to raw actions
+    with :meth:`denormalize` (the inverse affine map
+    ``action = normalized * scale + loc``) before they are sent to a simulator
+    or robot.
+
+    ``loc`` and ``scale`` are per-dimension statistics. Use :meth:`from_stats`
+    (mean/std or min/max) or :meth:`from_metadata` to build them from a
+    :class:`~torchrl.data.vla.RobotDatasetMetadata`.
+
+    .. note::
+        This is a replay-buffer / offline transform: only the forward direction
+        is wired, so it normalizes on ``sample`` and is a no-op on ``extend``,
+        and it cannot be used as a :class:`~torchrl.envs.TransformedEnv`
+        transform. Use :meth:`denormalize` to map a policy's predicted action
+        back to the raw action space for execution. For env-side action
+        normalization derived from a bounded action spec, use
+        :class:`~torchrl.envs.transforms.ActionScaling` instead.
+
+    Args:
+        loc (float or torch.Tensor): per-dimension location (e.g. action mean).
+        scale (float or torch.Tensor): per-dimension scale (e.g. action std).
+
+    Keyword Args:
+        action_key (NestedKey): the action to normalize. Defaults to ``"action"``.
+        out_key (NestedKey, optional): where to write the normalized action.
+            Defaults to ``action_key`` (in place).
+        eps (float): floor applied to ``scale`` to avoid division by zero.
+            Defaults to ``1e-6``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import ActionNormalize
+        >>> t = ActionNormalize(loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0]))
+        >>> td = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
+        >>> td["action"]
+        tensor([[1., 1.]])
+        >>> t.denormalize(td["action"])
+        tensor([[3., 6.]])
+
+    .. seealso::
+        :class:`~torchrl.envs.transforms.ObservationNorm` (the observation-side
+        affine normalizer) and :class:`~torchrl.envs.transforms.ActionScaling`
+        (the bidirectional, spec-coupled env-side action scaler). Use
+        ``ActionNormalize`` for the forward-only, dataset-statistics-driven
+        training path with an explicit :meth:`denormalize` for execution; use
+        ``ActionScaling`` to expose a normalized action space to a policy in a
+        :class:`~torchrl.envs.TransformedEnv`.
+    """
+
+    ENV_ERR = (
+        "ActionNormalize is a replay-buffer / offline transform and cannot be "
+        "used as an environment transform. Use ActionNormalize.denormalize() on "
+        "the execution path, or ActionScaling for env-side action normalization."
+    )
+
+    def __init__(
+        self,
+        loc: float | torch.Tensor,
+        scale: float | torch.Tensor,
+        *,
+        action_key: NestedKey = ACTION_KEY,
+        out_key: NestedKey | None = None,
+        eps: float = 1e-6,
+    ) -> None:
+        loc = torch.as_tensor(loc, dtype=torch.float32)
+        scale = torch.as_tensor(scale, dtype=torch.float32).clamp_min(eps)
+        if loc.shape != scale.shape:
+            raise ValueError(
+                f"loc and scale must have the same shape, got {tuple(loc.shape)} "
+                f"and {tuple(scale.shape)}."
+            )
+        out_key = action_key if out_key is None else out_key
+        super().__init__(in_keys=[action_key], out_keys=[out_key])
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale)
+
+    @property
+    def action_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    def _check_dim(self, action: torch.Tensor) -> None:
+        # Guard the silent-broadcast hazard: a per-dimension loc/scale must
+        # match the action's trailing dim. A scalar (or shape-[1]) loc/scale
+        # broadcasts freely and is left alone.
+        if self.loc.numel() > 1 and action.shape[-1] != self.loc.shape[-1]:
+            raise ValueError(
+                f"action last dim {action.shape[-1]} does not match the "
+                f"loc/scale dimension {self.loc.shape[-1]}."
+            )
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        self._check_dim(action)
+        return (action - self.loc) / self.scale
+
+    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        self._check_dim(action)
+        return action * self.scale + self.loc
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def set_container(self, container) -> None:
+        if (
+            isinstance(container, EnvBase)
+            or getattr(container, "parent", None) is not None
+        ):
+            raise ValueError(self.ENV_ERR)
+        super().set_container(container)
+
+    def normalize(self, action: torch.Tensor) -> torch.Tensor:
+        """Map a raw action to the normalized space ``(action - loc) / scale``."""
+        return self._apply_transform(action)
+
+    def denormalize(self, action: torch.Tensor) -> torch.Tensor:
+        """Map a normalized action back to raw actions ``action * scale + loc``."""
+        return self._inv_apply_transform(action)
+
+    @classmethod
+    def from_stats(
+        cls,
+        *,
+        mean: torch.Tensor | None = None,
+        std: torch.Tensor | None = None,
+        low: torch.Tensor | None = None,
+        high: torch.Tensor | None = None,
+        **kwargs,
+    ) -> ActionNormalize:
+        """Build from mean/std (zero-mean, unit-std) or min/max (maps to ``[-1, 1]``).
+
+        Provide exactly one complete pair: ``mean`` and ``std``, or ``low`` and
+        ``high``.
+        """
+        if (mean is None) != (std is None):
+            raise ValueError("mean and std must be provided together.")
+        if (low is None) != (high is None):
+            raise ValueError("low and high must be provided together.")
+        if (mean is not None) == (low is not None):
+            raise ValueError("Provide exactly one of (mean, std) or (low, high).")
+        if mean is not None:
+            loc = torch.as_tensor(mean, dtype=torch.float32)
+            scale = torch.as_tensor(std, dtype=torch.float32)
+        else:
+            low = torch.as_tensor(low, dtype=torch.float32)
+            high = torch.as_tensor(high, dtype=torch.float32)
+            loc = (low + high) / 2
+            scale = (high - low) / 2
+        return cls(loc, scale, **kwargs)
+
+    @classmethod
+    def from_metadata(cls, metadata: RobotDatasetMetadata, **kwargs) -> ActionNormalize:
+        """Build from the action statistics of a
+        :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
+        kwargs.setdefault("action_key", metadata.action_key)
+        if metadata.action_mean is not None and metadata.action_std is not None:
+            return cls.from_stats(
+                mean=metadata.action_mean, std=metadata.action_std, **kwargs
+            )
+        if metadata.action_low is not None and metadata.action_high is not None:
+            return cls.from_stats(
+                low=metadata.action_low, high=metadata.action_high, **kwargs
+            )
+        raise ValueError(
+            f"metadata {metadata.dataset_id!r} has no action normalization statistics "
+            "(set action_mean/action_std or action_low/action_high)."
+        )
+
+
+class ActionTokenizerTransform(Transform):
+    """Encode continuous actions into discrete tokens with an action tokenizer.
+
+    A replay-buffer / offline transform that wraps an
+    :class:`~torchrl.data.vla.ActionTokenizerBase`: on the forward path it
+    encodes the continuous action (or action chunk) at ``in_key`` into discrete
+    token ids at ``out_key`` -- the training target / input for an
+    autoregressive (RT-2 / OpenVLA-style) token VLA. Decoding tokens back to
+    continuous actions is done with the wrapped tokenizer's ``decode`` (the
+    transform itself is forward-only).
+
+    Args:
+        tokenizer (ActionTokenizerBase): the tokenizer to apply.
+
+    Keyword Args:
+        in_key (NestedKey): the continuous action to encode.
+            Defaults to ``"action"``.
+        out_key (NestedKey): where to write the token ids.
+            Defaults to ``"action_tokens"``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.vla import UniformActionTokenizer
+        >>> from torchrl.envs.transforms import ActionTokenizerTransform
+        >>> tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        >>> t = ActionTokenizerTransform(tok)
+        >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        >>> td["action_tokens"]
+        tensor([[  0, 128, 255]])
+    """
+
+    ENV_ERR = (
+        "ActionTokenizerTransform is a replay-buffer / offline transform and "
+        "cannot be used as an environment transform."
+    )
+
+    def __init__(
+        self,
+        tokenizer: ActionTokenizerBase,
+        *,
+        in_key: NestedKey = ACTION_KEY,
+        out_key: NestedKey = ACTION_TOKENS_KEY,
+    ) -> None:
+        if not isinstance(tokenizer, ActionTokenizerBase):
+            raise TypeError(
+                f"tokenizer must be an ActionTokenizerBase, got {type(tokenizer)}."
+            )
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.tokenizer = tokenizer
+
+    @property
+    def in_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    @property
+    def out_key(self) -> NestedKey:
+        return self.out_keys[0]
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        return self.tokenizer.encode(action)
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def set_container(self, container) -> None:
+        if (
+            isinstance(container, EnvBase)
+            or getattr(container, "parent", None) is not None
+        ):
+            raise ValueError(self.ENV_ERR)
+        super().set_container(container)

@@ -117,6 +117,7 @@ from .mcts import (  # usort:skip
     UCB1TunedScore,
     UCBScore,
 )
+from .vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase  # usort:skip
 
 __all__ = [
     "Actor",
@@ -162,6 +163,7 @@ __all__ = [
     "LSTM",
     "LSTMCell",
     "LSTMModule",
+    "LeRobotPolicyWrapper",
     "MCTSScore",
     "MCTSScores",
     "MLP",
@@ -210,10 +212,12 @@ __all__ = [
     "TanhDelta",
     "TanhModule",
     "TanhNormal",
+    "TinyVLA",
     "TruncatedNormal",
     "UCB1TunedScore",
     "UCBScore",
     "VDNMixer",
+    "VLAWrapperBase",
     "ValueNorm",
     "ValueOperator",
     "VmapModule",
