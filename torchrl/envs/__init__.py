@@ -74,9 +74,12 @@ from .libs import (
 )
 from .model_based import DreamerDecoder, DreamerEnv, ImaginedEnv, ModelBasedEnvBase
 from .transforms import (
+    ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
+    ActionNormalize,
     ActionScaling,
+    ActionTokenizerTransform,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -168,9 +171,12 @@ from .utils import (
 )
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
+    "ActionNormalize",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "AntEnv",
     "CubeBowlEnv",
     "VecNormV2",
