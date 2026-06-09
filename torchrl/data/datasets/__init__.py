@@ -8,6 +8,7 @@ from __future__ import annotations
 # Import classes that don't have external dependencies
 from .atari_dqn import AtariDQNExperienceReplay
 from .common import BaseDatasetExperienceReplay
+from .lerobot import lerobot_columns_to_tensordict, LeRobotExperienceReplay
 
 # Conditional imports for classes with external dependencies
 try:
@@ -51,6 +52,8 @@ __all__ = [
     "D4RLExperienceReplay",
     "MinariExperienceReplay",
     "GenDGRLExperienceReplay",
+    "LeRobotExperienceReplay",
+    "lerobot_columns_to_tensordict",
     "OpenMLExperienceReplay",
     "OpenXExperienceReplay",
     "RobosetExperienceReplay",
