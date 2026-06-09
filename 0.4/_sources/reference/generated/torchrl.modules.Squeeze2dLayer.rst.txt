@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+Squeeze2dLayer
+==============
+
+.. autoclass:: Squeeze2dLayer
+    :members:

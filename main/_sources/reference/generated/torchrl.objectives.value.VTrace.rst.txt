@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives.value
+
+
+VTrace
+======
+
+.. autoclass:: VTrace
+    :members:

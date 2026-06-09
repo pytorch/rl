@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl
+
+
+cuda_memory_profile
+===================
+
+.. autoclass:: cuda_memory_profile
+    :members:
+    :inherited-members:

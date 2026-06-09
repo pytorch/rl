@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+CenterCrop
+==========
+
+.. autoclass:: CenterCrop
+    :members:

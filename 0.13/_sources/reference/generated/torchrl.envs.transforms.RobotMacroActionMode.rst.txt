@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+RobotMacroActionMode
+====================
+
+.. autoclass:: RobotMacroActionMode
+    :members:

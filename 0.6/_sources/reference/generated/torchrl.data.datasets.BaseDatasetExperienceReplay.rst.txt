@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+BaseDatasetExperienceReplay
+===========================
+
+.. autoclass:: BaseDatasetExperienceReplay
+    :members:
+    :inherited-members:

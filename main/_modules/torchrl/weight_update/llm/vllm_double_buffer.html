@@ -1,0 +1,2141 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.weight_update.llm.vllm_double_buffer &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/weight_update/llm/vllm_double_buffer';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.weight_update.llm.vllm_double_buffer - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.weig...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.weight_update.llm.vllm_double_buffer">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/weight_update/llm/vllm_double_buffer</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.weight_update.llm.vllm_double_buffer</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="sd">&quot;&quot;&quot;vLLM weight synchronization using double-buffered shared memory.</span>
+
+<span class="sd">This module provides weight synchronization for vLLM engines using a double-buffer</span>
+<span class="sd">approach with memory-mapped TensorDict storage.</span>
+
+<span class="sd">**Architecture Overview**</span>
+
+<span class="sd">The double-buffer synchronization uses a simpler architecture compared to NCCL:</span>
+
+<span class="sd">1. **Sender (Trainer)**</span>
+<span class="sd">   - Extracts weights from the training model</span>
+<span class="sd">   - Writes weights to shared directory using TensorDict.memmap</span>
+<span class="sd">   - No coordination needed - receiver pulls when ready</span>
+
+<span class="sd">2. **Receiver (vLLM Worker)**</span>
+<span class="sd">   - Uses RPC to tell all vLLM workers to load from shared directory</span>
+<span class="sd">   - Each worker reads weights and calls model.load_weights()</span>
+<span class="sd">   - Can trigger at any time (pull-based)</span>
+
+<span class="sd">**Key Differences from NCCL**</span>
+
+<span class="sd">- **Async vs Sync**: Double-buffer is asynchronous (no coordination required)</span>
+<span class="sd">- **Push vs Pull**: Sender writes, receiver pulls when ready via RPC</span>
+<span class="sd">- **Simplicity**: No NCCL collectives, uses file I/O</span>
+<span class="sd">- **Storage**: Uses shared filesystem instead of GPU-GPU transfer</span>
+
+<span class="sd">**RPC Pattern**</span>
+
+<span class="sd">Like the NCCL implementation, this uses RPC to coordinate workers:</span>
+<span class="sd">- RPC tells workers: &quot;load weights from this directory&quot;</span>
+<span class="sd">- Workers read from shared storage independently</span>
+<span class="sd">- Each worker calls `model_runner.model.load_weights()`</span>
+
+<span class="sd">**Usage Example**</span>
+
+<span class="sd">.. code-block:: python</span>
+
+<span class="sd">    # Create scheme with shared directory</span>
+<span class="sd">    scheme = VLLMDoubleBufferSyncScheme(</span>
+<span class="sd">        remote_addr=&quot;/shared/weights&quot;,</span>
+<span class="sd">        num_threads=4</span>
+<span class="sd">    )</span>
+
+<span class="sd">    # Sender side (trainer)</span>
+<span class="sd">    sender = scheme.create_sender()</span>
+<span class="sd">    sender.register_model(policy_model)</span>
+<span class="sd">    sender.update_weights()  # Writes to /shared/weights</span>
+
+<span class="sd">    # Receiver side (vLLM worker - AsyncVLLM)</span>
+<span class="sd">    receiver = scheme.create_receiver(vllm_engine)</span>
+<span class="sd">    receiver.poll_and_apply()  # RPC to workers -&gt; load from /shared/weights</span>
+
+<span class="sd">**Node-to-Node Transfer**</span>
+
+<span class="sd">For distributed setups, you can use different addresses:</span>
+<span class="sd">- Sender writes to local path</span>
+<span class="sd">- Use NFS, rsync, or other file sync mechanisms</span>
+<span class="sd">- Receiver reads from its local mount point</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">torchrl.weight_update.weight_sync_schemes</span> <span class="kn">import</span> <span class="n">WeightStrategy</span><span class="p">,</span> <span class="n">WeightSyncScheme</span>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferTransport">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport">[docs]</a>
+<span class="k">class</span> <span class="nc">VLLMDoubleBufferTransport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transport for vLLM using double-buffered memory-mapped storage.</span>
+
+<span class="sd">    This transport writes weights to a shared directory and reads them back</span>
+<span class="sd">    using TensorDict&#39;s memory-mapping capabilities.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        remote_addr: Directory path where sender writes weights.</span>
+<span class="sd">        local_addr: Directory path where receiver reads weights.</span>
+<span class="sd">            If None, uses same path as remote_addr (for local testing).</span>
+<span class="sd">        num_threads: Number of threads for memmap operations.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">remote_addr</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">local_addr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">local_addr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">local_addr</span> <span class="o">=</span> <span class="n">remote_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span> <span class="o">=</span> <span class="n">remote_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span> <span class="o">=</span> <span class="n">local_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
+
+<div class="viewcode-block" id="VLLMDoubleBufferTransport.send_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.send_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">send_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Writes the weights to a shared directory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_id: Identifier for the model (used for logging).</span>
+<span class="sd">            weights: TensorDict or dict of weights to write.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">TensorDictBase</span><span class="p">):</span>
+            <span class="c1"># Ensure it has a batch_size</span>
+            <span class="k">if</span> <span class="n">weights</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <span class="p">():</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing weights for model &#39;</span><span class="si">{</span><span class="n">model_id</span><span class="si">}</span><span class="s2">&#39; to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">weights</span><span class="o">.</span><span class="n">memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span><span class="p">,</span> <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weights written successfully to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferTransport.receive_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.receive_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">receive_weights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reads the weights from the shared directory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Ignored (file-based transport is instant).</span>
+<span class="sd">            weights: Ignored.</span>
+<span class="sd">            model: Ignored.</span>
+<span class="sd">            strategy: Ignored.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TensorDict with flattened keys containing the weights.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Timeout is ignored since file-based transport doesn&#39;t involve waiting</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Reading weights from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">received_weights</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="o">.</span><span class="n">load_memmap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="p">)</span>
+        <span class="n">received_weights</span> <span class="o">=</span> <span class="n">received_weights</span><span class="o">.</span><span class="n">flatten_keys</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weights read successfully from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">received_weights</span></div>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferTransport.check_connection">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferTransport.html#torchrl.weight_update.llm.VLLMDoubleBufferTransport.check_connection">[docs]</a>
+    <span class="k">def</span> <span class="nf">check_connection</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if the transport is ready.</span>
+
+<span class="sd">        For file-based transport, always returns True.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferSyncScheme">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme">[docs]</a>
+<span class="k">class</span> <span class="nc">VLLMDoubleBufferSyncScheme</span><span class="p">(</span><span class="n">WeightSyncScheme</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Weight synchronization scheme for vLLM using double-buffered storage.</span>
+
+<span class="sd">    This scheme uses memory-mapped TensorDict storage to transfer weights from</span>
+<span class="sd">    a trainer to vLLM inference workers. It&#39;s simpler than NCCL-based approaches</span>
+<span class="sd">    and doesn&#39;t require process group coordination.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        remote_addr: Directory path where sender writes weights.</span>
+<span class="sd">        local_addr: Directory path where receiver reads weights.</span>
+<span class="sd">            If None, uses same path as remote_addr (for local testing).</span>
+<span class="sd">        num_threads: Number of threads for memmap operations. Defaults to 1.</span>
+<span class="sd">        strategy: Weight extraction strategy (&quot;tensordict&quot; or &quot;state_dict&quot;).</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # Local testing (same machine)</span>
+<span class="sd">        &gt;&gt;&gt; scheme = VLLMDoubleBufferSyncScheme(</span>
+<span class="sd">        ...     remote_addr=&quot;/tmp/weights&quot;,</span>
+<span class="sd">        ...     strategy=&quot;tensordict&quot;</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Distributed setup (different machines)</span>
+<span class="sd">        &gt;&gt;&gt; # On trainer node:</span>
+<span class="sd">        &gt;&gt;&gt; scheme = VLLMDoubleBufferSyncScheme(</span>
+<span class="sd">        ...     remote_addr=&quot;/mnt/shared/weights&quot;,  # NFS mount</span>
+<span class="sd">        ...     num_threads=4</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # On vLLM worker node:</span>
+<span class="sd">        &gt;&gt;&gt; scheme = VLLMDoubleBufferSyncScheme(</span>
+<span class="sd">        ...     remote_addr=&quot;/mnt/shared/weights&quot;,  # Same NFS mount</span>
+<span class="sd">        ...     num_threads=4</span>
+<span class="sd">        ... )</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">remote_addr</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">local_addr</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">num_threads</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">strategy</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;tensordict&quot;</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;tensordict&quot;</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span> <span class="o">=</span> <span class="n">remote_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span> <span class="o">=</span> <span class="n">local_addr</span> <span class="k">if</span> <span class="n">local_addr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">remote_addr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span> <span class="o">=</span> <span class="n">num_threads</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strategy_name</span> <span class="o">=</span> <span class="n">strategy</span>
+
+<div class="viewcode-block" id="VLLMDoubleBufferSyncScheme.create_transport">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_transport">[docs]</a>
+    <span class="k">def</span> <span class="nf">create_transport</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMDoubleBufferTransport</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create transport for double-buffered storage.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            **kwargs: Not used for file-based transport (kept for API compatibility).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A VLLMDoubleBufferTransport instance.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">VLLMDoubleBufferTransport</span><span class="p">(</span>
+            <span class="n">remote_addr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">remote_addr</span><span class="p">,</span>
+            <span class="n">local_addr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">local_addr</span><span class="p">,</span>
+            <span class="n">num_threads</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_threads</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferSyncScheme.create_sender">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_sender">[docs]</a>
+    <span class="k">def</span> <span class="nf">create_sender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMDoubleBufferWeightSender</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a weight sender for the trainer process.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">VLLMDoubleBufferWeightSender</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferSyncScheme.create_receiver">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.html#torchrl.weight_update.llm.VLLMDoubleBufferSyncScheme.create_receiver">[docs]</a>
+    <span class="k">def</span> <span class="nf">create_receiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VLLMDoubleBufferWeightReceiver</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a weight receiver for a vLLM worker process.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            vllm_engine: The vLLM engine instance (must have .llm_engine.model_executor attribute).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">VLLMDoubleBufferWeightReceiver</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferWeightSender">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender">[docs]</a>
+<span class="k">class</span> <span class="nc">VLLMDoubleBufferWeightSender</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sends weights to vLLM workers using double-buffered storage.</span>
+
+<span class="sd">    This sender extracts weights from a training model and writes them to</span>
+<span class="sd">    a shared directory using TensorDict.memmap.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; sender = scheme.create_sender()</span>
+<span class="sd">        &gt;&gt;&gt; sender.register_model(policy_model)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # During training loop</span>
+<span class="sd">        &gt;&gt;&gt; sender.update_weights()  # Writes current weights to shared storage</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scheme</span><span class="p">:</span> <span class="n">VLLMDoubleBufferSyncScheme</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span> <span class="o">=</span> <span class="n">scheme</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="VLLMDoubleBufferWeightSender.register_model">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.register_model">[docs]</a>
+    <span class="k">def</span> <span class="nf">register_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Register the model to extract weights from.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model: The model to extract weights from (e.g., TransformersWrapper).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span> <span class="nn">weakref</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span> <span class="o">=</span> <span class="n">weakref</span><span class="o">.</span><span class="n">ref</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="c1"># Create transport on registration</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">create_transport</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Registered model for double-buffer weight sync to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">remote_addr</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferWeightSender.update_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightSender.update_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract and write weights to shared storage.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Optional weights to send. If None, extracts from registered model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Transport not initialized. Call register_model first.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract weights if not provided</span>
+        <span class="k">if</span> <span class="n">weights</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_ref</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Model reference is dead&quot;</span><span class="p">)</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Ensure weights are in the right format</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="s2">&quot;state_dict&quot;</span><span class="p">):</span>
+                <span class="c1"># It&#39;s a module, extract</span>
+                <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span><span class="o">.</span><span class="n">extract_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+
+        <span class="c1"># Send via transport</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">send_weights</span><span class="p">(</span><span class="s2">&quot;vllm_model&quot;</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver">[docs]</a>
+<span class="k">class</span> <span class="nc">VLLMDoubleBufferWeightReceiver</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Receives weights in a vLLM worker using double-buffered storage.</span>
+
+<span class="sd">    This receiver reads weights from a shared directory and loads them into</span>
+<span class="sd">    the vLLM engine using the engine&#39;s load_weights interface.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; receiver = scheme.create_receiver(vllm_engine)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Poll for new weights</span>
+<span class="sd">        &gt;&gt;&gt; if receiver.poll_and_apply():</span>
+<span class="sd">        ...     print(&quot;Weights updated!&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scheme</span><span class="p">:</span> <span class="n">VLLMDoubleBufferSyncScheme</span><span class="p">,</span> <span class="n">vllm_engine</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span> <span class="o">=</span> <span class="n">scheme</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_strategy</span> <span class="o">=</span> <span class="n">WeightStrategy</span><span class="p">(</span><span class="n">extract_as</span><span class="o">=</span><span class="n">scheme</span><span class="o">.</span><span class="n">strategy_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span> <span class="o">=</span> <span class="n">vllm_engine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span> <span class="o">=</span> <span class="n">scheme</span><span class="o">.</span><span class="n">create_transport</span><span class="p">()</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Initialized double-buffer receiver reading from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">local_addr</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver.apply_weights">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.apply_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">apply_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">inplace</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply weights to vLLM engine using RPC.</span>
+
+<span class="sd">        This method uses RPC to tell all vLLM workers to load weights from</span>
+<span class="sd">        the shared storage directory. Similar to how AsyncVLLM._update_weights_with_nccl_broadcast_simple</span>
+<span class="sd">        uses collective_rpc to coordinate workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: TensorDict with flattened keys containing weights.</span>
+<span class="sd">            inplace: Whether to apply weights in place. Default is `True`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">inplace</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot apply weights out of place for vLLM double-buffer&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Applying weights to vLLM engine via RPC&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Convert TensorDict to list of (name, tensor) tuples</span>
+        <span class="n">weights_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">weights</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+
+        <span class="c1"># Check if this is an AsyncVLLM instance (uses RPC to coordinate workers)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span><span class="p">,</span> <span class="s2">&quot;collective_rpc&quot;</span><span class="p">):</span>
+            <span class="c1"># AsyncVLLM path: use RPC to tell all workers to load weights</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Using RPC to load </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights across all replicas&quot;</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Call collective_rpc to tell workers to load from shared storage</span>
+            <span class="c1"># The method &#39;load_weights_from_storage&#39; will be called on each worker</span>
+            <span class="n">futures</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span><span class="o">.</span><span class="n">collective_rpc</span><span class="p">(</span>
+                <span class="n">method</span><span class="o">=</span><span class="s2">&quot;load_weights_from_storage&quot;</span><span class="p">,</span>
+                <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_scheme</span><span class="o">.</span><span class="n">local_addr</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">num_threads</span><span class="p">),</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Wait for all workers to complete</span>
+            <span class="kn">import</span> <span class="nn">ray</span>
+
+            <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Weights loaded successfully via RPC&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Direct path for local LLM (non-AsyncVLLM)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Using direct load for local LLM&quot;</span><span class="p">)</span>
+            <span class="n">engine</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span><span class="o">.</span><span class="n">llm_engine</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span><span class="p">,</span> <span class="s2">&quot;llm_engine&quot;</span><span class="p">)</span>
+                <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vllm_engine</span>
+            <span class="p">)</span>
+            <span class="n">worker</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">model_executor</span><span class="o">.</span><span class="n">driver_worker</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">worker</span><span class="o">.</span><span class="n">model_runner</span><span class="o">.</span><span class="n">model</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">load_weights</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Weights loaded successfully&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="VLLMDoubleBufferWeightReceiver.poll_and_apply">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.html#torchrl.weight_update.llm.VLLMDoubleBufferWeightReceiver.poll_and_apply">[docs]</a>
+    <span class="k">def</span> <span class="nf">poll_and_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">180.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Poll for and apply weights from shared storage.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            timeout: Not used for file-based transport (kept for API compatibility).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            True if weights were successfully read and applied, False otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># timeout is not used by file-based transport but kept for API compatibility</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transport</span><span class="o">.</span><span class="n">receive_weights</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">apply_weights</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.weight_update.llm.vllm_double_buffer",
+       "headline": "torchrl.weight_update.llm.vllm_double_buffer",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/weight_update/llm/vllm_double_buffer.html",
+       "articleBody": "Source code for torchrl.weight_update.llm.vllm_double_buffer # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. \"\"\"vLLM weight synchronization using double-buffered shared memory. This module provides weight synchronization for vLLM engines using a double-buffer approach with memory-mapped TensorDict storage. **Architecture Overview** The double-buffer synchronization uses a simpler architecture compared to NCCL: 1. **Sender (Trainer)** - Extracts weights from the training model - Writes weights to shared directory using TensorDict.memmap - No coordination needed - receiver pulls when ready 2. **Receiver (vLLM Worker)** - Uses RPC to tell all vLLM workers to load from shared directory - Each worker reads weights and calls model.load_weights() - Can trigger at any time (pull-based) **Key Differences from NCCL** - **Async vs Sync**: Double-buffer is asynchronous (no coordination required) - **Push vs Pull**: Sender writes, receiver pulls when ready via RPC - **Simplicity**: No NCCL collectives, uses file I/O - **Storage**: Uses shared filesystem instead of GPU-GPU transfer **RPC Pattern** Like the NCCL implementation, this uses RPC to coordinate workers: - RPC tells workers: \"load weights from this directory\" - Workers read from shared storage independently - Each worker calls `model_runner.model.load_weights()` **Usage Example** .. code-block:: python # Create scheme with shared directory scheme = VLLMDoubleBufferSyncScheme( remote_addr=\"/shared/weights\", num_threads=4 ) # Sender side (trainer) sender = scheme.create_sender() sender.register_model(policy_model) sender.update_weights() # Writes to /shared/weights # Receiver side (vLLM worker - AsyncVLLM) receiver = scheme.create_receiver(vllm_engine) receiver.poll_and_apply() # RPC to workers -\u003e load from /shared/weights **Node-to-Node Transfer** For distributed setups, you can use different addresses: - Sender writes to local path - Use NFS, rsync, or other file sync mechanisms - Receiver reads from its local mount point \"\"\" from __future__ import annotations from typing import Any, Literal from tensordict import TensorDict, TensorDictBase from torchrl._utils import logger from torchrl.weight_update.weight_sync_schemes import WeightStrategy, WeightSyncScheme [docs] class VLLMDoubleBufferTransport: \"\"\"Transport for vLLM using double-buffered memory-mapped storage. This transport writes weights to a shared directory and reads them back using TensorDict\u0027s memory-mapping capabilities. Args: remote_addr: Directory path where sender writes weights. local_addr: Directory path where receiver reads weights. If None, uses same path as remote_addr (for local testing). num_threads: Number of threads for memmap operations. \"\"\" def __init__( self, remote_addr: str, local_addr: str | None = None, num_threads: int = 1 ): if local_addr is None: local_addr = remote_addr self.remote_addr = remote_addr self.local_addr = local_addr self.num_threads = num_threads [docs] def send_weights(self, model_id: str, weights: Any) -\u003e None: \"\"\"Writes the weights to a shared directory. Args: model_id: Identifier for the model (used for logging). weights: TensorDict or dict of weights to write. \"\"\" if isinstance(weights, dict): weights = TensorDict(weights, batch_size=[]) elif isinstance(weights, TensorDictBase): # Ensure it has a batch_size if weights.batch_size == (): weights = weights.clone() logger.info(f\"Writing weights for model \u0027{model_id}\u0027 to {self.remote_addr}\") weights.memmap(self.remote_addr, num_threads=self.num_threads) logger.info(f\"Weights written successfully to {self.remote_addr}\") [docs] def receive_weights( self, timeout: float | None = None, *, weights: Any = None, model: Any = None, strategy: Any = None, ) -\u003e Any | None: \"\"\"Reads the weights from the shared directory. Args: timeout: Ignored (file-based transport is instant). weights: Ignored. model: Ignored. strategy: Ignored. Returns: TensorDict with flattened keys containing the weights. \"\"\" # Timeout is ignored since file-based transport doesn\u0027t involve waiting logger.info(f\"Reading weights from {self.local_addr}\") received_weights = TensorDict.load_memmap(self.local_addr) received_weights = received_weights.flatten_keys(\".\") logger.info(f\"Weights read successfully from {self.local_addr}\") return received_weights [docs] def check_connection(self) -\u003e bool: \"\"\"Check if the transport is ready. For file-based transport, always returns True. \"\"\" return True [docs] class VLLMDoubleBufferSyncScheme(WeightSyncScheme): \"\"\"Weight synchronization scheme for vLLM using double-buffered storage. This scheme uses memory-mapped TensorDict storage to transfer weights from a trainer to vLLM inference workers. It\u0027s simpler than NCCL-based approaches and doesn\u0027t require process group coordination. Args: remote_addr: Directory path where sender writes weights. local_addr: Directory path where receiver reads weights. If None, uses same path as remote_addr (for local testing). num_threads: Number of threads for memmap operations. Defaults to 1. strategy: Weight extraction strategy (\"tensordict\" or \"state_dict\"). Example: \u003e\u003e\u003e # Local testing (same machine) \u003e\u003e\u003e scheme = VLLMDoubleBufferSyncScheme( ... remote_addr=\"/tmp/weights\", ... strategy=\"tensordict\" ... ) \u003e\u003e\u003e \u003e\u003e\u003e # Distributed setup (different machines) \u003e\u003e\u003e # On trainer node: \u003e\u003e\u003e scheme = VLLMDoubleBufferSyncScheme( ... remote_addr=\"/mnt/shared/weights\", # NFS mount ... num_threads=4 ... ) \u003e\u003e\u003e \u003e\u003e\u003e # On vLLM worker node: \u003e\u003e\u003e scheme = VLLMDoubleBufferSyncScheme( ... remote_addr=\"/mnt/shared/weights\", # Same NFS mount ... num_threads=4 ... ) \"\"\" def __init__( self, remote_addr: str, local_addr: str | None = None, num_threads: int = 1, strategy: Literal[\"tensordict\", \"state_dict\"] = \"tensordict\", ): self.remote_addr = remote_addr self.local_addr = local_addr if local_addr is not None else remote_addr self.num_threads = num_threads self.strategy_name = strategy [docs] def create_transport(self, **kwargs) -\u003e VLLMDoubleBufferTransport: \"\"\"Create transport for double-buffered storage. Args: **kwargs: Not used for file-based transport (kept for API compatibility). Returns: A VLLMDoubleBufferTransport instance. \"\"\" return VLLMDoubleBufferTransport( remote_addr=self.remote_addr, local_addr=self.local_addr, num_threads=self.num_threads, ) [docs] def create_sender(self) -\u003e VLLMDoubleBufferWeightSender: \"\"\"Create a weight sender for the trainer process.\"\"\" return VLLMDoubleBufferWeightSender(self) [docs] def create_receiver(self, vllm_engine) -\u003e VLLMDoubleBufferWeightReceiver: \"\"\"Create a weight receiver for a vLLM worker process. Args: vllm_engine: The vLLM engine instance (must have .llm_engine.model_executor attribute). \"\"\" return VLLMDoubleBufferWeightReceiver(self, vllm_engine) [docs] class VLLMDoubleBufferWeightSender: \"\"\"Sends weights to vLLM workers using double-buffered storage. This sender extracts weights from a training model and writes them to a shared directory using TensorDict.memmap. Example: \u003e\u003e\u003e sender = scheme.create_sender() \u003e\u003e\u003e sender.register_model(policy_model) \u003e\u003e\u003e \u003e\u003e\u003e # During training loop \u003e\u003e\u003e sender.update_weights() # Writes current weights to shared storage \"\"\" def __init__(self, scheme: VLLMDoubleBufferSyncScheme): self._scheme = scheme self._strategy = WeightStrategy(extract_as=scheme.strategy_name) self._model_ref = None self._transport = None [docs] def register_model(self, model: Any) -\u003e None: \"\"\"Register the model to extract weights from. Args: model: The model to extract weights from (e.g., TransformersWrapper). \"\"\" import weakref self._model_ref = weakref.ref(model) # Create transport on registration self._transport = self._scheme.create_transport() logger.info( f\"Registered model for double-buffer weight sync to {self._scheme.remote_addr}\" ) [docs] def update_weights(self, weights: Any | None = None) -\u003e None: \"\"\"Extract and write weights to shared storage. Args: weights: Optional weights to send. If None, extracts from registered model. \"\"\" if self._transport is None: raise RuntimeError(\"Transport not initialized. Call register_model first.\") # Extract weights if not provided if weights is None: model = self._model_ref() if model is None: raise RuntimeError(\"Model reference is dead\") weights = self._strategy.extract_weights(model) else: # Ensure weights are in the right format if hasattr(weights, \"state_dict\"): # It\u0027s a module, extract weights = self._strategy.extract_weights(weights) # Send via transport self._transport.send_weights(\"vllm_model\", weights) [docs] class VLLMDoubleBufferWeightReceiver: \"\"\"Receives weights in a vLLM worker using double-buffered storage. This receiver reads weights from a shared directory and loads them into the vLLM engine using the engine\u0027s load_weights interface. Example: \u003e\u003e\u003e receiver = scheme.create_receiver(vllm_engine) \u003e\u003e\u003e \u003e\u003e\u003e # Poll for new weights \u003e\u003e\u003e if receiver.poll_and_apply(): ... print(\"Weights updated!\") \"\"\" def __init__(self, scheme: VLLMDoubleBufferSyncScheme, vllm_engine): self._scheme = scheme self._strategy = WeightStrategy(extract_as=scheme.strategy_name) self._vllm_engine = vllm_engine self._transport = scheme.create_transport() logger.info( f\"Initialized double-buffer receiver reading from {self._scheme.local_addr}\" ) [docs] def apply_weights(self, weights: TensorDict, inplace: bool = True) -\u003e None: \"\"\"Apply weights to vLLM engine using RPC. This method uses RPC to tell all vLLM workers to load weights from the shared storage directory. Similar to how AsyncVLLM._update_weights_with_nccl_broadcast_simple uses collective_rpc to coordinate workers. Args: weights: TensorDict with flattened keys containing weights. inplace: Whether to apply weights in place. Default is `True`. \"\"\" if not inplace: raise ValueError(\"Cannot apply weights out of place for vLLM double-buffer\") logger.info(\"Applying weights to vLLM engine via RPC\") # Convert TensorDict to list of (name, tensor) tuples weights_list = list(weights.items()) # Check if this is an AsyncVLLM instance (uses RPC to coordinate workers) if hasattr(self._vllm_engine, \"collective_rpc\"): # AsyncVLLM path: use RPC to tell all workers to load weights logger.info( f\"Using RPC to load {len(weights_list)} weights across all replicas\" ) # Call collective_rpc to tell workers to load from shared storage # The method \u0027load_weights_from_storage\u0027 will be called on each worker futures = self._vllm_engine.collective_rpc( method=\"load_weights_from_storage\", args=(str(self._scheme.local_addr), self._transport.num_threads), ) # Wait for all workers to complete import ray ray.get(futures) logger.info(\"Weights loaded successfully via RPC\") else: # Direct path for local LLM (non-AsyncVLLM) logger.info(\"Using direct load for local LLM\") engine = ( self._vllm_engine.llm_engine if hasattr(self._vllm_engine, \"llm_engine\") else self._vllm_engine ) worker = engine.model_executor.driver_worker model = worker.model_runner.model model.load_weights(weights_list) logger.info(\"Weights loaded successfully\") [docs] def poll_and_apply(self, timeout: float = 180.0) -\u003e bool: \"\"\"Poll for and apply weights from shared storage. Args: timeout: Not used for file-based transport (kept for API compatibility). Returns: True if weights were successfully read and applied, False otherwise. \"\"\" # timeout is not used by file-based transport but kept for API compatibility weights = self._transport.receive_weights() self.apply_weights(weights) return True",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/weight_update/llm/vllm_double_buffer.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

@@ -1,0 +1,2408 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.envs.libs.isaac_lab &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/envs/libs/isaac_lab';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.envs.libs.isaac_lab - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.envs...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.envs.libs.isaac_lab">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/envs/libs/isaac_lab</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.envs.libs.isaac_lab</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="sd">&quot;&quot;&quot;Isaac Lab environment wrapper.</span>
+
+<span class="sd">This module exposes :class:`IsaacLabWrapper`, a thin specialisation of</span>
+<span class="sd">:class:`~torchrl.envs.libs.gym.GymWrapper` for Isaac Lab&#39;s vectorised</span>
+<span class="sd">environments. In addition to the auto-reset / spec handling inherited from</span>
+<span class="sd">the base wrapper, this module surfaces Isaac Lab&#39;s per-index reset and</span>
+<span class="sd">``reset_to`` APIs through the standard torchrl ``_reset`` mask, so that a</span>
+<span class="sd">caller can reset an arbitrary subset of sub-environments from the</span>
+<span class="sd">tensordict (and have the transform stack -- ``RewardSum``, ``InitTracker``,</span>
+<span class="sd">recurrent primers, ``VecNormV2``, ... -- fire correctly on the reset</span>
+<span class="sd">indices only).</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">importlib.util</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Mapping</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">NestedKey</span><span class="p">,</span> <span class="n">TensorDict</span><span class="p">,</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.libs.gym</span> <span class="kn">import</span> <span class="n">GymWrapper</span>
+
+<span class="n">_has_isaaclab</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;isaaclab&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_has_isaaclab_newton</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;isaaclab_newton&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+<span class="n">_has_isaaclab_ov</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;isaaclab_ov&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="IsaacLabWrapper">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.IsaacLabWrapper.html#torchrl.envs.IsaacLabWrapper">[docs]</a>
+<span class="k">class</span> <span class="nc">IsaacLabWrapper</span><span class="p">(</span><span class="n">GymWrapper</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A wrapper for IsaacLab environments.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env (isaaclab.envs.ManagerBasedRLEnv or equivalent): the environment</span>
+<span class="sd">            instance to wrap. ``ManagerBasedEnv``, ``ManagerBasedRLEnv``,</span>
+<span class="sd">            ``DirectRLEnv`` and ``DirectMARLEnv`` are all supported.</span>
+<span class="sd">        categorical_action_encoding (bool, optional): if ``True``, categorical</span>
+<span class="sd">            specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`),</span>
+<span class="sd">            otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`).</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
+<span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
+<span class="sd">            Defaults to ``True``.</span>
+<span class="sd">        native_autoreset (bool, optional): if ``True``, keeps Isaac Lab&#39;s native</span>
+<span class="sd">            auto-reset observations in the collector hot path and avoids the</span>
+<span class="sd">            synthetic reset call in :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`.</span>
+<span class="sd">            The terminal ``&quot;next&quot;`` observation remains unavailable and is</span>
+<span class="sd">            marked with ``NaN``; the native reset observation is cloned into</span>
+<span class="sd">            the next root observation.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        from_tiled_camera (bool, optional): if ``True``, reads pixels from an</span>
+<span class="sd">            Isaac Lab tiled camera sensor and writes them under ``pixels_key``.</span>
+<span class="sd">            This is the recommended headless rendering path. Defaults to</span>
+<span class="sd">            ``False``.</span>
+<span class="sd">        tiled_camera_name (str, optional): Name of the sensor in</span>
+<span class="sd">            ``env.scene.sensors``. Defaults to ``&quot;tiled_camera&quot;``.</span>
+<span class="sd">        tiled_camera_data_type (str, optional): Camera data type to read.</span>
+<span class="sd">            Defaults to ``&quot;rgb&quot;``.</span>
+<span class="sd">        pixels_key (NestedKey, optional): TensorDict key where pixels are</span>
+<span class="sd">            written. Defaults to ``&quot;pixels&quot;``.</span>
+<span class="sd">        pixels_dtype (torch.dtype, optional): dtype used for the output pixels.</span>
+<span class="sd">            If ``torch.uint8`` is requested and the camera returns floating</span>
+<span class="sd">            point data, values are scaled from ``[0, 1]`` to ``[0, 255]``.</span>
+<span class="sd">            Defaults to ``torch.uint8``.</span>
+<span class="sd">        pixels_channels (int, optional): Number of channels to keep from the</span>
+<span class="sd">            camera output. Defaults to ``3``.</span>
+
+<span class="sd">    For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation.</span>
+
+<span class="sd">    Refer to `the Isaac Lab doc for installation instructions &lt;https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html&gt;`_.</span>
+
+<span class="sd">    Per-index reset</span>
+<span class="sd">    ---------------</span>
+
+<span class="sd">    Isaac Lab&#39;s underlying envs let the caller reset an arbitrary subset of</span>
+<span class="sd">    sub-environments without disturbing the others. This wrapper plumbs that</span>
+<span class="sd">    capability through the standard torchrl ``&quot;_reset&quot;`` mask: when the</span>
+<span class="sd">    tensordict passed to :meth:`reset` carries a partial ``&quot;_reset&quot;`` boolean</span>
+<span class="sd">    mask (i.e. neither all ``True`` nor all ``False``), only the masked</span>
+<span class="sd">    sub-envs are reset and the others keep their state and ``episode_length_buf``.</span>
+<span class="sd">    The transform stack (``RewardSum``, ``InitTracker``, recurrent primers,</span>
+<span class="sd">    ``VecNormV2``, ...) fires on the reset rows only, exactly like a normal</span>
+<span class="sd">    reset.</span>
+
+<span class="sd">    The per-index reset path is gated on ``native_autoreset=True``: with the</span>
+<span class="sd">    default ``native_autoreset=False`` it would conflict with the</span>
+<span class="sd">    :class:`~torchrl.envs.transforms.VecGymEnvTransform`-based obs-swap path</span>
+<span class="sd">    that :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` triggers on every</span>
+<span class="sd">    &quot;done&quot; row (this would double-reset the affected envs). Set</span>
+<span class="sd">    ``native_autoreset=True`` if you want partial-reset semantics.</span>
+
+<span class="sd">    State-based reset</span>
+<span class="sd">    -----------------</span>
+
+<span class="sd">    For deterministic branching from a snapshot, snapshot the scene with</span>
+<span class="sd">    :meth:`get_state` and restore it with ``env.reset(td, set_state=True,</span>
+<span class="sd">    scene_state=snapshot)`` (or the :meth:`reset_to_state` convenience, which</span>
+<span class="sd">    routes through the same path). Manager-based envs only; both work in</span>
+<span class="sd">    conjunction with the partial ``&quot;_reset&quot;`` mask.</span>
+
+<span class="sd">    .. note:: The snapshot is passed as the ``scene_state`` *keyword argument*</span>
+<span class="sd">        rather than inside the tensordict. For a stateless env the reset state is</span>
+<span class="sd">        torch-native (tensordict / ``torch.Tensor`` entries declared in</span>
+<span class="sd">        ``state_spec``), so it lives naturally in the tensordict. Isaac Lab&#39;s</span>
+<span class="sd">        scene state is an opaque, non-torch-native object: carrying it in the</span>
+<span class="sd">        tensordict would mean wrapping it as a ``NonTensor`` ``state_spec`` entry</span>
+<span class="sd">        and threading it through the transform and step-MDP machinery, whereas a</span>
+<span class="sd">        kwarg is simpler and keeps simulator state out of the data path.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; # This code block ensures that the Isaac app is started in headless mode</span>
+<span class="sd">        &gt;&gt;&gt; from scripts_isaaclab.app import AppLauncher</span>
+<span class="sd">        &gt;&gt;&gt; import argparse</span>
+
+<span class="sd">        &gt;&gt;&gt; parser = argparse.ArgumentParser(description=&quot;Train an RL agent with TorchRL.&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; AppLauncher.add_app_launcher_args(parser)</span>
+<span class="sd">        &gt;&gt;&gt; args_cli, hydra_args = parser.parse_known_args([&quot;--headless&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; app_launcher = AppLauncher(args_cli)</span>
+
+<span class="sd">        &gt;&gt;&gt; # Imports and env</span>
+<span class="sd">        &gt;&gt;&gt; import gymnasium as gym</span>
+<span class="sd">        &gt;&gt;&gt; import isaaclab_tasks  # noqa: F401</span>
+<span class="sd">        &gt;&gt;&gt; from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs.libs.isaac_lab import IsaacLabWrapper</span>
+
+<span class="sd">        &gt;&gt;&gt; env = gym.make(&quot;Isaac-Ant-v0&quot;, cfg=AntEnvCfg())</span>
+<span class="sd">        &gt;&gt;&gt; env = IsaacLabWrapper(env)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Supports deterministic resets via ``reset(td, set_state=True,</span>
+    <span class="c1"># scene_state=...)`` (manager-based envs). The snapshot is honored through</span>
+    <span class="c1"># Isaac&#39;s ``reset_to`` rather than from tensordict state entries.</span>
+    <span class="n">_supports_set_state</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">:</span> <span class="n">isaaclab</span><span class="o">.</span><span class="n">envs</span><span class="o">.</span><span class="n">ManagerBasedRLEnv</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">categorical_action_encoding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">allow_done_after_reset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">convert_actions_to_numpy</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">native_autoreset</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">from_tiled_camera</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">tiled_camera_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tiled_camera&quot;</span><span class="p">,</span>
+        <span class="n">tiled_camera_data_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+        <span class="n">pixels_key</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;pixels&quot;</span><span class="p">,</span>
+        <span class="n">pixels_dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span>
+        <span class="n">pixels_channels</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">from_tiled_camera</span> <span class="o">=</span> <span class="n">from_tiled_camera</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_name</span> <span class="o">=</span> <span class="n">tiled_camera_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_data_type</span> <span class="o">=</span> <span class="n">tiled_camera_data_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels_key</span> <span class="o">=</span> <span class="n">pixels_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels_dtype</span> <span class="o">=</span> <span class="n">pixels_dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels_channels</span> <span class="o">=</span> <span class="n">pixels_channels</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">categorical_action_encoding</span><span class="o">=</span><span class="n">categorical_action_encoding</span><span class="p">,</span>
+            <span class="n">allow_done_after_reset</span><span class="o">=</span><span class="n">allow_done_after_reset</span><span class="p">,</span>
+            <span class="n">convert_actions_to_numpy</span><span class="o">=</span><span class="n">convert_actions_to_numpy</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">add_tiled_camera_config</span><span class="p">(</span>
+        <span class="n">env_cfg</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">sensor_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tiled_camera&quot;</span><span class="p">,</span>
+        <span class="n">data_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;rgb&quot;</span><span class="p">,</span>
+        <span class="n">renderer_backend</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;isaac_rtx&quot;</span><span class="p">,</span> <span class="s2">&quot;newton_warp&quot;</span><span class="p">,</span> <span class="s2">&quot;ovrtx&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">renderer_cfg</span><span class="p">:</span> <span class="nb">object</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">width</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">320</span><span class="p">,</span>
+        <span class="n">height</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">240</span><span class="p">,</span>
+        <span class="n">pos</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">7.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">),</span>
+        <span class="n">rot</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.9945</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1045</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
+        <span class="n">convention</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;opengl&quot;</span><span class="p">,</span> <span class="s2">&quot;ros&quot;</span><span class="p">,</span> <span class="s2">&quot;world&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;world&quot;</span><span class="p">,</span>
+        <span class="n">focal_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">24.0</span><span class="p">,</span>
+        <span class="n">focus_distance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">400.0</span><span class="p">,</span>
+        <span class="n">horizontal_aperture</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.955</span><span class="p">,</span>
+        <span class="n">clipping_range</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">100.0</span><span class="p">),</span>
+        <span class="n">render_interval</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Attach an Isaac Lab :class:`~isaaclab.sensors.TiledCameraCfg`.</span>
+
+<span class="sd">        This helper mutates an Isaac Lab environment config before the env is</span>
+<span class="sd">        instantiated, making headless RGB capture available through</span>
+<span class="sd">        :class:`IsaacLabWrapper` with ``from_tiled_camera=True``.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            env_cfg: Isaac Lab environment config to mutate.</span>
+<span class="sd">            sensor_name (str, optional): Name used in ``env.scene.sensors``.</span>
+<span class="sd">                Defaults to ``&quot;tiled_camera&quot;``.</span>
+<span class="sd">            data_type (str, optional): Camera output data type. Defaults to</span>
+<span class="sd">                ``&quot;rgb&quot;``.</span>
+<span class="sd">            renderer_backend (str, optional): Renderer backend to use for the</span>
+<span class="sd">                tiled camera. ``&quot;isaac_rtx&quot;`` keeps Isaac Lab&#39;s default RTX</span>
+<span class="sd">                renderer, ``&quot;newton_warp&quot;`` uses the Isaac Lab Newton Warp</span>
+<span class="sd">                renderer, and ``&quot;ovrtx&quot;`` uses the OVRTX renderer. Defaults to</span>
+<span class="sd">                ``None``, which keeps the Isaac Lab default.</span>
+<span class="sd">            renderer_cfg (object, optional): Explicit renderer configuration</span>
+<span class="sd">                object to pass to :class:`~isaaclab.sensors.TiledCameraCfg`.</span>
+<span class="sd">                This cannot be combined with ``renderer_backend``.</span>
+<span class="sd">            width (int, optional): Camera image width. Defaults to ``320``.</span>
+<span class="sd">            height (int, optional): Camera image height. Defaults to ``240``.</span>
+<span class="sd">            pos (tuple of float, optional): Camera position offset.</span>
+<span class="sd">            rot (tuple of float, optional): Camera orientation offset.</span>
+<span class="sd">            convention (str, optional): Orientation convention. Defaults to</span>
+<span class="sd">                ``&quot;world&quot;``.</span>
+<span class="sd">            focal_length (float, optional): Pinhole camera focal length.</span>
+<span class="sd">            focus_distance (float, optional): Pinhole camera focus distance.</span>
+<span class="sd">            horizontal_aperture (float, optional): Pinhole camera aperture.</span>
+<span class="sd">            clipping_range (tuple of float, optional): Near and far clipping</span>
+<span class="sd">                planes.</span>
+<span class="sd">            render_interval (int, optional): Simulation render interval. If</span>
+<span class="sd">                omitted, the existing config value is kept.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The mutated ``env_cfg``.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs.libs.isaac_lab import IsaacLabWrapper</span>
+<span class="sd">            &gt;&gt;&gt; cfg = IsaacLabWrapper.add_tiled_camera_config(AntEnvCfg())</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_isaaclab</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;Isaac Lab is required to add a tiled camera config.&quot;</span><span class="p">)</span>
+        <span class="kn">import</span> <span class="nn">isaaclab.sim</span> <span class="k">as</span> <span class="nn">sim_utils</span>
+        <span class="kn">from</span> <span class="nn">isaaclab.sensors</span> <span class="kn">import</span> <span class="n">TiledCameraCfg</span>
+
+        <span class="k">if</span> <span class="n">renderer_backend</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">renderer_cfg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Only one of renderer_backend or renderer_cfg can be provided.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">renderer_backend</span> <span class="o">==</span> <span class="s2">&quot;newton_warp&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_isaaclab_newton</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Isaac Lab Newton is required to use &quot;</span>
+                    <span class="s2">&quot;renderer_backend=&#39;newton_warp&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="kn">from</span> <span class="nn">isaaclab_newton.renderers</span> <span class="kn">import</span> <span class="n">NewtonWarpRendererCfg</span>
+
+            <span class="n">renderer_cfg</span> <span class="o">=</span> <span class="n">NewtonWarpRendererCfg</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="n">renderer_backend</span> <span class="o">==</span> <span class="s2">&quot;ovrtx&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_isaaclab_ov</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                    <span class="s2">&quot;Isaac Lab OVRTX is required to use renderer_backend=&#39;ovrtx&#39;.&quot;</span>
+                <span class="p">)</span>
+            <span class="kn">from</span> <span class="nn">isaaclab_ov.renderers</span> <span class="kn">import</span> <span class="n">OVRTXRendererCfg</span>
+
+            <span class="n">renderer_cfg</span> <span class="o">=</span> <span class="n">OVRTXRendererCfg</span><span class="p">()</span>
+
+        <span class="n">camera_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">renderer_cfg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">camera_kwargs</span><span class="p">[</span><span class="s2">&quot;renderer_cfg&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">renderer_cfg</span>
+        <span class="n">camera_cfg</span> <span class="o">=</span> <span class="n">TiledCameraCfg</span><span class="p">(</span>
+            <span class="n">prim_path</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">{ENV_REGEX_NS}</span><span class="s2">/Camera&quot;</span><span class="p">,</span>
+            <span class="n">offset</span><span class="o">=</span><span class="n">TiledCameraCfg</span><span class="o">.</span><span class="n">OffsetCfg</span><span class="p">(</span>
+                <span class="n">pos</span><span class="o">=</span><span class="n">pos</span><span class="p">,</span>
+                <span class="n">rot</span><span class="o">=</span><span class="n">rot</span><span class="p">,</span>
+                <span class="n">convention</span><span class="o">=</span><span class="n">convention</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">data_types</span><span class="o">=</span><span class="p">[</span><span class="n">data_type</span><span class="p">],</span>
+            <span class="n">spawn</span><span class="o">=</span><span class="n">sim_utils</span><span class="o">.</span><span class="n">PinholeCameraCfg</span><span class="p">(</span>
+                <span class="n">focal_length</span><span class="o">=</span><span class="n">focal_length</span><span class="p">,</span>
+                <span class="n">focus_distance</span><span class="o">=</span><span class="n">focus_distance</span><span class="p">,</span>
+                <span class="n">horizontal_aperture</span><span class="o">=</span><span class="n">horizontal_aperture</span><span class="p">,</span>
+                <span class="n">clipping_range</span><span class="o">=</span><span class="n">clipping_range</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">width</span><span class="o">=</span><span class="n">width</span><span class="p">,</span>
+            <span class="n">height</span><span class="o">=</span><span class="n">height</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">camera_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="n">env_cfg</span><span class="o">.</span><span class="n">scene</span><span class="p">,</span> <span class="n">sensor_name</span><span class="p">,</span> <span class="n">camera_cfg</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">render_interval</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">env_cfg</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">render_interval</span> <span class="o">=</span> <span class="n">render_interval</span>
+        <span class="k">return</span> <span class="n">env_cfg</span>
+
+    <span class="k">def</span> <span class="nf">seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_tiled_camera</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="n">camera</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tiled_camera</span><span class="p">()</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">cfg</span>
+        <span class="n">channels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_channels</span>
+        <span class="k">if</span> <span class="n">channels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_data_type</span> <span class="o">==</span> <span class="s2">&quot;rgb&quot;</span><span class="p">:</span>
+                <span class="n">channels</span> <span class="o">=</span> <span class="mi">3</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">channels</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">output</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_data_type</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_dtype</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">camera</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">output</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_data_type</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">cfg</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="n">cfg</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="n">channels</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span><span class="p">:</span>
+            <span class="n">pixels_spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">pixels_spec</span> <span class="o">=</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">pixels_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">pixels_spec</span>
+
+    <span class="k">def</span> <span class="nf">_get_tiled_camera</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">unwrapped</span>
+        <span class="n">scene</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">scene</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">scene</span><span class="o">.</span><span class="n">sensors</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_name</span><span class="p">]</span>
+        <span class="k">except</span> <span class="ne">KeyError</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Could not find tiled camera sensor </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_name</span><span class="si">!r}</span><span class="s2"> &quot;</span>
+                <span class="s2">&quot;in env.scene.sensors. Add one to the Isaac Lab config before &quot;</span>
+                <span class="s2">&quot;calling gym.make, for example with &quot;</span>
+                <span class="s2">&quot;IsaacLabWrapper.add_tiled_camera_config(...).&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span> <span class="nn">err</span>
+
+    <span class="k">def</span> <span class="nf">_read_tiled_camera_pixels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">pixels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tiled_camera</span><span class="p">()</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">output</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">tiled_camera_data_type</span><span class="p">]</span>
+        <span class="n">pixels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">pixels</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_channels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pixels</span> <span class="o">=</span> <span class="n">pixels</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_channels</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_dtype</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pixels</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_dtype</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">uint8</span> <span class="ow">and</span> <span class="n">pixels</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">is_floating_point</span><span class="p">:</span>
+                <span class="n">pixels</span> <span class="o">=</span> <span class="n">pixels</span><span class="o">.</span><span class="n">mul</span><span class="p">(</span><span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">)</span>
+            <span class="n">pixels</span> <span class="o">=</span> <span class="n">pixels</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixels_dtype</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pixels</span>
+
+    <span class="k">def</span> <span class="nf">_add_tiled_camera_pixels</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_tiled_camera</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_observation_keys</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="n">observations</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">observations</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;observation&quot;</span><span class="p">:</span> <span class="n">observations</span><span class="p">}</span>
+        <span class="n">observations</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">pixels_key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_tiled_camera_pixels</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_observation_keys</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_normalize_observation_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">observations</span>
+        <span class="n">spec_keys</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+        <span class="k">if</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">in</span> <span class="n">observations</span> <span class="ow">and</span> <span class="s2">&quot;policy&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">spec_keys</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;observation&quot;</span> <span class="ow">in</span> <span class="n">spec_keys</span><span class="p">:</span>
+                <span class="n">observations</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+                <span class="n">observations</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;policy&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">observations</span>
+
+    <span class="k">def</span> <span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+        <span class="n">observations</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset_output_transform</span><span class="p">(</span><span class="n">reset_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_tiled_camera_pixels</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">info</span>
+
+    <span class="k">def</span> <span class="nf">_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_outputs_tuple</span><span class="p">):</span>  <span class="c1"># noqa: F811</span>
+        <span class="c1"># IsaacLab will modify the `terminated` and `truncated` tensors</span>
+        <span class="c1">#  in-place. We clone them here to make sure data doesn&#39;t inadvertently get modified.</span>
+        <span class="c1"># The variable naming follows torchrl&#39;s convention here.</span>
+        <span class="n">observations</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">terminated</span><span class="p">,</span> <span class="n">truncated</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">step_outputs_tuple</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_tiled_camera_pixels</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">terminated</span> <span class="o">|</span> <span class="n">truncated</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># to get to (num_envs, 1)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">reward</span><span class="p">,</span>
+            <span class="n">terminated</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="n">truncated</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="n">done</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="n">info</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Isaac Lab env detection</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">_supported_isaac_env_classes</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">type</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the tuple of Isaac Lab env classes this wrapper can bridge.</span>
+
+<span class="sd">        ``ManagerBasedEnv`` and ``ManagerBasedRLEnv`` (subclass) expose</span>
+<span class="sd">        ``reset(env_ids=..., seed=..., options=...)`` and ``reset_to``.</span>
+<span class="sd">        ``DirectRLEnv`` and ``DirectMARLEnv`` only expose ``_reset_idx``;</span>
+<span class="sd">        for those we rebuild the post-reset observation manually.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">isaaclab.envs</span> <span class="kn">import</span> <span class="n">DirectMARLEnv</span><span class="p">,</span> <span class="n">DirectRLEnv</span><span class="p">,</span> <span class="n">ManagerBasedEnv</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="n">ManagerBasedEnv</span><span class="p">,</span> <span class="n">DirectRLEnv</span><span class="p">,</span> <span class="n">DirectMARLEnv</span><span class="p">)</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_supports_native_autoreset</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``True`` iff ``env`` (assumed already unwrapped) is a batched Isaac Lab env.</span>
+
+<span class="sd">        This is the single source of truth used by</span>
+<span class="sd">        :class:`~torchrl.envs.libs.gym._GymAsyncMeta` to decide whether to</span>
+<span class="sd">        install the :class:`~torchrl.envs.transforms.VecGymEnvTransform`</span>
+<span class="sd">        adapter and register the ``_torchrl_native_autoreset`` flag for an</span>
+<span class="sd">        Isaac Lab env (regardless of whether the env was wrapped via</span>
+<span class="sd">        :class:`IsaacLabWrapper` or the generic :class:`GymWrapper`).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_isaaclab</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_supported_isaac_env_classes</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_isaac_unwrapped</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">unwrapped</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Per-index reset bridge</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="c1"># Deterministic state-based reset is the single ``set_state=True`` path</span>
+        <span class="c1"># (``set_state`` is resolved by ``EnvBase.reset``). The snapshot is passed</span>
+        <span class="c1"># as the ``scene_state`` kwarg (from :meth:`get_state`) rather than inside</span>
+        <span class="c1"># the tensordict: unlike a stateless env&#39;s state (plain tensordict /</span>
+        <span class="c1"># ``torch.Tensor`` entries that live in ``state_spec``), Isaac Lab&#39;s scene</span>
+        <span class="c1"># state is an opaque, non-torch-native object. Forcing it into the</span>
+        <span class="c1"># tensordict would require wrapping it as a ``NonTensor`` ``state_spec``</span>
+        <span class="c1"># entry (polluting the input spec and the transform/step-MDP machinery);</span>
+        <span class="c1"># a kwarg is simpler and keeps it out of the data path. When set, it</span>
+        <span class="c1"># overrides the regular reset path entirely (Isaac Lab&#39;s ``reset_to``).</span>
+        <span class="n">set_state</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;set_state&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">scene_state</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;scene_state&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">is_relative</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;is_relative&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">scene_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">set_state</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;A `scene_state` snapshot was passed to reset() without &quot;</span>
+                <span class="s2">&quot;`set_state=True`. Pass `set_state=True` to deterministically &quot;</span>
+                <span class="s2">&quot;reset to the snapshot.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">reset</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reset</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">set_state</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">scene_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">&quot;reset(set_state=True) on an Isaac Lab env requires a &quot;</span>
+                    <span class="s2">&quot;`scene_state` snapshot (obtained from `env.get_state()`).&quot;</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reset_to_state_at</span><span class="p">(</span>
+                <span class="n">scene_state</span><span class="p">,</span> <span class="n">reset</span><span class="o">=</span><span class="n">reset</span><span class="p">,</span> <span class="n">is_relative</span><span class="o">=</span><span class="n">is_relative</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_batched</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">reset</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">reset</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="c1"># Full reset: defer to GymWrapper / GymLikeEnv.</span>
+            <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;_reset&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">reset</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="c1"># Nothing to reset: return a sentinel reset tensordict so the</span>
+            <span class="c1"># surrounding _reset_proc_data / _update_during_reset machinery</span>
+            <span class="c1"># preserves the incoming state on every sub-env.</span>
+            <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Per-index reset path. Gated on native_autoreset=True: with</span>
+        <span class="c1"># native_autoreset=False, partial-mask reset calls are issued by</span>
+        <span class="c1"># EnvBase.maybe_reset on every step that has any &quot;done&quot; row, and</span>
+        <span class="c1"># the surrounding VecGymEnvTransform already handles the obs swap</span>
+        <span class="c1"># without re-entering Isaac. Firing unwrapped.reset(env_ids=...)</span>
+        <span class="c1"># here would double-reset those envs. We keep the historical</span>
+        <span class="c1"># no-op semantics in that case so explicit partial resets</span>
+        <span class="c1"># remain a feature you opt into via native_autoreset=True.</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native_autoreset_enabled</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="s2">&quot;_reset&quot;</span><span class="p">)</span>
+
+        <span class="n">env_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reset_mask_to_env_ids</span><span class="p">(</span><span class="n">reset</span><span class="p">)</span>
+        <span class="n">obs</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_partial_reset</span><span class="p">(</span><span class="n">env_ids</span><span class="o">=</span><span class="n">env_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_reset_tensordict</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_input_td_has_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># Isaac Lab honors a ``scene_state`` snapshot passed as a reset kwarg,</span>
+        <span class="c1"># never tensordict state entries, so a reset tensordict carrying</span>
+        <span class="c1"># observations must not trigger the implicit-state transition warning.</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">_native_autoreset_enabled</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Whether the wrapping pipeline has ``native_autoreset=True``.</span>
+
+<span class="sd">        Set on the instance by :class:`~torchrl.envs.libs.gym._GymAsyncMeta`</span>
+<span class="sd">        when the wrapper is constructed via :class:`IsaacLabWrapper(env,</span>
+<span class="sd">        native_autoreset=True)`. Mirrored on the surrounding</span>
+<span class="sd">        :class:`~torchrl.envs.TransformedEnv` via ``_torchrl_native_autoreset``.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;_torchrl_native_autoreset&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_reset_mask_to_env_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert a ``_reset`` boolean mask to a 1-D ``env_ids`` tensor.&quot;&quot;&quot;</span>
+        <span class="c1"># The mask is shaped (num_envs, 1) or (num_envs,) and may live on a</span>
+        <span class="c1"># different device than the underlying Isaac env (e.g. CPU in tests).</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">reset</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">as_tuple</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_isaac_unwrapped</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_partial_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">env_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Reset the listed sub-envs without touching the rest.&quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">isaaclab.envs</span> <span class="kn">import</span> <span class="n">DirectMARLEnv</span><span class="p">,</span> <span class="n">DirectRLEnv</span><span class="p">,</span> <span class="n">ManagerBasedEnv</span>
+
+        <span class="n">unwrapped</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isaac_unwrapped</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">unwrapped</span><span class="p">,</span> <span class="n">ManagerBasedEnv</span><span class="p">):</span>
+            <span class="n">reset_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;env_ids&quot;</span><span class="p">:</span> <span class="n">env_ids</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">reset_kwargs</span><span class="p">[</span><span class="s2">&quot;seed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">seed</span>
+            <span class="k">if</span> <span class="n">options</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">reset_kwargs</span><span class="p">[</span><span class="s2">&quot;options&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">options</span>
+            <span class="k">return</span> <span class="n">unwrapped</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="o">**</span><span class="n">reset_kwargs</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">unwrapped</span><span class="p">,</span> <span class="p">(</span><span class="n">DirectRLEnv</span><span class="p">,</span> <span class="n">DirectMARLEnv</span><span class="p">)):</span>
+            <span class="c1"># DirectRLEnv.reset() does not accept env_ids -- fall back to the</span>
+            <span class="c1"># internal _reset_idx primitive and replay the post-reset bookkeeping</span>
+            <span class="c1"># that DirectRLEnv / DirectMARLEnv reset() would normally do.</span>
+            <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">unwrapped</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+            <span class="n">unwrapped</span><span class="o">.</span><span class="n">_reset_idx</span><span class="p">(</span><span class="n">env_ids</span><span class="p">)</span>
+            <span class="n">unwrapped</span><span class="o">.</span><span class="n">scene</span><span class="o">.</span><span class="n">write_data_to_sim</span><span class="p">()</span>
+            <span class="n">unwrapped</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">forward</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">unwrapped</span><span class="o">.</span><span class="n">_get_observations</span><span class="p">(),</span> <span class="n">unwrapped</span><span class="o">.</span><span class="n">extras</span>
+
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Per-index reset is not supported for Isaac Lab env of type &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">unwrapped</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">. Supported bases are ManagerBasedEnv &quot;</span>
+            <span class="s2">&quot;(and subclasses), DirectRLEnv and DirectMARLEnv.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_build_reset_tensordict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">info</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild a torchrl-style reset tensordict from Isaac&#39;s (obs, info).&quot;&quot;&quot;</span>
+        <span class="n">obs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_tiled_camera_pixels</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+        <span class="n">source</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">read_obs</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+        <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="n">source</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">info_dict_reader</span> <span class="ow">and</span> <span class="n">info</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">info_dict_reader</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">info_dict_reader</span><span class="p">:</span>
+                <span class="n">out</span> <span class="o">=</span> <span class="n">info_dict_reader</span><span class="p">(</span><span class="n">info</span><span class="p">,</span> <span class="n">tensordict_out</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">out</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">tensordict_out</span> <span class="o">=</span> <span class="n">tensordict_out</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tensordict_out</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># State-based reset bridge</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="nf">get_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the current Isaac Lab scene state.</span>
+
+<span class="sd">        This is exactly what ``InteractiveScene.get_state()`` returns on the</span>
+<span class="sd">        underlying env. It can later be passed back via</span>
+<span class="sd">        ``env.reset(td, set_state=True, scene_state=...)`` (or the</span>
+<span class="sd">        :meth:`reset_to_state` convenience) to deterministically branch back to</span>
+<span class="sd">        this checkpoint.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The scene-state dict (as defined by Isaac Lab; not converted).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isaac_unwrapped</span><span class="o">.</span><span class="n">scene</span><span class="o">.</span><span class="n">get_state</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">reset_to_state</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">is_relative</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Deterministically reset to ``state`` (per-index when a ``_reset`` mask is set).</span>
+
+<span class="sd">        ``state`` is the dict format returned by :meth:`get_state` (i.e.</span>
+<span class="sd">        ``InteractiveScene.get_state()``). Only manager-based envs are</span>
+<span class="sd">        supported (they are the only ones that expose ``reset_to``).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            state: scene state to restore.</span>
+<span class="sd">            tensordict: optional input tensordict. If it contains a ``&quot;_reset&quot;``</span>
+<span class="sd">                mask, only the masked sub-envs are restored; otherwise every</span>
+<span class="sd">                sub-env is restored.</span>
+
+<span class="sd">        Keyword Args:</span>
+<span class="sd">            is_relative: if ``True``, ``state`` is interpreted relative to the</span>
+<span class="sd">                env origin (matches Isaac Lab&#39;s ``reset_to(is_relative=True)``).</span>
+<span class="sd">                Defaults to ``False``.</span>
+<span class="sd">            seed: optional seed forwarded to Isaac&#39;s ``reset_to``.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A reset tensordict in torchrl&#39;s standard shape.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            This is a thin convenience around the unified deterministic-reset</span>
+<span class="sd">            path; it is exactly equivalent to::</span>
+
+<span class="sd">                env.reset(td, set_state=True, scene_state=state, is_relative=...)</span>
+
+<span class="sd">            If the env is wrapped in a :class:`~torchrl.envs.TransformedEnv` and</span>
+<span class="sd">            the transform stack (``RewardSum``, ``InitTracker``, primers,</span>
+<span class="sd">            ``VecNormV2``, ...) must fire on the restored rows, call that</span>
+<span class="sd">            ``reset(...)`` form on the top-level env so it routes through</span>
+<span class="sd">            :meth:`TransformedEnv._reset` and triggers every transform on the</span>
+<span class="sd">            way down.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;scene_state&quot;</span><span class="p">:</span> <span class="n">state</span><span class="p">,</span> <span class="s2">&quot;is_relative&quot;</span><span class="p">:</span> <span class="n">is_relative</span><span class="p">}</span>
+        <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;seed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">seed</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">set_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_reset_to_state_at</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">reset</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">is_relative</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">unwrapped</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isaac_unwrapped</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">unwrapped</span><span class="p">,</span> <span class="s2">&quot;reset_to&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Isaac Lab env of type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">unwrapped</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not &quot;</span>
+                <span class="s2">&quot;expose reset_to (only manager-based envs do). For state-based &quot;</span>
+                <span class="s2">&quot;reset on Direct envs, branch from the underlying scene state &quot;</span>
+                <span class="s2">&quot;by hand.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">reset</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">env_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">unwrapped</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">env_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reset_mask_to_env_ids</span><span class="p">(</span><span class="n">reset</span><span class="p">)</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_state_for_env_ids</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">env_ids</span><span class="p">)</span>
+        <span class="n">reset_to_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;env_ids&quot;</span><span class="p">:</span> <span class="n">env_ids</span><span class="p">,</span>
+            <span class="s2">&quot;is_relative&quot;</span><span class="p">:</span> <span class="n">is_relative</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reset_to_kwargs</span><span class="p">[</span><span class="s2">&quot;seed&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">seed</span>
+        <span class="n">obs</span><span class="p">,</span> <span class="n">info</span> <span class="o">=</span> <span class="n">unwrapped</span><span class="o">.</span><span class="n">reset_to</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="o">**</span><span class="n">reset_to_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_reset_tensordict</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_index_state_for_env_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">env_ids</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">num_envs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="n">num_envs</span><span class="p">,):</span>
+                <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">env_ids</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">state</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">{</span>
+                <span class="n">key</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index_state_for_env_ids</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">env_ids</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="p">}</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_state_for_env_ids</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">env_ids</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">state</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_index_state_for_env_ids</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">env_ids</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">state</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">state</span></div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.envs.libs.isaac_lab",
+       "headline": "torchrl.envs.libs.isaac_lab",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/envs/libs/isaac_lab.html",
+       "articleBody": "Source code for torchrl.envs.libs.isaac_lab # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. \"\"\"Isaac Lab environment wrapper. This module exposes :class:`IsaacLabWrapper`, a thin specialisation of :class:`~torchrl.envs.libs.gym.GymWrapper` for Isaac Lab\u0027s vectorised environments. In addition to the auto-reset / spec handling inherited from the base wrapper, this module surfaces Isaac Lab\u0027s per-index reset and ``reset_to`` APIs through the standard torchrl ``_reset`` mask, so that a caller can reset an arbitrary subset of sub-environments from the tensordict (and have the transform stack -- ``RewardSum``, ``InitTracker``, recurrent primers, ``VecNormV2``, ... -- fire correctly on the reset indices only). \"\"\" from __future__ import annotations import importlib.util from collections.abc import Mapping from typing import Any, Literal import torch from tensordict import NestedKey, TensorDict, TensorDictBase from torchrl.data.tensor_specs import Bounded, Unbounded from torchrl.envs.libs.gym import GymWrapper _has_isaaclab = importlib.util.find_spec(\"isaaclab\") is not None _has_isaaclab_newton = importlib.util.find_spec(\"isaaclab_newton\") is not None _has_isaaclab_ov = importlib.util.find_spec(\"isaaclab_ov\") is not None [docs] class IsaacLabWrapper(GymWrapper): \"\"\"A wrapper for IsaacLab environments. Args: env (isaaclab.envs.ManagerBasedRLEnv or equivalent): the environment instance to wrap. ``ManagerBasedEnv``, ``ManagerBasedRLEnv``, ``DirectRLEnv`` and ``DirectMARLEnv`` are all supported. categorical_action_encoding (bool, optional): if ``True``, categorical specs will be converted to the TorchRL equivalent (:class:`torchrl.data.Categorical`), otherwise a one-hot encoding will be used (:class:`torchrl.data.OneHot`). Defaults to ``False``. allow_done_after_reset (bool, optional): if ``True``, it is tolerated for envs to be ``done`` just after :meth:`reset` is called. Defaults to ``True``. native_autoreset (bool, optional): if ``True``, keeps Isaac Lab\u0027s native auto-reset observations in the collector hot path and avoids the synthetic reset call in :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset`. The terminal ``\"next\"`` observation remains unavailable and is marked with ``NaN``; the native reset observation is cloned into the next root observation. Defaults to ``False``. from_tiled_camera (bool, optional): if ``True``, reads pixels from an Isaac Lab tiled camera sensor and writes them under ``pixels_key``. This is the recommended headless rendering path. Defaults to ``False``. tiled_camera_name (str, optional): Name of the sensor in ``env.scene.sensors``. Defaults to ``\"tiled_camera\"``. tiled_camera_data_type (str, optional): Camera data type to read. Defaults to ``\"rgb\"``. pixels_key (NestedKey, optional): TensorDict key where pixels are written. Defaults to ``\"pixels\"``. pixels_dtype (torch.dtype, optional): dtype used for the output pixels. If ``torch.uint8`` is requested and the camera returns floating point data, values are scaled from ``[0, 1]`` to ``[0, 255]``. Defaults to ``torch.uint8``. pixels_channels (int, optional): Number of channels to keep from the camera output. Defaults to ``3``. For other arguments, see the :class:`torchrl.envs.GymWrapper` documentation. Refer to `the Isaac Lab doc for installation instructions \u003chttps://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html\u003e`_. Per-index reset --------------- Isaac Lab\u0027s underlying envs let the caller reset an arbitrary subset of sub-environments without disturbing the others. This wrapper plumbs that capability through the standard torchrl ``\"_reset\"`` mask: when the tensordict passed to :meth:`reset` carries a partial ``\"_reset\"`` boolean mask (i.e. neither all ``True`` nor all ``False``), only the masked sub-envs are reset and the others keep their state and ``episode_length_buf``. The transform stack (``RewardSum``, ``InitTracker``, recurrent primers, ``VecNormV2``, ...) fires on the reset rows only, exactly like a normal reset. The per-index reset path is gated on ``native_autoreset=True``: with the default ``native_autoreset=False`` it would conflict with the :class:`~torchrl.envs.transforms.VecGymEnvTransform`-based obs-swap path that :meth:`~torchrl.envs.EnvBase.step_and_maybe_reset` triggers on every \"done\" row (this would double-reset the affected envs). Set ``native_autoreset=True`` if you want partial-reset semantics. State-based reset ----------------- For deterministic branching from a snapshot, snapshot the scene with :meth:`get_state` and restore it with ``env.reset(td, set_state=True, scene_state=snapshot)`` (or the :meth:`reset_to_state` convenience, which routes through the same path). Manager-based envs only; both work in conjunction with the partial ``\"_reset\"`` mask. .. note:: The snapshot is passed as the ``scene_state`` *keyword argument* rather than inside the tensordict. For a stateless env the reset state is torch-native (tensordict / ``torch.Tensor`` entries declared in ``state_spec``), so it lives naturally in the tensordict. Isaac Lab\u0027s scene state is an opaque, non-torch-native object: carrying it in the tensordict would mean wrapping it as a ``NonTensor`` ``state_spec`` entry and threading it through the transform and step-MDP machinery, whereas a kwarg is simpler and keeps simulator state out of the data path. Example: \u003e\u003e\u003e # This code block ensures that the Isaac app is started in headless mode \u003e\u003e\u003e from scripts_isaaclab.app import AppLauncher \u003e\u003e\u003e import argparse \u003e\u003e\u003e parser = argparse.ArgumentParser(description=\"Train an RL agent with TorchRL.\") \u003e\u003e\u003e AppLauncher.add_app_launcher_args(parser) \u003e\u003e\u003e args_cli, hydra_args = parser.parse_known_args([\"--headless\"]) \u003e\u003e\u003e app_launcher = AppLauncher(args_cli) \u003e\u003e\u003e # Imports and env \u003e\u003e\u003e import gymnasium as gym \u003e\u003e\u003e import isaaclab_tasks # noqa: F401 \u003e\u003e\u003e from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg \u003e\u003e\u003e from torchrl.envs.libs.isaac_lab import IsaacLabWrapper \u003e\u003e\u003e env = gym.make(\"Isaac-Ant-v0\", cfg=AntEnvCfg()) \u003e\u003e\u003e env = IsaacLabWrapper(env) \"\"\" # Supports deterministic resets via ``reset(td, set_state=True, # scene_state=...)`` (manager-based envs). The snapshot is honored through # Isaac\u0027s ``reset_to`` rather than from tensordict state entries. _supports_set_state = True def __init__( self, env: isaaclab.envs.ManagerBasedRLEnv, # noqa: F821 *, categorical_action_encoding: bool = False, allow_done_after_reset: bool = True, convert_actions_to_numpy: bool = False, device: torch.device | None = None, native_autoreset: bool = False, from_tiled_camera: bool = False, tiled_camera_name: str = \"tiled_camera\", tiled_camera_data_type: str = \"rgb\", pixels_key: NestedKey = \"pixels\", pixels_dtype: torch.dtype | None = torch.uint8, pixels_channels: int | None = 3, **kwargs, ): self.from_tiled_camera = from_tiled_camera self.tiled_camera_name = tiled_camera_name self.tiled_camera_data_type = tiled_camera_data_type self.pixels_key = pixels_key self.pixels_dtype = pixels_dtype self.pixels_channels = pixels_channels if device is None: device = torch.device(\"cuda:0\") super().__init__( env, device=device, categorical_action_encoding=categorical_action_encoding, allow_done_after_reset=allow_done_after_reset, convert_actions_to_numpy=convert_actions_to_numpy, **kwargs, ) @staticmethod def add_tiled_camera_config( env_cfg, *, sensor_name: str = \"tiled_camera\", data_type: str = \"rgb\", renderer_backend: Literal[\"isaac_rtx\", \"newton_warp\", \"ovrtx\"] | None = None, renderer_cfg: object | None = None, width: int = 320, height: int = 240, pos: tuple[float, float, float] = (-7.0, 0.0, 3.0), rot: tuple[float, float, float, float] = (0.9945, 0.0, 0.1045, 0.0), convention: Literal[\"opengl\", \"ros\", \"world\"] = \"world\", focal_length: float = 24.0, focus_distance: float = 400.0, horizontal_aperture: float = 20.955, clipping_range: tuple[float, float] = (0.1, 100.0), render_interval: int | None = None, ): \"\"\"Attach an Isaac Lab :class:`~isaaclab.sensors.TiledCameraCfg`. This helper mutates an Isaac Lab environment config before the env is instantiated, making headless RGB capture available through :class:`IsaacLabWrapper` with ``from_tiled_camera=True``. Args: env_cfg: Isaac Lab environment config to mutate. sensor_name (str, optional): Name used in ``env.scene.sensors``. Defaults to ``\"tiled_camera\"``. data_type (str, optional): Camera output data type. Defaults to ``\"rgb\"``. renderer_backend (str, optional): Renderer backend to use for the tiled camera. ``\"isaac_rtx\"`` keeps Isaac Lab\u0027s default RTX renderer, ``\"newton_warp\"`` uses the Isaac Lab Newton Warp renderer, and ``\"ovrtx\"`` uses the OVRTX renderer. Defaults to ``None``, which keeps the Isaac Lab default. renderer_cfg (object, optional): Explicit renderer configuration object to pass to :class:`~isaaclab.sensors.TiledCameraCfg`. This cannot be combined with ``renderer_backend``. width (int, optional): Camera image width. Defaults to ``320``. height (int, optional): Camera image height. Defaults to ``240``. pos (tuple of float, optional): Camera position offset. rot (tuple of float, optional): Camera orientation offset. convention (str, optional): Orientation convention. Defaults to ``\"world\"``. focal_length (float, optional): Pinhole camera focal length. focus_distance (float, optional): Pinhole camera focus distance. horizontal_aperture (float, optional): Pinhole camera aperture. clipping_range (tuple of float, optional): Near and far clipping planes. render_interval (int, optional): Simulation render interval. If omitted, the existing config value is kept. Returns: The mutated ``env_cfg``. Examples: \u003e\u003e\u003e from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg \u003e\u003e\u003e from torchrl.envs.libs.isaac_lab import IsaacLabWrapper \u003e\u003e\u003e cfg = IsaacLabWrapper.add_tiled_camera_config(AntEnvCfg()) \"\"\" if not _has_isaaclab: raise ImportError(\"Isaac Lab is required to add a tiled camera config.\") import isaaclab.sim as sim_utils from isaaclab.sensors import TiledCameraCfg if renderer_backend is not None and renderer_cfg is not None: raise ValueError( \"Only one of renderer_backend or renderer_cfg can be provided.\" ) if renderer_backend == \"newton_warp\": if not _has_isaaclab_newton: raise ImportError( \"Isaac Lab Newton is required to use \" \"renderer_backend=\u0027newton_warp\u0027.\" ) from isaaclab_newton.renderers import NewtonWarpRendererCfg renderer_cfg = NewtonWarpRendererCfg() elif renderer_backend == \"ovrtx\": if not _has_isaaclab_ov: raise ImportError( \"Isaac Lab OVRTX is required to use renderer_backend=\u0027ovrtx\u0027.\" ) from isaaclab_ov.renderers import OVRTXRendererCfg renderer_cfg = OVRTXRendererCfg() camera_kwargs = {} if renderer_cfg is not None: camera_kwargs[\"renderer_cfg\"] = renderer_cfg camera_cfg = TiledCameraCfg( prim_path=\"{ENV_REGEX_NS}/Camera\", offset=TiledCameraCfg.OffsetCfg( pos=pos, rot=rot, convention=convention, ), data_types=[data_type], spawn=sim_utils.PinholeCameraCfg( focal_length=focal_length, focus_distance=focus_distance, horizontal_aperture=horizontal_aperture, clipping_range=clipping_range, ), width=width, height=height, **camera_kwargs, ) setattr(env_cfg.scene, sensor_name, camera_cfg) if render_interval is not None: env_cfg.sim.render_interval = render_interval return env_cfg def seed(self, seed: int | None): self._set_seed(seed) def _make_specs(self, env, batch_size=None) -\u003e None: super()._make_specs(env, batch_size=batch_size) if not self.from_tiled_camera: return camera = self._get_tiled_camera() cfg = camera.cfg channels = self.pixels_channels if channels is None: if self.tiled_camera_data_type == \"rgb\": channels = 3 else: channels = camera.data.output[self.tiled_camera_data_type].shape[-1] dtype = self.pixels_dtype if dtype is None: dtype = camera.data.output[self.tiled_camera_data_type].dtype shape = (*self.batch_size, cfg.height, cfg.width, channels) if dtype == torch.uint8: pixels_spec = Bounded(0, 255, shape=shape, dtype=dtype, device=self.device) else: pixels_spec = Unbounded(shape=shape, dtype=dtype, device=self.device) self.observation_spec[self.pixels_key] = pixels_spec def _get_tiled_camera(self): env = self._env.unwrapped scene = env.scene try: return scene.sensors[self.tiled_camera_name] except KeyError as err: raise KeyError( f\"Could not find tiled camera sensor {self.tiled_camera_name!r} \" \"in env.scene.sensors. Add one to the Isaac Lab config before \" \"calling gym.make, for example with \" \"IsaacLabWrapper.add_tiled_camera_config(...).\" ) from err def _read_tiled_camera_pixels(self) -\u003e torch.Tensor: pixels = self._get_tiled_camera().data.output[self.tiled_camera_data_type] pixels = torch.as_tensor(pixels, device=self.device) if self.pixels_channels is not None: pixels = pixels[..., : self.pixels_channels] if self.pixels_dtype is not None and pixels.dtype != self.pixels_dtype: if self.pixels_dtype == torch.uint8 and pixels.dtype.is_floating_point: pixels = pixels.mul(255).clamp(0, 255) pixels = pixels.to(self.pixels_dtype) return pixels def _add_tiled_camera_pixels(self, observations): if not self.from_tiled_camera: return self._normalize_observation_keys(observations) if isinstance(observations, Mapping): observations = dict(observations) else: observations = {\"observation\": observations} observations[self.pixels_key] = self._read_tiled_camera_pixels() return self._normalize_observation_keys(observations) def _normalize_observation_keys(self, observations): if not isinstance(observations, Mapping): return observations spec_keys = set(self.observation_spec.keys(True, True)) if \"policy\" in observations and \"policy\" not in spec_keys: if \"observation\" in spec_keys: observations = dict(observations) observations[\"observation\"] = observations.pop(\"policy\") return observations def _reset_output_transform(self, reset_data): # noqa: F811 observations, info = super()._reset_output_transform(reset_data) return self._add_tiled_camera_pixels(observations), info def _output_transform(self, step_outputs_tuple): # noqa: F811 # IsaacLab will modify the `terminated` and `truncated` tensors # in-place. We clone them here to make sure data doesn\u0027t inadvertently get modified. # The variable naming follows torchrl\u0027s convention here. observations, reward, terminated, truncated, info = step_outputs_tuple observations = self._add_tiled_camera_pixels(observations) done = terminated | truncated reward = reward.unsqueeze(-1) # to get to (num_envs, 1) return ( observations, reward, terminated.clone(), truncated.clone(), done.clone(), info, ) # ------------------------------------------------------------------ # Isaac Lab env detection # ------------------------------------------------------------------ @staticmethod def _supported_isaac_env_classes() -\u003e tuple[type, ...]: \"\"\"Returns the tuple of Isaac Lab env classes this wrapper can bridge. ``ManagerBasedEnv`` and ``ManagerBasedRLEnv`` (subclass) expose ``reset(env_ids=..., seed=..., options=...)`` and ``reset_to``. ``DirectRLEnv`` and ``DirectMARLEnv`` only expose ``_reset_idx``; for those we rebuild the post-reset observation manually. \"\"\" from isaaclab.envs import DirectMARLEnv, DirectRLEnv, ManagerBasedEnv return (ManagerBasedEnv, DirectRLEnv, DirectMARLEnv) @classmethod def _supports_native_autoreset(cls, env: Any) -\u003e bool: \"\"\"Return ``True`` iff ``env`` (assumed already unwrapped) is a batched Isaac Lab env. This is the single source of truth used by :class:`~torchrl.envs.libs.gym._GymAsyncMeta` to decide whether to install the :class:`~torchrl.envs.transforms.VecGymEnvTransform` adapter and register the ``_torchrl_native_autoreset`` flag for an Isaac Lab env (regardless of whether the env was wrapped via :class:`IsaacLabWrapper` or the generic :class:`GymWrapper`). \"\"\" if not _has_isaaclab: return False return isinstance(env, cls._supported_isaac_env_classes()) @property def _isaac_unwrapped(self): return self._env.unwrapped # ------------------------------------------------------------------ # Per-index reset bridge # ------------------------------------------------------------------ def _reset( self, tensordict: TensorDictBase | None = None, **kwargs ) -\u003e TensorDictBase: # Deterministic state-based reset is the single ``set_state=True`` path # (``set_state`` is resolved by ``EnvBase.reset``). The snapshot is passed # as the ``scene_state`` kwarg (from :meth:`get_state`) rather than inside # the tensordict: unlike a stateless env\u0027s state (plain tensordict / # ``torch.Tensor`` entries that live in ``state_spec``), Isaac Lab\u0027s scene # state is an opaque, non-torch-native object. Forcing it into the # tensordict would require wrapping it as a ``NonTensor`` ``state_spec`` # entry (polluting the input spec and the transform/step-MDP machinery); # a kwarg is simpler and keeps it out of the data path. When set, it # overrides the regular reset path entirely (Isaac Lab\u0027s ``reset_to``). set_state = kwargs.pop(\"set_state\", None) scene_state = kwargs.pop(\"scene_state\", None) is_relative = kwargs.pop(\"is_relative\", False) if scene_state is not None and not set_state: raise ValueError( \"A `scene_state` snapshot was passed to reset() without \" \"`set_state=True`. Pass `set_state=True` to deterministically \" \"reset to the snapshot.\" ) reset = None if tensordict is not None: reset = tensordict.get(\"_reset\", None) if set_state: if scene_state is None: raise ValueError( \"reset(set_state=True) on an Isaac Lab env requires a \" \"`scene_state` snapshot (obtained from `env.get_state()`).\" ) return self._reset_to_state_at( scene_state, reset=reset, is_relative=is_relative, **kwargs ) if not self._is_batched: return super()._reset(tensordict, **kwargs) if reset is None or reset.all(): # Full reset: defer to GymWrapper / GymLikeEnv. if tensordict is not None and \"_reset\" in tensordict.keys(): tensordict = tensordict.exclude(\"_reset\") return super()._reset(tensordict, **kwargs) if not reset.any(): # Nothing to reset: return a sentinel reset tensordict so the # surrounding _reset_proc_data / _update_during_reset machinery # preserves the incoming state on every sub-env. return tensordict.exclude(\"_reset\") # Per-index reset path. Gated on native_autoreset=True: with # native_autoreset=False, partial-mask reset calls are issued by # EnvBase.maybe_reset on every step that has any \"done\" row, and # the surrounding VecGymEnvTransform already handles the obs swap # without re-entering Isaac. Firing unwrapped.reset(env_ids=...) # here would double-reset those envs. We keep the historical # no-op semantics in that case so explicit partial resets # remain a feature you opt into via native_autoreset=True. if not self._native_autoreset_enabled: return tensordict.exclude(\"_reset\") env_ids = self._reset_mask_to_env_ids(reset) obs, info = self._partial_reset(env_ids=env_ids, **kwargs) return self._build_reset_tensordict(obs, info) def _input_td_has_state(self, tensordict: TensorDictBase | None) -\u003e bool: # Isaac Lab honors a ``scene_state`` snapshot passed as a reset kwarg, # never tensordict state entries, so a reset tensordict carrying # observations must not trigger the implicit-state transition warning. return False @property def _native_autoreset_enabled(self) -\u003e bool: \"\"\"Whether the wrapping pipeline has ``native_autoreset=True``. Set on the instance by :class:`~torchrl.envs.libs.gym._GymAsyncMeta` when the wrapper is constructed via :class:`IsaacLabWrapper(env, native_autoreset=True)`. Mirrored on the surrounding :class:`~torchrl.envs.TransformedEnv` via ``_torchrl_native_autoreset``. \"\"\" return self.__dict__.get(\"_torchrl_native_autoreset\", False) def _reset_mask_to_env_ids(self, reset: torch.Tensor) -\u003e torch.Tensor: \"\"\"Convert a ``_reset`` boolean mask to a 1-D ``env_ids`` tensor.\"\"\" # The mask is shaped (num_envs, 1) or (num_envs,) and may live on a # different device than the underlying Isaac env (e.g. CPU in tests). return ( reset.reshape(-1).nonzero(as_tuple=True)[0].to(self._isaac_unwrapped.device) ) def _partial_reset( self, *, env_ids: torch.Tensor, seed: int | None = None, options: dict | None = None, **kwargs, ) -\u003e tuple[Any, dict | None]: \"\"\"Reset the listed sub-envs without touching the rest.\"\"\" from isaaclab.envs import DirectMARLEnv, DirectRLEnv, ManagerBasedEnv unwrapped = self._isaac_unwrapped if isinstance(unwrapped, ManagerBasedEnv): reset_kwargs: dict[str, Any] = {\"env_ids\": env_ids} if seed is not None: reset_kwargs[\"seed\"] = seed if options is not None: reset_kwargs[\"options\"] = options return unwrapped.reset(**reset_kwargs) if isinstance(unwrapped, (DirectRLEnv, DirectMARLEnv)): # DirectRLEnv.reset() does not accept env_ids -- fall back to the # internal _reset_idx primitive and replay the post-reset bookkeeping # that DirectRLEnv / DirectMARLEnv reset() would normally do. if seed is not None: unwrapped.seed(seed) unwrapped._reset_idx(env_ids) unwrapped.scene.write_data_to_sim() unwrapped.sim.forward() return unwrapped._get_observations(), unwrapped.extras raise TypeError( f\"Per-index reset is not supported for Isaac Lab env of type \" f\"{type(unwrapped).__name__}. Supported bases are ManagerBasedEnv \" \"(and subclasses), DirectRLEnv and DirectMARLEnv.\" ) def _build_reset_tensordict(self, obs: Any, info: dict | None) -\u003e TensorDictBase: \"\"\"Rebuild a torchrl-style reset tensordict from Isaac\u0027s (obs, info).\"\"\" obs = self._add_tiled_camera_pixels(obs) source = self.read_obs(obs) tensordict_out = TensorDict(source=source, batch_size=self.batch_size) if self.info_dict_reader and info is not None: for info_dict_reader in self.info_dict_reader: out = info_dict_reader(info, tensordict_out) if out is not None: tensordict_out = out if self.device is not None: tensordict_out = tensordict_out.to(self.device) return tensordict_out # ------------------------------------------------------------------ # State-based reset bridge # ------------------------------------------------------------------ def get_state(self) -\u003e Any: \"\"\"Return the current Isaac Lab scene state. This is exactly what ``InteractiveScene.get_state()`` returns on the underlying env. It can later be passed back via ``env.reset(td, set_state=True, scene_state=...)`` (or the :meth:`reset_to_state` convenience) to deterministically branch back to this checkpoint. Returns: The scene-state dict (as defined by Isaac Lab; not converted). \"\"\" return self._isaac_unwrapped.scene.get_state() def reset_to_state( self, state: Any, tensordict: TensorDictBase | None = None, *, is_relative: bool = False, seed: int | None = None, ) -\u003e TensorDictBase: \"\"\"Deterministically reset to ``state`` (per-index when a ``_reset`` mask is set). ``state`` is the dict format returned by :meth:`get_state` (i.e. ``InteractiveScene.get_state()``). Only manager-based envs are supported (they are the only ones that expose ``reset_to``). Args: state: scene state to restore. tensordict: optional input tensordict. If it contains a ``\"_reset\"`` mask, only the masked sub-envs are restored; otherwise every sub-env is restored. Keyword Args: is_relative: if ``True``, ``state`` is interpreted relative to the env origin (matches Isaac Lab\u0027s ``reset_to(is_relative=True)``). Defaults to ``False``. seed: optional seed forwarded to Isaac\u0027s ``reset_to``. Returns: A reset tensordict in torchrl\u0027s standard shape. .. note:: This is a thin convenience around the unified deterministic-reset path; it is exactly equivalent to:: env.reset(td, set_state=True, scene_state=state, is_relative=...) If the env is wrapped in a :class:`~torchrl.envs.TransformedEnv` and the transform stack (``RewardSum``, ``InitTracker``, primers, ``VecNormV2``, ...) must fire on the restored rows, call that ``reset(...)`` form on the top-level env so it routes through :meth:`TransformedEnv._reset` and triggers every transform on the way down. \"\"\" kwargs: dict[str, Any] = {\"scene_state\": state, \"is_relative\": is_relative} if seed is not None: kwargs[\"seed\"] = seed return self.reset(tensordict, set_state=True, **kwargs) def _reset_to_state_at( self, state: Any, *, reset: torch.Tensor | None, is_relative: bool, seed: int | None = None, **kwargs, ) -\u003e TensorDictBase: unwrapped = self._isaac_unwrapped if not hasattr(unwrapped, \"reset_to\"): raise RuntimeError( f\"Isaac Lab env of type {type(unwrapped).__name__} does not \" \"expose reset_to (only manager-based envs do). For state-based \" \"reset on Direct envs, branch from the underlying scene state \" \"by hand.\" ) if reset is None: env_ids = torch.arange( self.batch_size.numel(), device=unwrapped.device, dtype=torch.long, ) else: env_ids = self._reset_mask_to_env_ids(reset) state = self._index_state_for_env_ids(state, env_ids) reset_to_kwargs: dict[str, Any] = { \"env_ids\": env_ids, \"is_relative\": is_relative, } if seed is not None: reset_to_kwargs[\"seed\"] = seed obs, info = unwrapped.reset_to(state, **reset_to_kwargs) return self._build_reset_tensordict(obs, info) def _index_state_for_env_ids(self, state: Any, env_ids: torch.Tensor) -\u003e Any: num_envs = self.batch_size.numel() if isinstance(state, torch.Tensor): if state.shape[:1] == (num_envs,): return state.index_select(0, env_ids.to(state.device)) return state if isinstance(state, Mapping): return { key: self._index_state_for_env_ids(value, env_ids) for key, value in state.items() } if isinstance(state, tuple): return tuple(self._index_state_for_env_ids(item, env_ids) for item in state) if isinstance(state, list): return [self._index_state_for_env_ids(item, env_ids) for item in state] return state",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/envs/libs/isaac_lab.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+BatchRenorm1d
+=============
+
+.. autoclass:: BatchRenorm1d
+    :members:

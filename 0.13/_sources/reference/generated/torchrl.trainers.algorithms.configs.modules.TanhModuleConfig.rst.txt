@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.modules.TanhModuleConfig
+============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.modules
+
+.. autoclass:: TanhModuleConfig

@@ -1,0 +1,2279 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.envs.libs.dm_control &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/envs/libs/dm_control';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.envs.libs.dm_control - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.envs...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.envs.libs.dm_control">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/envs/libs/dm_control</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.envs.libs.dm_control</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">importlib</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span><span class="p">,</span> <span class="n">VERBOSE</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Bounded</span><span class="p">,</span>
+    <span class="n">Categorical</span><span class="p">,</span>
+    <span class="n">Composite</span><span class="p">,</span>
+    <span class="n">OneHot</span><span class="p">,</span>
+    <span class="n">TensorSpec</span><span class="p">,</span>
+    <span class="n">Unbounded</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.utils</span> <span class="kn">import</span> <span class="n">DEVICE_TYPING</span><span class="p">,</span> <span class="n">numpy_to_torch_dtype_dict</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">_EnvPostInit</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.gym_like</span> <span class="kn">import</span> <span class="n">GymLikeEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.utils</span> <span class="kn">import</span> <span class="n">_classproperty</span>
+
+<span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;EGL_DEVICE_ID&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span> <span class="o">%</span> <span class="n">n</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">VERBOSE</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;EGL_DEVICE_ID: </span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s1">&#39;EGL_DEVICE_ID&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="n">_has_dmc</span> <span class="o">=</span> <span class="n">_has_dm_control</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;dm_control&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DMControlEnv&quot;</span><span class="p">,</span> <span class="s2">&quot;DMControlWrapper&quot;</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">_dmcontrol_to_torchrl_spec_transform</span><span class="p">(</span>
+    <span class="n">spec</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">categorical_discrete_encoding</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorSpec</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">dm_env</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">OrderedDict</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">_dmcontrol_to_torchrl_spec_transform</span><span class="p">(</span>
+                <span class="n">item</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">categorical_discrete_encoding</span><span class="o">=</span><span class="n">categorical_discrete_encoding</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">spec</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span><span class="o">**</span><span class="n">spec</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">DiscreteArray</span><span class="p">):</span>
+        <span class="c1"># DiscreteArray is a type of BoundedArray so this block needs to go first</span>
+        <span class="n">action_space_cls</span> <span class="o">=</span> <span class="n">Categorical</span> <span class="k">if</span> <span class="n">categorical_discrete_encoding</span> <span class="k">else</span> <span class="n">OneHot</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">categorical_discrete_encoding</span>
+                <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">long</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">action_space_cls</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">num_values</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">BoundedArray</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">):</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">Bounded</span><span class="p">(</span>
+            <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">low</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">minimum</span><span class="p">,</span>
+            <span class="n">high</span><span class="o">=</span><span class="n">spec</span><span class="o">.</span><span class="n">maximum</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">spec</span><span class="p">,</span> <span class="n">dm_env</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">Array</span><span class="p">):</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="n">spec</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">shape</span><span class="p">):</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">numpy_to_torch_dtype_dict</span><span class="p">[</span><span class="n">spec</span><span class="o">.</span><span class="n">dtype</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">double</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">half</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Unbounded</span><span class="p">(</span><span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">spec</span><span class="p">))</span>
+
+
+<span class="k">def</span> <span class="nf">_get_envs</span><span class="p">(</span><span class="n">to_dict</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_dm_control</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;Cannot find dm_control in virtual environment.&quot;</span><span class="p">)</span>
+    <span class="kn">from</span> <span class="nn">dm_control</span> <span class="kn">import</span> <span class="n">suite</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">to_dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">suite</span><span class="o">.</span><span class="n">BENCHMARKING</span><span class="p">)</span> <span class="o">+</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">suite</span><span class="o">.</span><span class="n">EXTRA</span><span class="p">)</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">tup</span> <span class="ow">in</span> <span class="n">suite</span><span class="o">.</span><span class="n">BENCHMARKING</span><span class="p">:</span>
+        <span class="n">env_name</span> <span class="o">=</span> <span class="n">tup</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">d</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tup</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">for</span> <span class="n">tup</span> <span class="ow">in</span> <span class="n">suite</span><span class="o">.</span><span class="n">EXTRA</span><span class="p">:</span>
+        <span class="n">env_name</span> <span class="o">=</span> <span class="n">tup</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">d</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tup</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">_robust_to_tensor</span><span class="p">(</span><span class="n">array</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">array</span><span class="o">.</span><span class="n">copy</span><span class="p">())</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">_DMControlMeta</span><span class="p">(</span><span class="n">_EnvPostInit</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_workers &gt; 1.</span>
+
+<span class="sd">    When ``DMControlEnv(..., num_workers=4)`` is called, this metaclass intercepts the</span>
+<span class="sd">    call and returns a :class:`~torchrl.envs.ParallelEnv` instead. The returned</span>
+<span class="sd">    ParallelEnv is lazy — workers are not started until the environment is actually used</span>
+<span class="sd">    (e.g., via :meth:`torchrl.envs.batched_envs.BatchedEnvBase.reset` / :meth:`torchrl.envs.batched_envs.BatchedEnvBase.step`</span>
+<span class="sd">    or when accessing specs).</span>
+
+<span class="sd">    Users can call :meth:`torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel`</span>
+<span class="sd">    to set ParallelEnv parameters before the environment starts.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Extract num_workers from explicit kwarg or kwargs dict</span>
+        <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_workers</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;num_workers&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">num_workers</span><span class="p">)</span> <span class="k">if</span> <span class="n">num_workers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;DMControlEnv&quot;</span> <span class="ow">and</span> <span class="n">num_workers</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
+
+            <span class="c1"># Extract env_name and task_name from args</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;env_name&quot;</span><span class="p">)</span>
+            <span class="n">task_name</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;task_name&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Remove env_name and task_name from kwargs if they were there</span>
+            <span class="c1"># (they&#39;ll be passed positionally to the env creator)</span>
+            <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;env_name&quot;</span><span class="p">,</span> <span class="s2">&quot;task_name&quot;</span><span class="p">)</span>
+            <span class="p">}</span>
+
+            <span class="c1"># Create factory function that builds single DMControlEnv instances</span>
+            <span class="k">def</span> <span class="nf">make_env</span><span class="p">(</span><span class="n">_env_name</span><span class="o">=</span><span class="n">env_name</span><span class="p">,</span> <span class="n">_task_name</span><span class="o">=</span><span class="n">task_name</span><span class="p">,</span> <span class="n">_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">):</span>
+                <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">_env_name</span><span class="p">,</span> <span class="n">_task_name</span><span class="p">,</span> <span class="n">num_workers</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="o">**</span><span class="n">_kwargs</span><span class="p">)</span>
+
+            <span class="c1"># Return lazy ParallelEnv (workers not started yet)</span>
+            <span class="k">return</span> <span class="n">ParallelEnv</span><span class="p">(</span><span class="n">num_workers</span><span class="p">,</span> <span class="n">make_env</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__call__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="DMControlWrapper">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.DMControlWrapper.html#torchrl.envs.DMControlWrapper">[docs]</a>
+<span class="k">class</span> <span class="nc">DMControlWrapper</span><span class="p">(</span><span class="n">GymLikeEnv</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DeepMind Control lab environment wrapper.</span>
+
+<span class="sd">    The DeepMind control library can be found here: https://github.com/deepmind/dm_control.</span>
+
+<span class="sd">    Paper: https://arxiv.org/abs/2006.12983</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env (dm_control.suite env): :class:`~dm_control.suite.base.Task`</span>
+<span class="sd">            environment instance.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        from_pixels (bool, optional): if ``True``, an attempt to return the pixel</span>
+<span class="sd">            observations from the env will be performed.</span>
+<span class="sd">            By default, these observations</span>
+<span class="sd">            will be written under the ``&quot;pixels&quot;`` entry.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        pixels_only (bool, optional): if ``True``, only the pixel observations will</span>
+<span class="sd">            be returned (by default under the ``&quot;pixels&quot;`` entry in the output tensordict).</span>
+<span class="sd">            If ``False``, observations (eg, states) and pixels will be returned</span>
+<span class="sd">            whenever ``from_pixels=True``. Defaults to ``True``.</span>
+<span class="sd">        frame_skip (int, optional): if provided, indicates for how many steps the</span>
+<span class="sd">            same action is to be repeated. The observation returned will be the</span>
+<span class="sd">            last observation of the sequence, whereas the reward will be the sum</span>
+<span class="sd">            of rewards across steps.</span>
+<span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
+<span class="sd">            is to be cast. Defaults to ``torch.device(&quot;cpu&quot;)``.</span>
+<span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
+<span class="sd">            Should match the leading dimensions of all observations, done states,</span>
+<span class="sd">            rewards, actions and infos.</span>
+<span class="sd">            Defaults to ``torch.Size([])``.</span>
+<span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
+<span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        available_envs (list): a list of ``Tuple[str, List[str]]`` representing the</span>
+<span class="sd">            environment / task pairs available.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from dm_control import suite</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import DMControlWrapper</span>
+<span class="sd">        &gt;&gt;&gt; env = suite.load(&quot;cheetah&quot;, &quot;run&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; env = DMControlWrapper(env,</span>
+<span class="sd">        ...    from_pixels=True, frame_skip=4)</span>
+<span class="sd">        &gt;&gt;&gt; td = env.rand_step()</span>
+<span class="sd">        &gt;&gt;&gt; print(td)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        pixels: Tensor(shape=torch.Size([240, 320, 3]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="sd">                        position: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        velocity: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float64, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=cpu,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.available_envs)</span>
+<span class="sd">        [(&#39;acrobot&#39;, [&#39;swingup&#39;, &#39;swingup_sparse&#39;]), (&#39;ball_in_cup&#39;, [&#39;catch&#39;]), (&#39;cartpole&#39;, [&#39;balance&#39;, &#39;balance_sparse&#39;, &#39;swingup&#39;, &#39;swingup_sparse&#39;, &#39;three_poles&#39;, &#39;two_poles&#39;]), (&#39;cheetah&#39;, [&#39;run&#39;]), (&#39;finger&#39;, [&#39;spin&#39;, &#39;turn_easy&#39;, &#39;turn_hard&#39;]), (&#39;fish&#39;, [&#39;upright&#39;, &#39;swim&#39;]), (&#39;hopper&#39;, [&#39;stand&#39;, &#39;hop&#39;]), (&#39;humanoid&#39;, [&#39;stand&#39;, &#39;walk&#39;, &#39;run&#39;, &#39;run_pure_state&#39;]), (&#39;manipulator&#39;, [&#39;bring_ball&#39;, &#39;bring_peg&#39;, &#39;insert_ball&#39;, &#39;insert_peg&#39;]), (&#39;pendulum&#39;, [&#39;swingup&#39;]), (&#39;point_mass&#39;, [&#39;easy&#39;, &#39;hard&#39;]), (&#39;reacher&#39;, [&#39;easy&#39;, &#39;hard&#39;]), (&#39;swimmer&#39;, [&#39;swimmer6&#39;, &#39;swimmer15&#39;]), (&#39;walker&#39;, [&#39;stand&#39;, &#39;walk&#39;, &#39;run&#39;]), (&#39;dog&#39;, [&#39;fetch&#39;, &#39;run&#39;, &#39;stand&#39;, &#39;trot&#39;, &#39;walk&#39;]), (&#39;humanoid_CMU&#39;, [&#39;run&#39;, &#39;stand&#39;, &#39;walk&#39;]), (&#39;lqr&#39;, [&#39;lqr_2_1&#39;, &#39;lqr_6_2&#39;]), (&#39;quadruped&#39;, [&#39;escape&#39;, &#39;fetch&#39;, &#39;run&#39;, &#39;walk&#39;]), (&#39;stacker&#39;, [&#39;stack_2&#39;, &#39;stack_4&#39;])]</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">git_url</span> <span class="o">=</span> <span class="s2">&quot;https://github.com/deepmind/dm_control&quot;</span>
+    <span class="n">libname</span> <span class="o">=</span> <span class="s2">&quot;dm_control&quot;</span>
+
+    <span class="nd">@_classproperty</span>
+    <span class="k">def</span> <span class="nf">available_envs</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_dm_control</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">_get_envs</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">lib</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="kn">import</span> <span class="nn">dm_control</span>
+
+        <span class="k">return</span> <span class="n">dm_control</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">env</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_build_env</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env</span><span class="p">,</span>
+        <span class="n">_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">from_pixels</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">render_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pixels_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">camera_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span> <span class="o">=</span> <span class="n">from_pixels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixels_only</span> <span class="o">=</span> <span class="n">pixels_only</span>
+
+        <span class="k">if</span> <span class="n">from_pixels</span><span class="p">:</span>
+            <span class="kn">from</span> <span class="nn">dm_control.suite.wrappers</span> <span class="kn">import</span> <span class="n">pixels</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_egl_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">render_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;camera_id&quot;</span><span class="p">:</span> <span class="n">camera_id</span><span class="p">}</span>
+            <span class="k">if</span> <span class="n">render_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">render_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">render_kwargs</span><span class="p">)</span>
+            <span class="n">env</span> <span class="o">=</span> <span class="n">pixels</span><span class="o">.</span><span class="n">Wrapper</span><span class="p">(</span>
+                <span class="n">env</span><span class="p">,</span>
+                <span class="n">pixels_only</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">pixels_only</span><span class="p">,</span>
+                <span class="n">render_kwargs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">render_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">env</span>
+
+    <span class="k">def</span> <span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env</span><span class="p">:</span> <span class="n">gym</span><span class="o">.</span><span class="n">Env</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>  <span class="c1"># noqa: F821</span>
+        <span class="c1"># specs are defined when first called</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_spec</span> <span class="o">=</span> <span class="n">_dmcontrol_to_torchrl_spec_transform</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">observation_spec</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="n">reward_spec</span> <span class="o">=</span> <span class="n">_dmcontrol_to_torchrl_spec_transform</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">reward_spec</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">reward_spec</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_spec</span> <span class="o">=</span> <span class="n">reward_spec</span>
+        <span class="c1"># populate default done spec</span>
+        <span class="n">done_spec</span> <span class="o">=</span> <span class="n">Categorical</span><span class="p">(</span>
+            <span class="n">n</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">done</span><span class="o">=</span><span class="n">done_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="n">truncated</span><span class="o">=</span><span class="n">done_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="n">terminated</span><span class="o">=</span><span class="n">done_spec</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">_dmcontrol_to_torchrl_spec_transform</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">action_spec</span><span class="p">(),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">dm_control</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span>
+        <span class="kn">from</span> <span class="nn">dm_control.suite.wrappers</span> <span class="kn">import</span> <span class="n">pixels</span>
+
+        <span class="k">if</span> <span class="s2">&quot;env&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;Could not find environment key &#39;env&#39; in kwargs.&quot;</span><span class="p">)</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="p">(</span><span class="n">dm_control</span><span class="o">.</span><span class="n">rl</span><span class="o">.</span><span class="n">control</span><span class="o">.</span><span class="n">Environment</span><span class="p">,</span> <span class="n">pixels</span><span class="o">.</span><span class="n">Wrapper</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;env is not of type &#39;dm_control.rl.control.Environment&#39; or `dm_control.suite.wrappers.pixels.Wrapper`.&quot;</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_set_egl_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span><span class="p">):</span>
+        <span class="c1"># Deprecated as lead to unreliable rendering</span>
+        <span class="c1"># egl device needs to be set before importing mujoco bindings: in</span>
+        <span class="c1"># distributed settings, it&#39;ll be easy to tell which cuda device to use.</span>
+        <span class="c1"># In mp settings, we&#39;ll need to use mp.Pool with a specific init function</span>
+        <span class="c1"># that defines the EGL device before importing libraries. For now, we&#39;ll</span>
+        <span class="c1"># just use a common EGL_DEVICE_ID environment variable for all processes.</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span> <span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="n">DEVICE_TYPING</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DMControlEnv</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_egl_device</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="nf">_init_env</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">seed</span>
+
+    <span class="k">def</span> <span class="nf">_set_seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">dm_control.suite.wrappers</span> <span class="kn">import</span> <span class="n">pixels</span>
+
+        <span class="k">if</span> <span class="n">_seed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">random_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="n">_seed</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">,</span> <span class="n">pixels</span><span class="o">.</span><span class="n">Wrapper</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">task</span><span class="p">,</span> <span class="s2">&quot;_random&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;self._env._env.task._random does not exist&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">_random</span> <span class="o">=</span> <span class="n">random_state</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">task</span><span class="p">,</span> <span class="s2">&quot;_random&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;self._env._env.task._random does not exist&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="o">.</span><span class="n">task</span><span class="o">.</span><span class="n">_random</span> <span class="o">=</span> <span class="n">random_state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_output_transform</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">timestep_tuple</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TimeStep</span><span class="p">]</span>  <span class="c1"># noqa: F821</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+        <span class="kn">from</span> <span class="nn">dm_env</span> <span class="kn">import</span> <span class="n">StepType</span>
+
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">timestep_tuple</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">tuple</span><span class="p">:</span>
+            <span class="n">timestep_tuple</span> <span class="o">=</span> <span class="p">(</span><span class="n">timestep_tuple</span><span class="p">,)</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">timestep_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reward</span>
+
+        <span class="n">truncated</span> <span class="o">=</span> <span class="n">terminated</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">timestep_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">step_type</span> <span class="o">==</span> <span class="n">StepType</span><span class="o">.</span><span class="n">LAST</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">timestep_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">discount</span><span class="p">,</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="n">truncated</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">terminated</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">done</span> <span class="o">=</span> <span class="n">truncated</span> <span class="ow">or</span> <span class="n">terminated</span>
+
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">timestep_tuple</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">observation</span>
+        <span class="n">info</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">return</span> <span class="n">observation</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">terminated</span><span class="p">,</span> <span class="n">truncated</span><span class="p">,</span> <span class="n">done</span><span class="p">,</span> <span class="n">info</span>
+
+    <span class="k">def</span> <span class="nf">_reset_output_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reset_data</span><span class="p">):</span>
+        <span class="p">(</span>
+            <span class="n">observation</span><span class="p">,</span>
+            <span class="n">reward</span><span class="p">,</span>
+            <span class="n">terminated</span><span class="p">,</span>
+            <span class="n">truncated</span><span class="p">,</span>
+            <span class="n">done</span><span class="p">,</span>
+            <span class="n">info</span><span class="p">,</span>
+        <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_transform</span><span class="p">(</span><span class="n">reset_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">observation</span><span class="p">,</span> <span class="n">info</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(env=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="si">}</span><span class="s2">, batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DMControlEnv">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.envs.DMControlEnv.html#torchrl.envs.DMControlEnv">[docs]</a>
+<span class="k">class</span> <span class="nc">DMControlEnv</span><span class="p">(</span><span class="n">DMControlWrapper</span><span class="p">,</span> <span class="n">metaclass</span><span class="o">=</span><span class="n">_DMControlMeta</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;DeepMind Control lab environment wrapper.</span>
+
+<span class="sd">    The DeepMind control library can be found here: https://github.com/deepmind/dm_control.</span>
+
+<span class="sd">    Paper: https://arxiv.org/abs/2006.12983</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env_name (str): name of the environment.</span>
+<span class="sd">        task_name (str): name of the task.</span>
+<span class="sd">        num_workers (int, optional): number of parallel environments. Defaults to 1.</span>
+<span class="sd">            When ``num_workers &gt; 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is</span>
+<span class="sd">            returned instead of a single environment. The parallel environment</span>
+<span class="sd">            is not started until it is actually used (e.g., via reset/step or</span>
+<span class="sd">            accessing specs). Use :meth:`~torchrl.envs.BatchedEnvBase.configure_parallel`</span>
+<span class="sd">            to set parallel execution parameters before the environment starts.</span>
+
+<span class="sd">    Keyword Args:</span>
+<span class="sd">        from_pixels (bool, optional): if ``True``, an attempt to return the pixel</span>
+<span class="sd">            observations from the env will be performed.</span>
+<span class="sd">            By default, these observations</span>
+<span class="sd">            will be written under the ``&quot;pixels&quot;`` entry.</span>
+<span class="sd">            Defaults to ``False``.</span>
+<span class="sd">        pixels_only (bool, optional): if ``True``, only the pixel observations will</span>
+<span class="sd">            be returned (by default under the ``&quot;pixels&quot;`` entry in the output tensordict).</span>
+<span class="sd">            If ``False``, observations (eg, states) and pixels will be returned</span>
+<span class="sd">            whenever ``from_pixels=True``. Defaults to ``True``.</span>
+<span class="sd">        frame_skip (int, optional): if provided, indicates for how many steps the</span>
+<span class="sd">            same action is to be repeated. The observation returned will be the</span>
+<span class="sd">            last observation of the sequence, whereas the reward will be the sum</span>
+<span class="sd">            of rewards across steps.</span>
+<span class="sd">        device (torch.device, optional): if provided, the device on which the data</span>
+<span class="sd">            is to be cast. Defaults to ``torch.device(&quot;cpu&quot;)``.</span>
+<span class="sd">        batch_size (torch.Size, optional): the batch size of the environment.</span>
+<span class="sd">            Should match the leading dimensions of all observations, done states,</span>
+<span class="sd">            rewards, actions and infos.</span>
+<span class="sd">            Defaults to ``torch.Size([])``.</span>
+<span class="sd">        allow_done_after_reset (bool, optional): if ``True``, it is tolerated</span>
+<span class="sd">            for envs to be ``done`` just after :meth:`reset` is called.</span>
+<span class="sd">            Defaults to ``False``.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        available_envs (list): a list of ``Tuple[str, List[str]]`` representing the</span>
+<span class="sd">            environment / task pairs available.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import DMControlEnv</span>
+<span class="sd">        &gt;&gt;&gt; env = DMControlEnv(env_name=&quot;cheetah&quot;, task_name=&quot;run&quot;,</span>
+<span class="sd">        ...    from_pixels=True, frame_skip=4)</span>
+<span class="sd">        &gt;&gt;&gt; td = env.rand_step()</span>
+<span class="sd">        &gt;&gt;&gt; print(td)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                action: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                next: TensorDict(</span>
+<span class="sd">                    fields={</span>
+<span class="sd">                        done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        pixels: Tensor(shape=torch.Size([240, 320, 3]), device=cpu, dtype=torch.uint8, is_shared=False),</span>
+<span class="sd">                        position: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                        reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False),</span>
+<span class="sd">                        terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False),</span>
+<span class="sd">                        velocity: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float64, is_shared=False)},</span>
+<span class="sd">                    batch_size=torch.Size([]),</span>
+<span class="sd">                    device=cpu,</span>
+<span class="sd">                    is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=cpu,</span>
+<span class="sd">            is_shared=False)</span>
+<span class="sd">        &gt;&gt;&gt; print(env.available_envs)</span>
+<span class="sd">        [(&#39;acrobot&#39;, [&#39;swingup&#39;, &#39;swingup_sparse&#39;]), ...]</span>
+<span class="sd">        &gt;&gt;&gt; # For running multiple envs in parallel (returns a lazy ParallelEnv)</span>
+<span class="sd">        &gt;&gt;&gt; env = DMControlEnv(&quot;cheetah&quot;, &quot;run&quot;, num_workers=4)</span>
+<span class="sd">        &gt;&gt;&gt; # Configure parallel parameters before the env starts</span>
+<span class="sd">        &gt;&gt;&gt; env.configure_parallel(use_buffers=True, num_threads=2)</span>
+<span class="sd">        &gt;&gt;&gt; # Environment starts when first used</span>
+<span class="sd">        &gt;&gt;&gt; env.reset()</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">env_name</span><span class="p">,</span> <span class="n">task_name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_dmc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="s2">&quot;dm_control python package was not found. Please install this dependency.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">env_name</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;task_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">task_name</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_build_env</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">env_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">task_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">_seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">dm_control</span> <span class="kn">import</span> <span class="n">suite</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">env_name</span> <span class="o">=</span> <span class="n">env_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">task_name</span> <span class="o">=</span> <span class="n">task_name</span>
+
+        <span class="n">from_pixels</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_pixels&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;from_pixels&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;from_pixels&quot;</span><span class="p">]</span>
+        <span class="n">pixels_only</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;pixels_only&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;pixels_only&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">del</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;pixels_only&quot;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_dmc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;dm_control not found, unable to create </span><span class="si">{</span><span class="n">env_name</span><span class="si">}</span><span class="s2">:&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">task_name</span><span class="si">}</span><span class="s2">. Consider downloading and installing &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;dm_control from </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">git_url</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">camera_id</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;camera_id&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_seed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">random_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">RandomState</span><span class="p">(</span><span class="n">_seed</span><span class="p">)</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;random&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">random_state</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">suite</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">env_name</span><span class="p">,</span> <span class="n">task_name</span><span class="p">,</span> <span class="n">task_kwargs</span><span class="o">=</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_build_env</span><span class="p">(</span>
+            <span class="n">env</span><span class="p">,</span>
+            <span class="n">_seed</span><span class="o">=</span><span class="n">_seed</span><span class="p">,</span>
+            <span class="n">from_pixels</span><span class="o">=</span><span class="n">from_pixels</span><span class="p">,</span>
+            <span class="n">pixels_only</span><span class="o">=</span><span class="n">pixels_only</span><span class="p">,</span>
+            <span class="n">camera_id</span><span class="o">=</span><span class="n">camera_id</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">rebuild_with_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">new_kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_constructor_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_env</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_env</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_env</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_check_kwargs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">if</span> <span class="s2">&quot;env_name&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">env_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;env_name&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;task_name&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">task_name</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;task_name&quot;</span><span class="p">]</span>
+                <span class="n">available_envs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">available_envs</span><span class="p">)</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">env_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available_envs</span>
+                    <span class="ow">or</span> <span class="n">task_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">available_envs</span><span class="p">[</span><span class="n">env_name</span><span class="p">]</span>
+                <span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">env_name</span><span class="si">}</span><span class="s2"> with task </span><span class="si">{</span><span class="n">task_name</span><span class="si">}</span><span class="s2"> is unknown in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">libname</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;dm_control requires task_name to be specified&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;dm_control requires env_name to be specified&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">(env=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">env_name</span><span class="si">}</span><span class="s2">, task=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">task_name</span><span class="si">}</span><span class="s2">, batch_size=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.envs.libs.dm_control",
+       "headline": "torchrl.envs.libs.dm_control",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/envs/libs/dm_control.html",
+       "articleBody": "Source code for torchrl.envs.libs.dm_control # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import collections import importlib import os from typing import Any import numpy as np import torch from torchrl._utils import logger as torchrl_logger, VERBOSE from torchrl.data.tensor_specs import ( Bounded, Categorical, Composite, OneHot, TensorSpec, Unbounded, ) from torchrl.data.utils import DEVICE_TYPING, numpy_to_torch_dtype_dict from torchrl.envs.common import _EnvPostInit from torchrl.envs.gym_like import GymLikeEnv from torchrl.envs.utils import _classproperty if torch.cuda.device_count() \u003e 1: n = torch.cuda.device_count() - 1 os.environ[\"EGL_DEVICE_ID\"] = str(1 + (os.getpid() % n)) if VERBOSE: torchrl_logger.info(f\"EGL_DEVICE_ID: {os.environ[\u0027EGL_DEVICE_ID\u0027]}\") _has_dmc = _has_dm_control = importlib.util.find_spec(\"dm_control\") is not None __all__ = [\"DMControlEnv\", \"DMControlWrapper\"] def _dmcontrol_to_torchrl_spec_transform( spec, dtype: torch.dtype | None = None, device: DEVICE_TYPING = None, categorical_discrete_encoding: bool = False, ) -\u003e TensorSpec: import dm_env if isinstance(spec, collections.OrderedDict) or isinstance(spec, dict): spec = { k: _dmcontrol_to_torchrl_spec_transform( item, device=device, categorical_discrete_encoding=categorical_discrete_encoding, ) for k, item in spec.items() } return Composite(**spec) elif isinstance(spec, dm_env.specs.DiscreteArray): # DiscreteArray is a type of BoundedArray so this block needs to go first action_space_cls = Categorical if categorical_discrete_encoding else OneHot if dtype is None: dtype = ( numpy_to_torch_dtype_dict[spec.dtype] if categorical_discrete_encoding else torch.long ) return action_space_cls(spec.num_values, device=device, dtype=dtype) elif isinstance(spec, dm_env.specs.BoundedArray): if dtype is None: dtype = numpy_to_torch_dtype_dict[spec.dtype] shape = spec.shape if not len(shape): shape = torch.Size([1]) return Bounded( shape=shape, low=spec.minimum, high=spec.maximum, dtype=dtype, device=device, ) elif isinstance(spec, dm_env.specs.Array): shape = spec.shape if not len(shape): shape = torch.Size([1]) if dtype is None: dtype = numpy_to_torch_dtype_dict[spec.dtype] if dtype in (torch.float, torch.double, torch.half): return Unbounded(shape=shape, dtype=dtype, device=device) else: return Unbounded(shape=shape, dtype=dtype, device=device) else: raise NotImplementedError(type(spec)) def _get_envs(to_dict: bool = True) -\u003e dict[str, Any]: if not _has_dm_control: raise ImportError(\"Cannot find dm_control in virtual environment.\") from dm_control import suite if not to_dict: return tuple(suite.BENCHMARKING) + tuple(suite.EXTRA) d = {} for tup in suite.BENCHMARKING: env_name = tup[0] d.setdefault(env_name, []).append(tup[1]) for tup in suite.EXTRA: env_name = tup[0] d.setdefault(env_name, []).append(tup[1]) return d.items() def _robust_to_tensor(array: float | np.ndarray) -\u003e torch.Tensor: if isinstance(array, np.ndarray): return torch.as_tensor(array.copy()) else: return torch.as_tensor(array) class _DMControlMeta(_EnvPostInit): \"\"\"Metaclass for DMControlEnv that returns a lazy ParallelEnv when num_workers \u003e 1. When ``DMControlEnv(..., num_workers=4)`` is called, this metaclass intercepts the call and returns a :class:`~torchrl.envs.ParallelEnv` instead. The returned ParallelEnv is lazy \u2014 workers are not started until the environment is actually used (e.g., via :meth:`torchrl.envs.batched_envs.BatchedEnvBase.reset` / :meth:`torchrl.envs.batched_envs.BatchedEnvBase.step` or when accessing specs). Users can call :meth:`torchrl.envs.batched_envs.BatchedEnvBase.configure_parallel` to set ParallelEnv parameters before the environment starts. \"\"\" def __call__(cls, *args, num_workers: int | None = None, **kwargs): # Extract num_workers from explicit kwarg or kwargs dict if num_workers is None: num_workers = kwargs.pop(\"num_workers\", 1) else: kwargs.pop(\"num_workers\", None) num_workers = int(num_workers) if num_workers is not None else 1 if cls.__name__ == \"DMControlEnv\" and num_workers \u003e 1: from torchrl.envs import ParallelEnv # Extract env_name and task_name from args env_name = args[0] if len(args) \u003e= 1 else kwargs.get(\"env_name\") task_name = args[1] if len(args) \u003e= 2 else kwargs.get(\"task_name\") # Remove env_name and task_name from kwargs if they were there # (they\u0027ll be passed positionally to the env creator) env_kwargs = { k: v for k, v in kwargs.items() if k not in (\"env_name\", \"task_name\") } # Create factory function that builds single DMControlEnv instances def make_env(_env_name=env_name, _task_name=task_name, _kwargs=env_kwargs): return cls(_env_name, _task_name, num_workers=1, **_kwargs) # Return lazy ParallelEnv (workers not started yet) return ParallelEnv(num_workers, make_env) return super().__call__(*args, **kwargs) [docs] class DMControlWrapper(GymLikeEnv): \"\"\"DeepMind Control lab environment wrapper. The DeepMind control library can be found here: https://github.com/deepmind/dm_control. Paper: https://arxiv.org/abs/2006.12983 Args: env (dm_control.suite env): :class:`~dm_control.suite.base.Task` environment instance. Keyword Args: from_pixels (bool, optional): if ``True``, an attempt to return the pixel observations from the env will be performed. By default, these observations will be written under the ``\"pixels\"`` entry. Defaults to ``False``. pixels_only (bool, optional): if ``True``, only the pixel observations will be returned (by default under the ``\"pixels\"`` entry in the output tensordict). If ``False``, observations (eg, states) and pixels will be returned whenever ``from_pixels=True``. Defaults to ``True``. frame_skip (int, optional): if provided, indicates for how many steps the same action is to be repeated. The observation returned will be the last observation of the sequence, whereas the reward will be the sum of rewards across steps. device (torch.device, optional): if provided, the device on which the data is to be cast. Defaults to ``torch.device(\"cpu\")``. batch_size (torch.Size, optional): the batch size of the environment. Should match the leading dimensions of all observations, done states, rewards, actions and infos. Defaults to ``torch.Size([])``. allow_done_after_reset (bool, optional): if ``True``, it is tolerated for envs to be ``done`` just after :meth:`reset` is called. Defaults to ``False``. Attributes: available_envs (list): a list of ``Tuple[str, List[str]]`` representing the environment / task pairs available. Examples: \u003e\u003e\u003e from dm_control import suite \u003e\u003e\u003e from torchrl.envs import DMControlWrapper \u003e\u003e\u003e env = suite.load(\"cheetah\", \"run\") \u003e\u003e\u003e env = DMControlWrapper(env, ... from_pixels=True, frame_skip=4) \u003e\u003e\u003e td = env.rand_step() \u003e\u003e\u003e print(td) TensorDict( fields={ action: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float64, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False), pixels: Tensor(shape=torch.Size([240, 320, 3]), device=cpu, dtype=torch.uint8, is_shared=False), position: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float64, is_shared=False), reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False), terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False), velocity: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float64, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False) \u003e\u003e\u003e print(env.available_envs) [(\u0027acrobot\u0027, [\u0027swingup\u0027, \u0027swingup_sparse\u0027]), (\u0027ball_in_cup\u0027, [\u0027catch\u0027]), (\u0027cartpole\u0027, [\u0027balance\u0027, \u0027balance_sparse\u0027, \u0027swingup\u0027, \u0027swingup_sparse\u0027, \u0027three_poles\u0027, \u0027two_poles\u0027]), (\u0027cheetah\u0027, [\u0027run\u0027]), (\u0027finger\u0027, [\u0027spin\u0027, \u0027turn_easy\u0027, \u0027turn_hard\u0027]), (\u0027fish\u0027, [\u0027upright\u0027, \u0027swim\u0027]), (\u0027hopper\u0027, [\u0027stand\u0027, \u0027hop\u0027]), (\u0027humanoid\u0027, [\u0027stand\u0027, \u0027walk\u0027, \u0027run\u0027, \u0027run_pure_state\u0027]), (\u0027manipulator\u0027, [\u0027bring_ball\u0027, \u0027bring_peg\u0027, \u0027insert_ball\u0027, \u0027insert_peg\u0027]), (\u0027pendulum\u0027, [\u0027swingup\u0027]), (\u0027point_mass\u0027, [\u0027easy\u0027, \u0027hard\u0027]), (\u0027reacher\u0027, [\u0027easy\u0027, \u0027hard\u0027]), (\u0027swimmer\u0027, [\u0027swimmer6\u0027, \u0027swimmer15\u0027]), (\u0027walker\u0027, [\u0027stand\u0027, \u0027walk\u0027, \u0027run\u0027]), (\u0027dog\u0027, [\u0027fetch\u0027, \u0027run\u0027, \u0027stand\u0027, \u0027trot\u0027, \u0027walk\u0027]), (\u0027humanoid_CMU\u0027, [\u0027run\u0027, \u0027stand\u0027, \u0027walk\u0027]), (\u0027lqr\u0027, [\u0027lqr_2_1\u0027, \u0027lqr_6_2\u0027]), (\u0027quadruped\u0027, [\u0027escape\u0027, \u0027fetch\u0027, \u0027run\u0027, \u0027walk\u0027]), (\u0027stacker\u0027, [\u0027stack_2\u0027, \u0027stack_4\u0027])] \"\"\" git_url = \"https://github.com/deepmind/dm_control\" libname = \"dm_control\" @_classproperty def available_envs(cls): if not _has_dm_control: return [] return list(_get_envs()) @property def lib(self): import dm_control return dm_control def __init__(self, env=None, **kwargs): if env is not None: kwargs[\"env\"] = env super().__init__(**kwargs) def _build_env( self, env, _seed: int | None = None, from_pixels: bool = False, render_kwargs: dict | None = None, pixels_only: bool = False, camera_id: int | str = 0, **kwargs, ): self.from_pixels = from_pixels self.pixels_only = pixels_only if from_pixels: from dm_control.suite.wrappers import pixels self._set_egl_device(self.device) self.render_kwargs = {\"camera_id\": camera_id} if render_kwargs is not None: self.render_kwargs.update(render_kwargs) env = pixels.Wrapper( env, pixels_only=self.pixels_only, render_kwargs=self.render_kwargs, ) return env def _make_specs(self, env: gym.Env) -\u003e None: # noqa: F821 # specs are defined when first called self.observation_spec = _dmcontrol_to_torchrl_spec_transform( self._env.observation_spec(), device=self.device ) reward_spec = _dmcontrol_to_torchrl_spec_transform( self._env.reward_spec(), device=self.device ) if len(reward_spec.shape) == 0: reward_spec.shape = torch.Size([1]) self.reward_spec = reward_spec # populate default done spec done_spec = Categorical( n=2, shape=(*self.batch_size, 1), dtype=torch.bool, device=self.device ) self.done_spec = Composite( done=done_spec.clone(), truncated=done_spec.clone(), terminated=done_spec.clone(), device=self.device, ) self.action_spec = _dmcontrol_to_torchrl_spec_transform( self._env.action_spec(), device=self.device ) def _check_kwargs(self, kwargs: dict): dm_control = self.lib from dm_control.suite.wrappers import pixels if \"env\" not in kwargs: raise TypeError(\"Could not find environment key \u0027env\u0027 in kwargs.\") env = kwargs[\"env\"] if not isinstance(env, (dm_control.rl.control.Environment, pixels.Wrapper)): raise TypeError( \"env is not of type \u0027dm_control.rl.control.Environment\u0027 or `dm_control.suite.wrappers.pixels.Wrapper`.\" ) def _set_egl_device(self, device: DEVICE_TYPING): # Deprecated as lead to unreliable rendering # egl device needs to be set before importing mujoco bindings: in # distributed settings, it\u0027ll be easy to tell which cuda device to use. # In mp settings, we\u0027ll need to use mp.Pool with a specific init function # that defines the EGL device before importing libraries. For now, we\u0027ll # just use a common EGL_DEVICE_ID environment variable for all processes. return def to(self, device: DEVICE_TYPING) -\u003e DMControlEnv: super().to(device) self._set_egl_device(self.device) return self def _init_env(self, seed: int | None = None) -\u003e int | None: seed = self.set_seed(seed) return seed def _set_seed(self, _seed: int | None) -\u003e None: from dm_control.suite.wrappers import pixels if _seed is None: return None random_state = np.random.RandomState(_seed) if isinstance(self._env, pixels.Wrapper): if not hasattr(self._env._env.task, \"_random\"): raise RuntimeError(\"self._env._env.task._random does not exist\") self._env._env.task._random = random_state else: if not hasattr(self._env.task, \"_random\"): raise RuntimeError(\"self._env._env.task._random does not exist\") self._env.task._random = random_state self.reset() def _output_transform( self, timestep_tuple: tuple[TimeStep] # noqa: F821 ) -\u003e tuple[np.ndarray, float, bool, bool, dict]: from dm_env import StepType if type(timestep_tuple) is not tuple: timestep_tuple = (timestep_tuple,) reward = timestep_tuple[0].reward truncated = terminated = False if timestep_tuple[0].step_type == StepType.LAST: if np.isclose(timestep_tuple[0].discount, 1): truncated = True else: terminated = True done = truncated or terminated observation = timestep_tuple[0].observation info = {} return observation, reward, terminated, truncated, done, info def _reset_output_transform(self, reset_data): ( observation, reward, terminated, truncated, done, info, ) = self._output_transform(reset_data) return observation, info def __repr__(self) -\u003e str: return ( f\"{self.__class__.__name__}(env={self._env}, batch_size={self.batch_size})\" ) [docs] class DMControlEnv(DMControlWrapper, metaclass=_DMControlMeta): \"\"\"DeepMind Control lab environment wrapper. The DeepMind control library can be found here: https://github.com/deepmind/dm_control. Paper: https://arxiv.org/abs/2006.12983 Args: env_name (str): name of the environment. task_name (str): name of the task. num_workers (int, optional): number of parallel environments. Defaults to 1. When ``num_workers \u003e 1``, a lazy :class:`~torchrl.envs.ParallelEnv` is returned instead of a single environment. The parallel environment is not started until it is actually used (e.g., via reset/step or accessing specs). Use :meth:`~torchrl.envs.BatchedEnvBase.configure_parallel` to set parallel execution parameters before the environment starts. Keyword Args: from_pixels (bool, optional): if ``True``, an attempt to return the pixel observations from the env will be performed. By default, these observations will be written under the ``\"pixels\"`` entry. Defaults to ``False``. pixels_only (bool, optional): if ``True``, only the pixel observations will be returned (by default under the ``\"pixels\"`` entry in the output tensordict). If ``False``, observations (eg, states) and pixels will be returned whenever ``from_pixels=True``. Defaults to ``True``. frame_skip (int, optional): if provided, indicates for how many steps the same action is to be repeated. The observation returned will be the last observation of the sequence, whereas the reward will be the sum of rewards across steps. device (torch.device, optional): if provided, the device on which the data is to be cast. Defaults to ``torch.device(\"cpu\")``. batch_size (torch.Size, optional): the batch size of the environment. Should match the leading dimensions of all observations, done states, rewards, actions and infos. Defaults to ``torch.Size([])``. allow_done_after_reset (bool, optional): if ``True``, it is tolerated for envs to be ``done`` just after :meth:`reset` is called. Defaults to ``False``. Attributes: available_envs (list): a list of ``Tuple[str, List[str]]`` representing the environment / task pairs available. Examples: \u003e\u003e\u003e from torchrl.envs import DMControlEnv \u003e\u003e\u003e env = DMControlEnv(env_name=\"cheetah\", task_name=\"run\", ... from_pixels=True, frame_skip=4) \u003e\u003e\u003e td = env.rand_step() \u003e\u003e\u003e print(td) TensorDict( fields={ action: Tensor(shape=torch.Size([6]), device=cpu, dtype=torch.float64, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False), pixels: Tensor(shape=torch.Size([240, 320, 3]), device=cpu, dtype=torch.uint8, is_shared=False), position: Tensor(shape=torch.Size([8]), device=cpu, dtype=torch.float64, is_shared=False), reward: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.float64, is_shared=False), terminated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([1]), device=cpu, dtype=torch.bool, is_shared=False), velocity: Tensor(shape=torch.Size([9]), device=cpu, dtype=torch.float64, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False)}, batch_size=torch.Size([]), device=cpu, is_shared=False) \u003e\u003e\u003e print(env.available_envs) [(\u0027acrobot\u0027, [\u0027swingup\u0027, \u0027swingup_sparse\u0027]), ...] \u003e\u003e\u003e # For running multiple envs in parallel (returns a lazy ParallelEnv) \u003e\u003e\u003e env = DMControlEnv(\"cheetah\", \"run\", num_workers=4) \u003e\u003e\u003e # Configure parallel parameters before the env starts \u003e\u003e\u003e env.configure_parallel(use_buffers=True, num_threads=2) \u003e\u003e\u003e # Environment starts when first used \u003e\u003e\u003e env.reset() \"\"\" def __init__(self, env_name, task_name, **kwargs): if not _has_dmc: raise ImportError( \"dm_control python package was not found. Please install this dependency.\" ) kwargs[\"env_name\"] = env_name kwargs[\"task_name\"] = task_name super().__init__(**kwargs) def _build_env( self, env_name: str, task_name: str, _seed: int | None = None, **kwargs, ): from dm_control import suite self.env_name = env_name self.task_name = task_name from_pixels = kwargs.get(\"from_pixels\") if \"from_pixels\" in kwargs: del kwargs[\"from_pixels\"] pixels_only = kwargs.get(\"pixels_only\") if \"pixels_only\" in kwargs: del kwargs[\"pixels_only\"] if not _has_dmc: raise ImportError( f\"dm_control not found, unable to create {env_name}:\" f\" {task_name}. Consider downloading and installing \" f\"dm_control from {self.git_url}\" ) camera_id = kwargs.pop(\"camera_id\", 0) if _seed is not None: random_state = np.random.RandomState(_seed) kwargs[\"random\"] = random_state env = suite.load(env_name, task_name, task_kwargs=kwargs) return super()._build_env( env, _seed=_seed, from_pixels=from_pixels, pixels_only=pixels_only, camera_id=camera_id, **kwargs, ) def rebuild_with_kwargs(self, **new_kwargs): self._constructor_kwargs.update(new_kwargs) self._env = self._build_env() self._make_specs(self._env) def _check_kwargs(self, kwargs: dict): if \"env_name\" in kwargs: env_name = kwargs[\"env_name\"] if \"task_name\" in kwargs: task_name = kwargs[\"task_name\"] available_envs = dict(self.available_envs) if ( env_name not in available_envs or task_name not in available_envs[env_name] ): raise RuntimeError( f\"{env_name} with task {task_name} is unknown in {self.libname}\" ) else: raise TypeError(\"dm_control requires task_name to be specified\") else: raise TypeError(\"dm_control requires env_name to be specified\") def __repr__(self) -\u003e str: return f\"{self.__class__.__name__}(env={self.env_name}, task={self.task_name}, batch_size={self.batch_size})\"",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/envs/libs/dm_control.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

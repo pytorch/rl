@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+CEMPlanner
+==========
+
+.. autoclass:: CEMPlanner
+    :members:

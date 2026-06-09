@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+REDQLoss
+========
+
+.. autoclass:: REDQLoss
+    :members:

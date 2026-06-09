@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.DQNTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: DQNTrainerConfig

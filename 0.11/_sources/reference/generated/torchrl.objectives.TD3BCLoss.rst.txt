@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+TD3BCLoss
+=========
+
+.. autoclass:: TD3BCLoss
+    :members:

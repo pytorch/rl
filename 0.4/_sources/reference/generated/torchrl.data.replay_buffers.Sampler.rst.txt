@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data.replay_buffers
+
+
+Sampler
+=======
+
+.. autoclass:: Sampler
+    :members:
+    :inherited-members:

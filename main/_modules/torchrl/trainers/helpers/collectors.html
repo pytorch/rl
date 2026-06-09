@@ -1,0 +1,2157 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.trainers.helpers.collectors &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/trainers/helpers/collectors';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.trainers.helpers.collectors - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.trai...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.trainers.helpers.collectors">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/trainers/helpers/collectors</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.trainers.helpers.collectors</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
+
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span> <span class="n">TensorDictModuleWrapper</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">BaseCollector</span><span class="p">,</span>
+    <span class="n">Collector</span><span class="p">,</span>
+    <span class="n">MultiAsyncCollector</span><span class="p">,</span>
+    <span class="n">MultiSyncCollector</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.postprocs</span> <span class="kn">import</span> <span class="n">MultiStep</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.batched_envs</span> <span class="kn">import</span> <span class="n">ParallelEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.common</span> <span class="kn">import</span> <span class="n">EnvBase</span>
+
+
+<div class="viewcode-block" id="sync_async_collector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.sync_async_collector.html#torchrl.trainers.helpers.sync_async_collector">[docs]</a>
+<span class="k">def</span> <span class="nf">sync_async_collector</span><span class="p">(</span>
+    <span class="n">env_fns</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">],</span>
+    <span class="n">env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MultiAsyncCollector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs asynchronous collectors, each running synchronous environments.</span>
+
+<span class="sd">    .. aafig::</span>
+
+
+<span class="sd">            +----------------------------------------------------------------------+</span>
+<span class="sd">            |           &quot;MultiAsyncCollector&quot;                     |                |</span>
+<span class="sd">            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |</span>
+<span class="sd">            |  &quot;Collector 1&quot;  |  &quot;Collector 2&quot;  |  &quot;Collector 3&quot;  |     &quot;Main&quot;     |</span>
+<span class="sd">            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
+<span class="sd">            | &quot;env1&quot; | &quot;env2&quot; | &quot;env3&quot; | &quot;env4&quot; | &quot;env5&quot; | &quot;env6&quot; |                |</span>
+<span class="sd">            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
+<span class="sd">            |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |                |</span>
+<span class="sd">            |        |        |        |        |        |        |                |</span>
+<span class="sd">            |       &quot;actor&quot;   |        |        |       &quot;actor&quot;   |                |</span>
+<span class="sd">            |                 |        |        |                 |                |</span>
+<span class="sd">            | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                 |                |</span>
+<span class="sd">            |        |        |                 |                 |                |</span>
+<span class="sd">            |        |        |                 | &quot;step&quot; | &quot;step&quot; |                |</span>
+<span class="sd">            |        |        |                 |        |        |                |</span>
+<span class="sd">            |       &quot;actor    | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                |</span>
+<span class="sd">            |                 |        |        |                 |                |</span>
+<span class="sd">            | &quot;yield batch 1&quot; |       &quot;actor&quot;   |                 |&quot;collect, train&quot;|</span>
+<span class="sd">            |                 |                 |                 |                |</span>
+<span class="sd">            | &quot;step&quot; | &quot;step&quot; |                 | &quot;yield batch 2&quot; |&quot;collect, train&quot;|</span>
+<span class="sd">            |        |        |                 |                 |                |</span>
+<span class="sd">            |        |        | &quot;yield batch 3&quot; |                 |&quot;collect, train&quot;|</span>
+<span class="sd">            |        |        |                 |                 |                |</span>
+<span class="sd">            +----------------------------------------------------------------------+</span>
+
+<span class="sd">    Environment types can be identical or different. In the latter case, env_fns should be a list with all the creator</span>
+<span class="sd">    fns for the various envs,</span>
+<span class="sd">    and the policy should handle those envs in batch.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.</span>
+<span class="sd">        env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.</span>
+<span class="sd">        num_env_per_collector: Number of environments per data collector. The product</span>
+<span class="sd">            num_env_per_collector * num_collectors should be less or equal to the number of workers available.</span>
+<span class="sd">        num_collectors: Number of data collectors to be run in parallel.</span>
+<span class="sd">        **kwargs: Other kwargs passed to the data collectors</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_make_collector</span><span class="p">(</span>
+        <span class="n">MultiAsyncCollector</span><span class="p">,</span>
+        <span class="n">env_fns</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
+        <span class="n">env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
+        <span class="n">num_env_per_collector</span><span class="o">=</span><span class="n">num_env_per_collector</span><span class="p">,</span>
+        <span class="n">num_collectors</span><span class="o">=</span><span class="n">num_collectors</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="sync_sync_collector">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.sync_sync_collector.html#torchrl.trainers.helpers.sync_sync_collector">[docs]</a>
+<span class="k">def</span> <span class="nf">sync_sync_collector</span><span class="p">(</span>
+    <span class="n">env_fns</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">],</span>
+    <span class="n">env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Collector</span> <span class="o">|</span> <span class="n">MultiSyncCollector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Runs synchronous collectors, each running synchronous environments.</span>
+
+<span class="sd">    E.g.</span>
+
+<span class="sd">    .. aafig::</span>
+
+<span class="sd">            +----------------------------------------------------------------------+</span>
+<span class="sd">            |            &quot;MultiSyncCollector&quot;                     |                |</span>
+<span class="sd">            |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|                |</span>
+<span class="sd">            |   &quot;Collector 1&quot; |  &quot;Collector 2&quot;  |  &quot;Collector 3&quot;  |     Main       |</span>
+<span class="sd">            |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
+<span class="sd">            | &quot;env1&quot; | &quot;env2&quot; | &quot;env3&quot; | &quot;env4&quot; | &quot;env5&quot; | &quot;env6&quot; |                |</span>
+<span class="sd">            |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~|</span>
+<span class="sd">            |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |&quot;reset&quot; |                |</span>
+<span class="sd">            |        |        |        |        |        |        |                |</span>
+<span class="sd">            |       &quot;actor&quot;   |        |        |       &quot;actor&quot;   |                |</span>
+<span class="sd">            |                 |        |        |                 |                |</span>
+<span class="sd">            | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                 |                |</span>
+<span class="sd">            |        |        |                 |                 |                |</span>
+<span class="sd">            |        |        |                 | &quot;step&quot; | &quot;step&quot; |                |</span>
+<span class="sd">            |        |        |                 |        |        |                |</span>
+<span class="sd">            |       &quot;actor&quot;   | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                |</span>
+<span class="sd">            |                 |        |        |                 |                |</span>
+<span class="sd">            |                 |       &quot;actor&quot;   |                 |                |</span>
+<span class="sd">            |                 |                 |                 |                |</span>
+<span class="sd">            |                       &quot;yield batch of traj 1&quot;-------&gt;&quot;collect, train&quot;|</span>
+<span class="sd">            |                                                     |                |</span>
+<span class="sd">            | &quot;step&quot; | &quot;step&quot; | &quot;step&quot; | &quot;step&quot; | &quot;step&quot; | &quot;step&quot; |                |</span>
+<span class="sd">            |        |        |        |        |        |        |                |</span>
+<span class="sd">            |       &quot;actor&quot;   |       &quot;actor&quot;   |        |        |                |</span>
+<span class="sd">            |                 | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   |                |</span>
+<span class="sd">            |                 |        |        |                 |                |</span>
+<span class="sd">            | &quot;step&quot; | &quot;step&quot; |       &quot;actor&quot;   | &quot;step&quot; | &quot;step&quot; |                |</span>
+<span class="sd">            |        |        |                 |        |        |                |</span>
+<span class="sd">            |       &quot;actor&quot;   |                 |       &quot;actor&quot;   |                |</span>
+<span class="sd">            |                       &quot;yield batch of traj 2&quot;-------&gt;&quot;collect, train&quot;|</span>
+<span class="sd">            |                                                     |                |</span>
+<span class="sd">            +----------------------------------------------------------------------+</span>
+
+<span class="sd">    Envs can be identical or different. In the latter case, env_fns should be a list with all the creator fns</span>
+<span class="sd">    for the various envs,</span>
+<span class="sd">    and the policy should handle those envs in batch.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        env_fns: Callable (or list of Callables) returning an instance of EnvBase class.</span>
+<span class="sd">        env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created.</span>
+<span class="sd">        num_env_per_collector: Number of environments per data collector. The product</span>
+<span class="sd">            num_env_per_collector * num_collectors should be less or equal to the number of workers available.</span>
+<span class="sd">        num_collectors: Number of data collectors to be run in parallel.</span>
+<span class="sd">        **kwargs: Other kwargs passed to the data collectors</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">num_collectors</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="s2">&quot;device&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">&quot;storing_device&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;storing_device&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;storing_device&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_make_collector</span><span class="p">(</span>
+            <span class="n">Collector</span><span class="p">,</span>
+            <span class="n">env_fns</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
+            <span class="n">env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
+            <span class="n">num_env_per_collector</span><span class="o">=</span><span class="n">num_env_per_collector</span><span class="p">,</span>
+            <span class="n">num_collectors</span><span class="o">=</span><span class="n">num_collectors</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_make_collector</span><span class="p">(</span>
+        <span class="n">MultiSyncCollector</span><span class="p">,</span>
+        <span class="n">env_fns</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
+        <span class="n">env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
+        <span class="n">num_env_per_collector</span><span class="o">=</span><span class="n">num_env_per_collector</span><span class="p">,</span>
+        <span class="n">num_collectors</span><span class="o">=</span><span class="n">num_collectors</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span> <span class="nf">_make_collector</span><span class="p">(</span>
+    <span class="n">collector_class</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span>
+    <span class="n">env_fns</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Callable</span><span class="p">],</span>
+    <span class="n">env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">policy</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">TensorDictBase</span><span class="p">],</span> <span class="n">TensorDictBase</span><span class="p">],</span>
+    <span class="n">max_frames_per_traj</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">postproc</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_collectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">env_kwargs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_fns</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">num_env</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_fns</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">num_env_per_collector</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_env_per_collector</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">num_env</span> <span class="o">//</span> <span class="o">-</span><span class="n">num_collectors</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">num_collectors</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">num_collectors</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">num_env</span> <span class="o">//</span> <span class="o">-</span><span class="n">num_env_per_collector</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">num_env_per_collector</span> <span class="o">*</span> <span class="n">num_collectors</span> <span class="o">&lt;</span> <span class="n">num_env</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;num_env_per_collector * num_collectors=</span><span class="si">{</span><span class="n">num_env_per_collector</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">num_collectors</span><span class="si">}</span><span class="s2"> &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;has been found to be less than num_env=</span><span class="si">{</span><span class="n">num_env</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">num_env</span> <span class="o">=</span> <span class="n">num_env_per_collector</span> <span class="o">*</span> <span class="n">num_collectors</span>
+            <span class="n">env_fns</span> <span class="o">=</span> <span class="p">[</span><span class="n">env_fns</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_env</span><span class="p">)]</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                <span class="s2">&quot;num_env was not a list but num_env_per_collector and num_collectors were not both specified,&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;got num_env_per_collector=</span><span class="si">{</span><span class="n">num_env_per_collector</span><span class="si">}</span><span class="s2"> and num_collectors=</span><span class="si">{</span><span class="n">num_collectors</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env_kwargs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">[</span><span class="n">env_kwargs</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_env</span><span class="p">)]</span>
+
+    <span class="n">env_fns_split</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">env_fns</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">num_env_per_collector</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_env</span><span class="p">,</span> <span class="n">num_env_per_collector</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="n">env_kwargs_split</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">env_kwargs</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="n">num_env_per_collector</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_env</span><span class="p">,</span> <span class="n">num_env_per_collector</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_fns_split</span><span class="p">)</span> <span class="o">!=</span> <span class="n">num_collectors</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;num_collectors=</span><span class="si">{</span><span class="n">num_collectors</span><span class="si">}</span><span class="s2"> differs from len(env_fns_split)=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">env_fns_split</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">num_env_per_collector</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">env_fns</span> <span class="o">=</span> <span class="p">[</span><span class="n">_env_fn</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">_env_fn</span> <span class="ow">in</span> <span class="n">env_fns_split</span><span class="p">]</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">[</span><span class="n">_env_kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">_env_kwargs</span> <span class="ow">in</span> <span class="n">env_kwargs_split</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">env_fns</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="k">lambda</span> <span class="n">_env_fn</span><span class="o">=</span><span class="n">_env_fn</span><span class="p">,</span> <span class="n">_env_kwargs</span><span class="o">=</span><span class="n">_env_kwargs</span><span class="p">:</span> <span class="n">ParallelEnv</span><span class="p">(</span>
+                <span class="n">num_workers</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">_env_fn</span><span class="p">),</span>
+                <span class="n">create_env_fn</span><span class="o">=</span><span class="n">_env_fn</span><span class="p">,</span>
+                <span class="n">create_env_kwargs</span><span class="o">=</span><span class="n">_env_kwargs</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">_env_fn</span><span class="p">,</span> <span class="n">_env_kwargs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">env_fns_split</span><span class="p">,</span> <span class="n">env_kwargs_split</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">collector_class</span> <span class="ow">is</span> <span class="n">Collector</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">env_fns</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Something went wrong: expected a single env constructor but got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">env_fns</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">env_fns</span> <span class="o">=</span> <span class="n">env_fns</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="n">env_kwargs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">collector_class</span><span class="p">(</span>
+        <span class="n">create_env_fn</span><span class="o">=</span><span class="n">env_fns</span><span class="p">,</span>
+        <span class="n">create_env_kwargs</span><span class="o">=</span><span class="n">env_kwargs</span><span class="p">,</span>
+        <span class="n">policy</span><span class="o">=</span><span class="n">policy</span><span class="p">,</span>
+        <span class="n">total_frames</span><span class="o">=</span><span class="n">total_frames</span><span class="p">,</span>
+        <span class="n">max_frames_per_traj</span><span class="o">=</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
+        <span class="n">frames_per_batch</span><span class="o">=</span><span class="n">frames_per_batch</span><span class="p">,</span>
+        <span class="n">postproc</span><span class="o">=</span><span class="n">postproc</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="make_collector_offpolicy">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_collector_offpolicy.html#torchrl.trainers.helpers.make_collector_offpolicy">[docs]</a>
+<span class="k">def</span> <span class="nf">make_collector_offpolicy</span><span class="p">(</span>
+    <span class="n">make_env</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
+    <span class="n">actor_model_explore</span><span class="p">:</span> <span class="p">(</span><span class="n">TensorDictModuleWrapper</span> <span class="o">|</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">),</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="n">make_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Returns a data collector for off-policy sota-implementations.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        make_env (Callable): environment creator</span>
+<span class="sd">        actor_model_explore (SafeModule): Model instance used for evaluation and exploration update</span>
+<span class="sd">        cfg (DictConfig): config for creating collector object</span>
+<span class="sd">        make_env_kwargs (dict): kwargs for the env creator</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">async_collection</span><span class="p">:</span>
+        <span class="n">collector_helper</span> <span class="o">=</span> <span class="n">sync_async_collector</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">collector_helper</span> <span class="o">=</span> <span class="n">sync_sync_collector</span>
+
+    <span class="k">if</span> <span class="n">cfg</span><span class="o">.</span><span class="n">multi_step</span><span class="p">:</span>
+        <span class="n">ms</span> <span class="o">=</span> <span class="n">MultiStep</span><span class="p">(</span>
+            <span class="n">gamma</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
+            <span class="n">n_steps</span><span class="o">=</span><span class="n">cfg</span><span class="o">.</span><span class="n">n_steps_return</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">ms</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">make_env_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">make_env_kwargs</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">env_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">make_env_kwargs</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">make_env_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="n">make_env_kwargs</span>
+    <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+        <span class="k">else</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">collector_helper_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;env_fns&quot;</span><span class="p">:</span> <span class="n">make_env</span><span class="p">,</span>
+        <span class="s2">&quot;env_kwargs&quot;</span><span class="p">:</span> <span class="n">env_kwargs</span><span class="p">,</span>
+        <span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">actor_model_explore</span><span class="p">,</span>
+        <span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
+        <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">,</span>
+        <span class="s2">&quot;total_frames&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">total_frames</span><span class="p">,</span>
+        <span class="s2">&quot;postproc&quot;</span><span class="p">:</span> <span class="n">ms</span><span class="p">,</span>
+        <span class="s2">&quot;num_env_per_collector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="c1"># we already took care of building the make_parallel_env function</span>
+        <span class="s2">&quot;num_collectors&quot;</span><span class="p">:</span> <span class="o">-</span><span class="n">cfg</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">//</span> <span class="o">-</span><span class="n">cfg</span><span class="o">.</span><span class="n">env_per_collector</span><span class="p">,</span>
+        <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">,</span>
+        <span class="s2">&quot;storing_device&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">,</span>
+        <span class="s2">&quot;init_random_frames&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">init_random_frames</span><span class="p">,</span>
+        <span class="s2">&quot;split_trajs&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># trajectories must be separated if multi-step is used</span>
+        <span class="s2">&quot;exploration_type&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">exploration_type</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">collector</span> <span class="o">=</span> <span class="n">collector_helper</span><span class="p">(</span><span class="o">**</span><span class="n">collector_helper_kwargs</span><span class="p">)</span>
+    <span class="n">collector</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">seed</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">collector</span></div>
+
+
+
+<div class="viewcode-block" id="make_collector_onpolicy">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.trainers.helpers.make_collector_onpolicy.html#torchrl.trainers.helpers.make_collector_onpolicy">[docs]</a>
+<span class="k">def</span> <span class="nf">make_collector_onpolicy</span><span class="p">(</span>
+    <span class="n">make_env</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[],</span> <span class="n">EnvBase</span><span class="p">],</span>
+    <span class="n">actor_model_explore</span><span class="p">:</span> <span class="p">(</span><span class="n">TensorDictModuleWrapper</span> <span class="o">|</span> <span class="n">ProbabilisticTensorDictSequential</span><span class="p">),</span>
+    <span class="n">cfg</span><span class="p">:</span> <span class="n">DictConfig</span><span class="p">,</span>  <span class="c1"># noqa: F821</span>
+    <span class="n">make_env_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseCollector</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Makes a collector in on-policy settings.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        make_env (Callable): environment creator</span>
+<span class="sd">        actor_model_explore (SafeModule): Model instance used for evaluation and exploration update</span>
+<span class="sd">        cfg (DictConfig): config for creating collector object</span>
+<span class="sd">        make_env_kwargs (dict): kwargs for the env creator</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">collector_helper</span> <span class="o">=</span> <span class="n">sync_sync_collector</span>
+
+    <span class="n">ms</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">env_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">make_env_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">make_env_kwargs</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">env_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">make_env_kwargs</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">make_env_kwargs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">env_kwargs</span> <span class="o">=</span> <span class="n">make_env_kwargs</span>
+    <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+        <span class="k">else</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">collector_helper_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;env_fns&quot;</span><span class="p">:</span> <span class="n">make_env</span><span class="p">,</span>
+        <span class="s2">&quot;env_kwargs&quot;</span><span class="p">:</span> <span class="n">env_kwargs</span><span class="p">,</span>
+        <span class="s2">&quot;policy&quot;</span><span class="p">:</span> <span class="n">actor_model_explore</span><span class="p">,</span>
+        <span class="s2">&quot;max_frames_per_traj&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">max_frames_per_traj</span><span class="p">,</span>
+        <span class="s2">&quot;frames_per_batch&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">frames_per_batch</span><span class="p">,</span>
+        <span class="s2">&quot;total_frames&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">total_frames</span><span class="p">,</span>
+        <span class="s2">&quot;postproc&quot;</span><span class="p">:</span> <span class="n">ms</span><span class="p">,</span>
+        <span class="s2">&quot;num_env_per_collector&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="c1"># we already took care of building the make_parallel_env function</span>
+        <span class="s2">&quot;num_collectors&quot;</span><span class="p">:</span> <span class="o">-</span><span class="n">cfg</span><span class="o">.</span><span class="n">num_workers</span> <span class="o">//</span> <span class="o">-</span><span class="n">cfg</span><span class="o">.</span><span class="n">env_per_collector</span><span class="p">,</span>
+        <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">,</span>
+        <span class="s2">&quot;storing_device&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">collector_device</span><span class="p">,</span>
+        <span class="s2">&quot;split_trajs&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="c1"># trajectories must be separated in online settings</span>
+        <span class="s2">&quot;exploration_type&quot;</span><span class="p">:</span> <span class="n">cfg</span><span class="o">.</span><span class="n">exploration_type</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">collector</span> <span class="o">=</span> <span class="n">collector_helper</span><span class="p">(</span><span class="o">**</span><span class="n">collector_helper_kwargs</span><span class="p">)</span>
+    <span class="n">collector</span><span class="o">.</span><span class="n">set_seed</span><span class="p">(</span><span class="n">cfg</span><span class="o">.</span><span class="n">seed</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">collector</span></div>
+
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">OnPolicyCollectorConfig</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;On-policy collector config struct.&quot;&quot;&quot;</span>
+
+    <span class="n">collector_device</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="k">lambda</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;cpu&quot;</span><span class="p">])</span>
+    <span class="c1"># device on which the data collector should store the trajectories to be passed to this script.</span>
+    <span class="c1"># If the collector device differs from the policy device (cuda:0 if available), then the</span>
+    <span class="c1"># weights of the collector policy are synchronized with collector.update_policy_weights_().</span>
+    <span class="n">pin_memory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># if ``True``, the data collector will call pin_memory before dispatching tensordicts onto the passing device</span>
+    <span class="n">frames_per_batch</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span>
+    <span class="c1"># number of steps executed in the environment per collection.</span>
+    <span class="c1"># This value represents how many steps will the data collector execute and return in *each*</span>
+    <span class="c1"># environment that has been created in between two rounds of optimization</span>
+    <span class="c1"># (see the optim_steps_per_batch above).</span>
+    <span class="c1"># On the one hand, a low value will enhance the data throughput between processes in async</span>
+    <span class="c1"># settings, which can make the accessing of data a computational bottleneck.</span>
+    <span class="c1"># High values will on the other hand lead to greater tensor sizes in memory and disk to be</span>
+    <span class="c1"># written and read at each global iteration. One should look at the number of frames per second</span>
+    <span class="c1"># in the log to assess the efficiency of the configuration.</span>
+    <span class="n">total_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50000000</span>
+    <span class="c1"># total number of frames collected for training. Does account for frame_skip (i.e. will be</span>
+    <span class="c1"># divided by the frame_skip). Default=50e6.</span>
+    <span class="n">num_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">32</span>
+    <span class="c1"># Number of workers used for data collection.</span>
+    <span class="n">env_per_collector</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span>
+    <span class="c1"># Number of environments per collector. If the env_per_collector is in the range:</span>
+    <span class="c1"># 1&lt;env_per_collector&lt;=num_workers, then the collector runs</span>
+    <span class="c1"># ceil(num_workers/env_per_collector) in parallel and executes the policy steps synchronously</span>
+    <span class="c1"># for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">42</span>
+    <span class="c1"># seed used for the environment, pytorch and numpy.</span>
+    <span class="n">exploration_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;random&quot;</span>
+    <span class="c1"># exploration mode of the data collector.</span>
+    <span class="n">async_collection</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># whether data collection should be done asynchronously. Asynchronous data collection means</span>
+    <span class="c1"># that the data collector will keep on running the environment with the previous weights</span>
+    <span class="c1"># configuration while the optimization loop is being done. If the algorithm is trained</span>
+    <span class="c1"># synchronously, data collection and optimization will occur iteratively, not concurrently.</span>
+
+
+<span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">OffPolicyCollectorConfig</span><span class="p">(</span><span class="n">OnPolicyCollectorConfig</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Off-policy collector config struct.&quot;&quot;&quot;</span>
+
+    <span class="n">multi_step</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="c1"># whether multi-step rewards should be used.</span>
+    <span class="n">n_steps_return</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="c1"># If multi_step is set to True, this value defines the number of steps to look ahead for the reward computation.</span>
+    <span class="n">init_random_frames</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50000</span>
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.trainers.helpers.collectors",
+       "headline": "torchrl.trainers.helpers.collectors",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/trainers/helpers/collectors.html",
+       "articleBody": "Source code for torchrl.trainers.helpers.collectors # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from collections.abc import Callable from dataclasses import dataclass, field from typing import Any from tensordict import TensorDictBase from tensordict.nn import ProbabilisticTensorDictSequential, TensorDictModuleWrapper from torchrl.collectors import ( BaseCollector, Collector, MultiAsyncCollector, MultiSyncCollector, ) from torchrl.data.postprocs import MultiStep from torchrl.envs.batched_envs import ParallelEnv from torchrl.envs.common import EnvBase [docs] def sync_async_collector( env_fns: Callable | list[Callable], env_kwargs: dict | list[dict] | None, num_env_per_collector: int | None = None, num_collectors: int | None = None, **kwargs, ) -\u003e MultiAsyncCollector: \"\"\"Runs asynchronous collectors, each running synchronous environments. .. aafig:: +----------------------------------------------------------------------+ | \"MultiAsyncCollector\" | | |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| | | \"Collector 1\" | \"Collector 2\" | \"Collector 3\" | \"Main\" | |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~| | \"env1\" | \"env2\" | \"env3\" | \"env4\" | \"env5\" | \"env6\" | | |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~| |\"reset\" |\"reset\" |\"reset\" |\"reset\" |\"reset\" |\"reset\" | | | | | | | | | | | \"actor\" | | | \"actor\" | | | | | | | | | \"step\" | \"step\" | \"actor\" | | | | | | | | | | | | | \"step\" | \"step\" | | | | | | | | | | \"actor | \"step\" | \"step\" | \"actor\" | | | | | | | | | \"yield batch 1\" | \"actor\" | |\"collect, train\"| | | | | | | \"step\" | \"step\" | | \"yield batch 2\" |\"collect, train\"| | | | | | | | | | \"yield batch 3\" | |\"collect, train\"| | | | | | | +----------------------------------------------------------------------+ Environment types can be identical or different. In the latter case, env_fns should be a list with all the creator fns for the various envs, and the policy should handle those envs in batch. Args: env_fns: Callable (or list of Callables) returning an instance of EnvBase class. env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created. num_env_per_collector: Number of environments per data collector. The product num_env_per_collector * num_collectors should be less or equal to the number of workers available. num_collectors: Number of data collectors to be run in parallel. **kwargs: Other kwargs passed to the data collectors \"\"\" return _make_collector( MultiAsyncCollector, env_fns=env_fns, env_kwargs=env_kwargs, num_env_per_collector=num_env_per_collector, num_collectors=num_collectors, **kwargs, ) [docs] def sync_sync_collector( env_fns: Callable | list[Callable], env_kwargs: dict | list[dict] | None, num_env_per_collector: int | None = None, num_collectors: int | None = None, **kwargs, ) -\u003e Collector | MultiSyncCollector: \"\"\"Runs synchronous collectors, each running synchronous environments. E.g. .. aafig:: +----------------------------------------------------------------------+ | \"MultiSyncCollector\" | | |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| | | \"Collector 1\" | \"Collector 2\" | \"Collector 3\" | Main | |~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~~|~~~~~~~~~~~~~~~~| | \"env1\" | \"env2\" | \"env3\" | \"env4\" | \"env5\" | \"env6\" | | |~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~|~~~~~~~~~~~~~~~~| |\"reset\" |\"reset\" |\"reset\" |\"reset\" |\"reset\" |\"reset\" | | | | | | | | | | | \"actor\" | | | \"actor\" | | | | | | | | | \"step\" | \"step\" | \"actor\" | | | | | | | | | | | | | \"step\" | \"step\" | | | | | | | | | | \"actor\" | \"step\" | \"step\" | \"actor\" | | | | | | | | | | \"actor\" | | | | | | | | | \"yield batch of traj 1\"-------\u003e\"collect, train\"| | | | | \"step\" | \"step\" | \"step\" | \"step\" | \"step\" | \"step\" | | | | | | | | | | | \"actor\" | \"actor\" | | | | | | \"step\" | \"step\" | \"actor\" | | | | | | | | | \"step\" | \"step\" | \"actor\" | \"step\" | \"step\" | | | | | | | | | | \"actor\" | | \"actor\" | | | \"yield batch of traj 2\"-------\u003e\"collect, train\"| | | | +----------------------------------------------------------------------+ Envs can be identical or different. In the latter case, env_fns should be a list with all the creator fns for the various envs, and the policy should handle those envs in batch. Args: env_fns: Callable (or list of Callables) returning an instance of EnvBase class. env_kwargs: Optional. Dictionary (or list of dictionaries) containing the kwargs for the environment being created. num_env_per_collector: Number of environments per data collector. The product num_env_per_collector * num_collectors should be less or equal to the number of workers available. num_collectors: Number of data collectors to be run in parallel. **kwargs: Other kwargs passed to the data collectors \"\"\" if num_collectors == 1: if \"device\" in kwargs: kwargs[\"device\"] = kwargs.pop(\"device\") if \"storing_device\" in kwargs: kwargs[\"storing_device\"] = kwargs.pop(\"storing_device\") return _make_collector( Collector, env_fns=env_fns, env_kwargs=env_kwargs, num_env_per_collector=num_env_per_collector, num_collectors=num_collectors, **kwargs, ) return _make_collector( MultiSyncCollector, env_fns=env_fns, env_kwargs=env_kwargs, num_env_per_collector=num_env_per_collector, num_collectors=num_collectors, **kwargs, ) def _make_collector( collector_class: type, env_fns: Callable | list[Callable], env_kwargs: dict | list[dict] | None, policy: Callable[[TensorDictBase], TensorDictBase], max_frames_per_traj: int = -1, frames_per_batch: int = 200, total_frames: int | None = None, postproc: Callable | None = None, num_env_per_collector: int | None = None, num_collectors: int | None = None, **kwargs, ) -\u003e BaseCollector: if env_kwargs is None: env_kwargs = {} if isinstance(env_fns, list): num_env = len(env_fns) if num_env_per_collector is None: num_env_per_collector = -(num_env // -num_collectors) elif num_collectors is None: num_collectors = -(num_env // -num_env_per_collector) else: if num_env_per_collector * num_collectors \u003c num_env: raise ValueError( f\"num_env_per_collector * num_collectors={num_env_per_collector * num_collectors} \" f\"has been found to be less than num_env={num_env}\" ) else: try: num_env = num_env_per_collector * num_collectors env_fns = [env_fns for _ in range(num_env)] except (TypeError): raise Exception( \"num_env was not a list but num_env_per_collector and num_collectors were not both specified,\" f\"got num_env_per_collector={num_env_per_collector} and num_collectors={num_collectors}\" ) if not isinstance(env_kwargs, list): env_kwargs = [env_kwargs for _ in range(num_env)] env_fns_split = [ env_fns[i : i + num_env_per_collector] for i in range(0, num_env, num_env_per_collector) ] env_kwargs_split = [ env_kwargs[i : i + num_env_per_collector] for i in range(0, num_env, num_env_per_collector) ] if len(env_fns_split) != num_collectors: raise RuntimeError( f\"num_collectors={num_collectors} differs from len(env_fns_split)={len(env_fns_split)}\" ) if num_env_per_collector == 1: env_fns = [_env_fn[0] for _env_fn in env_fns_split] env_kwargs = [_env_kwargs[0] for _env_kwargs in env_kwargs_split] else: env_fns = [ lambda _env_fn=_env_fn, _env_kwargs=_env_kwargs: ParallelEnv( num_workers=len(_env_fn), create_env_fn=_env_fn, create_env_kwargs=_env_kwargs, ) for _env_fn, _env_kwargs in zip(env_fns_split, env_kwargs_split) ] env_kwargs = None if collector_class is Collector: if len(env_fns) \u003e 1: raise RuntimeError( f\"Something went wrong: expected a single env constructor but got {len(env_fns)}\" ) env_fns = env_fns[0] env_kwargs = env_kwargs[0] return collector_class( create_env_fn=env_fns, create_env_kwargs=env_kwargs, policy=policy, total_frames=total_frames, max_frames_per_traj=max_frames_per_traj, frames_per_batch=frames_per_batch, postproc=postproc, **kwargs, ) [docs] def make_collector_offpolicy( make_env: Callable[[], EnvBase], actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential), cfg: DictConfig, # noqa: F821 make_env_kwargs: dict | None = None, ) -\u003e BaseCollector: \"\"\"Returns a data collector for off-policy sota-implementations. Args: make_env (Callable): environment creator actor_model_explore (SafeModule): Model instance used for evaluation and exploration update cfg (DictConfig): config for creating collector object make_env_kwargs (dict): kwargs for the env creator \"\"\" if cfg.async_collection: collector_helper = sync_async_collector else: collector_helper = sync_sync_collector if cfg.multi_step: ms = MultiStep( gamma=cfg.gamma, n_steps=cfg.n_steps_return, ) else: ms = None env_kwargs = {} if make_env_kwargs is not None and isinstance(make_env_kwargs, dict): env_kwargs.update(make_env_kwargs) elif make_env_kwargs is not None: env_kwargs = make_env_kwargs cfg.collector_device = ( cfg.collector_device if len(cfg.collector_device) \u003e 1 else cfg.collector_device[0] ) collector_helper_kwargs = { \"env_fns\": make_env, \"env_kwargs\": env_kwargs, \"policy\": actor_model_explore, \"max_frames_per_traj\": cfg.max_frames_per_traj, \"frames_per_batch\": cfg.frames_per_batch, \"total_frames\": cfg.total_frames, \"postproc\": ms, \"num_env_per_collector\": 1, # we already took care of building the make_parallel_env function \"num_collectors\": -cfg.num_workers // -cfg.env_per_collector, \"device\": cfg.collector_device, \"storing_device\": cfg.collector_device, \"init_random_frames\": cfg.init_random_frames, \"split_trajs\": True, # trajectories must be separated if multi-step is used \"exploration_type\": cfg.exploration_type, } collector = collector_helper(**collector_helper_kwargs) collector.set_seed(cfg.seed) return collector [docs] def make_collector_onpolicy( make_env: Callable[[], EnvBase], actor_model_explore: (TensorDictModuleWrapper | ProbabilisticTensorDictSequential), cfg: DictConfig, # noqa: F821 make_env_kwargs: dict | None = None, ) -\u003e BaseCollector: \"\"\"Makes a collector in on-policy settings. Args: make_env (Callable): environment creator actor_model_explore (SafeModule): Model instance used for evaluation and exploration update cfg (DictConfig): config for creating collector object make_env_kwargs (dict): kwargs for the env creator \"\"\" collector_helper = sync_sync_collector ms = None env_kwargs = {} if make_env_kwargs is not None and isinstance(make_env_kwargs, dict): env_kwargs.update(make_env_kwargs) elif make_env_kwargs is not None: env_kwargs = make_env_kwargs cfg.collector_device = ( cfg.collector_device if len(cfg.collector_device) \u003e 1 else cfg.collector_device[0] ) collector_helper_kwargs = { \"env_fns\": make_env, \"env_kwargs\": env_kwargs, \"policy\": actor_model_explore, \"max_frames_per_traj\": cfg.max_frames_per_traj, \"frames_per_batch\": cfg.frames_per_batch, \"total_frames\": cfg.total_frames, \"postproc\": ms, \"num_env_per_collector\": 1, # we already took care of building the make_parallel_env function \"num_collectors\": -cfg.num_workers // -cfg.env_per_collector, \"device\": cfg.collector_device, \"storing_device\": cfg.collector_device, \"split_trajs\": True, # trajectories must be separated in online settings \"exploration_type\": cfg.exploration_type, } collector = collector_helper(**collector_helper_kwargs) collector.set_seed(cfg.seed) return collector @dataclass class OnPolicyCollectorConfig: \"\"\"On-policy collector config struct.\"\"\" collector_device: Any = field(default_factory=lambda: [\"cpu\"]) # device on which the data collector should store the trajectories to be passed to this script. # If the collector device differs from the policy device (cuda:0 if available), then the # weights of the collector policy are synchronized with collector.update_policy_weights_(). pin_memory: bool = False # if ``True``, the data collector will call pin_memory before dispatching tensordicts onto the passing device frames_per_batch: int = 1000 # number of steps executed in the environment per collection. # This value represents how many steps will the data collector execute and return in *each* # environment that has been created in between two rounds of optimization # (see the optim_steps_per_batch above). # On the one hand, a low value will enhance the data throughput between processes in async # settings, which can make the accessing of data a computational bottleneck. # High values will on the other hand lead to greater tensor sizes in memory and disk to be # written and read at each global iteration. One should look at the number of frames per second # in the log to assess the efficiency of the configuration. total_frames: int = 50000000 # total number of frames collected for training. Does account for frame_skip (i.e. will be # divided by the frame_skip). Default=50e6. num_workers: int = 32 # Number of workers used for data collection. env_per_collector: int = 8 # Number of environments per collector. If the env_per_collector is in the range: # 1\u003cenv_per_collector\u003c=num_workers, then the collector runs # ceil(num_workers/env_per_collector) in parallel and executes the policy steps synchronously # for each of these parallel wrappers. If env_per_collector=num_workers, no parallel wrapper is created seed: int = 42 # seed used for the environment, pytorch and numpy. exploration_type: str = \"random\" # exploration mode of the data collector. async_collection: bool = False # whether data collection should be done asynchronously. Asynchronous data collection means # that the data collector will keep on running the environment with the previous weights # configuration while the optimization loop is being done. If the algorithm is trained # synchronously, data collection and optimization will occur iteratively, not concurrently. @dataclass class OffPolicyCollectorConfig(OnPolicyCollectorConfig): \"\"\"Off-policy collector config struct.\"\"\" multi_step: bool = False # whether multi-step rewards should be used. n_steps_return: int = 3 # If multi_step is set to True, this value defines the number of steps to look ahead for the reward computation. init_random_frames: int = 50000",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/trainers/helpers/collectors.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

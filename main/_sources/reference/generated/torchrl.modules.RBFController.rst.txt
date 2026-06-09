@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+RBFController
+=============
+
+.. autoclass:: RBFController
+    :members:

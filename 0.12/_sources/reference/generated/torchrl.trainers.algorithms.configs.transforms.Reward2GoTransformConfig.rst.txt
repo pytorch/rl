@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.transforms.Reward2GoTransformConfig
+=======================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.transforms
+
+.. autoclass:: Reward2GoTransformConfig

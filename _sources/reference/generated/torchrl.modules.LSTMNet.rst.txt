@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+LSTMNet
+=======
+
+.. autoclass:: LSTMNet
+    :members:

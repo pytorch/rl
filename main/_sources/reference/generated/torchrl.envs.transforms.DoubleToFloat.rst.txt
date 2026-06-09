@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.envs.transforms
+
+
+DoubleToFloat
+=============
+
+.. autoclass:: DoubleToFloat
+    :members:
