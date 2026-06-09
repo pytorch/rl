@@ -57,6 +57,11 @@ Data and metadata
     RobotDatasetMetadata
     validate_vla_tensordict
 
+Robot VLA trajectories can be loaded into the canonical schema from
+:class:`~torchrl.data.datasets.OpenXExperienceReplay` (Open X-Embodiment) and
+:class:`~torchrl.data.datasets.LeRobotExperienceReplay` (the LeRobot format),
+both of which expose trajectory-aware slice sampling.
+
 Transforms
 ----------
 
