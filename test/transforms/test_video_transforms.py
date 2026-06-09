@@ -390,6 +390,28 @@ class TestVideoClipRefMultiFile:
         assert ref.batch_size == torch.Size([4, 2])
         assert ref.decode().shape == torch.Size([4, 2, 3, 8, 12])
 
+    def test_rebin_preserves_per_file_source(self, two_videos):
+        # rebin must keep the correct per-element source: with 2 files (low/high
+        # intensity), early bins come from file A and later bins from file B.
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb]).rebin(4)
+        assert ref.batch_size == torch.Size([4])
+        means = _means(ref.decode())
+        assert means[0] < 120 and means[1] < 120  # file A (base 0)
+        assert means[2] >= 120 and means[3] >= 120  # file B (base 130)
+
+    def test_from_files_num_bins(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb], num_bins=5, frames_per_bin=2)
+        assert ref.batch_size == torch.Size([5, 2])
+        # wiring is equivalent to building the cat and rebinning explicitly
+        assert torch.equal(
+            ref.frame_index,
+            VideoClipRef.from_files([pa, pb]).rebin(5, frames_per_bin=2).frame_index,
+        )
+        with pytest.raises(ValueError):
+            VideoClipRef.from_files([pa, pb], frames_per_bin=2)
+
     def test_from_files_num_frames_per_file(self, two_videos):
         pa, pb = two_videos
         # provide counts to skip metadata reads; int and per-file forms agree

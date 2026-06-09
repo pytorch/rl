@@ -399,6 +399,8 @@ class VideoClipRef(TensorClass["nocast"]):
         paths: Sequence[str | os.PathLike],
         *,
         num_frames_per_file: int | Sequence[int] | None = None,
+        num_bins: int | None = None,
+        frames_per_bin: int | None = None,
         stream: int | None = None,
         auto_decode: bool = False,
         device: Any = None,
@@ -423,6 +425,12 @@ class VideoClipRef(TensorClass["nocast"]):
             num_frames_per_file (int or sequence of int, optional): frame count(s).
                 An ``int`` applies to every file; a sequence gives one count per
                 file. ``None`` (default) reads each file's metadata once.
+            num_bins (int, optional): resample the concatenated frames onto this many
+                non-overlapping temporal bins (see :meth:`rebin`). Defaults to
+                ``None`` (every frame).
+            frames_per_bin (int, optional): with ``num_bins``, the number of frames
+                per bin. ``None`` (default) takes a single center frame per bin.
+                Requires ``num_bins``.
             stream (int, optional): stream index, applied to every file.
             auto_decode (bool, optional): see :class:`VideoClipRef`.
             device (torch.device or str, optional): default output device.
@@ -456,7 +464,7 @@ class VideoClipRef(TensorClass["nocast"]):
             sources.extend([path] * count)
             local.extend(range(count))
         frame_index = torch.tensor(local, dtype=torch.long)
-        return cls(
+        ref = cls(
             source=NonTensorStack(*sources),
             frame_index=frame_index,
             stream=stream,
@@ -465,6 +473,11 @@ class VideoClipRef(TensorClass["nocast"]):
             out_dtype=dtype,
             batch_size=frame_index.shape,
         )
+        if num_bins is not None:
+            return ref.rebin(int(num_bins), frames_per_bin)
+        if frames_per_bin is not None:
+            raise ValueError("`frames_per_bin` requires `num_bins`.")
+        return ref
 
     @classmethod
     def from_timestamps(
@@ -549,16 +562,15 @@ class VideoClipRef(TensorClass["nocast"]):
             >>> ref.rebin(30, frames_per_bin=3).batch_size
             torch.Size([30, 3])
         """
-        base = self.frame_index.reshape(-1)
-        positions = _bin_frame_index(int(base.numel()), int(num_bins), frames_per_bin)
-        return type(self)(
-            source=_first(self.source),
-            frame_index=base[positions],
-            stream=_first(self.stream),
-            auto_decode=bool(_first(self.auto_decode, False)),
-            out_device=_first(self.out_device),
-            out_dtype=_first(self.out_dtype),
+        flat = self.reshape(-1)
+        positions = _bin_frame_index(
+            int(flat.frame_index.numel()), int(num_bins), frames_per_bin
         )
+        # Gather source and frame_index together at the selected positions so a
+        # multi-file reference keeps the correct per-element source. We index the
+        # underlying tensordict (rather than ``flat[positions]``) to bypass the
+        # ``auto_decode`` eager path and always return a (lazy) reference.
+        return type(self)._from_tensordict(flat._tensordict[positions])
 
     def _source_list(self, n: int) -> list:
         sources = _flatten(self.source)
