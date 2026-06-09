@@ -135,8 +135,7 @@ class UniformActionTokenizer(ActionTokenizerBase):
     def from_metadata(
         cls, metadata: RobotDatasetMetadata, num_bins: int
     ) -> UniformActionTokenizer:
-        """Build from the ``action_low``/``action_high`` of a
-        :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
+        """Build from the ``action_low``/``action_high`` of a :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
         if metadata.action_low is None or metadata.action_high is None:
             raise ValueError(
                 f"metadata {metadata.dataset_id!r} has no action bounds "
