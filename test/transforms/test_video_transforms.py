@@ -572,6 +572,18 @@ class TestVideoClipRefCuda:
         )(td)
         assert out["pixels"].device.type == "cuda"
 
+    def test_tensordict_to_device_decodes_on_device(self, video_path):
+        # Moving the tensordict that holds the reference makes decode() materialize
+        # frames on that device (decode falls back to the container device).
+        td = TensorDict({"frame": VideoClipRef.from_file(video_path)}, batch_size=[20])
+        td = td.to("cpu")
+        assert td["frame"].decode().device.type == "cpu"
+        td = td.to("cuda")
+        assert td["frame"].decode().device.type == "cuda"
+        assert td["frame"][3:7].decode().device.type == "cuda"
+        # an explicit override still wins
+        assert td["frame"].decode(device="cpu").device.type == "cpu"
+
 
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
