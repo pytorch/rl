@@ -24,7 +24,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import torch
-from tensordict import NonTensorStack, TensorClass
+from tensordict import TensorClass
 
 from torchrl._utils import logger as torchrl_logger
 
@@ -139,6 +139,62 @@ def _first(value: Any, default: Any = None) -> Any:
     return default
 
 
+def _as_path(value: Any) -> str:
+    return os.fspath(value) if isinstance(value, os.PathLike) else value
+
+
+def _is_path(value: Any) -> bool:
+    return isinstance(value, (str, bytes, os.PathLike))
+
+
+def _file_lists(value: Any) -> list[list]:
+    """Collects the file-list(s) carried by a ``sources`` field, row-major.
+
+    A ``VideoClipRef`` stores the unique file paths once as a flat tuple
+    (``sources``). Batched tensorclass operations (stacking, replay-buffer storage)
+    can wrap that tuple into a nested ``LinkedList`` that carries one copy of the
+    tuple per batch element. This walks whatever structure ``sources`` currently has
+    and returns every innermost "file list" (a sequence of path-like leaves) in
+    row-major order, so the caller can resolve ``sources[file_id]`` per element.
+    """
+    if value is None:
+        return [[]]
+    if _is_path(value):
+        return [[_as_path(value)]]
+    if hasattr(value, "tolist") and not torch.is_tensor(value):
+        return _file_lists(value.tolist())
+    try:
+        children = list(value)
+    except TypeError:
+        return [[value]]
+    if children and all(_is_path(child) for child in children):
+        return [[_as_path(child) for child in children]]
+    out: list[list] = []
+    for child in children:
+        out.extend(_file_lists(child))
+    return out
+
+
+def _resolve_paths(sources: Any, file_id: list[int], n: int) -> list:
+    """Resolves the per-element source path from ``sources`` and ``file_id``.
+
+    ``file_id[i]`` indexes into the file list that applies to element ``i``. The
+    file list is either shared by all elements (a single flat ``sources`` tuple) or
+    carried per element (after stacking / replay-buffer storage); both collapse to
+    the same per-element path here.
+    """
+    groups = _file_lists(sources)
+    if len(groups) == 1:
+        files = groups[0]
+        return [files[file_id[i]] for i in range(n)]
+    if len(groups) != n:
+        raise RuntimeError(
+            f"VideoClipRef.decode found {len(groups)} source file lists for {n} "
+            "frame indices; sources and frame_index must describe the same elements."
+        )
+    return [groups[i][file_id[i]] for i in range(n)]
+
+
 def _is_contiguous_run(indices: list[int]) -> bool:
     return len(indices) > 0 and indices == list(
         range(indices[0], indices[0] + len(indices))
@@ -222,12 +278,21 @@ def _bin_frame_index(
 class VideoClipRef(TensorClass["nocast"]):
     """A lazy, picklable reference to frames inside an encoded video.
 
-    A ``VideoClipRef`` stores only the *address* of frames -- a video ``source``
-    (path / URI / file id) plus a ``frame_index`` tensor -- never an open decoder
-    and never the decoded pixels. Its batch dimensions are the frames, so indexing
-    behaves like a tensor of frames but stays lazy::
+    A ``VideoClipRef`` stores only the *address* of frames -- the video file(s) it
+    spans (``sources``) plus a per-frame ``frame_index`` and ``file_id`` -- never an
+    open decoder and never the decoded pixels. Its batch dimensions are the frames,
+    so indexing behaves like a tensor of frames but stays lazy::
 
         video[50:100]   # -> VideoClipRef with 50 frames, no decoding happened
+
+    The address is stored compactly so that multi-file references stay cheap: the
+    unique file paths live once in the ``sources`` metadata tuple, and each frame
+    carries a small ``file_id`` integer (an index into ``sources``) alongside its
+    ``frame_index`` (the *local* position within that file). A single-file reference
+    has ``sources=(path,)`` and an all-zero ``file_id``; spanning several files (see
+    :meth:`from_files`) only grows ``file_id`` by one ``int64`` per frame rather than
+    storing a path string per frame. For backward compatibility, the resolved video
+    path is exposed via the :attr:`source` property.
 
     Decoding to a dense ``uint8`` tensor is explicit, batched and seek-friendly via
     :meth:`decode` (grouping by source, using ranged reads for contiguous indices),
@@ -241,13 +306,21 @@ class VideoClipRef(TensorClass["nocast"]):
     per-bin stack) or :meth:`from_timestamps` (time-based alignment).
 
     Args:
-        source (str): the video path / URI / file id. Required.
-        frame_index (torch.Tensor, optional): a ``long`` tensor of frame positions
-            whose shape becomes the batch size. If omitted, it defaults to *every*
-            frame of ``source`` (``arange(num_frames)``) and the frame count is read
-            from the file metadata once at construction (this opens the file and
-            requires torchcodec). Pass it explicitly to reference a subset -- e.g.
-            one episode of a multi-episode / "bucketed" file -- with no metadata read.
+        sources (str, PathLike or tuple of str): the video path / URI / file id, or a
+            tuple of unique paths for a multi-file reference. A single path is
+            normalized to a one-element tuple. Required. (Accessible afterwards as
+            either ``sources`` -- the tuple -- or :attr:`source` -- the resolved path.)
+        frame_index (torch.Tensor, optional): a ``long`` tensor of *local* frame
+            positions (within each frame's file) whose shape becomes the batch size.
+            If omitted, it defaults to *every* frame of the (single) source
+            (``arange(num_frames)``) and the frame count is read from the file
+            metadata once at construction (this opens the file and requires
+            torchcodec). Pass it explicitly to reference a subset -- e.g. one episode
+            of a multi-episode / "bucketed" file -- with no metadata read.
+        file_id (torch.Tensor, optional): a ``long`` tensor, the same shape as
+            ``frame_index``, giving each frame's index into ``sources``. Defaults to
+            all zeros (every frame comes from ``sources[0]``). Built automatically by
+            :meth:`from_files` for multi-file references.
 
     Keyword Args:
         stream (int, optional): the video stream index to decode from. ``None``
@@ -281,6 +354,8 @@ class VideoClipRef(TensorClass["nocast"]):
         >>> ref = VideoClipRef(path)        # every frame; batch size read from file
         >>> ref.batch_size
         torch.Size([16])
+        >>> ref.source == path              # back-compat accessor
+        True
         >>> clip = ref[4:8]            # lazy, no decoding
         >>> clip.batch_size
         torch.Size([4])
@@ -291,8 +366,9 @@ class VideoClipRef(TensorClass["nocast"]):
     .. seealso:: :class:`~torchrl.envs.transforms.DecodeVideoTransform`.
     """
 
-    source: str
+    sources: Any
     frame_index: torch.Tensor | None = None
+    file_id: torch.Tensor | None = None
     stream: int | None = None
     auto_decode: bool = False
     out_device: Any = None
@@ -301,14 +377,20 @@ class VideoClipRef(TensorClass["nocast"]):
     def __post_init__(self):
         # Runs only on direct construction (``VideoClipRef(...)``), not on the
         # internal ``_from_tensordict`` path used by indexing/stacking -- and even
-        # if it did run there, every branch below is a no-op once ``frame_index`` is
-        # a long tensor with a matching ``batch_size``.
+        # if it did run there, every branch below is a no-op once ``frame_index`` /
+        # ``file_id`` are long tensors with a matching ``batch_size``.
+        sources = self.sources
+        # Normalize a single path (str / PathLike) into a one-element tuple so the
+        # ``VideoClipRef(path)`` ergonomic and the multi-file form share one schema.
+        if _is_path(sources):
+            sources = (_as_path(sources),)
+            self.sources = sources
         frame_index = self.frame_index
         if frame_index is None:
-            # No frame_index given: address every frame, reading the count from the
-            # file metadata once. This is the ``VideoClipRef(path)`` ergonomic.
+            # No frame_index given: address every frame of the (single) source,
+            # reading the count from its metadata once. ``VideoClipRef(path)``.
             frame_index = torch.arange(
-                _num_frames(_get_decoder(self.source, self.stream, None))
+                _num_frames(_get_decoder(_first(sources), self.stream, None))
             )
         elif not torch.is_tensor(frame_index):
             frame_index = torch.as_tensor(frame_index)
@@ -316,10 +398,38 @@ class VideoClipRef(TensorClass["nocast"]):
             frame_index = frame_index.to(torch.long)
         if frame_index is not self.frame_index:
             self.frame_index = frame_index
+        # ``file_id`` defaults to all-zeros (single-file): every frame -> sources[0].
+        file_id = self.file_id
+        if file_id is None:
+            file_id = torch.zeros_like(frame_index)
+        elif not torch.is_tensor(file_id):
+            file_id = torch.as_tensor(file_id)
+        if file_id.dtype != torch.long:
+            file_id = file_id.to(torch.long)
+        if file_id is not self.file_id:
+            self.file_id = file_id
         # tensorclass does not infer batch_size from a tensor field, so set it here
         # (the frames are the batch dimensions). A scalar (0-d) index stays scalar.
         if self.batch_size == torch.Size([]) and frame_index.ndim >= 1:
             self.batch_size = frame_index.shape
+
+    @property
+    def source(self):
+        """The video path(s) addressed by this reference (back-compat accessor).
+
+        For a single-file reference this is the path string ``sources[0]`` (so
+        ``ref.source == path``). For a multi-file reference it is the list of
+        per-element resolved paths (one per frame), in batch order.
+        """
+        groups = _file_lists(self.sources)
+        if len(groups) == 1 and len(groups[0]) == 1:
+            # Single-file reference: return the bare path for backward compatibility.
+            return groups[0][0]
+        file_id = self.file_id
+        if file_id is None:
+            return groups[0] if len(groups) == 1 else groups
+        flat = file_id.reshape(-1).cpu().tolist()
+        return _resolve_paths(self.sources, flat, len(flat))
 
     @classmethod
     def from_file(
@@ -384,8 +494,9 @@ class VideoClipRef(TensorClass["nocast"]):
             frame_index = torch.arange(int(num_frames))
         # ``frame_index=None`` lets ``__post_init__`` read the frame count from the
         # file metadata; an explicit ``frame_index`` (or ``num_frames``) skips that.
+        # ``file_id`` defaults to all-zeros (single source) in ``__post_init__``.
         return cls(
-            source=path,
+            sources=(path,),
             frame_index=frame_index,
             stream=stream,
             auto_decode=auto_decode,
@@ -414,7 +525,13 @@ class VideoClipRef(TensorClass["nocast"]):
         straddles two files decodes per file and concatenates). This avoids
         concatenating the videos into one large file and avoids any
         ``LazyStacked``/``LazyCat`` container -- it is just a longer ``frame_index``
-        with a per-element ``source``.
+        plus a per-element ``file_id``.
+
+        The address is stored compactly: the unique file paths are kept once in the
+        ``sources`` metadata tuple (in first-seen order), and each frame carries a
+        single ``int64`` ``file_id`` into that tuple plus its ``frame_index`` (the
+        local position within its file). No path string is stored per frame, so
+        references spanning thousands of files stay light on the replay-buffer path.
 
         Files may have different lengths; the batch size is the total frame count.
 
@@ -458,15 +575,25 @@ class VideoClipRef(TensorClass["nocast"]):
                     "`num_frames_per_file` must have one entry per path "
                     f"({len(paths)}), got {len(counts)}."
                 )
-        sources: list[str] = []
+        # Unique paths in first-seen order; each frame stores a small int file_id
+        # into this tuple rather than a per-frame path string.
+        unique: list[str] = []
+        index_of: dict[str, int] = {}
+        for path in paths:
+            if path not in index_of:
+                index_of[path] = len(unique)
+                unique.append(path)
         local: list[int] = []
+        file_ids: list[int] = []
         for path, count in zip(paths, counts):
-            sources.extend([path] * count)
             local.extend(range(count))
+            file_ids.extend([index_of[path]] * count)
         frame_index = torch.tensor(local, dtype=torch.long)
+        file_id = torch.tensor(file_ids, dtype=torch.long)
         ref = cls(
-            source=NonTensorStack(*sources),
+            sources=tuple(unique),
             frame_index=frame_index,
+            file_id=file_id,
             stream=stream,
             auto_decode=auto_decode,
             out_device=device,
@@ -566,25 +693,36 @@ class VideoClipRef(TensorClass["nocast"]):
         positions = _bin_frame_index(
             int(flat.frame_index.numel()), int(num_bins), frames_per_bin
         )
-        # Gather source and frame_index together at the selected positions so a
-        # multi-file reference keeps the correct per-element source. We index the
-        # underlying tensordict (rather than ``flat[positions]``) to bypass the
-        # ``auto_decode`` eager path and always return a (lazy) reference.
+        # Gather ``file_id`` and ``frame_index`` together at the selected positions so
+        # a multi-file reference keeps each bin pointing at the correct file; the
+        # ``sources`` tuple rides along unchanged as metadata. We index the underlying
+        # tensordict (rather than ``flat[positions]``) to bypass the ``auto_decode``
+        # eager path and always return a (lazy) reference.
         return type(self)._from_tensordict(flat._tensordict[positions])
 
     def _source_list(self, n: int) -> list:
-        sources = _flatten(self.source)
-        if len(sources) == 1 and n > 1:
-            sources = sources * n
-        return sources
+        """Resolves the per-element source path (one per frame) for ``decode``."""
+        file_id = self.file_id
+        if file_id is None:
+            file_id_flat = [0] * n
+        else:
+            file_id_flat = file_id.reshape(-1).cpu().tolist()
+        if len(file_id_flat) != n:
+            raise RuntimeError(
+                f"VideoClipRef.decode found {len(file_id_flat)} file ids for {n} "
+                "frame indices; file_id and frame_index must describe the same "
+                "elements."
+            )
+        return _resolve_paths(self.sources, file_id_flat, n)
 
     def decode(self, *, device: Any = None, dtype: Any = None) -> torch.Tensor:
         """Decodes the referenced frames to a dense tensor.
 
-        Frames are grouped by ``source`` and decoded with a per-process decoder
-        cache; contiguous index runs use a single ranged read. The output keeps the
-        reference's batch shape: a scalar reference yields ``[C, H, W]`` and a
-        reference with batch size ``[*B]`` yields ``[*B, C, H, W]``.
+        Each frame's source file is resolved from its ``file_id`` (an index into the
+        ``sources`` tuple); frames are then grouped by source file and decoded with a
+        per-process decoder cache, with contiguous index runs read in a single ranged
+        read. The output keeps the reference's batch shape: a scalar reference yields
+        ``[C, H, W]`` and a reference with batch size ``[*B]`` yields ``[*B, C, H, W]``.
 
         Keyword Args:
             device (torch.device or str, optional): output device for the decoded
@@ -613,12 +751,8 @@ class VideoClipRef(TensorClass["nocast"]):
 
         frame_index = self.frame_index.reshape(-1).cpu().tolist()
         n = len(frame_index)
+        # Resolve each frame's source path from its file_id (raises on mismatch).
         sources = self._source_list(n)
-        if len(sources) != n:
-            raise RuntimeError(
-                f"VideoClipRef.decode found {len(sources)} sources for {n} frame "
-                "indices; source and frame_index must describe the same elements."
-            )
 
         groups: dict[Any, list[tuple[int, int]]] = defaultdict(list)
         for position, (src, idx) in enumerate(zip(sources, frame_index)):
