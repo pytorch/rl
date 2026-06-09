@@ -7,5 +7,6 @@ from __future__ import annotations
 
 from torchrl.modules.vla.common import VLAWrapperBase
 from torchrl.modules.vla.models import TinyVLA
+from torchrl.modules.vla.wrappers import LeRobotPolicyWrapper
 
-__all__ = ["VLAWrapperBase", "TinyVLA"]
+__all__ = ["VLAWrapperBase", "TinyVLA", "LeRobotPolicyWrapper"]
