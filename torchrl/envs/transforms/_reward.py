@@ -55,6 +55,7 @@ __all__ = [
     "RewardClipping",
     "RewardSum",
     "SignTransform",
+    "SuccessReward",
     "TargetReturn",
 ]
 
@@ -991,3 +992,48 @@ class LineariseRewards(Transform):
             )
 
         return (self.weights * reward).sum(dim=-1, keepdim=True)
+
+
+class SuccessReward(Transform):
+    """Sparse 0/1 success reward for reinforcement fine-tuning.
+
+    Reads a boolean (or 0/1) success signal and writes a sparse reward
+    (``scale`` on success, ``0`` otherwise). This is the trajectory-level
+    success reward used by SimpleVLA-RL / RL4VLA-style VLA RL, where a binary
+    task-completion signal is the only reward, but it is a general transform:
+    sparse task-completion rewards are ubiquitous in goal-conditioned RL.
+
+    It is a standard leaf transform: it can be appended to a
+    :class:`~torchrl.envs.TransformedEnv` (it overwrites the step reward from the
+    env's success signal) or applied to sampled data in a replay buffer.
+
+    Args:
+        success_key (NestedKey): the boolean success signal to read.
+            Defaults to ``"success"``.
+        reward_key (NestedKey): the reward to write. Defaults to ``"reward"``.
+
+    Keyword Args:
+        scale (float): the reward value on success. Defaults to ``1.0``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import SuccessReward
+        >>> t = SuccessReward(scale=1.0)
+        >>> td = TensorDict({"success": torch.tensor([[True], [False]])}, batch_size=[2])
+        >>> t(td)["reward"].squeeze(-1).tolist()
+        [1.0, 0.0]
+    """
+
+    def __init__(
+        self,
+        success_key: NestedKey = "success",
+        reward_key: NestedKey = "reward",
+        *,
+        scale: float = 1.0,
+    ) -> None:
+        super().__init__(in_keys=[success_key], out_keys=[reward_key])
+        self.scale = float(scale)
+
+    def _apply_transform(self, success: torch.Tensor) -> torch.Tensor:
+        return success.to(torch.get_default_dtype()) * self.scale

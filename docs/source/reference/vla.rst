@@ -85,6 +85,8 @@ replay buffers and transformed environments. They are documented in full on the
 - :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- encode
   continuous actions into discrete tokens (wrapping an action tokenizer) for
   autoregressive token VLAs.
+- :class:`~torchrl.envs.transforms.SuccessReward` -- a sparse 0/1 success
+  reward for RL fine-tuning.
 
 Action representations
 ----------------------
@@ -131,7 +133,8 @@ wraps any chunk-predicting policy, emits one action per step and re-plans every
 Objectives
 ----------
 
-Fine-tuning objectives for VLA policies.
+Fine-tuning objectives for VLA policies: chunked behavior cloning, and
+reinforcement fine-tuning for token policies (GRPO / PPO-clip).
 
 .. currentmodule:: torchrl.objectives.vla
 
@@ -140,3 +143,4 @@ Fine-tuning objectives for VLA policies.
     :template: rl_template_noinherit.rst
 
     VLABCLoss
+    VLATokenGRPOLoss

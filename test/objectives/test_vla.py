@@ -14,7 +14,7 @@ import torch
 from tensordict import NonTensorStack, TensorDict
 
 from torchrl.modules.vla import TinyVLA
-from torchrl.objectives.vla import VLABCLoss
+from torchrl.objectives.vla import VLABCLoss, VLATokenGRPOLoss
 
 
 def _make_bc_td(batch=4, chunk=4, action_dim=3, pad=False):
@@ -112,6 +112,127 @@ class TestVLABCLoss:
             loss(td)["loss_vla_bc"].backward()
             opt.step()
         assert loss(td)["loss_vla_bc"].item() < 0.5 * l0
+
+
+def _make_obs_td(batch=2, h=16, state_dim=5, with_state=True):
+    obs = {"image": torch.zeros(batch, 3, h, h, dtype=torch.uint8)}
+    if with_state:
+        obs["state"] = torch.randn(batch, state_dim)
+    data = {
+        "observation": obs,
+        "language_instruction": NonTensorStack(*[f"task {i}" for i in range(batch)]),
+    }
+    return TensorDict(data, batch_size=[batch])
+
+
+class TestVLATokenGRPOLoss:
+    @staticmethod
+    def _setup(mode="sample", advantage=1.0, batch=8):
+        torch.manual_seed(0)
+        policy = TinyVLA(
+            action_dim=2, chunk_size=2, action_head="tokens", vocab_size=8, mode=mode
+        )
+        obs = _make_obs_td(batch=batch)
+        with torch.no_grad():
+            coll = policy(obs.clone())
+        td = obs.clone()
+        td["action_tokens"] = coll["action_tokens"]
+        td["log_probs"] = coll["log_probs"].detach()
+        td["advantage"] = torch.full((batch,), float(advantage))
+        return policy, obs, td
+
+    def test_loss_keys(self):
+        policy, _, td = self._setup()
+        out = VLATokenGRPOLoss(policy)(td)
+        assert "loss_objective" in out.keys()
+        assert "clip_fraction" in out.keys()
+        assert out["loss_objective"].shape == torch.Size([])
+
+    def test_requires_token_head(self):
+        policy = TinyVLA(action_dim=2, chunk_size=2)  # continuous head
+        with pytest.raises(ValueError, match="token-head"):
+            VLATokenGRPOLoss(policy)
+
+    def _taken_logprob(self, policy, obs, td):
+        with torch.no_grad():
+            return (
+                policy.get_dist(obs.clone()).log_prob(td["action_tokens"]).sum().item()
+            )
+
+    def test_positive_advantage_increases_logprob(self):
+        policy, obs, td = self._setup(advantage=1.0)
+        loss = VLATokenGRPOLoss(policy, clip_epsilon=0.2)
+        before = self._taken_logprob(policy, obs, td)
+        opt = torch.optim.Adam(loss.parameters(), lr=2e-3)
+        for _ in range(20):
+            opt.zero_grad()
+            loss(td)["loss_objective"].backward()
+            opt.step()
+        assert self._taken_logprob(policy, obs, td) > before
+
+    def test_negative_advantage_decreases_logprob(self):
+        policy, obs, td = self._setup(advantage=-1.0)
+        loss = VLATokenGRPOLoss(policy, clip_epsilon=0.2)
+        before = self._taken_logprob(policy, obs, td)
+        opt = torch.optim.Adam(loss.parameters(), lr=2e-3)
+        for _ in range(20):
+            opt.zero_grad()
+            loss(td)["loss_objective"].backward()
+            opt.step()
+        assert self._taken_logprob(policy, obs, td) < before
+
+    def test_kl_to_ref(self):
+        policy, _, td = self._setup()
+        td["ref_log_probs"] = td["log_probs"]
+        loss = VLATokenGRPOLoss(policy, kl_to_ref_coeff=0.1)
+        out = loss(td)
+        assert "loss_kl_to_ref" in out.keys()
+        assert "kl_to_ref" in out.keys()
+        assert torch.isfinite(out["loss_kl_to_ref"])
+        # the KL keys are reflected in out_keys and ref_log_probs in in_keys
+        assert "loss_kl_to_ref" in loss.out_keys
+        assert "ref_log_probs" in loss.in_keys
+
+    def test_advantage_shapes_equivalent(self):
+        policy, _, td = self._setup(batch=4)
+        td["advantage"] = torch.randn(4)
+        loss = VLATokenGRPOLoss(policy, reduction="none")
+        base = loss(td.copy())["loss_objective"]
+        assert base.shape == torch.Size([4])
+        for shape in [(4, 1), (4, 1, 1)]:
+            td2 = td.copy()
+            td2["advantage"] = td["advantage"].reshape(shape)
+            torch.testing.assert_close(loss(td2)["loss_objective"], base)
+
+    def test_single_sample_batch(self):
+        policy, _, td = self._setup(batch=1)
+        out = VLATokenGRPOLoss(policy, reduction="none")(td)
+        assert out["loss_objective"].shape == torch.Size([1])
+
+    def test_set_keys_and_nested_advantage(self):
+        policy, _, td = self._setup()
+        loss = VLATokenGRPOLoss(policy)
+        loss.set_keys(advantage=("group", "adv"))
+        assert ("group", "adv") in loss.in_keys  # cache invalidated
+        td.set(("group", "adv"), td.get("advantage"))
+        assert torch.isfinite(loss(td)["loss_objective"])
+
+    def test_missing_advantage_raises(self):
+        policy, _, td = self._setup()
+        del td["advantage"]
+        with pytest.raises(KeyError, match="advantage"):
+            VLATokenGRPOLoss(policy)(td)
+
+    def test_non_detached_sample_log_prob_raises(self):
+        policy, _, td = self._setup()
+        td["log_probs"] = td["log_probs"].clone().requires_grad_(True)
+        with pytest.raises(RuntimeError, match="requires grad"):
+            VLATokenGRPOLoss(policy)(td)
+
+    def test_invalid_clip_epsilon(self):
+        policy = TinyVLA(action_dim=2, chunk_size=2, action_head="tokens", vocab_size=8)
+        with pytest.raises(ValueError, match="clip_epsilon"):
+            VLATokenGRPOLoss(policy, clip_epsilon=1.0)
 
 
 if __name__ == "__main__":

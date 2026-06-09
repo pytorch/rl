@@ -41,6 +41,7 @@ from torchrl.envs import (
     RewardSum,
     SerialEnv,
     SignTransform,
+    SuccessReward,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
@@ -1723,3 +1724,19 @@ class TestSignTransform(TransformBase):
                 env.close()
             except RuntimeError:
                 pass
+
+
+class TestSuccessReward:
+    def test_sparse_reward(self):
+        t = SuccessReward(scale=2.0)
+        td = TensorDict(
+            {"success": torch.tensor([[True], [False], [True]])}, batch_size=[3]
+        )
+        assert t(td)["reward"].squeeze(-1).tolist() == [2.0, 0.0, 2.0]
+
+    def test_nested_keys(self):
+        t = SuccessReward(("next", "success"), ("next", "reward"))
+        td = TensorDict(
+            {"next": {"success": torch.tensor([True, False])}}, batch_size=[2]
+        )
+        assert t(td)["next", "reward"].tolist() == [1.0, 0.0]

@@ -6,5 +6,6 @@
 from __future__ import annotations
 
 from torchrl.objectives.vla.bc import VLABCLoss
+from torchrl.objectives.vla.rl import VLATokenGRPOLoss
 
-__all__ = ["VLABCLoss"]
+__all__ = ["VLABCLoss", "VLATokenGRPOLoss"]
