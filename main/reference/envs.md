@@ -64,6 +64,7 @@ rollout = parallel_env.rollout(100)
 - [Forward and inverse transforms](envs_transforms.html#forward-and-inverse-transforms)
 - [Designing your own Transform](envs_transforms.html#designing-your-own-transform)
 - [Available Transforms](envs_transforms.html#available-transforms)
+- [Functional transforms](envs_transforms.html#functional-transforms)
 - [Environments with masked actions](envs_transforms.html#environments-with-masked-actions)
 - [Macro-control primitives](macro_primitives.html)
 

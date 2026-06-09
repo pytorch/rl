@@ -1,6 +1,6 @@
 # VideoClipRef
 
-*class*torchrl.data.VideoClipRef(*source: 'str'*, *frame_index: 'torch.Tensor | None' = None*, *stream: 'int | None' = None*, *auto_decode: 'bool' = False*, *out_device: 'Any' = None*, *out_dtype: 'Any' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/video.html#VideoClipRef)
+*class*torchrl.data.VideoClipRef(*sources: 'Any'*, *frame_index: 'torch.Tensor | None' = None*, *file_id: 'torch.Tensor | None' = None*, *stream: 'int | None' = None*, *auto_decode: 'bool' = False*, *out_device: 'Any' = None*, *out_dtype: 'Any' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/video.html#VideoClipRef)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -12,10 +12,11 @@ decode(***, *device: Any = None*, *dtype: Any = None*) → [Tensor](https://docs
 
 Decodes the referenced frames to a dense tensor.
 
-Frames are grouped by `source` and decoded with a per-process decoder
-cache; contiguous index runs use a single ranged read. The output keeps the
-reference's batch shape: a scalar reference yields `[C, H, W]` and a
-reference with batch size `[*B]` yields `[*B, C, H, W]`.
+Each frame's source file is resolved from its `file_id` (an index into the
+`sources` tuple); frames are then grouped by source file and decoded with a
+per-process decoder cache, with contiguous index runs read in a single ranged
+read. The output keeps the reference's batch shape: a scalar reference yields
+`[C, H, W]` and a reference with batch size `[*B]` yields `[*B, C, H, W]`.
 
 Keyword Arguments:
 
@@ -232,7 +233,13 @@ returned reference points to a `(file, local frame)` pair, so slicing,
 straddles two files decodes per file and concatenates). This avoids
 concatenating the videos into one large file and avoids any
 `LazyStacked`/`LazyCat` container - it is just a longer `frame_index`
-with a per-element `source`.
+plus a per-element `file_id`.
+
+The address is stored compactly: the unique file paths are kept once in the
+`sources` metadata tuple (in first-seen order), and each frame carries a
+single `int64` `file_id` into that tuple plus its `frame_index` (the
+local position within its file). No path string is stored per frame, so
+references spanning thousands of files stay light on the replay-buffer path.
 
 Files may have different lengths; the batch size is the total frame count.
 
@@ -1263,6 +1270,14 @@ the value will be simply written at its destination.
 Returns:
 
 self
+
+*property*source
+
+The video path(s) addressed by this reference (back-compat accessor).
+
+For a single-file reference this is the path string `sources[0]` (so
+`ref.source == path`). For a multi-file reference it is the list of
+per-element resolved paths (one per frame), in batch order.
 
 stack(*dim: int = 0*, ***, *out=None*)
 

@@ -335,6 +335,7 @@
 - [VecGymEnvTransform](reference/generated/torchrl.envs.transforms.VecGymEnvTransform.md)
 - [VecNorm](reference/generated/torchrl.envs.transforms.VecNorm.md)
 - [VecNormV2](reference/generated/torchrl.envs.transforms.VecNormV2.md)
+- [cat_frames](reference/generated/torchrl.envs.transforms.functional.cat_frames.md)
 - [gSDENoise](reference/generated/torchrl.envs.transforms.gSDENoise.md)
 - [implement_for](reference/generated/torchrl.implement_for.md)
 - [ActorCriticOperator](reference/generated/torchrl.modules.ActorCriticOperator.md)

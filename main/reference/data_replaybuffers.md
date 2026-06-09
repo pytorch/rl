@@ -75,8 +75,9 @@ a flat, storage-friendly representation when serializing or restoring a buffer:
 Video-backed datasets are dominated by frames; materializing every decoded frame
 as a dense tensor throws away the video codec's compression. [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)
 is a lightweight, picklable reference to frames inside an encoded video (mp4, ...):
-it stores only *where* the frames are (a source path/URI plus a `frame_index`),
-so indexing the whole buffer stays cheap. Frames are decoded on-demand with
+it stores only *where* the frames are (the file(s) it spans plus a per-frame
+`frame_index` and `file_id`), so indexing the whole buffer stays cheap. Frames
+are decoded on-demand with
 torchcodec by [`DecodeVideoTransform`](generated/torchrl.envs.transforms.DecodeVideoTransform.html#torchrl.envs.transforms.DecodeVideoTransform), appended on
 the replay-buffer sample path, so `rb.sample()` returns decoded frames aligned to
 the sampled steps. It composes with `SliceSampler`: a contiguous window of
@@ -121,13 +122,16 @@ rather than one large mp4. [`VideoClipRef.from_files()`](generated/torchrl.data.
 as a single logical sequence, so slicing, `rebin()` and decoding work across
 file boundaries (a window that straddles two files decodes per file and
 concatenates), with one cached decoder per file. No `LazyStacked` / `LazyCat`
-container is needed - it is just a longer `frame_index` with a per-element
-`source`.
+container is needed - it is just a longer `frame_index` plus a per-frame
+`file_id`. The index is stored compactly: the unique file paths live once in the
+`sources` tuple and each frame carries a single `int64` `file_id` into it, so
+references spanning thousands of files stay light on the replay-buffer sample path
+(the resolved path is still available via the `VideoClipRef.source` property).
 
 When camera and control loops run at different rates, prefer
 [`VideoClipRef.from_timestamps()`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_timestamps) to align frames by time rather than by index.
 
-| [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)(source[, frame_index, stream, ...]) | |
+| [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)(sources[, frame_index, ...]) | |
 | --- | --- |
 | [`clear_video_decoder_cache`](generated/torchrl.data.clear_video_decoder_cache.html#torchrl.data.clear_video_decoder_cache)() | Closes and clears all cached torchcodec decoders in the current process. |
 | [`set_video_decoder_cache_size`](generated/torchrl.data.set_video_decoder_cache_size.html#torchrl.data.set_video_decoder_cache_size)(maxsize) | Sets the maximum number of open torchcodec decoders cached per process. |

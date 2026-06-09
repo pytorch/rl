@@ -113,6 +113,13 @@ For convenience, `CatFrames` provides a `make_rb_transform_and_sampler()` method
 - A modified version of the transform suitable for use in replay buffers
 - A corresponding `SliceSampler` to use with the buffer
 
+See also
+
+The offline (contiguous trajectory slice) windowing performed
+by this transform is also available as a pure functional,
+[`torchrl.envs.transforms.functional.cat_frames()`](torchrl.envs.transforms.functional.cat_frames.html#torchrl.envs.transforms.functional.cat_frames), which operates
+directly on a plain tensor.
+
 forward(*tensordict: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)[[source]](../../_modules/torchrl/envs/transforms/_observation.html#CatFrames.forward)
 
 Reads the input tensordict, and for the selected keys, applies the transform.

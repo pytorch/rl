@@ -336,6 +336,16 @@ to be able to create this other composition:
 | [`VecNormV2`](generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2)(in_keys[, out_keys, lock, ...]) | A class for normalizing vectorized observations and rewards in reinforcement learning environments. |
 | [`gSDENoise`](generated/torchrl.envs.transforms.gSDENoise.html#torchrl.envs.transforms.gSDENoise)([state_dim, action_dim, shape]) | A gSDE noise initializer. |
 
+## Functional transforms
+
+Some transforms expose a pure, stateless functional core (the PyTorch
+`torch.nn.functional` / `torch.nn.Module` split) that can be reused directly
+on plain tensors, outside the transform machinery. The stateful transform
+delegates to the functional so that the two stay equivalent.
+
+| [`cat_frames`](generated/torchrl.envs.transforms.functional.cat_frames.html#torchrl.envs.transforms.functional.cat_frames)(tensor, N, dim, *[, padding, ...]) | Stacks a sliding window of `N` successive frames along `dim`. |
+| --- | --- |
+
 ## Environments with masked actions
 
 In some environments with discrete actions, the actions available to the agent might change throughout execution.
