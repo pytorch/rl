@@ -185,6 +185,39 @@ def _decode_group(
         raise
 
 
+def _bin_frame_index(
+    num_frames: int, num_bins: int, frames_per_bin: int | None = None
+) -> torch.Tensor:
+    """Builds frame positions for ``num_bins`` non-overlapping temporal bins.
+
+    Bins partition ``[0, num_frames)`` via ``round(linspace(0, num_frames,
+    num_bins + 1))`` edges. With ``frames_per_bin=None`` each bin contributes its
+    center frame (shape ``[num_bins]`` -- a subsample). With ``frames_per_bin=k``
+    each bin contributes ``k`` frames spanning the bin (shape ``[num_bins, k]`` -- a
+    dense stack; frames are dropped or repeated as needed to stay rectangular).
+    """
+    if num_bins < 1:
+        raise ValueError(f"num_bins must be >= 1, got {num_bins}.")
+    if num_frames < 1:
+        raise ValueError(f"num_frames must be >= 1, got {num_frames}.")
+    edges = torch.linspace(0, num_frames, num_bins + 1).round().long()
+    last = num_frames - 1
+    lo = edges[:-1].clamp(0, last)
+    hi = torch.maximum((edges[1:] - 1).clamp(0, last), lo)
+    if frames_per_bin is None:
+        return ((lo + hi).to(torch.float) / 2).round().long()
+    k = int(frames_per_bin)
+    if k < 1:
+        raise ValueError(f"frames_per_bin must be >= 1, got {k}.")
+    fractions = torch.linspace(0, 1, k)
+    span = (hi - lo).to(torch.float)
+    return (
+        (lo[:, None].to(torch.float) + fractions[None, :] * span[:, None])
+        .round()
+        .long()
+    )
+
+
 class VideoClipRef(TensorClass["nocast"]):
     """A lazy, picklable reference to frames inside an encoded video.
 
@@ -201,6 +234,10 @@ class VideoClipRef(TensorClass["nocast"]):
     contiguous window of steps becomes a single ranged decode). Use the companion
     :class:`~torchrl.envs.transforms.DecodeVideoTransform` to decode on the
     replay-buffer sample path.
+
+    To align a video onto a lower-rate signal (e.g. proprioceptive steps), use
+    :meth:`rebin` (subsample to one frame per bin, or a dense non-overlapping
+    per-bin stack) or :meth:`from_timestamps` (time-based alignment).
 
     Args:
         source (str): the video path / URI / file id. Required.
@@ -291,6 +328,8 @@ class VideoClipRef(TensorClass["nocast"]):
         stream: int | None = None,
         num_frames: int | None = None,
         frame_index: torch.Tensor | None = None,
+        num_bins: int | None = None,
+        frames_per_bin: int | None = None,
         auto_decode: bool = False,
         device: Any = None,
         dtype: Any = None,
@@ -308,6 +347,14 @@ class VideoClipRef(TensorClass["nocast"]):
                 metadata (this opens the file once).
             frame_index (torch.Tensor, optional): explicit frame positions. If
                 given, ``num_frames`` is ignored and no metadata read is performed.
+                Mutually exclusive with ``num_bins``.
+            num_bins (int, optional): resample the video onto this many
+                non-overlapping temporal bins (see :meth:`rebin`). Defaults to
+                ``None`` (every frame).
+            frames_per_bin (int, optional): with ``num_bins``, the number of frames
+                per bin (a dense ``[num_bins, frames_per_bin]`` stack). ``None``
+                (default) takes a single center frame per bin (a ``[num_bins]``
+                subsample). Requires ``num_bins``.
             auto_decode (bool, optional): see :class:`VideoClipRef`. Defaults to
                 ``False``.
             device (torch.device or str, optional): default output device. A CUDA
@@ -317,11 +364,22 @@ class VideoClipRef(TensorClass["nocast"]):
                 ``None`` (``uint8``).
 
         Returns:
-            VideoClipRef: a reference whose batch size is the number of frames.
+            VideoClipRef: a reference whose batch size is the number of frames (or
+            ``[num_bins]`` / ``[num_bins, frames_per_bin]`` when binning).
         """
         if isinstance(path, os.PathLike):
             path = os.fspath(path)
-        if frame_index is None and num_frames is not None:
+        if num_bins is not None:
+            if frame_index is not None:
+                raise ValueError("`num_bins` and `frame_index` are mutually exclusive.")
+            if num_frames is None:
+                num_frames = _num_frames(_get_decoder(path, stream, None))
+            frame_index = _bin_frame_index(
+                int(num_frames), int(num_bins), frames_per_bin
+            )
+        elif frames_per_bin is not None:
+            raise ValueError("`frames_per_bin` requires `num_bins`.")
+        elif frame_index is None and num_frames is not None:
             frame_index = torch.arange(int(num_frames))
         # ``frame_index=None`` lets ``__post_init__`` read the frame count from the
         # file metadata; an explicit ``frame_index`` (or ``num_frames``) skips that.
@@ -384,6 +442,50 @@ class VideoClipRef(TensorClass["nocast"]):
             dtype=dtype,
         )
 
+    def rebin(self, num_bins: int, frames_per_bin: int | None = None) -> VideoClipRef:
+        """Resamples the referenced frames onto ``num_bins`` non-overlapping bins.
+
+        Bins partition the frames this reference currently addresses into
+        ``num_bins`` contiguous, non-overlapping temporal bins, useful to align a
+        video onto a lower-rate signal (e.g. proprioceptive steps).
+
+        - ``frames_per_bin=None`` (default) keeps one **center** frame per bin: the
+          returned reference has batch size ``[num_bins]`` and decodes to
+          ``[num_bins, C, H, W]`` (a subsample / decimation).
+        - ``frames_per_bin=k`` keeps ``k`` frames spanning each bin: batch size
+          ``[num_bins, k]``, decoding to ``[num_bins, k, C, H, W]`` (a dense,
+          non-overlapping stack; frames are dropped or repeated to stay rectangular).
+
+        For *overlapping* (sliding-window) stacking, subsample first
+        (``rebin(num_bins)``) and apply :class:`~torchrl.envs.transforms.CatFrames`
+        to the decoded frames on the sample path.
+
+        Args:
+            num_bins (int): the number of temporal bins.
+            frames_per_bin (int, optional): frames kept per bin. ``None`` (default)
+                takes the single center frame.
+
+        Returns:
+            VideoClipRef: a new (lazy) reference over the binned frames.
+
+        Examples:
+            >>> ref = VideoClipRef(path)            # 100 frames  # doctest: +SKIP
+            >>> ref.rebin(30).batch_size            # one frame per proprio step
+            torch.Size([30])
+            >>> ref.rebin(30, frames_per_bin=3).batch_size
+            torch.Size([30, 3])
+        """
+        base = self.frame_index.reshape(-1)
+        positions = _bin_frame_index(int(base.numel()), int(num_bins), frames_per_bin)
+        return type(self)(
+            source=_first(self.source),
+            frame_index=base[positions],
+            stream=_first(self.stream),
+            auto_decode=bool(_first(self.auto_decode, False)),
+            out_device=_first(self.out_device),
+            out_dtype=_first(self.out_dtype),
+        )
+
     def _source_list(self, n: int) -> list:
         sources = _flatten(self.source)
         if len(sources) == 1 and n > 1:
@@ -438,11 +540,13 @@ class VideoClipRef(TensorClass["nocast"]):
 
         out: list[torch.Tensor | None] = [None] * n
         for src, items in groups.items():
-            positions = [p for p, _ in items]
-            indices = [i for _, i in items]
-            data = _decode_group(src, stream, indices, decode_device)
-            for offset, position in enumerate(positions):
-                out[position] = data[offset]
+            # Decode each distinct frame once, then scatter to every position that
+            # referenced it (binning / sliding windows can repeat indices).
+            unique = sorted({idx for _, idx in items})
+            data = _decode_group(src, stream, unique, decode_device)
+            offset_of = {idx: offset for offset, idx in enumerate(unique)}
+            for position, idx in items:
+                out[position] = data[offset_of[idx]]
 
         stacked = torch.stack(out)  # type: ignore[arg-type]
         if dtype is not None:

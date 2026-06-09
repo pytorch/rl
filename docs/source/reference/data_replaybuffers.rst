@@ -87,7 +87,7 @@ a flat, storage-friendly representation when serializing or restoring a buffer:
     Flat2TED
 
 Video-backed replay buffers
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Video-backed datasets are dominated by frames; materializing every decoded frame
 as a dense tensor throws away the video codec's compression. :class:`VideoClipRef`
@@ -101,6 +101,38 @@ sampled steps maps to consecutive frame indices and decodes as a single ranged
 read. Decoders are opened lazily and cached per worker process (see
 :func:`set_video_decoder_cache_size` and :func:`clear_video_decoder_cache`); the
 references stored in the buffer never hold an open decoder.
+
+**Temporal alignment / binning.** Video frames usually outnumber a lower-rate
+signal (e.g. 100 frames for 30 proprioceptive steps). :meth:`VideoClipRef.rebin`
+(also ``VideoClipRef.from_file(..., num_bins=...)``) resamples the frames onto
+``num_bins`` non-overlapping temporal bins:
+
+- ``frames_per_bin=None`` keeps one **center** frame per bin -> ``[num_bins]``,
+  decoding to ``[num_bins, C, H, W]`` (subsample);
+- ``frames_per_bin=k`` keeps ``k`` frames spanning each bin -> ``[num_bins, k]``,
+  decoding to ``[num_bins, k, C, H, W]`` (a dense, non-overlapping stack; frames are
+  dropped/repeated to stay rectangular).
+
+For *overlapping* (sliding-window) stacking, subsample first and then apply
+:class:`~torchrl.envs.transforms.CatFrames` to the decoded frames on the sample
+path -- ``CatFrames`` concatenates along an existing dim
+(``[B, C, H, W] -> [B, N*C, H, W]``), giving classic frame-stacking with
+trajectory-edge padding, while ``rebin``'s stack keeps a separate frame axis::
+
+    >>> from torchrl.data import VideoClipRef, ReplayBuffer, LazyTensorStorage, SliceSampler
+    >>> from torchrl.envs.transforms import CatFrames, Compose, DecodeVideoTransform
+    >>> # one frame per step, then a sliding stack of the last 4 along the channel dim
+    >>> rb = ReplayBuffer(
+    ...     storage=LazyTensorStorage(1000),
+    ...     sampler=SliceSampler(slice_len=16, traj_key="episode"),
+    ...     transform=Compose(
+    ...         DecodeVideoTransform(in_keys=["frame"], out_keys=["pixels"]),
+    ...         CatFrames(N=4, dim=-3, in_keys=["pixels"]),
+    ...     ),
+    ... )  # doctest: +SKIP
+
+When camera and control loops run at different rates, prefer
+:meth:`VideoClipRef.from_timestamps` to align frames by time rather than by index.
 
 .. currentmodule:: torchrl.data
 

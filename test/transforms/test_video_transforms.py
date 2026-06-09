@@ -155,6 +155,70 @@ class TestVideoClipRef:
         # 10 fps -> seconds * fps
         assert ref.frame_index.tolist() == [0, 5, 10]
 
+    def test_rebin_subsample(self, video_path):
+        # 20 frames -> 5 bins of 4; one center frame per bin.
+        ref = VideoClipRef(video_path).rebin(5)
+        assert isinstance(ref, VideoClipRef)
+        assert ref.batch_size == torch.Size([5])
+        assert ref.frame_index.tolist() == [2, 6, 10, 14, 18]
+        decoded = ref.decode()
+        assert decoded.shape == torch.Size([5, 3, 8, 12])
+        assert _aligned(decoded, [2, 6, 10, 14, 18])
+
+    def test_rebin_stack(self, video_path):
+        # 5 non-overlapping bins, 2 frames each (bin endpoints).
+        ref = VideoClipRef(video_path).rebin(5, frames_per_bin=2)
+        assert ref.batch_size == torch.Size([5, 2])
+        assert ref.frame_index.tolist() == [[0, 3], [4, 7], [8, 11], [12, 15], [16, 19]]
+        decoded = ref.decode()
+        assert decoded.shape == torch.Size([5, 2, 3, 8, 12])
+        # first bin: frames 0 and 3
+        assert _aligned(decoded[0], [0, 3])
+
+    def test_rebin_non_divisible(self, video_path):
+        # 20 / 7 is not integer: result must still be dense and in range.
+        ref = VideoClipRef(video_path).rebin(7)
+        assert ref.batch_size == torch.Size([7])
+        assert ref.decode().shape == torch.Size([7, 3, 8, 12])
+        assert ref.frame_index.min() >= 0 and ref.frame_index.max() <= 19
+
+    def test_rebin_stack_repeats_to_stay_dense(self, video_path):
+        # frames_per_bin larger than the bin span repeats frames (stays dense).
+        ref = VideoClipRef(video_path).rebin(7, frames_per_bin=4)
+        assert ref.batch_size == torch.Size([7, 4])
+        assert ref.decode().shape == torch.Size([7, 4, 3, 8, 12])
+
+    def test_rebin_after_slice(self, video_path):
+        # rebin operates on the frames currently referenced.
+        ref = VideoClipRef(video_path)[4:16].rebin(3)
+        assert ref.batch_size == torch.Size([3])
+        # bins over the 12 referenced frames [4..15]; centers at positions [2,6,10]
+        assert ref.frame_index.tolist() == [6, 10, 14]
+
+    def test_from_file_num_bins(self, video_path):
+        assert VideoClipRef.from_file(video_path, num_bins=5).frame_index.tolist() == [
+            2,
+            6,
+            10,
+            14,
+            18,
+        ]
+        ref = VideoClipRef.from_file(video_path, num_bins=5, frames_per_bin=2)
+        assert ref.batch_size == torch.Size([5, 2])
+        with pytest.raises(ValueError):
+            VideoClipRef.from_file(video_path, num_bins=5, frame_index=[0, 1])
+        with pytest.raises(ValueError):
+            VideoClipRef.from_file(video_path, frames_per_bin=2)
+
+    def test_decode_dedups_repeated_indices(self, video_path):
+        # Repeated indices decode the same frame and are scattered to each position.
+        ref = VideoClipRef(video_path, frame_index=torch.tensor([3, 3, 7, 3]))
+        decoded = ref.decode()
+        assert decoded.shape == torch.Size([4, 3, 8, 12])
+        torch.testing.assert_close(decoded[0], decoded[1])
+        torch.testing.assert_close(decoded[0], decoded[3])
+        assert _aligned(decoded, [3, 3, 7, 3])
+
     def test_pickle_roundtrip_no_decoder_state(self, video_path):
         ref = VideoClipRef.from_file(video_path)
         # warm the (module-level, per-process) decoder cache
