@@ -167,6 +167,30 @@ class TestVideoClipRef:
         assert decoded.shape == torch.Size([4, 3, 8, 12])
         assert _aligned(decoded, [5, 6, 7, 8])
 
+    def test_cuda_decode_falls_back_to_cpu(self, video_path, monkeypatch):
+        # When the torchcodec build cannot decode on CUDA, decoding must fall back
+        # to CPU (the caller then moves frames to the device). Simulated on CPU.
+        import torchrl.data.video as video_mod
+
+        real_get_decoder = video_mod._get_decoder
+
+        def fake_get_decoder(source, stream, device):
+            if device is not None:
+                raise RuntimeError(
+                    "validateDeviceInterface, DeviceInterface.cpp:87, "
+                    "Unsupported device: cuda"
+                )
+            return real_get_decoder(source, stream, None)
+
+        monkeypatch.setattr(video_mod, "_get_decoder", fake_get_decoder)
+        monkeypatch.setattr(video_mod, "_CUDA_DECODE_DISABLED", False)
+        frames = video_mod._decode_group(
+            video_path, None, [2, 3, 4], torch.device("cuda")
+        )
+        assert frames.shape[0] == 3
+        assert frames.device.type == "cpu"
+        assert video_mod._CUDA_DECODE_DISABLED is True
+
     def test_decoder_cache_size(self, video_path):
         clear_video_decoder_cache()
         set_video_decoder_cache_size(1)

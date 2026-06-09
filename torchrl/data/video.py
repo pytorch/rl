@@ -25,6 +25,8 @@ from typing import Any
 import torch
 from tensordict import TensorClass
 
+from torchrl._utils import logger as torchrl_logger
+
 __all__ = [
     "VideoClipRef",
     "clear_video_decoder_cache",
@@ -142,6 +144,47 @@ def _is_contiguous_run(indices: list[int]) -> bool:
     )
 
 
+# Whether GPU decoding has been found unsupported by the installed torchcodec
+# build in this process (set the first time a CUDA decode is attempted and fails).
+_CUDA_DECODE_DISABLED = False
+
+
+def _is_unsupported_device_error(err: Exception) -> bool:
+    message = str(err).lower()
+    return "unsupported device" in message or "deviceinterface" in message
+
+
+def _frames_for_indices(decoder, indices: list[int]) -> torch.Tensor:
+    if _is_contiguous_run(indices):
+        return decoder.get_frames_in_range(start=indices[0], stop=indices[-1] + 1).data
+    return decoder.get_frames_at(indices=indices).data
+
+
+def _decode_group(
+    source: Any, stream: int | None, indices: list[int], decode_device: Any
+) -> torch.Tensor:
+    """Decodes frames for a single source, with a CPU fallback.
+
+    Falls back to CPU decoding when the torchcodec build cannot decode on the
+    requested CUDA device (NVDEC); the caller moves the result to the requested
+    output device afterwards.
+    """
+    global _CUDA_DECODE_DISABLED
+    use_device = decode_device if not _CUDA_DECODE_DISABLED else None
+    try:
+        return _frames_for_indices(_get_decoder(source, stream, use_device), indices)
+    except RuntimeError as err:
+        if use_device is not None and _is_unsupported_device_error(err):
+            _CUDA_DECODE_DISABLED = True
+            torchrl_logger.warning(
+                "torchcodec cannot decode on the requested CUDA device; falling "
+                "back to CPU decoding and moving frames to the device. Install a "
+                "CUDA-enabled torchcodec build to use NVDEC."
+            )
+            return _frames_for_indices(_get_decoder(source, stream, None), indices)
+        raise
+
+
 class VideoClipRef(TensorClass["nocast"]):
     """A lazy, picklable reference to frames inside an encoded video.
 
@@ -177,9 +220,10 @@ class VideoClipRef(TensorClass["nocast"]):
             for references stored in a replay buffer and rely on
             :class:`~torchrl.envs.transforms.DecodeVideoTransform` instead.
             Defaults to ``False``.
-        out_device (torch.device or str, optional): default device for decoded
-            frames. A CUDA device enables GPU (NVDEC) decoding. Defaults to ``None``
-            (CPU).
+        out_device (torch.device or str, optional): default output device for
+            decoded frames. A CUDA device uses GPU (NVDEC) decoding when the
+            torchcodec build supports it, otherwise frames are decoded on CPU and
+            moved to the device. Defaults to ``None`` (CPU).
         out_dtype (torch.dtype, optional): default dtype for decoded frames.
             Defaults to ``None`` (``uint8``).
 
@@ -266,8 +310,9 @@ class VideoClipRef(TensorClass["nocast"]):
                 given, ``num_frames`` is ignored and no metadata read is performed.
             auto_decode (bool, optional): see :class:`VideoClipRef`. Defaults to
                 ``False``.
-            device (torch.device or str, optional): default decode device. A CUDA
-                device enables GPU decoding. Defaults to ``None``.
+            device (torch.device or str, optional): default output device. A CUDA
+                device uses GPU (NVDEC) decoding when supported, else decodes on CPU
+                and moves the frames. Defaults to ``None``.
             dtype (torch.dtype, optional): default decode dtype. Defaults to
                 ``None`` (``uint8``).
 
@@ -354,8 +399,10 @@ class VideoClipRef(TensorClass["nocast"]):
         reference with batch size ``[*B]`` yields ``[*B, C, H, W]``.
 
         Keyword Args:
-            device (torch.device or str, optional): device for the decoded frames,
-                overriding ``out_device``. A CUDA device enables GPU decoding.
+            device (torch.device or str, optional): output device for the decoded
+                frames, overriding ``out_device``. A CUDA device uses GPU (NVDEC)
+                decoding when the torchcodec build supports it, and otherwise decodes
+                on CPU and moves the frames to the device.
             dtype (torch.dtype, optional): dtype for the decoded frames, overriding
                 ``out_dtype``. Defaults to ``uint8``.
 
@@ -369,6 +416,12 @@ class VideoClipRef(TensorClass["nocast"]):
         if dtype is None:
             dtype = _first(self.out_dtype)
         stream = _first(self.stream)
+        out_device = torch.device(device) if device is not None else None
+        # Only attempt on-device (NVDEC) decoding for CUDA outputs; CPU outputs and
+        # the fallback path decode on CPU and move afterwards.
+        decode_device = (
+            out_device if out_device is not None and out_device.type == "cuda" else None
+        )
 
         frame_index = self.frame_index.reshape(-1).cpu().tolist()
         n = len(frame_index)
@@ -385,23 +438,17 @@ class VideoClipRef(TensorClass["nocast"]):
 
         out: list[torch.Tensor | None] = [None] * n
         for src, items in groups.items():
-            decoder = _get_decoder(src, stream, device)
             positions = [p for p, _ in items]
             indices = [i for _, i in items]
-            if _is_contiguous_run(indices):
-                data = decoder.get_frames_in_range(
-                    start=indices[0], stop=indices[-1] + 1
-                ).data
-            else:
-                data = decoder.get_frames_at(indices=indices).data
+            data = _decode_group(src, stream, indices, decode_device)
             for offset, position in enumerate(positions):
                 out[position] = data[offset]
 
         stacked = torch.stack(out)  # type: ignore[arg-type]
         if dtype is not None:
             stacked = stacked.to(dtype)
-        if device is not None:
-            stacked = stacked.to(device)
+        if out_device is not None:
+            stacked = stacked.to(out_device)
         frame_shape = stacked.shape[1:]
         return stacked.reshape(*self.batch_size, *frame_shape)
 
