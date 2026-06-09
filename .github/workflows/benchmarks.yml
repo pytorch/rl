@@ -186,6 +186,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
+          # Cap the on-disk benchmark history (dev/bench/data.js) so it cannot
+          # grow without bound and bloat the repository / clone size.
+          max-items-in-chart: 250
       - name: Store GPU benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
@@ -199,5 +202,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-pages-branch: gh-pages
           auto-push: true
+          # Cap the on-disk benchmark history (dev/bench/data.js) so it cannot
+          # grow without bound and bloat the repository / clone size.
+          max-items-in-chart: 250
           # Use regular comments instead of PR reviews to avoid permission issues
           comment-style: 'github'
