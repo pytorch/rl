@@ -248,6 +248,7 @@ Available Transforms
     ActionChunkTransform
     ActionDiscretizer
     ActionMask
+    ActionNormalize
     ActionScaling
     AutoResetEnv
     AutoResetTransform

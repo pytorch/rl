@@ -40,6 +40,7 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
+from torchrl.data.vla import RobotDatasetMetadata
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
@@ -66,7 +67,7 @@ from torchrl.envs import (
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import ActionChunkTransform
+from torchrl.envs.transforms import ActionChunkTransform, ActionNormalize
 from torchrl.envs.transforms.transforms import (
     ActionDiscretizer,
     FORWARD_NOT_IMPLEMENTED,
@@ -2246,6 +2247,132 @@ class TestActionChunkTransform:
         c_chunk, c_pad = compiled(action)
         torch.testing.assert_close(c_chunk, eager_chunk)
         assert torch.equal(c_pad, eager_pad)
+
+
+class TestActionNormalize:
+    def test_normalize_values(self):
+        t = ActionNormalize(
+            loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0])
+        )
+        out = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
+        torch.testing.assert_close(out["action"], torch.tensor([[1.0, 1.0]]))
+
+    def test_denormalize_roundtrip(self):
+        t = ActionNormalize(loc=torch.randn(5), scale=torch.rand(5) + 0.5)
+        action = torch.randn(4, 5)
+        torch.testing.assert_close(t.denormalize(t.normalize(action)), action)
+
+    def test_from_stats_mean_std(self):
+        t = ActionNormalize.from_stats(
+            mean=torch.tensor([2.0]), std=torch.tensor([3.0])
+        )
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([5.0])), torch.tensor([1.0])
+        )
+
+    def test_from_stats_low_high(self):
+        t = ActionNormalize.from_stats(
+            low=torch.tensor([-2.0, 0.0]), high=torch.tensor([2.0, 10.0])
+        )
+        # min -> -1, max -> +1, midpoint -> 0
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([[-2.0, 10.0], [0.0, 5.0]])),
+            torch.tensor([[-1.0, 1.0], [0.0, 0.0]]),
+        )
+
+    def test_from_stats_requires_args(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            ActionNormalize.from_stats()
+
+    def test_from_stats_both_pairs_raises(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            ActionNormalize.from_stats(
+                mean=torch.zeros(2),
+                std=torch.ones(2),
+                low=-torch.ones(2),
+                high=torch.ones(2),
+            )
+
+    def test_from_stats_partial_pair_raises(self):
+        with pytest.raises(ValueError, match="together"):
+            ActionNormalize.from_stats(mean=torch.zeros(2))
+
+    def test_cannot_be_env_transform(self):
+        t = ActionNormalize(loc=0.0, scale=1.0)
+        with pytest.raises(ValueError, match="replay-buffer"):
+            t._call(TensorDict({"action": torch.randn(2, 3)}, batch_size=[2]))
+
+    def test_dim_mismatch_raises(self):
+        # per-dim loc/scale (len 7) vs an action whose last dim is 1 must not
+        # silently broadcast
+        t = ActionNormalize(loc=torch.arange(7.0), scale=torch.ones(7))
+        with pytest.raises(ValueError, match="does not match"):
+            t.normalize(torch.zeros(4, 1))
+
+    def test_scalar_broadcasts(self):
+        # a scalar loc/scale broadcasts freely across any action shape
+        t = ActionNormalize(loc=1.0, scale=2.0)
+        out = t.normalize(torch.full((4, 5), 3.0))
+        torch.testing.assert_close(out, torch.ones(4, 5))
+
+    def test_from_metadata_mean_std(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=2,
+            action_mean=torch.tensor([1.0, 2.0]),
+            action_std=torch.tensor([2.0, 4.0]),
+        )
+        t = ActionNormalize.from_metadata(meta)
+        out = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
+        torch.testing.assert_close(out["action"], torch.tensor([[1.0, 1.0]]))
+
+    def test_from_metadata_low_high(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=1,
+            action_low=torch.tensor([-1.0]),
+            action_high=torch.tensor([1.0]),
+        )
+        t = ActionNormalize.from_metadata(meta)
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([1.0])), torch.tensor([1.0])
+        )
+
+    def test_from_metadata_no_stats_raises(self):
+        meta = RobotDatasetMetadata("bridge", action_dim=2)
+        with pytest.raises(ValueError, match="no action normalization statistics"):
+            ActionNormalize.from_metadata(meta)
+
+    def test_nested_action_key(self):
+        t = ActionNormalize(loc=0.0, scale=2.0, action_key=("data", "action"))
+        td = TensorDict({"data": {"action": torch.tensor([[4.0]])}}, batch_size=[1])
+        out = t(td)
+        torch.testing.assert_close(out["data", "action"], torch.tensor([[2.0]]))
+
+    def test_shape_mismatch_raises(self):
+        with pytest.raises(ValueError, match="same shape"):
+            ActionNormalize(loc=torch.zeros(3), scale=torch.ones(2))
+
+    def test_constant_dim_no_nan(self):
+        # std == 0 for a constant action dim: eps floor avoids NaN, value -> 0
+        t = ActionNormalize(loc=torch.tensor([5.0]), scale=torch.tensor([0.0]))
+        out = t.normalize(torch.tensor([[5.0]]))
+        assert torch.isfinite(out).all()
+        torch.testing.assert_close(out, torch.zeros_like(out))
+
+    def test_replay_buffer_safe(self):
+        # As an RB transform: normalize on sample, no-op on extend (no inverse
+        # wiring), so the round-trip yields normalized actions.
+        t = ActionNormalize(
+            loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0])
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10), transform=t, batch_size=4
+        )
+        raw = torch.tensor([[3.0, 6.0]]).expand(10, 2).clone()
+        rb.extend(TensorDict({"action": raw}, batch_size=[10]))
+        sample = rb.sample()
+        torch.testing.assert_close(sample["action"], torch.ones_like(sample["action"]))
 
 
 if __name__ == "__main__":

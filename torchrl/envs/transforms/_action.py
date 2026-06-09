@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from torchrl.data.vla import RobotDatasetMetadata
 
 if TYPE_CHECKING:
     from typing import Self
@@ -47,6 +47,7 @@ __all__ = [
     "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
+    "ActionNormalize",
     "ActionScaling",
     "DiscreteActionProjection",
     "FlattenAction",
@@ -943,6 +944,12 @@ class ActionScaling(Transform):
         tensor([-1., -1., -1., -1., -1., -1., -1.])
         >>> env.action_spec.space.high
         tensor([1., 1., 1., 1., 1., 1., 1.])
+
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionNormalize` -- the
+        forward-only, dataset-statistics-driven action normalizer for the
+        offline / replay-buffer training path (with an explicit ``denormalize``
+        for execution), as opposed to this bidirectional, spec-coupled env-side
+        scaler.
     """
 
     invertible = True
@@ -1617,3 +1624,180 @@ class ActionChunkTransform(Transform):
         ):
             raise ValueError(self.ENV_ERR)
         super().set_container(container)
+
+
+class ActionNormalize(Transform):
+    """Affine action normalization for VLA training and execution.
+
+    The action-space analogue of :class:`~torchrl.envs.transforms.ObservationNorm`.
+    On the forward (data) path it normalizes expert actions, so the policy is
+    trained to predict normalized actions::
+
+        normalized = (action - loc) / scale
+
+    A policy operating in this normalized space is mapped back to raw actions
+    with :meth:`denormalize` (the inverse affine map
+    ``action = normalized * scale + loc``) before they are sent to a simulator
+    or robot.
+
+    ``loc`` and ``scale`` are per-dimension statistics. Use :meth:`from_stats`
+    (mean/std or min/max) or :meth:`from_metadata` to build them from a
+    :class:`~torchrl.data.vla.RobotDatasetMetadata`.
+
+    .. note::
+        This is a replay-buffer / offline transform: only the forward direction
+        is wired, so it normalizes on ``sample`` and is a no-op on ``extend``,
+        and it cannot be used as a :class:`~torchrl.envs.TransformedEnv`
+        transform. Use :meth:`denormalize` to map a policy's predicted action
+        back to the raw action space for execution. For env-side action
+        normalization derived from a bounded action spec, use
+        :class:`~torchrl.envs.transforms.ActionScaling` instead.
+
+    Args:
+        loc (float or torch.Tensor): per-dimension location (e.g. action mean).
+        scale (float or torch.Tensor): per-dimension scale (e.g. action std).
+
+    Keyword Args:
+        action_key (NestedKey): the action to normalize. Defaults to ``"action"``.
+        out_key (NestedKey, optional): where to write the normalized action.
+            Defaults to ``action_key`` (in place).
+        eps (float): floor applied to ``scale`` to avoid division by zero.
+            Defaults to ``1e-6``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import ActionNormalize
+        >>> t = ActionNormalize(loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0]))
+        >>> td = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
+        >>> td["action"]
+        tensor([[1., 1.]])
+        >>> t.denormalize(td["action"])
+        tensor([[3., 6.]])
+
+    .. seealso::
+        :class:`~torchrl.envs.transforms.ObservationNorm` (the observation-side
+        affine normalizer) and :class:`~torchrl.envs.transforms.ActionScaling`
+        (the bidirectional, spec-coupled env-side action scaler). Use
+        ``ActionNormalize`` for the forward-only, dataset-statistics-driven
+        training path with an explicit :meth:`denormalize` for execution; use
+        ``ActionScaling`` to expose a normalized action space to a policy in a
+        :class:`~torchrl.envs.TransformedEnv`.
+    """
+
+    ENV_ERR = (
+        "ActionNormalize is a replay-buffer / offline transform and cannot be "
+        "used as an environment transform. Use ActionNormalize.denormalize() on "
+        "the execution path, or ActionScaling for env-side action normalization."
+    )
+
+    def __init__(
+        self,
+        loc: float | torch.Tensor,
+        scale: float | torch.Tensor,
+        *,
+        action_key: NestedKey = ACTION_KEY,
+        out_key: NestedKey | None = None,
+        eps: float = 1e-6,
+    ) -> None:
+        loc = torch.as_tensor(loc, dtype=torch.float32)
+        scale = torch.as_tensor(scale, dtype=torch.float32).clamp_min(eps)
+        if loc.shape != scale.shape:
+            raise ValueError(
+                f"loc and scale must have the same shape, got {tuple(loc.shape)} "
+                f"and {tuple(scale.shape)}."
+            )
+        out_key = action_key if out_key is None else out_key
+        super().__init__(in_keys=[action_key], out_keys=[out_key])
+        self.register_buffer("loc", loc)
+        self.register_buffer("scale", scale)
+
+    @property
+    def action_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    def _check_dim(self, action: torch.Tensor) -> None:
+        # Guard the silent-broadcast hazard: a per-dimension loc/scale must
+        # match the action's trailing dim. A scalar (or shape-[1]) loc/scale
+        # broadcasts freely and is left alone.
+        if self.loc.numel() > 1 and action.shape[-1] != self.loc.shape[-1]:
+            raise ValueError(
+                f"action last dim {action.shape[-1]} does not match the "
+                f"loc/scale dimension {self.loc.shape[-1]}."
+            )
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        self._check_dim(action)
+        return (action - self.loc) / self.scale
+
+    def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        self._check_dim(action)
+        return action * self.scale + self.loc
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def set_container(self, container) -> None:
+        if (
+            isinstance(container, EnvBase)
+            or getattr(container, "parent", None) is not None
+        ):
+            raise ValueError(self.ENV_ERR)
+        super().set_container(container)
+
+    def normalize(self, action: torch.Tensor) -> torch.Tensor:
+        """Map a raw action to the normalized space ``(action - loc) / scale``."""
+        return self._apply_transform(action)
+
+    def denormalize(self, action: torch.Tensor) -> torch.Tensor:
+        """Map a normalized action back to raw actions ``action * scale + loc``."""
+        return self._inv_apply_transform(action)
+
+    @classmethod
+    def from_stats(
+        cls,
+        *,
+        mean: torch.Tensor | None = None,
+        std: torch.Tensor | None = None,
+        low: torch.Tensor | None = None,
+        high: torch.Tensor | None = None,
+        **kwargs,
+    ) -> ActionNormalize:
+        """Build from mean/std (zero-mean, unit-std) or min/max (maps to ``[-1, 1]``).
+
+        Provide exactly one complete pair: ``mean`` and ``std``, or ``low`` and
+        ``high``.
+        """
+        if (mean is None) != (std is None):
+            raise ValueError("mean and std must be provided together.")
+        if (low is None) != (high is None):
+            raise ValueError("low and high must be provided together.")
+        if (mean is not None) == (low is not None):
+            raise ValueError("Provide exactly one of (mean, std) or (low, high).")
+        if mean is not None:
+            loc = torch.as_tensor(mean, dtype=torch.float32)
+            scale = torch.as_tensor(std, dtype=torch.float32)
+        else:
+            low = torch.as_tensor(low, dtype=torch.float32)
+            high = torch.as_tensor(high, dtype=torch.float32)
+            loc = (low + high) / 2
+            scale = (high - low) / 2
+        return cls(loc, scale, **kwargs)
+
+    @classmethod
+    def from_metadata(cls, metadata: RobotDatasetMetadata, **kwargs) -> ActionNormalize:
+        """Build from the action statistics of a
+        :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
+        kwargs.setdefault("action_key", metadata.action_key)
+        if metadata.action_mean is not None and metadata.action_std is not None:
+            return cls.from_stats(
+                mean=metadata.action_mean, std=metadata.action_std, **kwargs
+            )
+        if metadata.action_low is not None and metadata.action_high is not None:
+            return cls.from_stats(
+                low=metadata.action_low, high=metadata.action_high, **kwargs
+            )
+        raise ValueError(
+            f"metadata {metadata.dataset_id!r} has no action normalization statistics "
+            "(set action_mean/action_std or action_low/action_high)."
+        )
