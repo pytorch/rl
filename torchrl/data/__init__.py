@@ -100,6 +100,7 @@ from .tensor_specs import (
 )
 from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
 from .video import clear_video_decoder_cache, set_video_decoder_cache_size, VideoClipRef
+from .vla import RobotDatasetMetadata, validate_vla_tensordict
 
 __all__ = [
     "AdaptiveKLController",
@@ -153,6 +154,7 @@ __all__ = [
     "ReplayBuffer",
     "ReplayBufferEnsemble",
     "RewardData",
+    "RobotDatasetMetadata",
     "RolloutFromModel",
     "RoundRobinWriter",
     "SamplerEnsemble",
@@ -196,4 +198,5 @@ __all__ = [
     "create_infinite_iterator",
     "get_dataloader",
     "set_video_decoder_cache_size",
+    "validate_vla_tensordict",
 ]
