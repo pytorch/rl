@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+VideoClipRef
+============
+
+.. autoclass:: VideoClipRef
+    :members:
+    :inherited-members:

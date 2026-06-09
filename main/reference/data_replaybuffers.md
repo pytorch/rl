@@ -69,3 +69,65 @@ a flat, storage-friendly representation when serializing or restoring a buffer:
 | [`TED2Flat`](generated/torchrl.data.TED2Flat.html#torchrl.data.TED2Flat)([done_key, shift_key, is_full_key, ...]) | A storage saving hook to serialize TED data in a compact format. |
 | --- | --- |
 | [`Flat2TED`](generated/torchrl.data.Flat2TED.html#torchrl.data.Flat2TED)([done_key, shift_key, is_full_key, ...]) | A storage loading hook to deserialize flattened TED data to TED format. |
+
+### Video-backed replay buffers
+
+Video-backed datasets are dominated by frames; materializing every decoded frame
+as a dense tensor throws away the video codec's compression. [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)
+is a lightweight, picklable reference to frames inside an encoded video (mp4, ...):
+it stores only *where* the frames are (a source path/URI plus a `frame_index`),
+so indexing the whole buffer stays cheap. Frames are decoded on-demand with
+torchcodec by [`DecodeVideoTransform`](generated/torchrl.envs.transforms.DecodeVideoTransform.html#torchrl.envs.transforms.DecodeVideoTransform), appended on
+the replay-buffer sample path, so `rb.sample()` returns decoded frames aligned to
+the sampled steps. It composes with `SliceSampler`: a contiguous window of
+sampled steps maps to consecutive frame indices and decodes as a single ranged
+read. Decoders are opened lazily and cached per worker process (see
+[`set_video_decoder_cache_size()`](generated/torchrl.data.set_video_decoder_cache_size.html#torchrl.data.set_video_decoder_cache_size) and [`clear_video_decoder_cache()`](generated/torchrl.data.clear_video_decoder_cache.html#torchrl.data.clear_video_decoder_cache)); the
+references stored in the buffer never hold an open decoder.
+
+**Temporal alignment / binning.** Video frames usually outnumber a lower-rate
+signal (e.g. 100 frames for 30 proprioceptive steps). [`VideoClipRef.rebin()`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.rebin)
+(also `VideoClipRef.from_file(..., num_bins=...)`) resamples the frames onto
+`num_bins` non-overlapping temporal bins:
+
+- `frames_per_bin=None` keeps one **center** frame per bin -> `[num_bins]`,
+decoding to `[num_bins, C, H, W]` (subsample);
+- `frames_per_bin=k` keeps `k` frames spanning each bin -> `[num_bins, k]`,
+decoding to `[num_bins, k, C, H, W]` (a dense, non-overlapping stack; frames are
+dropped/repeated to stay rectangular).
+
+For *overlapping* (sliding-window) stacking, subsample first and then apply
+[`CatFrames`](generated/torchrl.envs.transforms.CatFrames.html#torchrl.envs.transforms.CatFrames) to the decoded frames on the sample
+path - `CatFrames` concatenates along an existing dim
+(`[B, C, H, W] -> [B, N*C, H, W]`), giving classic frame-stacking with
+trajectory-edge padding, while `rebin`'s stack keeps a separate frame axis:
+
+```
+>>> from torchrl.data import VideoClipRef, ReplayBuffer, LazyTensorStorage, SliceSampler
+>>> from torchrl.envs.transforms import CatFrames, Compose, DecodeVideoTransform
+>>> # one frame per step, then a sliding stack of the last 4 along the channel dim
+>>> rb = ReplayBuffer(
+... storage=LazyTensorStorage(1000),
+... sampler=SliceSampler(slice_len=16, traj_key="episode"),
+... transform=Compose(
+... DecodeVideoTransform(in_keys=["frame"], out_keys=["pixels"]),
+... CatFrames(N=4, dim=-3, in_keys=["pixels"]),
+... ),
+... )
+```
+
+**Multiple files.** A clip is often split across many small files (one per episode)
+rather than one large mp4. [`VideoClipRef.from_files()`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_files) addresses a list of files
+as a single logical sequence, so slicing, `rebin()` and decoding work across
+file boundaries (a window that straddles two files decodes per file and
+concatenates), with one cached decoder per file. No `LazyStacked` / `LazyCat`
+container is needed - it is just a longer `frame_index` with a per-element
+`source`.
+
+When camera and control loops run at different rates, prefer
+[`VideoClipRef.from_timestamps()`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_timestamps) to align frames by time rather than by index.
+
+| [`VideoClipRef`](generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef)(source[, frame_index, stream, ...]) | |
+| --- | --- |
+| [`clear_video_decoder_cache`](generated/torchrl.data.clear_video_decoder_cache.html#torchrl.data.clear_video_decoder_cache)() | Closes and clears all cached torchcodec decoders in the current process. |
+| [`set_video_decoder_cache_size`](generated/torchrl.data.set_video_decoder_cache_size.html#torchrl.data.set_video_decoder_cache_size)(maxsize) | Sets the maximum number of open torchcodec decoders cached per process. |

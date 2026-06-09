@@ -262,6 +262,7 @@ Available Transforms
     ConditionalSkip
     Crop
     DTypeCastTransform
+    DecodeVideoTransform
     DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
