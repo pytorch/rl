@@ -8,7 +8,10 @@ import pytest
 import torch
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule
-from torchrl.data import TensorDictReplayBuffer
+from torchrl.data import Composite, TensorDictReplayBuffer, Unbounded
+from torchrl.data.tensor_specs import Categorical
+from torchrl.envs.common import EnvBase
+from torchrl.envs.model_based import WorldModelEnv
 from torchrl.modules import WorldModel
 from torchrl.objectives import WorldModelLoss
 
@@ -83,6 +86,35 @@ def _constant_policy(latent_dim: int = LATENT_DIM, action_dim: int = ACTION_DIM)
         in_keys=["latent"],
         out_keys=["action"],
     )
+
+
+class _SpecOnlyEnv(EnvBase):
+    """Minimal EnvBase used to supply specs to :class:`WorldModelEnv` in tests.
+
+    Not steppable on its own — only its specs are read by the env wrapper.
+    """
+
+    def __init__(self, batch_size: int = BATCH, device: str = "cpu") -> None:
+        super().__init__(batch_size=[batch_size], device=device)
+        self.observation_spec = Composite(
+            latent=Unbounded(shape=(batch_size, LATENT_DIM), device=device),
+            shape=[batch_size],
+            device=device,
+        )
+        self.action_spec = Unbounded(shape=(batch_size, ACTION_DIM), device=device)
+        self.reward_spec = Unbounded(shape=(batch_size, 1), device=device)
+        self.done_spec = Categorical(
+            n=2, shape=(batch_size, 1), dtype=torch.bool, device=device
+        )
+
+    def _reset(self, tensordict, **kwargs):  # pragma: no cover - never called
+        raise NotImplementedError
+
+    def _step(self, tensordict):  # pragma: no cover - never called
+        raise NotImplementedError
+
+    def _set_seed(self, seed):  # pragma: no cover - never called
+        return seed
 
 
 # ---------------------------------------------------------------------------
@@ -170,46 +202,68 @@ class TestWorldModelForward:
 
 
 class TestWorldModelRollout:
+    """Tests exercising imagined rollouts via :class:`WorldModelEnv`.
+
+    The world model owns prediction; the env owns rollout semantics. Each test
+    here builds a ``WorldModelEnv`` around a ``WorldModel`` and drives it
+    through :meth:`EnvBase.rollout` so that reset/step/done handling stays
+    consistent with every other TorchRL env (no parallel rollout
+    implementation on ``WorldModel`` itself).
+    """
+
+    @staticmethod
+    def _make_env(wm: WorldModel) -> WorldModelEnv:
+        return WorldModelEnv(wm, base_env=_SpecOnlyEnv(batch_size=BATCH))
+
     def test_rollout_shape(self):
         wm = _make_linear_world_model()
+        env = self._make_env(wm)
         start_td = _make_start_td()
         policy = _constant_policy()
         horizon = 5
-        out = wm.rollout(start_td, policy, horizon)
+        out = env.rollout(max_steps=horizon, policy=policy, tensordict=start_td)
         assert out.shape == torch.Size([BATCH, horizon])
 
     def test_rollout_no_done_head(self):
-        """Rollout with break_when_any_done=True but no done head runs full horizon."""
+        """Without a done head, rollouts run for the requested ``max_steps``."""
         wm = _make_linear_world_model(with_done_head=False)
+        env = self._make_env(wm)
         start_td = _make_start_td()
         policy = _constant_policy()
-        out = wm.rollout(start_td, policy, horizon=4, break_when_any_done=True)
+        out = env.rollout(max_steps=4, policy=policy, tensordict=start_td)
         assert out.shape == torch.Size([BATCH, 4])
 
     def test_rollout_break_when_done(self):
-        """Rollout stops early when done is always True from the done head."""
+        """When the done head always predicts done=True, env.rollout stops early."""
         wm = _make_linear_world_model(with_done_head=True)
-        # Override done head to always output True.
+        # Override done head to always output True for every batch element.
         wm.done_head = TensorDictModule(
-            lambda x: torch.ones(x.shape[0], 1, dtype=torch.bool),
+            lambda x: torch.ones(*x.shape[:-1], 1, dtype=torch.bool),
             in_keys=[("next", "latent")],
             out_keys=[("next", "done")],
         )
-        # Rebuild _step_seq to include the new done_head.
+        # Rebuild the step sequence so the env picks up the new done_head.
         from tensordict.nn import TensorDictSequential
 
         wm._step_seq = TensorDictSequential(wm.dynamics, wm.reward_head, wm.done_head)
 
+        env = self._make_env(wm)
         start_td = _make_start_td()
         policy = _constant_policy()
-        out = wm.rollout(start_td, policy, horizon=10, break_when_any_done=True)
+        out = env.rollout(
+            max_steps=10,
+            policy=policy,
+            tensordict=start_td,
+            break_when_any_done=True,
+        )
         assert out.shape[1] == 1  # Stopped after first step.
 
     def test_rollout_contains_reward(self):
         wm = _make_linear_world_model()
+        env = self._make_env(wm)
         start_td = _make_start_td()
         policy = _constant_policy()
-        out = wm.rollout(start_td, policy, horizon=3)
+        out = env.rollout(max_steps=3, policy=policy, tensordict=start_td)
         assert ("next", "reward") in out.keys(include_nested=True)
 
     def test_rollout_replay_buffer_compatible(self):
@@ -217,14 +271,22 @@ class TestWorldModelRollout:
         from torchrl.data import LazyTensorStorage
 
         wm = _make_linear_world_model()
+        env = self._make_env(wm)
         start_td = _make_start_td()
         policy = _constant_policy()
-        rollout_td = wm.rollout(start_td, policy, horizon=5)
+        rollout_td = env.rollout(max_steps=5, policy=policy, tensordict=start_td)
         # Flatten batch+time into a single batch dimension.
         flat = rollout_td.reshape(-1)
         rb = TensorDictReplayBuffer(storage=LazyTensorStorage(max_size=100))
         rb.extend(flat)
         assert len(rb) == flat.batch_size[0]
+
+    def test_reset_requires_latent(self):
+        """WorldModelEnv refuses to reset without an explicit starting latent."""
+        wm = _make_linear_world_model()
+        env = self._make_env(wm)
+        with pytest.raises(RuntimeError, match="initial latent"):
+            env.reset()
 
 
 # ---------------------------------------------------------------------------

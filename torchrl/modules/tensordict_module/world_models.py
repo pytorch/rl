@@ -4,9 +4,6 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from collections.abc import Callable
-
-import torch
 from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential
 
@@ -16,11 +13,18 @@ class WorldModel(TensorDictModuleBase):
 
     ``WorldModel`` wraps an encoder, a dynamics model, a reward head, and
     optionally a done head and a decoder into a single TensorDict-native
-    module. It exposes named shortcuts for encoding, decoding, and stepping,
-    and provides a ``rollout`` method whose output matches the layout produced
-    by :meth:`~torchrl.envs.EnvBase.rollout`, making imagined trajectories
-    directly compatible with replay buffers, value estimators, and loss
-    modules.
+    module. It owns *prediction and composition* — encoding observations,
+    advancing latent state, predicting rewards and termination — and exposes
+    named shortcuts (:meth:`encode`, :meth:`step`, :meth:`decode`) so each
+    component can be invoked individually.
+
+    Rollout semantics live elsewhere: wrap a ``WorldModel`` in
+    :class:`~torchrl.envs.model_based.WorldModelEnv` (or another
+    :class:`~torchrl.envs.model_based.ModelBasedEnvBase` subclass) and use
+    :meth:`~torchrl.envs.EnvBase.rollout` to generate imagined trajectories.
+    This keeps env-level concerns — reset/step contract, ``done`` handling,
+    spec validation — out of the prediction module and avoids forking a
+    second rollout implementation with subtly different semantics.
 
     The module is key-driven: each component communicates through named
     TensorDict keys defined by its ``in_keys`` / ``out_keys``. No specific
@@ -136,94 +140,15 @@ class WorldModel(TensorDictModuleBase):
             )
         return self.decoder(tensordict)
 
-    def rollout(
-        self,
-        start_td: TensorDictBase,
-        policy: Callable[[TensorDictBase], TensorDictBase],
-        horizon: int,
-        *,
-        break_when_any_done: bool = True,
-    ) -> TensorDictBase:
-        """Run an imagined rollout for up to ``horizon`` steps.
+    @property
+    def step_module(self) -> TensorDictSequential:
+        """The step-only sequence (dynamics + heads, no encoder).
 
-        At each step the policy is queried for an action, then the world model
-        advances the latent state via :meth:`step`. State propagation between
-        steps uses :func:`~torchrl.envs.utils.step_mdp`, which moves all
-        ``("next", key)`` entries to the root level — identical to how
-        :class:`~torchrl.envs.EnvBase` advances a real MDP.
-
-        The returned TensorDict has shape ``(*start_td.batch_size, t)`` where
-        ``t <= horizon``. Each entry along the time dimension contains the
-        full transition: current latent, action, next latent, predicted
-        reward, and optionally done/decoder outputs. This layout matches
-        :meth:`~torchrl.envs.EnvBase.rollout`, so the result can be stored
-        directly in a :class:`~torchrl.data.TensorDictReplayBuffer`, sampled
-        by :class:`~torchrl.data.SliceSampler`, or consumed by any TorchRL
-        loss module.
-
-        Args:
-            start_td (TensorDictBase): initial tensordict containing the
-                starting latent state (and any other keys required by the
-                policy and dynamics).
-            policy (callable): a callable that maps a ``TensorDictBase`` to a
-                ``TensorDictBase`` with an action key added in-place or as a
-                copy.
-            horizon (int): maximum number of imagined steps.
-            break_when_any_done (bool, optional): if ``True`` and a
-                ``done_head`` is present, the rollout terminates as soon as
-                any trajectory in the batch is done. Default: ``True``.
-
-        Returns:
-            TensorDictBase: shape ``(*start_td.batch_size, t)``.
-
-        Examples:
-            >>> import torch
-            >>> from tensordict import TensorDict
-            >>> from tensordict.nn import TensorDictModule
-            >>> from torchrl.modules import WorldModel
-            >>> obs_dim, latent_dim, action_dim = 8, 4, 2
-            >>> encoder = TensorDictModule(
-            ...     torch.nn.Linear(obs_dim, latent_dim),
-            ...     in_keys=["observation"], out_keys=["latent"],
-            ... )
-            >>> dynamics = TensorDictModule(
-            ...     torch.nn.Linear(latent_dim + action_dim, latent_dim),
-            ...     in_keys=["latent", "action"], out_keys=[("next", "latent")],
-            ... )
-            >>> reward_head = TensorDictModule(
-            ...     torch.nn.Linear(latent_dim, 1),
-            ...     in_keys=[("next", "latent")], out_keys=[("next", "reward")],
-            ... )
-            >>> world_model = WorldModel(encoder, dynamics, reward_head)
-            >>> policy = TensorDictModule(
-            ...     torch.nn.Linear(latent_dim, action_dim),
-            ...     in_keys=["latent"], out_keys=["action"],
-            ... )
-            >>> start_td = TensorDict(
-            ...     {"observation": torch.randn(3, obs_dim)}, batch_size=[3]
-            ... )
-            >>> start_td = world_model.encode(start_td)
-            >>> rollout_td = world_model.rollout(start_td, policy, horizon=5)
-            >>> rollout_td.shape
-            torch.Size([3, 5])
+        Exposed as a public attribute so :class:`~torchrl.envs.model_based.WorldModelEnv`
+        and other model-based env wrappers can drive the world model in latent
+        space, one step at a time, without rerunning the encoder on every step.
         """
-        # Lazy import to avoid circular dependency:
-        # torchrl.modules.tensordict_module -> torchrl.envs.utils ->
-        # torchrl.modules.tensordict_module.exploration
-        from torchrl.envs.utils import step_mdp
-
-        td = start_td.copy()
-        outputs = []
-        for _ in range(horizon):
-            td = policy(td)
-            td = self._step_seq(td)
-            outputs.append(td.copy())
-            done = td.get(("next", "done"), default=None)
-            if break_when_any_done and self.done_head is not None and done is not None:
-                if done.any():
-                    break
-            td = step_mdp(td, keep_other=True)
-        return torch.stack(outputs, dim=len(start_td.batch_size))
+        return self._step_seq
 
 
 class WorldModelWrapper(TensorDictSequential):
