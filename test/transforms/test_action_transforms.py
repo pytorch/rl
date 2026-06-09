@@ -66,6 +66,7 @@ from torchrl.envs import (
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.transforms import ActionChunkTransform
 from torchrl.envs.transforms.transforms import (
     ActionDiscretizer,
     FORWARD_NOT_IMPLEMENTED,
@@ -2142,6 +2143,109 @@ class TestFlattenAction(TransformBase):
         )
         r = env.rollout(4)
         assert r["action"].shape == (4, 15)
+
+
+class TestActionChunkTransform:
+    def test_shapes(self):
+        t = ActionChunkTransform(chunk_size=4)
+        out = t(TensorDict({"action": torch.randn(2, 6, 3)}, batch_size=[2, 6]))
+        assert out["action_chunk"].shape == torch.Size([2, 6, 4, 3])
+        assert out["action_is_pad"].shape == torch.Size([2, 6, 4])
+        assert out["action_is_pad"].dtype == torch.bool
+
+    def test_values_and_padding(self):
+        t = ActionChunkTransform(chunk_size=3)
+        action = torch.arange(4).view(1, 4, 1).float()
+        out = t(TensorDict({"action": action}, batch_size=[1, 4]))
+        expected_chunk = torch.tensor(
+            [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
+        assert torch.equal(out["action_is_pad"][0], expected_pad)
+
+    def test_no_batch_dim(self):
+        t = ActionChunkTransform(chunk_size=2)
+        out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
+        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out["action_is_pad"].shape == torch.Size([5, 2])
+
+    def test_chunk_larger_than_horizon(self):
+        t = ActionChunkTransform(chunk_size=10)
+        out = t(TensorDict({"action": torch.arange(3).view(1, 3, 1).float()}, [1, 3]))
+        assert out["action_chunk"].shape == torch.Size([1, 3, 10, 1])
+        # first chunk: steps 0,1,2 valid then padded
+        assert not out["action_is_pad"][0, 0, :3].any()
+        assert out["action_is_pad"][0, 0, 3:].all()
+
+    def test_invalid_chunk_size(self):
+        with pytest.raises(ValueError, match="chunk_size"):
+            ActionChunkTransform(chunk_size=0)
+
+    def test_nested_action_key(self):
+        t = ActionChunkTransform(
+            chunk_size=2,
+            action_key=("data", "action"),
+            chunk_key=("data", "chunk"),
+            pad_key=("data", "pad"),
+        )
+        td = TensorDict({"data": {"action": torch.randn(2, 4, 3)}}, batch_size=[2, 4])
+        out = t(td)
+        assert out["data", "chunk"].shape == torch.Size([2, 4, 2, 3])
+        assert out["data", "pad"].shape == torch.Size([2, 4, 2])
+
+    def test_missing_action_raises(self):
+        t = ActionChunkTransform(chunk_size=2)
+        with pytest.raises(KeyError):
+            t(TensorDict({"other": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
+
+    def test_replay_buffer_integration(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            transform=ActionChunkTransform(3),
+            batch_size=4,
+        )
+        # each stored item is a [T=5, A=2] trajectory window
+        rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
+        sample = rb.sample()
+        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
+        assert sample["action_is_pad"].shape[-1] == 3
+
+    def test_no_cross_boundary_after_reshape(self):
+        # Emulate a flat SliceSampler batch of two length-4 slices, then reshape
+        # to [num_slices, slice_len] before chunking (the documented workflow).
+        flat = TensorDict(
+            {"action": torch.tensor([0.0, 1, 2, 3, 10, 11, 12, 13]).view(8, 1)},
+            batch_size=[8],
+        )
+        windows = flat.reshape(2, 4)
+        out = ActionChunkTransform(3)(windows)
+        chunk = out["action_chunk"][..., 0]
+        # neither slice pulls the other slice's actions across the boundary
+        assert chunk[0].max() <= 3
+        assert chunk[1].min() >= 10
+        # the window tail is padded
+        assert out["action_is_pad"][0, -1].tolist() == [False, True, True]
+
+    def test_cannot_be_env_transform(self):
+        t = ActionChunkTransform(2)
+        with pytest.raises(ValueError, match="replay-buffer"):
+            t._call(TensorDict({"action": torch.randn(2, 3)}, batch_size=[2]))
+
+    def test_trailing_dim_enforced(self):
+        # time_dim must point to the second-to-last dim (action_dim is last)
+        t = ActionChunkTransform(2, time_dim=0)
+        with pytest.raises(ValueError, match="immediately follow"):
+            t(TensorDict({"action": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
+
+    def test_compile_build_chunk(self):
+        t = ActionChunkTransform(chunk_size=3)
+        action = torch.randn(2, 5, 2)
+        eager_chunk, eager_pad = t._build_chunk(action)
+        compiled = torch.compile(t._build_chunk, fullgraph=True)
+        c_chunk, c_pad = compiled(action)
+        torch.testing.assert_close(c_chunk, eager_chunk)
+        assert torch.equal(c_pad, eager_pad)
 
 
 if __name__ == "__main__":
