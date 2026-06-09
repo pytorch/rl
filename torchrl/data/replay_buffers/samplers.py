@@ -1840,19 +1840,6 @@ class SliceSampler(Sampler):
         has_collector = ("collector", "traj_ids") in keys
         has_episode = "episode" in keys
         if has_collector:
-            if has_episode:
-                # BC change: pre-0.13 the default was traj_key="episode" so a
-                # storage carrying both keys would have used "episode". From
-                # 0.13 onwards we prefer ("collector", "traj_ids"). Warn so
-                # users who relied on the old default can pin it explicitly.
-                warnings.warn(
-                    "SliceSampler auto-detected both ('collector', 'traj_ids') "
-                    "and 'episode' in the storage and is now using the former. "
-                    "Prior to v0.13 the default was 'episode'. To silence this "
-                    "warning, pass traj_key=... explicitly.",
-                    FutureWarning,
-                    stacklevel=2,
-                )
             self.traj_key = ("collector", "traj_ids")
             self._fetch_traj = True
             return
@@ -2103,14 +2090,30 @@ class SliceSampler(Sampler):
             out_of_traj = relative_starts < 0
             if out_of_traj.any():
                 # a negative start means sampling fewer elements
-                seq_length = torch.where(
-                    ~out_of_traj, seq_length, seq_length + relative_starts
+                # Convert seq_length to tensor to avoid torch.compile inductor C++ codegen
+                # bug with mixed scalar/tensor int64 in blendv operations (see PyTorch #xyz)
+                seq_length_t = torch.as_tensor(
+                    seq_length,
+                    dtype=relative_starts.dtype,
+                    device=relative_starts.device,
                 )
-                relative_starts = torch.where(~out_of_traj, relative_starts, 0)
+                seq_length = torch.where(
+                    ~out_of_traj, seq_length_t, seq_length_t + relative_starts
+                )
+                relative_starts = torch.where(
+                    ~out_of_traj, relative_starts, torch.zeros_like(relative_starts)
+                )
         if self.span[1]:
             out_of_traj = relative_starts + seq_length > lengths[traj_idx]
             if out_of_traj.any():
                 # a negative start means sampling fewer elements
+                # Convert seq_length to tensor if it's still a scalar
+                if not isinstance(seq_length, torch.Tensor):
+                    seq_length = torch.as_tensor(
+                        seq_length,
+                        dtype=relative_starts.dtype,
+                        device=relative_starts.device,
+                    )
                 seq_length = torch.minimum(
                     seq_length, lengths[traj_idx] - relative_starts
                 )

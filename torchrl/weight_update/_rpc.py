@@ -144,7 +144,7 @@ class RPCTransport:
     This transport handles weight updates for ONE specific remote collector via
     torch.distributed primitives (send/recv) with RPC used for signaling.
     Multiple transports are created for multiple collectors, following the same
-    pattern as the DistributedDataCollector.
+    pattern as the DistributedCollector.
     """
 
     def __init__(

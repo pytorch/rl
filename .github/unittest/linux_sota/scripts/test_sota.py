@@ -288,7 +288,7 @@ commands = {
   train.minibatch_size=100 \
   logger.backend=
 """,
-    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100
+    "bandits": """python sota-implementations/bandits/dqn.py --n_steps=100 --dataset=synthetic
 """,
     "dreamer": """python sota-implementations/dreamer/dreamer.py \
   optimization.total_optim_steps=2 \

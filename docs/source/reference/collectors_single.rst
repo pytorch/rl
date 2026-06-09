@@ -58,25 +58,20 @@ internally; it does **not** determine the output batch size when
 **Replay buffer integration**: when a ``replay_buffer`` is also provided,
 complete trajectories are written to the buffer as **flat 1-D sequences** (no
 padding) instead of being yielded.  This is the recommended pattern for
-off-policy training with :class:`~torchrl.data.SliceSampler`, especially
+off-policy training with :class:`~torchrl.data.replay_buffers.SliceSampler`, especially
 with multi-process collectors where fixed-frame batches can silently mix
 episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
 
 .. note::
-    The following legacy names are also available for backward compatibility:
-
-    - ``DataCollectorBase`` → ``BaseCollector``
-    - ``SyncDataCollector`` → ``Collector``
-    - ``aSyncDataCollector`` → ``AsyncCollector``
-    - ``_MultiDataCollector`` → ``MultiCollector``
-    - ``MultiSyncDataCollector`` → ``MultiSyncCollector``
-    - ``MultiaSyncDataCollector`` → ``MultiAsyncCollector``
+    The deprecated collector aliases were removed in v0.13. Use the canonical
+    classes directly: ``BaseCollector``, ``Collector``, ``AsyncCollector``,
+    ``MultiCollector``, ``MultiSyncCollector``, and ``MultiAsyncCollector``.
 
 Using AsyncBatchedCollector
 ---------------------------
 
 The :class:`AsyncBatchedCollector` pairs an :class:`~torchrl.envs.AsyncEnvPool`
-with an :class:`~torchrl.modules.InferenceServer` to pipeline environment
+with an :class:`~torchrl.modules.inference_server.InferenceServer` to pipeline environment
 stepping and batched GPU inference.  You only need to supply **env factories**
 and a **policy** -- all internal wiring is handled automatically:
 
@@ -197,7 +192,7 @@ Data collectors that have been started with `start()` should be shut down using
 
     For maximum throughput with trajectory-based training (e.g. recurrent
     policies, decision transformers), combine ``start()`` with
-    ``trajs_per_batch`` and a :class:`~torchrl.data.SliceSampler`:
+    ``trajs_per_batch`` and a :class:`~torchrl.data.replay_buffers.SliceSampler`:
 
     .. code-block:: python
 

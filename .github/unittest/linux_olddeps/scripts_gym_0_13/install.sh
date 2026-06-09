@@ -50,9 +50,11 @@ fi
 if [[ "$RELEASE" == 0 ]]; then
   # pybind11 headers are required to build tensordict's C++ extension.
   python -m pip install "pybind11[global]"
-  python -m pip install git+https://github.com/pytorch/tensordict.git
+  python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict.git
 else
-  python -m pip install tensordict
+  python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+  python -m pip install --no-deps tensordict
 fi
 
 # smoke test
@@ -63,5 +65,5 @@ python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"
 python -m pip install "setuptools<82"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 python -c "import torchrl"

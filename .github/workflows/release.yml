@@ -167,8 +167,9 @@ jobs:
 
           # Read all 3 version files
           ROOT_VERSION=$(cat version.txt | tr -d '[:space:]')
-          SCRIPT_SH_VERSION=$(grep -E '^export TORCHRL_BUILD_VERSION=' .github/scripts/td_script.sh | cut -d'=' -f2)
-          SCRIPT_BAT_VERSION=$(grep -E '^set TORCHRL_BUILD_VERSION=' .github/scripts/version_script.bat | cut -d'=' -f2)
+          SCRIPT_SH_LINE=$(grep -E '^export TORCHRL_BUILD_VERSION=' .github/scripts/td_script.sh | head -1)
+          SCRIPT_SH_VERSION=$(echo "$SCRIPT_SH_LINE" | sed -E 's/^export TORCHRL_BUILD_VERSION=//; s/^"//; s/"$//; s/^\$\{BUILD_VERSION:-([^}]+)\}$/\1/')
+          SCRIPT_BAT_VERSION=$(grep -Ei '^[[:space:]]*set TORCHRL_BUILD_VERSION=' .github/scripts/version_script.bat | head -1 | sed -E 's/^[[:space:]]*set TORCHRL_BUILD_VERSION=//')
 
           echo ""
           echo "Version file contents:"
@@ -610,6 +611,16 @@ jobs:
           find dist -type d -empty -delete
           echo "Wheels prepared for upload:"
           ls -la dist/
+
+      - name: Filter PyPI-incompatible local-version wheels
+        run: |
+          # PyPI rejects local versions such as X.Y.Z+cpu or X.Y.Z+cu128.
+          # Keep the default CPU wheels (built without +cpu above) and macOS
+          # wheels, but do not send CUDA/local-version artifacts to PyPI.
+          find dist -name "*+*.whl" -type f -print -delete
+          echo "Wheels remaining for PyPI upload:"
+          ls -la dist/
+          test -n "$(find dist -name '*.whl' -type f -print -quit)"
 
       - name: Publish to PyPI (OIDC)
         if: ${{ env.DRY_RUN != 'true' }}

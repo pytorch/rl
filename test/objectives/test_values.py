@@ -69,7 +69,20 @@ class TestValues:
         ],
     )
     @pytest.mark.parametrize("shifted", [False, True])
-    def test_value_chunk_size_matches_unchunked(self, estimator_cls, kwargs, shifted):
+    @pytest.mark.parametrize("deactivate_vmap", [False, True])
+    @pytest.mark.parametrize(
+        "chunk_kwargs",
+        [
+            {"value_chunk_size": 3},
+            {"num_chunks": 3},
+            {"num_chunk": 3},
+        ],
+    )
+    def test_chunked_value_calls_match_unchunked(
+        self, estimator_cls, kwargs, shifted, deactivate_vmap, chunk_kwargs
+    ):
+        if deactivate_vmap and _TORCH_VERSION < version.parse("2.7"):
+            pytest.skip("_pseudo_vmap is not supported for torch<2.7")
         torch.manual_seed(0)
         value_net = TensorDictModule(
             nn.Linear(3, 1),
@@ -95,18 +108,128 @@ class TestValues:
             **kwargs,
             value_network=value_net,
             shifted=shifted,
+            deactivate_vmap=deactivate_vmap,
         )
         chunked = estimator_cls(
             **kwargs,
             value_network=value_net,
             shifted=shifted,
-            value_chunk_size=3,
+            deactivate_vmap=deactivate_vmap,
+            **chunk_kwargs,
         )
 
         expected = unchunked(td.clone())
         actual = chunked(td.clone())
         torch.testing.assert_close(actual["advantage"], expected["advantage"])
         torch.testing.assert_close(actual["value_target"], expected["value_target"])
+
+    def test_value_chunk_options_are_mutually_exclusive(self):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        with pytest.raises(ValueError, match="value_chunk_size and num_chunks"):
+            GAE(
+                gamma=0.9,
+                lmbda=0.95,
+                value_network=value_net,
+                value_chunk_size=3,
+                num_chunks=2,
+            )
+        with pytest.raises(ValueError, match="num_chunks and num_chunk"):
+            GAE(
+                gamma=0.9,
+                lmbda=0.95,
+                value_network=value_net,
+                num_chunks=2,
+                num_chunk=3,
+            )
+
+    def test_num_chunks_splits_into_requested_number_of_chunks(self):
+        value_net = TensorDictModule(
+            nn.Linear(3, 1),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        estimator = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            num_chunks=3,
+        )
+        td = TensorDict({"obs": torch.randn(4, 3)}, [4])
+        assert len(estimator._split_value_net_input(td)) == 3
+        empty_td = TensorDict({"obs": torch.randn(0, 3)}, [0])
+        assert estimator._split_value_net_input(empty_td) == (empty_td,)
+
+    @pytest.mark.parametrize("vectorized", [False, True])
+    @pytest.mark.parametrize("deactivate_vmap", [False, True])
+    @pytest.mark.parametrize("method", ["forward", "value_estimate"])
+    @pytest.mark.parametrize(
+        "chunk_kwargs",
+        [
+            {"value_chunk_size": 3},
+            {"num_chunks": 3},
+            {"num_chunk": 3},
+        ],
+    )
+    def test_gae_chunked_functional_calls_match_unchunked(
+        self, vectorized, deactivate_vmap, method, chunk_kwargs
+    ):
+        if deactivate_vmap and _TORCH_VERSION < version.parse("2.7"):
+            pytest.skip("_pseudo_vmap is not supported for torch<2.7")
+        torch.manual_seed(0)
+        value_net = TensorDictModule(
+            nn.Linear(3, 1),
+            in_keys=["obs"],
+            out_keys=["state_value"],
+        )
+        td = TensorDict(
+            {
+                "obs": torch.randn(4, 5, 3),
+                "next": {
+                    "obs": torch.randn(4, 5, 3),
+                    "reward": torch.randn(4, 5, 1),
+                    "done": torch.zeros(4, 5, 1, dtype=torch.bool),
+                    "terminated": torch.zeros(4, 5, 1, dtype=torch.bool),
+                },
+            },
+            [4, 5],
+        )
+        td["next", "done"][:, -1] = True
+        td["next", "terminated"][:, -1] = True
+        params = TensorDict.from_module(value_net)
+        target_params = params.clone(False)
+
+        unchunked = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            vectorized=vectorized,
+            deactivate_vmap=deactivate_vmap,
+        )
+        chunked = GAE(
+            gamma=0.9,
+            lmbda=0.95,
+            value_network=value_net,
+            vectorized=vectorized,
+            deactivate_vmap=deactivate_vmap,
+            **chunk_kwargs,
+        )
+        if method == "forward":
+            expected = unchunked(td.clone(), params=params, target_params=target_params)
+            actual = chunked(td.clone(), params=params, target_params=target_params)
+            torch.testing.assert_close(actual["advantage"], expected["advantage"])
+            torch.testing.assert_close(actual["value_target"], expected["value_target"])
+        else:
+            expected = unchunked.value_estimate(
+                td.clone(), params=params, target_params=target_params
+            )
+            actual = chunked.value_estimate(
+                td.clone(), params=params, target_params=target_params
+            )
+            torch.testing.assert_close(actual, expected)
 
     @pytest.mark.parametrize(
         "estimator_cls,kwargs",
@@ -122,7 +245,7 @@ class TestValues:
         """``("next", obs)`` may be ``NaN`` at trajectory ends.
 
         That happens by design when the buffer is fed by
-        :class:`~torchrl.collectors.SyncDataCollector` configured with
+        :class:`~torchrl.collectors.Collector` configured with
         ``compact_obs=True`` and rehydrated via
         :class:`~torchrl.envs.transforms.NextStateReconstructor`. Without the
         sanitizer in

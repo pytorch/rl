@@ -140,7 +140,7 @@ uv_pip_install \
 # labmaze (dm_control dependency) doesn't have Python 3.13+ wheels
 if [[ "$PYTHON_VERSION" != "3.13" && "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing dm_control"
-  uv_pip_install dm_control
+  uv_pip_install "dm_control>=1.0.41" "mujoco>=3.8.1,<3.9.0"
 fi
 
 # Install ray for Python < 3.14 (ray doesn't support Python 3.14 yet)
@@ -158,7 +158,7 @@ fi
 # Install mujoco for Python < 3.14 (mujoco doesn't have Python 3.14 wheels yet)
 if [[ "$PYTHON_VERSION" != "3.14" ]]; then
   echo "installing mujoco"
-  uv_pip_install "mujoco>=3.3.7"
+  uv_pip_install "mujoco>=3.8.1,<3.9.0"
 fi
 
 # Install gymnasium
@@ -168,9 +168,9 @@ if [[ "$PYTHON_VERSION" == "3.14" ]]; then
   uv_pip_install "gymnasium>=1.1"
 elif [[ "$PYTHON_VERSION" == "3.12" ]]; then
   uv_pip_install ale-py sympy
-  uv_pip_install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]"
+  uv_pip_install "gymnasium[mujoco]>=1.1" "mo-gymnasium[mujoco]" "mujoco>=3.8.1,<3.9.0"
 else
-  uv_pip_install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]"
+  uv_pip_install "gymnasium[atari,mujoco]>=1.1" "mo-gymnasium[mujoco]" "mujoco>=3.8.1,<3.9.0"
 fi
 
 # sanity check
@@ -240,6 +240,9 @@ else
   uv_pip_install --no-deps tensordict
 fi
 
+printf "* Installing hoptorch\n"
+uv_pip_install "hoptorch>=0.1.1"
+
 printf "* Installing torchrl\n"
 if [[ "$RELEASE" == 0 ]]; then
   uv_pip_install -e . --no-build-isolation --no-deps
@@ -247,7 +250,7 @@ else
   uv_pip_install -e . --no-build-isolation --no-deps
 fi
 
-# install torchcodec (from source for nightly, from PyPI for stable)
+# install torchcodec (from source for nightly, from the PyTorch wheel index for stable)
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   torchcodec_dir=$(mktemp -d)
   git clone --depth 1 https://github.com/pytorch/torchcodec.git "$torchcodec_dir"
@@ -257,7 +260,7 @@ if [[ "$TORCH_VERSION" == "nightly" ]]; then
     uv_pip_install --no-build-isolation "$torchcodec_dir"
   rm -rf "$torchcodec_dir"
 else
-  uv_pip_install torchcodec
+  uv_pip_install --index-url "https://download.pytorch.org/whl/${CU_VERSION}" torchcodec
 fi
 
 if [ "${CU_VERSION:-}" != cpu ] ; then
@@ -325,6 +328,7 @@ export PYTORCH_TEST_WITH_SLOW='1'
 python -m torch.utils.collect_env
 
 bash "${root_dir}/.github/unittest/helpers/assert_torch_version.sh" "$TORCH_VERSION"
+bash "${root_dir}/.github/unittest/helpers/assert_torch_tensordict_versions.sh" "$TORCH_VERSION"
 
 Xvfb :99 -screen 0 1024x768x24 &
 

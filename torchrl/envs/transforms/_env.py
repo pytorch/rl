@@ -1172,6 +1172,87 @@ class StepCounter(Transform):
         )
 
 
+class TerminateTransform(Transform):
+    r"""Terminate a rollout when a user-supplied predicate becomes true.
+
+    After each environment step, ``stop(next_tensordict)`` is evaluated and its
+    boolean result is OR-ed into the environment's ``terminated`` (and, by
+    default, ``done``) entries. Combined with
+    ``rollout(..., break_when_any_done=True)`` (the default), this ends the
+    rollout as soon as the goal condition is reached -- without writing a
+    bespoke stepping loop. It is the natural companion of the
+    :meth:`~torchrl.envs.EnvBase.rollout` ``actions`` keyword for scripted,
+    goal-terminated replays.
+
+    Args:
+        stop (callable): a callable taking the post-step (``"next"``)
+            TensorDict and returning a boolean scalar or a boolean tensor
+            broadcastable to the environment's done entries.
+
+    Keyword Args:
+        write_done (bool, optional): if ``True`` (default), also OR the flag
+            into the ``done`` entries so ``break_when_any_done`` halts the
+            rollout. Set to ``False`` to write only ``terminated`` entries.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> from torchrl.envs.transforms import TerminateTransform
+        >>> env = TransformedEnv(  # doctest: +SKIP
+        ...     GymEnv("Pendulum-v1"),
+        ...     TerminateTransform(lambda td: td["observation"][..., 0] > 0.99),
+        ... )
+        >>> rollout = env.rollout(200, break_when_any_done=True)  # doctest: +SKIP
+    """
+
+    def __init__(
+        self,
+        stop: Callable[[TensorDictBase], Any],
+        *,
+        write_done: bool = True,
+    ) -> None:
+        if not callable(stop):
+            raise ValueError("`stop` must be a callable.")
+        super().__init__(in_keys=[], out_keys=[])
+        self.stop = stop
+        self.write_done = write_done
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        flag = self.stop(next_tensordict)
+        if not isinstance(flag, torch.Tensor):
+            flag = torch.as_tensor(flag, device=next_tensordict.device)
+        flag = flag.bool()
+        parent = self.parent
+        done_keys = list(parent.done_keys) if parent is not None else ["done"]
+        for key in done_keys:
+            leaf = key[-1] if isinstance(key, tuple) else key
+            if leaf == "truncated":
+                continue
+            if leaf == "done" and not self.write_done:
+                continue
+            current = next_tensordict.get(key, default=None)
+            if current is None:
+                continue
+            broadcast = flag
+            while broadcast.ndim < current.ndim:
+                broadcast = broadcast.unsqueeze(-1)
+            broadcast = broadcast.expand(current.shape)
+            next_tensordict.set(key, current | broadcast)
+        return next_tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError(
+            f"class {type(self)} cannot be executed without a parent environment."
+        )
+
+
 class RandomTruncationTransform(Transform):
     """Randomly truncate episodes to decorrelate synchronized batched envs.
 

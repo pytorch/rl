@@ -19,7 +19,7 @@ import torch.cuda
 from tensordict import TensorDict, TensorDictBase
 from torch import nn
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
@@ -721,11 +721,3 @@ class DistributedSyncCollector(BaseCollector):
             torch.distributed.destroy_process_group()
 
         torchrl_logger.debug("collector shut down")
-
-
-class DistributedSyncDataCollector(
-    DistributedSyncCollector, metaclass=_LegacyCollectorMeta
-):
-    """Deprecated version of :class:`~torchrl.collectors.distributed.DistributedSyncCollector`."""
-
-    ...

@@ -82,7 +82,11 @@ conda env update --file "${this_dir}/environment.yml" --prune
 
 conda install conda-forge::ffmpeg -y
 
-pip install robohive
+pip install robohive --no-deps
+pip install GitPython
+# robohive is installed with --no-deps, but its myochallenge chasetag envs do
+# `import pink` (provided by the pink-noise-rl package), so add it explicitly.
+pip install "pink-noise-rl==2.0.1"
 
 python -m robohive_init
 

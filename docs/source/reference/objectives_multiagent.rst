@@ -6,8 +6,8 @@ Multi-Agent Objectives
 Loss modules for multi-agent reinforcement learning algorithms. These losses
 follow the torchrl multi-agent tensordict convention (per-agent tensors
 nested under group keys such as ``("agents", "observation")``; see
-:class:`~torchrl.envs.libs.vmas.VmasEnv` and
-:class:`~torchrl.envs.libs.pettingzoo.PettingZooEnv`).
+:class:`~torchrl.envs.VmasEnv` and
+:class:`~torchrl.envs.PettingZooEnv`).
 
 MAPPO and IPPO
 --------------

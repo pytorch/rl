@@ -227,7 +227,7 @@ class MultiStepTransform(Transform):
 class NextStateReconstructor(Transform):
     """Re-hydrate ``("next", obs)`` keys at sampling time by shifting along the batch.
 
-    Pairs with :class:`~torchrl.collectors.SyncDataCollector` configured with
+    Pairs with :class:`~torchrl.collectors.Collector` configured with
     ``compact_obs=True`` (and the analogous flag on the multi-process collectors):
     the collector drops the observation and state keys from the
     ``("next", ...)`` sub-tensordict before stacking because those values are
@@ -245,7 +245,7 @@ class NextStateReconstructor(Transform):
 
     "Same trajectory" is decided from a trajectory id key in the sample,
     by default ``("collector", "traj_ids")`` — the key that
-    :class:`~torchrl.collectors.SyncDataCollector` populates when
+    :class:`~torchrl.collectors.Collector` populates when
     ``track_traj_ids=True`` (the default). The semantics fall out cleanly for
     every common sampler:
 
@@ -331,6 +331,24 @@ class NextStateReconstructor(Transform):
         ... }, batch_size=[8])
         >>> rb.extend(data)
         >>> sample = rb.sample()  # ('next', 'observation') is reconstructed
+
+    .. seealso::
+
+        :class:`~torchrl.collectors.Collector`'s ``compact_obs`` flag
+        is the producer side of this transform — it drops the duplicated
+        ``("next", obs)`` before stacking. Trajectory ends carry ``NaN`` after
+        rehydration; the value-estimator pipeline keeps GAE / TD targets
+        numerically defined via
+        :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`.
+        :class:`~torchrl.envs.transforms.MultiStepTransform` is **not**
+        compatible with the compact path: it needs the canonical ``("next", obs)``
+        to read the n-step neighbour (and to keep working at the last
+        ``n - 1`` frames of every trajectory, where the n-step lookup falls
+        back to the in-trajectory neighbours). For a lossy alternative that
+        reconstructs the *real* boundary transition (smaller memory saving,
+        no ``NaN``), see
+        :class:`~torchrl.envs.transforms.NextObservationDelta`. See the
+        *Memory-efficient RL training* tutorial for an end-to-end pipeline.
     """
 
     def __init__(

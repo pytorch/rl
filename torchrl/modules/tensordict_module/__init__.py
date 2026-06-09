@@ -3,6 +3,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from torchrl.modules.tensordict_module._rnn_precision import (
+    get_recurrent_matmul_precision,
+    RecurrentMatmulPrecision,
+    RecurrentMatmulPrecisionUserMode,
+    set_recurrent_matmul_precision,
+)
 from torchrl.modules.tensordict_module.actors import (
     Actor,
     ActorCriticOperator,
@@ -37,6 +43,7 @@ from torchrl.modules.tensordict_module.probabilistic import (
     SafeProbabilisticTensorDictSequential,
 )
 from torchrl.modules.tensordict_module.rnn import (
+    canonicalize_rnn_subset,
     GRU,
     GRUCell,
     GRUModule,
@@ -78,13 +85,18 @@ __all__ = [
     "OrnsteinUhlenbeckProcessWrapper",
     "SafeProbabilisticModule",
     "SafeProbabilisticTensorDictSequential",
+    "canonicalize_rnn_subset",
     "GRU",
     "GRUCell",
     "GRUModule",
     "LSTM",
     "LSTMCell",
     "LSTMModule",
+    "RecurrentMatmulPrecision",
+    "RecurrentMatmulPrecisionUserMode",
+    "get_recurrent_matmul_precision",
     "recurrent_mode",
+    "set_recurrent_matmul_precision",
     "set_recurrent_mode",
     "SafeSequential",
     "WorldModel",

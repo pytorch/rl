@@ -81,9 +81,7 @@ _has_hydra = importlib.util.find_spec("hydra") is not None
 _python_version_compatible = sys.version_info >= (3, 10)
 _has_vmas = importlib.util.find_spec("vmas") is not None
 # Make sure that warnings raise an exception
-pytestmark = [
-    pytest.mark.filterwarnings("error"),
-]
+pytestmark = pytest.mark.filterwarnings("error")
 
 
 @pytest.mark.skipif(
@@ -149,7 +147,10 @@ class TestEnvConfigs:
             batched_env_type=batched_env_type,
         )
         env = instantiate(cfg)
-        assert isinstance(env, cls)
+        try:
+            assert isinstance(env, cls)
+        finally:
+            env.close(raise_if_closed=False)
 
 
 @pytest.mark.skipif(
@@ -1106,7 +1107,7 @@ class TestCollectorsConfig:
     def test_collector_config(self, factory, collector):
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.collectors import (
-            AsyncDataCollectorConfig,
+            AsyncCollectorConfig,
             MultiAsyncCollectorConfig,
             MultiSyncCollectorConfig,
         )
@@ -1130,7 +1131,7 @@ class TestCollectorsConfig:
         # Define cfg_cls and kwargs based on collector type
         if collector == "async":
 
-            cfg_cls = AsyncDataCollectorConfig
+            cfg_cls = AsyncCollectorConfig
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
             cfg_cls = MultiSyncCollectorConfig
@@ -1189,7 +1190,7 @@ class TestCollectorsConfig:
         """
         from hydra.utils import instantiate
         from torchrl.trainers.algorithms.configs.collectors import (
-            AsyncDataCollectorConfig,
+            AsyncCollectorConfig,
             MultiAsyncCollectorConfig,
             MultiSyncCollectorConfig,
         )
@@ -1225,7 +1226,7 @@ class TestCollectorsConfig:
         )
 
         if collector == "async":
-            cfg_cls = AsyncDataCollectorConfig
+            cfg_cls = AsyncCollectorConfig
             expected_cls = AsyncCollector
             kwargs = {"create_env_fn": env_cfg, "frames_per_batch": 10}
         elif collector == "multi_sync":
@@ -1631,7 +1632,7 @@ class TestTrainerConfigs:
             optimizer=optimizer_config,
             logger=None,  # Optional field
             save_trainer_file="/tmp/test.pt",
-            replay_buffer=replay_buffer_config
+            replay_buffer=replay_buffer_config,
             # All optional fields are omitted to test defaults
         )
 

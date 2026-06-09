@@ -27,7 +27,7 @@ from torchrl.collectors.distributed import RayCollector
 from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import InitTracker, StepCounter, TransformedEnv, VecNormV2
+from torchrl.envs import InitTracker, RewardSum, StepCounter, TransformedEnv, VecNormV2
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import LSTMModule, MLP
 from torchrl.testing import get_default_devices
@@ -206,6 +206,102 @@ def _isaaclab_native_rollout(seed: int, max_steps: int = 4):
 
 def _isaaclab_transition_keys(rollout):
     return _isaaclab_rollout_keys(rollout)
+
+
+def _isaaclab_direct_native_autoreset_in_process(env_name: str, num_envs: int):
+    """Drive a Direct-workflow Isaac env one step into a forced ``done`` row.
+
+    Returns a small dict of bool/Tensor results that the parent process
+    asserts on. Kept in-process for the ``mp.Process`` worker; never call
+    directly because Isaac Lab can only be initialised once per process.
+    """
+    os.environ["ACCEPT_EULA"] = "Y"
+    os.environ["OMNI_KIT_ACCEPT_EULA"] = "YES"
+    os.environ["PRIVACY_CONSENT"] = "Y"
+    env = make_isaac_env(env_name=env_name, native_autoreset=True, num_envs=num_envs)
+    try:
+        obs_keys = list(env.full_observation_spec.keys(True, True))
+        obs_key = "policy" if "policy" in obs_keys else obs_keys[0]
+        td = env.reset()
+        raw_env = env
+        while hasattr(raw_env, "base_env"):
+            raw_env = raw_env.base_env
+        raw_inner = raw_env._env.unwrapped
+        # Force the next step to flip ``done`` for at least one row.
+        raw_inner.episode_length_buf.zero_()
+        raw_inner.episode_length_buf.reshape(-1)[0] = raw_inner.max_episode_length - 1
+
+        td = env.rand_action(td)
+        td, td_ = env.step_and_maybe_reset(td)
+
+        done = td["next", "done"].squeeze(-1).cpu()
+        terminal_obs = td["next", obs_key].cpu()
+        next_obs = td_[obs_key].cpu()
+        return {
+            "any_done": bool(done.any().item()),
+            "terminal_nan_at_done": bool(torch.isnan(terminal_obs[done]).all().item())
+            if done.any()
+            else True,
+            "next_finite_at_done": bool(next_obs[done].isfinite().all().item())
+            if done.any()
+            else True,
+            "next_done_zero": bool((~td_["done"]).all().item()),
+        }
+    finally:
+        env.close()
+
+
+def _isaaclab_direct_native_autoreset_worker(queue, env_name: str, num_envs: int):
+    try:
+        result = _isaaclab_direct_native_autoreset_in_process(env_name, num_envs)
+        buffer = io.BytesIO()
+        torch.save(result, buffer)
+        queue.put(("succeeded", buffer.getvalue()))
+    except BaseException:
+        queue.put(("failed", traceback.format_exc()))
+        raise
+
+
+def _isaaclab_direct_native_autoreset(env_name: str, num_envs: int = 16):
+    """Run :func:`_isaaclab_direct_native_autoreset_in_process` in a worker."""
+    queue = mp.Queue(1)
+    proc = mp.Process(
+        target=_isaaclab_direct_native_autoreset_worker,
+        args=(queue, env_name, num_envs),
+    )
+    try:
+        proc.start()
+        deadline = time.monotonic() + 300
+        while True:
+            try:
+                status, payload = queue.get(timeout=1)
+                break
+            except queue_lib.Empty:
+                if not proc.is_alive():
+                    proc.join()
+                    pytest.fail(
+                        f"Isaac Lab Direct-env worker exited with code "
+                        f"{proc.exitcode} without returning."
+                    )
+                if time.monotonic() > deadline:
+                    proc.terminate()
+                    proc.join(timeout=30)
+                    pytest.fail("Isaac Lab Direct-env worker timed out.")
+        proc.join(timeout=30)
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=30)
+            pytest.fail("Isaac Lab Direct-env worker did not exit after returning.")
+        if status != "succeeded":
+            pytest.fail(f"Isaac Lab Direct-env worker failed:\n{payload}")
+        if proc.exitcode:
+            pytest.fail(
+                f"Isaac Lab Direct-env worker exited with code {proc.exitcode}."
+            )
+        return torch.load(io.BytesIO(payload), weights_only=False)
+    finally:
+        queue.close()
+        proc.join()
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")
@@ -547,6 +643,202 @@ class TestIsaacLab:
                 rollout["next", "policy"][..., :-1, :][done[..., :-1]]
             ).all()
             assert rollout["policy"][..., 1:, :][done[..., :-1]].isfinite().all()
+
+    @pytest.mark.parametrize(
+        "env_name",
+        ["Isaac-Cartpole-Direct-v0"],
+    )
+    def test_isaaclab_direct_env_native_autoreset(self, env_name):
+        """Direct-workflow envs must bridge to ``native_autoreset`` too.
+
+        Mirrors :meth:`test_isaaclab_native_autoreset_vecnorm_step_and_maybe_reset`
+        but on a Direct env (``DirectRLEnv``): when ``native_autoreset=True``,
+        ``step_and_maybe_reset`` must skip the synthetic ``env.reset()`` call,
+        mark the terminal ``("next", obs)`` as NaN at the done rows, and
+        return finite obs at the same rows on the next root tensordict.
+        """
+        result = _isaaclab_direct_native_autoreset(env_name)
+        assert result["any_done"], "Forced terminal step did not flip done."
+        assert result["terminal_nan_at_done"]
+        assert result["next_finite_at_done"]
+        assert result["next_done_zero"]
+
+    # ------------------------------------------------------------------
+    # Per-index reset bridge (IsaacLabWrapper._reset)
+    # ------------------------------------------------------------------
+
+    def test_isaaclab_partial_reset_via_reset_mask(self):
+        """A partial ``_reset`` mask must reset only the masked sub-envs.
+
+        Asserted invariants:
+            - ``episode_length_buf`` is 0 only for the masked envs.
+            - Non-masked envs keep their prior step counter (verified by
+              stepping the env several times before the partial reset).
+        """
+        env = make_isaac_env(native_autoreset=True)
+        try:
+            raw_env = _isaaclab_raw_env(env)
+            if not hasattr(raw_env, "episode_length_buf"):
+                pytest.skip("Isaac Lab env does not expose episode_length_buf.")
+            num_envs = env.batch_size[0]
+            assert num_envs >= 2
+
+            td = env.reset()
+            for _ in range(3):
+                td = env.rand_action(td)
+                td, td_ = env.step_and_maybe_reset(td)
+                td = td_
+            pre_lengths = raw_env.episode_length_buf.clone()
+            assert (pre_lengths > 0).all()
+
+            half = num_envs // 2
+            reset_mask = torch.zeros(num_envs, 1, dtype=torch.bool, device=env.device)
+            reset_mask[:half] = True
+            td.set("_reset", reset_mask)
+            env.reset(td)
+
+            post_lengths = raw_env.episode_length_buf
+            assert (post_lengths[:half] == 0).all()
+            assert (
+                post_lengths[half:] == pre_lengths[half:].to(post_lengths.device)
+            ).all()
+        finally:
+            env.close()
+
+    def test_isaaclab_partial_reset_triggers_transforms(self):
+        """A partial reset must reset transform state only for the masked envs.
+
+        Uses ``RewardSum`` as a proxy: its ``"episode_reward"`` running
+        accumulator must zero out on the masked rows and stay untouched on
+        the others.
+        """
+        env = make_isaac_env(native_autoreset=True)
+        try:
+            num_envs = env.batch_size[0]
+            assert num_envs >= 2
+
+            env_rs = TransformedEnv(env, RewardSum())
+            td = env_rs.reset()
+            assert "episode_reward" in td.keys()
+
+            for _ in range(3):
+                td = env_rs.rand_action(td)
+                td, td_ = env_rs.step_and_maybe_reset(td)
+                td = td_
+            pre_episode_reward = td["episode_reward"].clone()
+            assert (pre_episode_reward != 0).any()
+
+            half = num_envs // 2
+            reset_mask = torch.zeros(num_envs, 1, dtype=torch.bool, device=td.device)
+            reset_mask[:half] = True
+            td.set("_reset", reset_mask)
+            td_after = env_rs.reset(td)
+
+            assert (td_after["episode_reward"][:half] == 0).all()
+            assert torch.allclose(
+                td_after["episode_reward"][half:], pre_episode_reward[half:]
+            )
+        finally:
+            env_rs.close()
+
+    def test_isaaclab_full_reset_unchanged_by_bridge(self):
+        """A full reset (no ``_reset`` mask, or all-True mask) must keep the
+        existing semantics intact, including with ``native_autoreset=True``.
+        """
+        env = make_isaac_env(native_autoreset=True)
+        try:
+            raw_env = _isaaclab_raw_env(env)
+            num_envs = env.batch_size[0]
+
+            td = env.reset()
+            for _ in range(3):
+                td = env.rand_action(td)
+                td, td_ = env.step_and_maybe_reset(td)
+                td = td_
+            if hasattr(raw_env, "episode_length_buf"):
+                assert (raw_env.episode_length_buf > 0).all()
+
+            env.reset()
+            if hasattr(raw_env, "episode_length_buf"):
+                assert (raw_env.episode_length_buf == 0).all()
+
+            # Same with an all-True ``_reset`` mask.
+            for _ in range(2):
+                td = env.rand_action(td)
+                td, td_ = env.step_and_maybe_reset(td)
+                td = td_
+            if hasattr(raw_env, "episode_length_buf"):
+                assert (raw_env.episode_length_buf > 0).all()
+            all_true = torch.ones(num_envs, 1, dtype=torch.bool, device=td.device)
+            td.set("_reset", all_true)
+            env.reset(td)
+            if hasattr(raw_env, "episode_length_buf"):
+                assert (raw_env.episode_length_buf == 0).all()
+        finally:
+            env.close()
+
+    # ------------------------------------------------------------------
+    # State-based reset bridge (IsaacLabWrapper.reset_to_state / get_state)
+    # ------------------------------------------------------------------
+
+    def test_isaaclab_reset_to_state_roundtrip(self):
+        """Snapshot the scene, step, then ``reset_to_state`` for a subset.
+
+        The masked envs should land back on the snapshot state; the rest
+        should keep evolving from the post-step state.
+        """
+        env = make_isaac_env(native_autoreset=True)
+        try:
+            raw_env = _isaaclab_raw_env(env)
+            if not hasattr(raw_env, "reset_to"):
+                pytest.skip("Isaac Lab env does not expose reset_to.")
+            num_envs = env.batch_size[0]
+            assert num_envs >= 2
+
+            env.reset()
+            snapshot = raw_env.scene.get_state()
+
+            td = env.reset()
+            for _ in range(3):
+                td = env.rand_action(td)
+                td, td_ = env.step_and_maybe_reset(td)
+                td = td_
+
+            half = num_envs // 2
+            reset_mask = torch.zeros(num_envs, 1, dtype=torch.bool, device=td.device)
+            reset_mask[:half] = True
+            td.set("_reset", reset_mask)
+
+            td_after = env.reset(
+                td,
+                set_state=True,
+                scene_state=snapshot,
+                is_relative=False,
+            )
+
+            # Verify the masked envs have ``episode_length_buf`` zeroed.
+            if hasattr(raw_env, "episode_length_buf"):
+                buf = raw_env.episode_length_buf
+                assert (buf[:half] == 0).all()
+                # And the rest were untouched -- this confirms reset_to was
+                # called with env_ids rather than as a full reset.
+                assert (buf[half:] > 0).all()
+            assert td_after.batch_size == env.batch_size
+        finally:
+            env.close()
+
+    def test_isaaclab_get_state_returns_scene_state(self):
+        """``get_state`` must mirror ``InteractiveScene.get_state()``."""
+        env = make_isaac_env()
+        try:
+            raw_env = _isaaclab_raw_env(env)
+            # IsaacLabWrapper exposes ``get_state``; reach it through the
+            # transform stack's __getattr__ forwarding.
+            state = env.get_state()
+            raw = raw_env.scene.get_state()
+            assert type(state) is type(raw)
+        finally:
+            env.close()
 
     def test_isaaclab_lstm(self, env):
         """Test that LSTM/RNN works with pre-vectorized IsaacLab environments (Issue #1493).

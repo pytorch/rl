@@ -39,6 +39,7 @@ class WandbLoggerConfig(LoggerConfig):
     id: str | None = None
     project: str | None = None
     video_fps: int = 32
+    log_env_packages: bool = True
     log_dir: str | None = None
     wandb_kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -55,6 +56,7 @@ def _make_wandb_logger(
     id: str | None = None,
     project: str | None = None,
     video_fps: int = 32,
+    log_env_packages: bool = True,
     log_dir: str | None = None,
     wandb_kwargs: dict[str, Any] | None = None,
 ) -> WandbLogger:
@@ -66,6 +68,7 @@ def _make_wandb_logger(
         id=id,
         project=project,
         video_fps=video_fps,
+        log_env_packages=log_env_packages,
         log_dir=log_dir,
         **wandb_kwargs,
     )

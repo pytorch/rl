@@ -87,6 +87,7 @@ docs/source/gen_modules
 docs/source/reference/generated
 docs/source/tutorials
 docs/src
+.docs_mujoco_menagerie/
 
 # PyBuilder
 .pybuilder/

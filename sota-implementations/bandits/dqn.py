@@ -9,12 +9,90 @@ import argparse
 import torch
 import tqdm
 
+from tensordict import TensorDict, TensorDictBase
 from tensordict.nn import TensorDictSequential
 from torch import nn
+from torchrl.data.tensor_specs import Categorical, Composite, Unbounded
+from torchrl.envs.common import EnvBase
 from torchrl.envs.libs.openml import OpenMLEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import DistributionalQValueActor, EGreedyModule, MLP, QValueActor
 from torchrl.objectives import DistributionalDQNLoss, DQNLoss
+
+
+class SyntheticBanditEnv(EnvBase):
+    """Small offline contextual-bandit environment for smoke tests."""
+
+    def __init__(
+        self,
+        batch_size,
+        n_features: int = 8,
+        n_actions: int = 4,
+        dataset_size: int = 4096,
+        device: torch.device | str = "cpu",
+    ):
+        batch_size = torch.Size(batch_size)
+        device = torch.device(device)
+        self.n_features = n_features
+        self.n_actions = n_actions
+        self.dataset_size = dataset_size
+        self.rng = torch.Generator(device=device).manual_seed(0)
+        self.features = torch.randn(
+            dataset_size, n_features, device=device, generator=self.rng
+        )
+        weights = torch.randn(n_features, n_actions, device=device, generator=self.rng)
+        self.outcomes = (self.features @ weights).argmax(-1)
+        super().__init__(device=device, batch_size=batch_size)
+        self.observation_spec = Composite(
+            {
+                "observation": Unbounded(
+                    shape=(*batch_size, n_features), device=self.device
+                ),
+                "y": Categorical(n_actions, shape=batch_size, device=self.device),
+            },
+            shape=batch_size,
+            device=self.device,
+        )
+        self.action_spec = Categorical(n_actions, shape=batch_size, device=self.device)
+        self.reward_spec = Unbounded(shape=(*batch_size, 1), device=self.device)
+
+    def _sample(self) -> TensorDict:
+        index = torch.randint(
+            self.dataset_size,
+            self.batch_size,
+            generator=self.rng,
+            device=self.device,
+        )
+        return TensorDict(
+            {
+                "observation": self.features[index],
+                "y": self.outcomes[index],
+            },
+            self.batch_size,
+            device=self.device,
+        )
+
+    def _reset(self, tensordict: TensorDictBase | None = None) -> TensorDict:
+        return self._sample()
+
+    def _step(self, tensordict: TensorDictBase) -> TensorDict:
+        reward = (tensordict["action"] == tensordict["y"]).float().unsqueeze(-1)
+        done = torch.ones_like(reward, dtype=torch.bool)
+        return TensorDict(
+            {
+                "done": done,
+                "reward": reward,
+                **tensordict.select(*self.observation_spec.keys()),
+            },
+            self.batch_size,
+            device=self.device,
+        )
+
+    def _set_seed(self, seed: int | None) -> None:
+        if seed is None:
+            seed = 0
+        self.rng = torch.Generator(device=self.device).manual_seed(seed)
+
 
 parser = argparse.ArgumentParser()
 
@@ -41,6 +119,7 @@ parser.add_argument(
         "covertype",
         "shuttle",
         "magic",
+        "synthetic",
     ],
     help="OpenML dataset",
 )
@@ -59,7 +138,10 @@ if __name__ == "__main__":
     distributional = args.distributional
     dataset = args.dataset
 
-    env = OpenMLEnv(dataset, batch_size=[batch_size])
+    if dataset == "synthetic":
+        env = SyntheticBanditEnv(batch_size=[batch_size])
+    else:
+        env = OpenMLEnv(dataset, batch_size=[batch_size])
     n_actions = env.action_spec.space.n
     if distributional:
         # does not really make sense since the value is either 0 or 1 and hopefully we

@@ -9,6 +9,7 @@ import functools
 import warnings
 from collections.abc import Callable
 from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from functools import wraps
 
@@ -34,6 +35,8 @@ from torchrl.objectives.utils import (
     _pseudo_vmap,
     _vmap_func,
     hold_out_net,
+    register_value_estimator,
+    ValueEstimators,
 )
 from torchrl.objectives.value.functional import (
     generalized_advantage_estimate,
@@ -103,7 +106,47 @@ class ValueEstimatorBase(TensorDictModuleBase):
     If only the value estimate is needed, the :meth:`ValueFunctionBase.value_estimate`
     should be used instead.
 
+    Keyword Args:
+        value_chunk_size (int, optional): if set, splits value-network calls
+            into chunks of this many elements along the leading dimension.
+            Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
+        shifted_budget (int, optional): number of extra value-network time slots
+            used when ``shifted=True``. ``1`` uses a ``T+1``
+            budget, ``2`` can represent one internal reset plus the rollout
+            boundary without dropping samples, and so on. Defaults to ``1``.
+
     """
+
+    @classmethod
+    def for_loss(cls, loss_module, **hyperparams):
+        """Construct an instance configured against ``loss_module``.
+
+        Used by the value-estimator registry
+        (:func:`~torchrl.objectives.utils.build_value_estimator`) to keep
+        per-estimator wiring quirks out of every loss class. The default
+        implementation picks up ``loss_module.critic_network`` if present,
+        falling back to ``loss_module.value_network``, and forwards the
+        remaining ``hyperparams`` to the constructor.
+
+        A loss that owns a value module under a non-standard name can pass
+        ``value_network=<the module>`` through
+        :func:`~torchrl.objectives.utils.dispatch_value_estimator` — it
+        wins over the auto-detected one. Estimator subclasses with
+        additional dependencies (e.g. :class:`VTrace` needing the actor)
+        override this method.
+        """
+        if "value_network" not in hyperparams:
+            value_network = getattr(loss_module, "critic_network", None)
+            if value_network is None:
+                value_network = getattr(loss_module, "value_network", None)
+            hyperparams["value_network"] = value_network
+        return cls(**hyperparams)
 
     @dataclass
     class _AcceptedKeys:
@@ -238,6 +281,8 @@ class ValueEstimatorBase(TensorDictModuleBase):
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
+        num_chunks: int | None = None,
+        num_chunk: int | None = None,
         shifted_budget: int = 1,
     ):
         super().__init__()
@@ -249,7 +294,16 @@ class ValueEstimatorBase(TensorDictModuleBase):
         self._tensor_keys = None
         self.differentiable = differentiable
         self.deactivate_vmap = deactivate_vmap
-        self.value_chunk_size = value_chunk_size
+        self.value_chunk_size = self._check_positive_int(
+            value_chunk_size, "value_chunk_size"
+        )
+        self.num_chunks = self._resolve_num_chunks(num_chunks, num_chunk)
+        if self.value_chunk_size is not None and self.num_chunks is not None:
+            raise ValueError(
+                "value_chunk_size and num_chunks cannot both be set. "
+                "Use value_chunk_size to specify a chunk size or num_chunks "
+                "to specify a number of chunks."
+            )
         if shifted_budget < 1:
             raise ValueError(f"shifted_budget must be >= 1, got {shifted_budget}.")
         self.shifted_budget = shifted_budget
@@ -270,6 +324,45 @@ class ValueEstimatorBase(TensorDictModuleBase):
             raise RuntimeError(
                 "Setting 'value_key' via constructor is deprecated, use .set_keys(value_key='some_key') instead.",
             )
+
+    @staticmethod
+    def _check_positive_int(value: int | None, name: str) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"{name} must be an integer or None, got {type(value)}.")
+        if value < 1:
+            raise ValueError(f"{name} must be >= 1, got {value}.")
+        return value
+
+    @classmethod
+    def _resolve_num_chunks(
+        cls, num_chunks: int | None, num_chunk: int | None
+    ) -> int | None:
+        num_chunks = cls._check_positive_int(num_chunks, "num_chunks")
+        num_chunk = cls._check_positive_int(num_chunk, "num_chunk")
+        if num_chunk is None:
+            return num_chunks
+        if num_chunks is not None and num_chunks != num_chunk:
+            raise ValueError(
+                "num_chunks and num_chunk cannot both be set to different values."
+            )
+        return num_chunk
+
+    def _split_value_net_input(
+        self, data: TensorDictBase
+    ) -> tuple[TensorDictBase, ...]:
+        if self.num_chunks is not None:
+            if data.shape[0] == 0:
+                return (data,)
+            num_chunks = min(self.num_chunks, data.shape[0])
+            if num_chunks == 1:
+                return (data,)
+            return tuple(data.tensor_split(num_chunks, dim=0))
+        chunk_size = self.value_chunk_size
+        if chunk_size is None or data.numel() <= chunk_size:
+            return (data,)
+        return tuple(data.split(chunk_size, dim=0))
 
     @property
     def tensor_keys(self) -> _AcceptedKeys:
@@ -381,7 +474,9 @@ class ValueEstimatorBase(TensorDictModuleBase):
         if self.value_network is not None:
             with hold_out_net(
                 self.value_network
-            ) if target_params is None else target_params.to_module(self.value_network):
+            ) if target_params is None else target_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(step_td)
         next_value = step_td.get(self.tensor_keys.value)
         return next_value
@@ -442,7 +537,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
         as produced by
         :class:`~torchrl.envs.transforms.NextStateReconstructor` at trajectory
         ends in conjunction with
-        :class:`~torchrl.collectors.SyncDataCollector` configured with
+        :class:`~torchrl.collectors.Collector` configured with
         ``compact_obs=True``. Without this step, ``V(NaN) = NaN`` propagates
         through the TD / GAE kernels (the multiplication by ``(1 - done)``
         does not zero NaN out because ``0 * NaN = NaN`` in IEEE 754).
@@ -457,6 +552,17 @@ class ValueEstimatorBase(TensorDictModuleBase):
 
         Operates on a shallow copy so the caller's ``tensordict`` is not
         mutated.
+
+        .. seealso::
+
+            :class:`~torchrl.collectors.Collector` (``compact_obs``)
+            and :class:`~torchrl.envs.transforms.NextStateReconstructor` are
+            the typical producers of ``NaN`` next-observations at trajectory
+            ends. :class:`~torchrl.envs.transforms.NextObservationDelta`
+            is an alternative env-side compression that *avoids* the
+            ``NaN``-at-boundary case (at the cost of a smaller memory
+            saving). The *Memory-efficient RL training* tutorial wires the
+            knobs together end-to-end.
         """
         copied = False
         for k in in_keys:
@@ -621,7 +727,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 )
             data_in.set(key, data_value)
         if params is not None:
-            with params.to_module(value_net):
+            with params.to_module(value_net, preserve_module_state=False):
                 values_full = _call_value_net(data_in)
         else:
             values_full = _call_value_net(data_in)
@@ -675,11 +781,11 @@ class ValueEstimatorBase(TensorDictModuleBase):
         data = self._sanitize_next_obs_nan(data, in_keys)
 
         def _call_value_net(data_in: TensorDictBase) -> torch.Tensor:
-            chunk_size = self.value_chunk_size
-            if chunk_size is None or data_in.numel() <= chunk_size:
+            chunks = self._split_value_net_input(data_in)
+            if len(chunks) == 1:
                 return value_net(data_in).get(value_key)
             values = []
-            for chunk in data_in.split(chunk_size, dim=0):
+            for chunk in chunks:
                 values.append(value_net(chunk).get(value_key))
             return torch.cat(values, dim=0)
 
@@ -713,10 +819,31 @@ class ValueEstimatorBase(TensorDictModuleBase):
             elif (
                 params is None
                 and next_params is None
-                and self.value_chunk_size is not None
+                and (self.value_chunk_size is not None or self.num_chunks is not None)
             ):
                 value = _call_value_net(data_root)
                 value_ = _call_value_net(data_next)
+            elif params is not None and (
+                self.value_chunk_size is not None or self.num_chunks is not None
+            ):
+                params_stack = torch.stack([params, next_params], 0).contiguous()
+                values = []
+                next_values = []
+                for root_chunk, next_chunk in zip(
+                    self._split_value_net_input(data_root),
+                    self._split_value_net_input(data_next),
+                ):
+                    data_out = _vmap_func(
+                        value_net,
+                        (0, 0),
+                        randomness=vmap_randomness,
+                        pseudo_vmap=self.deactivate_vmap,
+                    )(torch.stack([root_chunk, next_chunk], 0), params_stack)
+                    value_est = data_out.get(value_key)
+                    values.append(value_est[0])
+                    next_values.append(value_est[1])
+                value = torch.cat(values, dim=0)
+                value_ = torch.cat(next_values, dim=0)
             elif params is not None:
                 params_stack = torch.stack([params, next_params], 0).contiguous()
                 data_out = _vmap_func(
@@ -731,7 +858,7 @@ class ValueEstimatorBase(TensorDictModuleBase):
                 data_out = _pseudo_vmap(value_net, (0,), randomness=vmap_randomness)(
                     data_in
                 )
-            if self.value_chunk_size is None or params is not None:
+            if self.value_chunk_size is None and self.num_chunks is None:
                 value_est = data_out.get(value_key)
                 value, value_ = value_est[0], value_est[1]
         data.set(value_key, value)
@@ -794,6 +921,10 @@ class ValueEstimatorBase(TensorDictModuleBase):
             tensordict.set(key, value.masked_fill(~mask, 0))
 
 
+@register_value_estimator(
+    ValueEstimators.TD0,
+    default_kwargs={"gamma": 0.99, "differentiable": True},
+)
 class TD0Estimator(ValueEstimatorBase):
     """Temporal Difference (TD(0)) estimate of advantage function.
 
@@ -867,6 +998,12 @@ class TD0Estimator(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -889,6 +1026,8 @@ class TD0Estimator(ValueEstimatorBase):
         device: torch.device | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
+        num_chunks: int | None = None,
+        num_chunk: int | None = None,
         shifted_budget: int = 1,
     ):
         super().__init__(
@@ -902,6 +1041,8 @@ class TD0Estimator(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
+            num_chunks=num_chunks,
+            num_chunk=num_chunk,
             shifted_budget=shifted_budget,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
@@ -1059,6 +1200,10 @@ class TD0Estimator(ValueEstimatorBase):
         return value_target
 
 
+@register_value_estimator(
+    ValueEstimators.TD1,
+    default_kwargs={"gamma": 0.99, "differentiable": True},
+)
 class TD1Estimator(ValueEstimatorBase):
     r""":math:`\infty`-Temporal Difference (TD(1)) estimate of advantage function.
 
@@ -1136,6 +1281,12 @@ class TD1Estimator(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -1159,6 +1310,8 @@ class TD1Estimator(ValueEstimatorBase):
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
+        num_chunks: int | None = None,
+        num_chunk: int | None = None,
         shifted_budget: int = 1,
     ):
         super().__init__(
@@ -1172,6 +1325,8 @@ class TD1Estimator(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
+            num_chunks=num_chunks,
+            num_chunk=num_chunk,
             shifted_budget=shifted_budget,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
@@ -1337,6 +1492,10 @@ class TD1Estimator(ValueEstimatorBase):
         return value_target
 
 
+@register_value_estimator(
+    ValueEstimators.TDLambda,
+    default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+)
 class TDLambdaEstimator(ValueEstimatorBase):
     r"""TD(:math:`\lambda`) estimate of advantage function.
 
@@ -1417,6 +1576,12 @@ class TDLambdaEstimator(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -1442,6 +1607,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
         time_dim: int | None = None,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
+        num_chunks: int | None = None,
+        num_chunk: int | None = None,
         shifted_budget: int = 1,
     ):
         super().__init__(
@@ -1455,6 +1622,8 @@ class TDLambdaEstimator(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
+            num_chunks=num_chunks,
+            num_chunk=num_chunk,
             shifted_budget=shifted_budget,
         )
         self.register_buffer("gamma", torch.tensor(gamma, device=self._device))
@@ -1649,6 +1818,10 @@ class TDLambdaEstimator(ValueEstimatorBase):
         return val
 
 
+@register_value_estimator(
+    ValueEstimators.GAE,
+    default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+)
 class GAE(ValueEstimatorBase):
     """A class wrapper around the generalized advantage estimate functional.
 
@@ -1738,6 +1911,12 @@ class GAE(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -1788,6 +1967,8 @@ class GAE(ValueEstimatorBase):
         auto_reset_env: bool = False,
         deactivate_vmap: bool = False,
         value_chunk_size: int | None = None,
+        num_chunks: int | None = None,
+        num_chunk: int | None = None,
         shifted_budget: int = 1,
     ):
         super().__init__(
@@ -1801,6 +1982,8 @@ class GAE(ValueEstimatorBase):
             device=device,
             deactivate_vmap=deactivate_vmap,
             value_chunk_size=value_chunk_size,
+            num_chunks=num_chunks,
+            num_chunk=num_chunk,
             shifted_budget=shifted_budget,
         )
         self.register_buffer(
@@ -2138,6 +2321,10 @@ class GAE(ValueEstimatorBase):
         return value_target
 
 
+@register_value_estimator(
+    ValueEstimators.MAGAE,
+    default_kwargs={"gamma": 0.99, "lmbda": 0.95, "differentiable": True},
+)
 class MultiAgentGAE(GAE):
     """Multi-agent Generalized Advantage Estimator.
 
@@ -2240,6 +2427,10 @@ class MultiAgentGAE(GAE):
         return (adv - loc) / scale
 
 
+@register_value_estimator(
+    ValueEstimators.VTrace,
+    default_kwargs={"gamma": 0.99, "differentiable": True},
+)
 class VTrace(ValueEstimatorBase):
     """A class wrapper around V-Trace estimate functional.
 
@@ -2323,6 +2514,12 @@ class VTrace(ValueEstimatorBase):
         value_chunk_size (int, optional): if set, splits value-network calls
             into chunks of this many elements along the leading dimension.
             Defaults to ``None``.
+        num_chunks (int, optional): if set, splits value-network calls into
+            this many chunks along the leading dimension. Mutually exclusive
+            with ``value_chunk_size``. ``num_chunk`` is accepted as an alias.
+            Defaults to ``None``.
+        num_chunk (int, optional): alias for ``num_chunks``. Cannot be set
+            together with a different ``num_chunks`` value. Defaults to ``None``.
         shifted_budget (int, optional): number of extra value-network time slots
             used when ``shifted=True``. ``1`` uses a ``T+1``
             budget, ``2`` can represent one internal reset plus the rollout
@@ -2337,6 +2534,33 @@ class VTrace(ValueEstimatorBase):
       network (if any) and use the provided value instead.
 
     """
+
+    @classmethod
+    def for_loss(cls, loss_module, **hyperparams):
+        """V-Trace needs both the critic *and* the actor.
+
+        When the loss is functional, the actor stored on the loss module is
+        a stateless template — we deep-copy it and bake the current params
+        in, since V-Trace doesn't support a functional actor call.
+        """
+        value_network = hyperparams.pop("value_network", None)
+        if value_network is None:
+            value_network = getattr(loss_module, "critic_network", None)
+            if value_network is None:
+                value_network = getattr(loss_module, "value_network", None)
+        actor_network = hyperparams.pop("actor_network", None)
+        if actor_network is None:
+            actor_network = loss_module.actor_network
+        if getattr(loss_module, "functional", False):
+            actor_network = deepcopy(actor_network)
+            loss_module.actor_network_params.to_module(
+                actor_network, preserve_module_state=False
+            )
+        return cls(
+            value_network=value_network,
+            actor_network=actor_network,
+            **hyperparams,
+        )
 
     def __init__(
         self,
@@ -2356,6 +2580,8 @@ class VTrace(ValueEstimatorBase):
         device: torch.device | None = None,
         time_dim: int | None = None,
         value_chunk_size: int | None = None,
+        num_chunks: int | None = None,
+        num_chunk: int | None = None,
         shifted_budget: int = 1,
     ):
         super().__init__(
@@ -2368,6 +2594,8 @@ class VTrace(ValueEstimatorBase):
             skip_existing=skip_existing,
             device=device,
             value_chunk_size=value_chunk_size,
+            num_chunks=num_chunks,
+            num_chunk=num_chunk,
             shifted_budget=shifted_budget,
         )
         if not isinstance(gamma, torch.Tensor):

@@ -40,10 +40,11 @@ requires-python = ">=3.10"
 dependencies = [
     "torch>=2.1.0",
     "pyvers",
+    "hoptorch>=0.1.4",
     "numpy",
     "packaging",
     "cloudpickle",
-    "tensordict>=0.12.0,<0.13.0",
+    "tensordict>=0.13.0,<0.14.0",
 ]
 
 [dependency-groups]
@@ -55,6 +56,7 @@ dev = [
     "imageio",
     "mujoco",
     "mujoco-torch",
+    "pre-commit",
     "pytest",
     "tensorboard",
     "tqdm",
@@ -78,6 +80,7 @@ atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
+video = ["torchcodec>=0.10.0"]
 rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
@@ -103,6 +106,9 @@ utils = [
     "tqdm",
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
+    "pre-commit",
+    "autoflake",
+    "autopep8",
 ]
 checkpointing = ["torchsnapshot"]
 offline-data = [
@@ -190,7 +196,7 @@ version_scheme = "post-release"
 # Local scheme is handled by setup.py (appends +g<sha> unless on release/v<version> branch)
 local_scheme = "no-local-version"
 version_file = "torchrl/_version.py"
-fallback_version = "0.12.0"
+fallback_version = "0.13.0"
 
 [tool.setuptools.packages.find]
 exclude = [
@@ -204,7 +210,12 @@ exclude = [
 
 [tool.setuptools.package-data]
 "*" = ["*.txt", "*.md"]
-"torchrl" = ["csrc/*.h", "csrc/*.cu"]
+"torchrl" = [
+    "csrc/*.h",
+    "csrc/*.cu",
+    "envs/custom/mujoco/assets/*.xml",
+    "envs/custom/mujoco/assets/NOTICE",
+]
 
 [tool.codespell]
 skip = ".git,*.svg,*.png,*.jpg,*.css,*.js,*.tmp,docs/_local_build,docs/source/reference/generated,torchrl/_version.py,.worktrees,0.9"

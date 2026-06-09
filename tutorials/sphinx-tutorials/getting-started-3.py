@@ -132,7 +132,7 @@ print(data["collector", "traj_ids"])
 # technique, the writing heuristic or the transforms applied to them. We will
 # leave the fancy stuff for a dedicated in-depth tutorial. The generic replay
 # buffer only needs to know what storage it has to use. In general, we
-# recommend a :class:`~torchrl.data.TensorStorage` subclass, which will work
+# recommend a :class:`~torchrl.data.replay_buffers.TensorStorage` subclass, which will work
 # fine in most cases. We'll be using
 # :class:`~torchrl.data.replay_buffers.LazyMemmapStorage`
 # in this tutorial, which enjoys two nice properties: first, being "lazy",
@@ -197,7 +197,7 @@ print(sample)
 #   equivalent to calling ``rb.sample()`` within a loop!
 # - For trajectory-based training (recurrent policies, decision transformers),
 #   see :ref:`collectors_replay_trajs` — it shows how to use
-#   ``trajs_per_batch`` with a :class:`~torchrl.data.SliceSampler` to store
+#   ``trajs_per_batch`` with a :class:`~torchrl.data.replay_buffers.SliceSampler` to store
 #   and sample clean trajectory slices from the replay buffer, especially
 #   with multi-process collectors.
 #

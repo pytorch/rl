@@ -21,16 +21,11 @@ from torchrl.objectives.utils import (
     _pseudo_vmap,
     _reduce,
     _vmap_func,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class IQLLoss(LossModule):
@@ -450,7 +445,9 @@ class IQLLoss(LossModule):
 
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
 
         log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
@@ -469,7 +466,9 @@ class IQLLoss(LossModule):
             td_copy = tensordict.select(
                 *self.value_network.in_keys, strict=False
             ).detach()
-            with self.value_network_params.to_module(self.value_network):
+            with self.value_network_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(td_copy)
             value = td_copy.get(self.tensor_keys.value).squeeze(
                 -1
@@ -500,7 +499,9 @@ class IQLLoss(LossModule):
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile)
@@ -551,53 +552,32 @@ class IQLLoss(LossModule):
         )
         return loss_qval, metadata
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-        value_net = self.value_network
-
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value_target": "value_target",
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            **hyperparams,
+        )
 
 
 class DiscreteIQLLoss(IQLLoss):
@@ -873,7 +853,9 @@ class DiscreteIQLLoss(IQLLoss):
 
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # KL loss
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
 
         log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
@@ -912,7 +894,9 @@ class DiscreteIQLLoss(IQLLoss):
             td_copy = tensordict.select(
                 *self.value_network.in_keys, strict=False
             ).detach()
-            with self.value_network_params.to_module(self.value_network):
+            with self.value_network_params.to_module(
+                self.value_network, preserve_module_state=False
+            ):
                 self.value_network(td_copy)
             value = td_copy.get(self.tensor_keys.value).squeeze(
                 -1
@@ -968,7 +952,9 @@ class DiscreteIQLLoss(IQLLoss):
             min_Q, _ = torch.min(chosen_state_action_value, dim=0)
         # state value
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_Q - value, self.expectile)
