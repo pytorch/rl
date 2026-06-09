@@ -1793,8 +1793,7 @@ class ActionNormalize(Transform):
 
     @classmethod
     def from_metadata(cls, metadata: RobotDatasetMetadata, **kwargs) -> ActionNormalize:
-        """Build from the action statistics of a
-        :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
+        """Build from the action statistics of a :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
         kwargs.setdefault("action_key", metadata.action_key)
         if metadata.action_mean is not None and metadata.action_std is not None:
             return cls.from_stats(
