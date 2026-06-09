@@ -250,6 +250,7 @@ Available Transforms
     ActionMask
     ActionNormalize
     ActionScaling
+    ActionTokenizerTransform
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform

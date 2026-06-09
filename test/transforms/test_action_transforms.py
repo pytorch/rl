@@ -40,7 +40,7 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
-from torchrl.data.vla import RobotDatasetMetadata
+from torchrl.data.vla import RobotDatasetMetadata, UniformActionTokenizer
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
@@ -67,7 +67,11 @@ from torchrl.envs import (
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import ActionChunkTransform, ActionNormalize
+from torchrl.envs.transforms import (
+    ActionChunkTransform,
+    ActionNormalize,
+    ActionTokenizerTransform,
+)
 from torchrl.envs.transforms.transforms import (
     ActionDiscretizer,
     FORWARD_NOT_IMPLEMENTED,
@@ -2373,6 +2377,43 @@ class TestActionNormalize:
         rb.extend(TensorDict({"action": raw}, batch_size=[10]))
         sample = rb.sample()
         torch.testing.assert_close(sample["action"], torch.ones_like(sample["action"]))
+
+
+class TestActionTokenizerTransform:
+    def test_forward_encode(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+
+    def test_decode_via_tokenizer(self):
+        # The transform is forward-only; decoding is done with the wrapped tokenizer.
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        assert t.tokenizer is tok
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        td = t(TensorDict({"action": action}, batch_size=[1]))
+        recon = t.tokenizer.decode(td["action_tokens"])
+        assert (recon - action).abs().max() <= (2.0 / (2 * 256)) + 1e-5
+
+    def test_nested_keys_and_chunk(self):
+        tok = UniformActionTokenizer(64, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(
+            tok, in_key="action_chunk", out_key=("tokens", "action")
+        )
+        td = TensorDict({"action_chunk": torch.zeros(2, 3, 4, 5)}, batch_size=[2, 3])
+        out = t(td)
+        assert out["tokens", "action"].shape == torch.Size([2, 3, 4, 5])
+
+    def test_requires_tokenizer(self):
+        with pytest.raises(TypeError, match="ActionTokenizerBase"):
+            ActionTokenizerTransform(object())
+
+    def test_cannot_be_env_transform(self):
+        tok = UniformActionTokenizer(8, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        with pytest.raises(ValueError, match="replay-buffer"):
+            t._call(TensorDict({"action": torch.zeros(2, 3)}, batch_size=[2]))
 
 
 if __name__ == "__main__":

@@ -73,3 +73,22 @@ replay buffers and transformed environments. They are documented in full on the
   :class:`~torchrl.envs.transforms.ObservationNorm`); normalizes expert actions
   for training and denormalizes a policy's predicted actions for execution,
   with ``from_metadata`` / ``from_stats`` constructors.
+- :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- encode
+  continuous actions into discrete tokens (wrapping an action tokenizer) for
+  autoregressive token VLAs.
+
+Action representations
+----------------------
+
+Action tokenizers map continuous actions to discrete token ids and back, so
+that autoregressive (RT-2 / OpenVLA-style) VLA policies can emit actions through
+a language-model head.
+
+.. currentmodule:: torchrl.data.vla
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    ActionTokenizerBase
+    UniformActionTokenizer

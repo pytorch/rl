@@ -39,7 +39,13 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.data.vla.schema import ACTION_CHUNK_KEY, ACTION_IS_PAD_KEY, ACTION_KEY
+from torchrl.data.vla.schema import (
+    ACTION_CHUNK_KEY,
+    ACTION_IS_PAD_KEY,
+    ACTION_KEY,
+    ACTION_TOKENS_KEY,
+)
+from torchrl.data.vla.tokenizers import ActionTokenizerBase
 from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
@@ -49,6 +55,7 @@ __all__ = [
     "ActionMask",
     "ActionNormalize",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "DiscreteActionProjection",
     "FlattenAction",
     "MultiAction",
@@ -1801,3 +1808,77 @@ class ActionNormalize(Transform):
             f"metadata {metadata.dataset_id!r} has no action normalization statistics "
             "(set action_mean/action_std or action_low/action_high)."
         )
+
+
+class ActionTokenizerTransform(Transform):
+    """Encode continuous actions into discrete tokens with an action tokenizer.
+
+    A replay-buffer / offline transform that wraps an
+    :class:`~torchrl.data.vla.ActionTokenizerBase`: on the forward path it
+    encodes the continuous action (or action chunk) at ``in_key`` into discrete
+    token ids at ``out_key`` -- the training target / input for an
+    autoregressive (RT-2 / OpenVLA-style) token VLA. Decoding tokens back to
+    continuous actions is done with the wrapped tokenizer's ``decode`` (the
+    transform itself is forward-only).
+
+    Args:
+        tokenizer (ActionTokenizerBase): the tokenizer to apply.
+
+    Keyword Args:
+        in_key (NestedKey): the continuous action to encode.
+            Defaults to ``"action"``.
+        out_key (NestedKey): where to write the token ids.
+            Defaults to ``"action_tokens"``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.vla import UniformActionTokenizer
+        >>> from torchrl.envs.transforms import ActionTokenizerTransform
+        >>> tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        >>> t = ActionTokenizerTransform(tok)
+        >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        >>> td["action_tokens"]
+        tensor([[  0, 128, 255]])
+    """
+
+    ENV_ERR = (
+        "ActionTokenizerTransform is a replay-buffer / offline transform and "
+        "cannot be used as an environment transform."
+    )
+
+    def __init__(
+        self,
+        tokenizer: ActionTokenizerBase,
+        *,
+        in_key: NestedKey = ACTION_KEY,
+        out_key: NestedKey = ACTION_TOKENS_KEY,
+    ) -> None:
+        if not isinstance(tokenizer, ActionTokenizerBase):
+            raise TypeError(
+                f"tokenizer must be an ActionTokenizerBase, got {type(tokenizer)}."
+            )
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.tokenizer = tokenizer
+
+    @property
+    def in_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    @property
+    def out_key(self) -> NestedKey:
+        return self.out_keys[0]
+
+    def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
+        return self.tokenizer.encode(action)
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def set_container(self, container) -> None:
+        if (
+            isinstance(container, EnvBase)
+            or getattr(container, "parent", None) is not None
+        ):
+            raise ValueError(self.ENV_ERR)
+        super().set_container(container)
