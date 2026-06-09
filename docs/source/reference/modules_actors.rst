@@ -15,6 +15,7 @@ TensorDictModules and SafeModules
     :toctree: generated/
     :template: rl_template_noinherit.rst
 
+    ActionChunkExecutor
     Actor
     DiffusionActor
     MultiStepActorWrapper
