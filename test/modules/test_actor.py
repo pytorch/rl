@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import torch
 from _modules_common import _has_transformers
-from tensordict import NonTensorData, TensorDict
+from tensordict import NonTensorData, NonTensorStack, TensorDict
 from tensordict.nn import CompositeDistribution, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
@@ -34,6 +34,7 @@ from torchrl.modules.tensordict_module.actors import (
     ActorValueOperator,
     LMHeadActorValueOperator,
 )
+from torchrl.modules.vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase
 
 from torchrl.testing import get_default_devices
 from torchrl.testing.mocking_classes import CountingEnv, NestedCountingEnv
@@ -719,6 +720,180 @@ class TestBatchedActor:
             rollout[1]["observation"]
             == (torch.arange(50) % 6).reshape_as(rollout[1]["observation"])
         ).all()
+
+
+def _make_obs_td(batch=2, h=16, state_dim=5, with_state=True):
+    obs = {"image": torch.zeros(batch, 3, h, h, dtype=torch.uint8)}
+    if with_state:
+        obs["state"] = torch.randn(batch, state_dim)
+    data = {
+        "observation": obs,
+        "language_instruction": NonTensorStack(*[f"task {i}" for i in range(batch)]),
+    }
+    return TensorDict(data, batch_size=[batch])
+
+
+class TestVLAWrapperBase:
+    def test_token_head_requires_vocab(self):
+        with pytest.raises(ValueError, match="vocab_size"):
+            VLAWrapperBase(action_dim=2, chunk_size=2, action_head="tokens")
+
+    def test_invalid_action_head(self):
+        with pytest.raises(ValueError, match="action_head"):
+            VLAWrapperBase(action_dim=2, chunk_size=2, action_head="diffusion")
+
+    def test_invalid_mode(self):
+        with pytest.raises(ValueError, match="mode"):
+            VLAWrapperBase(action_dim=2, chunk_size=2, mode="beam")
+
+    def test_hook_not_implemented(self):
+        base = VLAWrapperBase(action_dim=2, chunk_size=2)
+        with pytest.raises(NotImplementedError):
+            base._predict(TensorDict({}, batch_size=[]))
+
+
+class TestTinyVLA:
+    def test_continuous(self):
+        policy = TinyVLA(action_dim=7, chunk_size=4)
+        out = policy(_make_obs_td())
+        assert out["action_chunk"].shape == torch.Size([2, 4, 7])
+        assert policy.out_keys == ["action_chunk"]
+        assert ("observation", "image") in policy.in_keys
+
+    def test_tokens(self):
+        policy = TinyVLA(
+            action_dim=7, chunk_size=4, action_head="tokens", vocab_size=64
+        )
+        out = policy(_make_obs_td())
+        assert out["action_tokens"].shape == torch.Size([2, 4, 7])
+        assert out["log_probs"].shape == torch.Size([2, 4, 7])
+        assert (out["action_tokens"] >= 0).all() and (out["action_tokens"] < 64).all()
+        dist = policy.get_dist(_make_obs_td())
+        assert dist.logits.shape == torch.Size([2, 4, 7, 64])
+
+    def test_get_dist_continuous_raises(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2)
+        with pytest.raises(RuntimeError, match="tokens"):
+            policy.get_dist(_make_obs_td())
+
+    def test_no_state(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2, use_state=False)
+        assert ("observation", "state") not in policy.in_keys
+        out = policy(_make_obs_td(with_state=False))
+        assert out["action_chunk"].shape == torch.Size([2, 2, 3])
+
+    def test_set_keys(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2)
+        policy.set_keys(instruction="instr", action_chunk=("pred", "chunk"))
+        assert "instr" in policy.in_keys
+        assert policy.out_keys == [("pred", "chunk")]
+        td = TensorDict(
+            {
+                "observation": {
+                    "image": torch.zeros(2, 3, 16, 16, dtype=torch.uint8),
+                    "state": torch.randn(2, 5),
+                },
+                "instr": NonTensorStack("a", "b"),
+            },
+            batch_size=[2],
+        )
+        assert policy(td)["pred", "chunk"].shape == torch.Size([2, 2, 3])
+
+    def test_greedy_deterministic(self):
+        policy = TinyVLA(
+            action_dim=3, chunk_size=2, action_head="tokens", vocab_size=16
+        )
+        td = _make_obs_td()
+        torch.testing.assert_close(
+            policy(td.clone())["action_tokens"], policy(td.clone())["action_tokens"]
+        )
+
+    def test_gradient_flow(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2)
+        out = policy(_make_obs_td())
+        out["action_chunk"].sum().backward()
+        grads = [p.grad for p in policy.parameters() if p.requires_grad]
+        assert any(g is not None and g.abs().sum() > 0 for g in grads)
+
+
+class _DummyChunkPolicy:
+    """A stand-in for a LeRobot action-chunk policy."""
+
+    def __init__(self, chunk_size, action_dim, value=0.0):
+        self.chunk_size = chunk_size
+        self.action_dim = action_dim
+        self.value = value
+        self.last_batch = None
+
+    def predict_action_chunk(self, batch):
+        self.last_batch = batch
+        b = batch["observation.state"].shape[0]
+        return torch.full((b, self.chunk_size, self.action_dim), self.value)
+
+
+class TestLeRobotPolicyWrapper:
+    def test_wraps_external_policy(self):
+        policy = LeRobotPolicyWrapper(
+            _DummyChunkPolicy(4, 7), action_dim=7, chunk_size=4
+        )
+        out = policy(_make_obs_td())
+        assert out["action_chunk"].shape == torch.Size([2, 4, 7])
+        assert policy.out_keys == ["action_chunk"]
+
+    def test_builds_lerobot_batch(self):
+        dummy = _DummyChunkPolicy(2, 3)
+        policy = LeRobotPolicyWrapper(
+            dummy, action_dim=3, chunk_size=2, camera_name="top"
+        )
+        policy(_make_obs_td())
+        batch = dummy.last_batch
+        assert "observation.images.top" in batch
+        assert "observation.state" in batch
+        assert batch["task"] == ["task 0", "task 1"]
+
+    def test_predict_fn_override(self):
+        called = {}
+
+        def predict_fn(model, batch):
+            called["yes"] = True
+            b = batch["observation.state"].shape[0]
+            return torch.zeros(b, 2, 3)
+
+        policy = LeRobotPolicyWrapper(
+            object(), action_dim=3, chunk_size=2, predict_fn=predict_fn
+        )
+        out = policy(_make_obs_td())
+        assert called.get("yes") and out["action_chunk"].shape == torch.Size([2, 2, 3])
+
+    def test_callable_policy(self):
+        def model(batch):
+            b = batch["observation.state"].shape[0]
+            return torch.zeros(b, 2, 3)
+
+        policy = LeRobotPolicyWrapper(model, action_dim=3, chunk_size=2)
+        assert policy(_make_obs_td())["action_chunk"].shape == torch.Size([2, 2, 3])
+
+    def test_bad_policy_raises(self):
+        policy = LeRobotPolicyWrapper(object(), action_dim=3, chunk_size=2)
+        with pytest.raises(TypeError, match="predict_action_chunk"):
+            policy(_make_obs_td())
+
+    def test_wrong_chunk_shape_raises(self):
+        # a single-step [B, action_dim] output (e.g. LeRobot select_action) is
+        # not a chunk and must fail loudly, even when B == chunk_size
+        def model(batch):
+            b = batch["observation.state"].shape[0]
+            return torch.zeros(b, 3)
+
+        policy = LeRobotPolicyWrapper(model, action_dim=3, chunk_size=2)
+        with pytest.raises(ValueError, match="action chunk of shape"):
+            policy(_make_obs_td())
+
+    def test_from_pretrained_requires_lerobot(self):
+        with pytest.raises(ImportError, match="lerobot"):
+            LeRobotPolicyWrapper.from_pretrained(
+                "fake/repo", action_dim=7, chunk_size=4
+            )
 
 
 if __name__ == "__main__":
