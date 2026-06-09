@@ -175,6 +175,20 @@ class TestVideoClipRef:
         # first bin: frames 0 and 3
         assert _aligned(decoded[0], [0, 3])
 
+    def test_rebin_divisible_reconstructs_full_video(self, video_path):
+        # When num_bins * frames_per_bin == num_frames, the binned stack is the full
+        # video reshaped: flattening the (bin, frame) axes recovers every frame.
+        full = VideoClipRef(video_path)  # 20 frames
+        binned = VideoClipRef.from_file(video_path, num_bins=5, frames_per_bin=4)
+        assert binned.frame_index.tolist() == [
+            [0, 1, 2, 3],
+            [4, 5, 6, 7],
+            [8, 9, 10, 11],
+            [12, 13, 14, 15],
+            [16, 17, 18, 19],
+        ]
+        assert torch.equal(binned.decode().flatten(0, 1), full.decode())
+
     def test_rebin_non_divisible(self, video_path):
         # 20 / 7 is not integer: result must still be dense and in range.
         ref = VideoClipRef(video_path).rebin(7)
