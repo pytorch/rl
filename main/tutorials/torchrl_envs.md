@@ -432,7 +432,7 @@ plt.imshow(data.get("pixels").numpy())
 ![torchrl envs](../_images/sphx_glr_torchrl_envs_001.png)
 
 ```
-<matplotlib.image.AxesImage object at 0x7fe230e56a50>
+<matplotlib.image.AxesImage object at 0x7f7ccc08b7d0>
 ```
 
 Let's have a look at what the tensordict contains:
@@ -954,7 +954,7 @@ env.foo
 ```
 
 ```
-'bar_90b5249e-63fa-11f1-86d5-0242ac110002'
+'bar_49c89398-6401-11f1-b720-0242ac110002'
 ```
 
 ```
@@ -982,7 +982,7 @@ foo_list # needs to be instantiated, for instance using list
 ```
 
 ```
-<torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7fe2312b4990>
+<torchrl.envs.batched_envs._dispatch_caller_parallel object at 0x7f7aaa75a910>
 ```
 
 ```
@@ -990,7 +990,7 @@ list(foo_list)
 ```
 
 ```
-['bar_923d7b7c-63fa-11f1-af1c-0242ac110002', 'bar_92353c82-63fa-11f1-85b0-0242ac110002', 'bar_923c2772-63fa-11f1-a618-0242ac110002']
+['bar_4b4f5472-6401-11f1-90e3-0242ac110002', 'bar_4b47953e-6401-11f1-a8b6-0242ac110002', 'bar_4b46fa48-6401-11f1-95ec-0242ac110002']
 ```
 
 Similarly, methods can also be accessed:
@@ -1136,8 +1136,8 @@ print("std: :", data.get("observation").std(0)) # Approx 1
 ```
 
 ```
-mean: : tensor([ 0.1702, -0.2651, -0.4163])
-std: : tensor([1.1711, 1.0888, 1.1357])
+mean: : tensor([-0.1278, 0.3286, 0.1917])
+std: : tensor([0.9931, 1.0916, 1.1512])
 ```
 
 In **parallel envs** things are slightly more complicated, as we need to
@@ -1205,8 +1205,8 @@ data: TensorDict(
  batch_size=torch.Size([3, 5]),
  device=None,
  is_shared=False)
-mean: : tensor([-0.1989, 0.0421, 0.0520])
-std: : tensor([1.1656, 1.1663, 1.1833])
+mean: : tensor([-0.0677, 0.2975, 0.0101])
+std: : tensor([1.1981, 1.2515, 1.3241])
 ```
 
 The count is slightly higher than the number of steps (since we

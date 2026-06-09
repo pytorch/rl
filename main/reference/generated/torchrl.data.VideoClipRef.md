@@ -21,9 +21,11 @@ read. The output keeps the reference's batch shape: a scalar reference yields
 Keyword Arguments:
 
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - output device for the decoded
-frames, overriding `out_device`. A CUDA device uses GPU (NVDEC)
-decoding when the torchcodec build supports it, and otherwise decodes
-on CPU and moves the frames to the device.
+frames, overriding `out_device`. Defaults to `out_device` if set,
+else the reference's own device (so `td.to("cuda")` on a tensordict
+holding the reference decodes onto CUDA), else CPU. A CUDA device uses
+GPU (NVDEC) decoding when the torchcodec build supports it, and
+otherwise decodes on CPU and moves the frames to the device.
 - **dtype** ([*torch.dtype*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype)*,**optional*) - dtype for the decoded frames, overriding
 `out_dtype`. Defaults to `uint8`.
 
