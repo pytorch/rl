@@ -59,6 +59,7 @@ from .models import (
     VDNMixer,
 )
 from .tensordict_module import (
+    ActionChunkExecutor,
     Actor,
     ActorCriticOperator,
     ActorCriticWrapper,
@@ -117,8 +118,10 @@ from .mcts import (  # usort:skip
     UCB1TunedScore,
     UCBScore,
 )
+from .vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase  # usort:skip
 
 __all__ = [
+    "ActionChunkExecutor",
     "Actor",
     "DiffusionActor",
     "ActorCriticOperator",
@@ -162,6 +165,7 @@ __all__ = [
     "LSTM",
     "LSTMCell",
     "LSTMModule",
+    "LeRobotPolicyWrapper",
     "MCTSScore",
     "MCTSScores",
     "MLP",
@@ -210,10 +214,12 @@ __all__ = [
     "TanhDelta",
     "TanhModule",
     "TanhNormal",
+    "TinyVLA",
     "TruncatedNormal",
     "UCB1TunedScore",
     "UCBScore",
     "VDNMixer",
+    "VLAWrapperBase",
     "ValueNorm",
     "ValueOperator",
     "VmapModule",
