@@ -20,10 +20,11 @@ import importlib.util
 import os
 import threading
 from collections import defaultdict, OrderedDict
+from collections.abc import Sequence
 from typing import Any
 
 import torch
-from tensordict import TensorClass
+from tensordict import NonTensorStack, TensorClass
 
 from torchrl._utils import logger as torchrl_logger
 
@@ -390,6 +391,79 @@ class VideoClipRef(TensorClass["nocast"]):
             auto_decode=auto_decode,
             out_device=device,
             out_dtype=dtype,
+        )
+
+    @classmethod
+    def from_files(
+        cls,
+        paths: Sequence[str | os.PathLike],
+        *,
+        num_frames_per_file: int | Sequence[int] | None = None,
+        stream: int | None = None,
+        auto_decode: bool = False,
+        device: Any = None,
+        dtype: Any = None,
+    ) -> VideoClipRef:
+        """Builds a single reference spanning several video files (a lazy "cat").
+
+        The files are addressed as one logical sequence: element ``j`` of the
+        returned reference points to a ``(file, local frame)`` pair, so slicing,
+        :meth:`rebin` and decoding work across file boundaries (a slice that
+        straddles two files decodes per file and concatenates). This avoids
+        concatenating the videos into one large file and avoids any
+        ``LazyStacked``/``LazyCat`` container -- it is just a longer ``frame_index``
+        with a per-element ``source``.
+
+        Files may have different lengths; the batch size is the total frame count.
+
+        Args:
+            paths (sequence of str or PathLike): the video files, in order.
+
+        Keyword Args:
+            num_frames_per_file (int or sequence of int, optional): frame count(s).
+                An ``int`` applies to every file; a sequence gives one count per
+                file. ``None`` (default) reads each file's metadata once.
+            stream (int, optional): stream index, applied to every file.
+            auto_decode (bool, optional): see :class:`VideoClipRef`.
+            device (torch.device or str, optional): default output device.
+            dtype (torch.dtype, optional): default decode dtype.
+
+        Returns:
+            VideoClipRef: a reference over the concatenated frames of all files.
+
+        Examples:
+            >>> ref = VideoClipRef.from_files(["ep0.mp4", "ep1.mp4"])  # doctest: +SKIP
+            >>> ref.rebin(30, frames_per_bin=4).decode().shape  # doctest: +SKIP
+            torch.Size([30, 4, 3, H, W])
+        """
+        paths = [os.fspath(p) if isinstance(p, os.PathLike) else p for p in paths]
+        if not paths:
+            raise ValueError("`from_files` requires at least one path.")
+        if num_frames_per_file is None:
+            counts = [_num_frames(_get_decoder(p, stream, None)) for p in paths]
+        elif isinstance(num_frames_per_file, int):
+            counts = [int(num_frames_per_file)] * len(paths)
+        else:
+            counts = [int(c) for c in num_frames_per_file]
+            if len(counts) != len(paths):
+                raise ValueError(
+                    "`num_frames_per_file` must have one entry per path "
+                    f"({len(paths)}), got {len(counts)}."
+                )
+        sources: list[str] = []
+        local: list[int] = []
+        for path, count in zip(paths, counts):
+            sources.extend([path] * count)
+            local.extend(range(count))
+        frame_index = torch.tensor(local, dtype=torch.long)
+        return cls(
+            source=NonTensorStack(*sources),
+            frame_index=frame_index,
+            stream=stream,
+            auto_decode=auto_decode,
+            out_device=device,
+            out_dtype=dtype,
+            batch_size=frame_index.shape,
         )
 
     @classmethod

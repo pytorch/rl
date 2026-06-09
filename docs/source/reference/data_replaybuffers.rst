@@ -131,6 +131,14 @@ trajectory-edge padding, while ``rebin``'s stack keeps a separate frame axis::
     ...     ),
     ... )  # doctest: +SKIP
 
+**Multiple files.** A clip is often split across many small files (one per episode)
+rather than one large mp4. :meth:`VideoClipRef.from_files` addresses a list of files
+as a single logical sequence, so slicing, :meth:`rebin` and decoding work across
+file boundaries (a window that straddles two files decodes per file and
+concatenates), with one cached decoder per file. No ``LazyStacked`` / ``LazyCat``
+container is needed -- it is just a longer ``frame_index`` with a per-element
+``source``.
+
 When camera and control loops run at different rates, prefer
 :meth:`VideoClipRef.from_timestamps` to align frames by time rather than by index.
 

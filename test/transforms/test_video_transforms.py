@@ -34,18 +34,24 @@ pytestmark = pytest.mark.skipif(
 _STEP = 11
 
 
-def _intensity(i: int) -> int:
-    return min(i * _STEP, 255)
+def _intensity(i: int, base: int = 0) -> int:
+    return min(base + i * _STEP, 255)
 
 
-def _write_video(path: str, num_frames: int = 20, height: int = 8, width: int = 12):
+def _write_video(
+    path: str, num_frames: int = 20, *, base: int = 0, height: int = 8, width: int = 12
+):
     from torchcodec.encoders import VideoEncoder
 
     frames = torch.zeros(num_frames, 3, height, width, dtype=torch.uint8)
     for i in range(num_frames):
-        frames[i] = _intensity(i)
+        frames[i] = _intensity(i, base)
     VideoEncoder(frames=frames, frame_rate=10).to_file(path)
     return num_frames
+
+
+def _means(frames: torch.Tensor) -> list:
+    return frames.float().mean(dim=tuple(range(1, frames.ndim))).round().long().tolist()
 
 
 @pytest.fixture
@@ -341,6 +347,82 @@ class TestDecodeVideoTransform:
         rb.extend(data)
         sample = rb.sample()
         assert sample["obs", "pixels"].shape == torch.Size([10, 3, 8, 12])
+
+
+class TestVideoClipRefMultiFile:
+    @pytest.fixture
+    def two_videos(self, tmp_path):
+        clear_video_decoder_cache()
+        pa = os.path.join(str(tmp_path), "a.mp4")
+        pb = os.path.join(str(tmp_path), "b.mp4")
+        _write_video(pa, num_frames=10, base=0)
+        _write_video(pb, num_frames=10, base=130)
+        yield pa, pb
+        clear_video_decoder_cache()
+
+    def test_from_files_concatenates(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb])
+        assert ref.batch_size == torch.Size([20])
+        assert ref.frame_index.tolist() == list(range(10)) + list(range(10))
+        means = _means(ref.decode())
+        expected = [_intensity(i, 0) for i in range(10)] + [
+            _intensity(i, 130) for i in range(10)
+        ]
+        assert all(abs(m - e) <= 14 for m, e in zip(means, expected))
+
+    def test_from_files_cross_boundary_slice(self, two_videos):
+        pa, pb = two_videos
+        # frames 8, 9 of file A then frames 0, 1 of file B
+        decoded = VideoClipRef.from_files([pa, pb])[8:12].decode()
+        assert decoded.shape == torch.Size([4, 3, 8, 12])
+        expected = [
+            _intensity(8, 0),
+            _intensity(9, 0),
+            _intensity(0, 130),
+            _intensity(1, 130),
+        ]
+        assert all(abs(m - e) <= 14 for m, e in zip(_means(decoded), expected))
+
+    def test_from_files_rebin_across_cat(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb]).rebin(4, frames_per_bin=2)
+        assert ref.batch_size == torch.Size([4, 2])
+        assert ref.decode().shape == torch.Size([4, 2, 3, 8, 12])
+
+    def test_from_files_num_frames_per_file(self, two_videos):
+        pa, pb = two_videos
+        # provide counts to skip metadata reads; int and per-file forms agree
+        assert torch.equal(
+            VideoClipRef.from_files([pa, pb], num_frames_per_file=10).frame_index,
+            VideoClipRef.from_files([pa, pb], num_frames_per_file=[10, 10]).frame_index,
+        )
+
+    def test_from_files_validation(self, two_videos):
+        pa, pb = two_videos
+        with pytest.raises(ValueError):
+            VideoClipRef.from_files([])
+        with pytest.raises(ValueError):
+            VideoClipRef.from_files([pa, pb], num_frames_per_file=[10])
+
+    def test_from_files_replay_buffer(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb])  # 20 frames across 2 files
+        data = TensorDict(
+            {"frame": ref, "episode": torch.zeros(20, dtype=torch.long)},
+            batch_size=[20],
+        )
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(20),
+            sampler=SliceSampler(slice_len=4, traj_key="episode"),
+            batch_size=8,
+            transform=DecodeVideoTransform(in_keys=["frame"], out_keys=["pixels"]),
+        )
+        rb.extend(data)
+        sample = rb.sample()
+        assert sample["pixels"].shape == torch.Size([8, 3, 8, 12])
+        # the per-frame source survived storage: both files are represented overall
+        assert isinstance(sample["frame"], VideoClipRef)
 
 
 @pytest.mark.gpu
