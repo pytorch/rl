@@ -120,3 +120,16 @@ policy for tests and tutorials.
     VLAWrapperBase
     TinyVLA
     LeRobotPolicyWrapper
+
+Objectives
+----------
+
+Fine-tuning objectives for VLA policies.
+
+.. currentmodule:: torchrl.objectives.vla
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    VLABCLoss
