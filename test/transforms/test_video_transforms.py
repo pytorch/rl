@@ -364,12 +364,88 @@ class TestVideoClipRefMultiFile:
         pa, pb = two_videos
         ref = VideoClipRef.from_files([pa, pb])
         assert ref.batch_size == torch.Size([20])
+        # frame_index stays LOCAL (per-file), not a global running index
         assert ref.frame_index.tolist() == list(range(10)) + list(range(10))
         means = _means(ref.decode())
         expected = [_intensity(i, 0) for i in range(10)] + [
             _intensity(i, 130) for i in range(10)
         ]
         assert all(abs(m - e) <= 14 for m, e in zip(means, expected))
+
+    def test_from_files_compact_storage(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb])
+        # The unique file paths are stored ONCE as a small tuple, not one path per
+        # frame; each frame carries a single integer file_id into that tuple.
+        assert ref.sources == (pa, pb)
+        assert ref.file_id.dtype == torch.long
+        assert ref.file_id.shape == ref.frame_index.shape
+        assert ref.file_id.tolist() == [0] * 10 + [1] * 10
+        # No per-frame string leaf: the only non-tensor metadata is the file tuple
+        # (length 2), independent of the 20-frame batch size.
+        assert len(ref.sources) == 2
+
+    def test_single_file_compact_storage(self, video_path):
+        ref = VideoClipRef.from_file(video_path)
+        # Single-file refs normalize to a one-element tuple + all-zero file_id.
+        assert ref.sources == (video_path,)
+        assert ref.file_id.tolist() == [0] * 20
+        # Back-compat: .source returns the bare path for a single-file reference.
+        assert ref.source == video_path
+
+    def test_source_property_resolves_per_element(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb])
+        # Multi-file .source resolves to one path per frame via file_id.
+        resolved = ref.source
+        assert list(resolved) == [pa] * 10 + [pb] * 10
+        # A cross-boundary slice resolves correctly too.
+        assert list(ref[8:12].source) == [pa, pa, pb, pb]
+
+    def test_from_files_dedupes_repeated_paths(self, two_videos):
+        pa, pb = two_videos
+        # The same file passed twice is stored once; file_id points back at it.
+        ref = VideoClipRef.from_files([pa, pb, pa], num_frames_per_file=4)
+        assert ref.sources == (pa, pb)
+        assert ref.file_id.tolist() == [0] * 4 + [1] * 4 + [0] * 4
+        assert ref.frame_index.tolist() == list(range(4)) * 3
+
+    def test_decode_picks_correct_file_per_element(self, two_videos):
+        pa, pb = two_videos
+        # Hand-build a reference that interleaves files via file_id and check that
+        # decode resolves each element's source independently.
+        ref = VideoClipRef(
+            sources=(pa, pb),
+            frame_index=torch.tensor([1, 2, 1, 2]),
+            file_id=torch.tensor([0, 1, 1, 0]),
+        )
+        means = _means(ref.decode())
+        expected = [
+            _intensity(1, 0),  # file A frame 1
+            _intensity(2, 130),  # file B frame 2
+            _intensity(1, 130),  # file B frame 1
+            _intensity(2, 0),  # file A frame 2
+        ]
+        assert all(abs(m - e) <= 14 for m, e in zip(means, expected))
+
+    def test_from_files_pickle_roundtrip(self, two_videos):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb])
+        ref[8:12].decode()  # warm the per-process cache
+        reloaded = pickle.loads(pickle.dumps(ref))
+        assert isinstance(reloaded, VideoClipRef)
+        assert reloaded.sources == (pa, pb)
+        assert reloaded.file_id.tolist() == ref.file_id.tolist()
+        clear_video_decoder_cache()
+        # Cross-boundary decode still maps to the right files after a round-trip.
+        decoded = reloaded[8:12].decode()
+        expected = [
+            _intensity(8, 0),
+            _intensity(9, 0),
+            _intensity(0, 130),
+            _intensity(1, 130),
+        ]
+        assert all(abs(m - e) <= 14 for m, e in zip(_means(decoded), expected))
 
     def test_from_files_cross_boundary_slice(self, two_videos):
         pa, pb = two_videos
@@ -445,6 +521,34 @@ class TestVideoClipRefMultiFile:
         assert sample["pixels"].shape == torch.Size([8, 3, 8, 12])
         # the per-frame source survived storage: both files are represented overall
         assert isinstance(sample["frame"], VideoClipRef)
+        # the compact file_id travels alongside the decoded frames and the decoded
+        # intensities match the file each sampled frame was resolved to.
+        sampled = sample["frame"]
+        file_ids = sampled.file_id.reshape(-1).tolist()
+        bases = [0 if fid == 0 else 130 for fid in file_ids]
+        locals_ = sampled.frame_index.reshape(-1).tolist()
+        expected = [_intensity(i, base) for i, base in zip(locals_, bases)]
+        assert all(abs(m - e) <= 14 for m, e in zip(_means(sample["pixels"]), expected))
+
+    @pytest.mark.parametrize("storage_cls", [LazyTensorStorage, LazyMemmapStorage])
+    def test_from_files_storage_roundtrip_resolves_files(self, two_videos, storage_cls):
+        pa, pb = two_videos
+        ref = VideoClipRef.from_files([pa, pb])  # 20 frames across 2 files
+        storage = storage_cls(20)
+        storage.set(range(20), ref)
+        # Pull frames straddling the file boundary back out of storage and decode.
+        out = storage.get(torch.tensor([8, 9, 10, 11]))
+        assert isinstance(out, VideoClipRef)
+        assert out.file_id.tolist() == [0, 0, 1, 1]
+        assert out.frame_index.tolist() == [8, 9, 0, 1]
+        decoded = out.decode()
+        expected = [
+            _intensity(8, 0),
+            _intensity(9, 0),
+            _intensity(0, 130),
+            _intensity(1, 130),
+        ]
+        assert all(abs(m - e) <= 14 for m, e in zip(_means(decoded), expected))
 
 
 @pytest.mark.gpu

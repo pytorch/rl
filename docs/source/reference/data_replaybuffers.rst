@@ -92,8 +92,9 @@ Video-backed replay buffers
 Video-backed datasets are dominated by frames; materializing every decoded frame
 as a dense tensor throws away the video codec's compression. :class:`VideoClipRef`
 is a lightweight, picklable reference to frames inside an encoded video (mp4, ...):
-it stores only *where* the frames are (a source path/URI plus a ``frame_index``),
-so indexing the whole buffer stays cheap. Frames are decoded on-demand with
+it stores only *where* the frames are (the file(s) it spans plus a per-frame
+``frame_index`` and ``file_id``), so indexing the whole buffer stays cheap. Frames
+are decoded on-demand with
 torchcodec by :class:`~torchrl.envs.transforms.DecodeVideoTransform`, appended on
 the replay-buffer sample path, so ``rb.sample()`` returns decoded frames aligned to
 the sampled steps. It composes with :class:`SliceSampler`: a contiguous window of
@@ -136,8 +137,11 @@ rather than one large mp4. :meth:`VideoClipRef.from_files` addresses a list of f
 as a single logical sequence, so slicing, :meth:`rebin` and decoding work across
 file boundaries (a window that straddles two files decodes per file and
 concatenates), with one cached decoder per file. No ``LazyStacked`` / ``LazyCat``
-container is needed -- it is just a longer ``frame_index`` with a per-element
-``source``.
+container is needed -- it is just a longer ``frame_index`` plus a per-frame
+``file_id``. The index is stored compactly: the unique file paths live once in the
+``sources`` tuple and each frame carries a single ``int64`` ``file_id`` into it, so
+references spanning thousands of files stay light on the replay-buffer sample path
+(the resolved path is still available via the ``VideoClipRef.source`` property).
 
 When camera and control loops run at different rates, prefer
 :meth:`VideoClipRef.from_timestamps` to align frames by time rather than by index.
