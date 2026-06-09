@@ -10,6 +10,7 @@ import torch
 from tensordict import TensorDict
 from torchrl.envs import ParallelEnv, SerialEnv, step_mdp, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.transforms.functional import cat_frames
 
 
 def make_simple_env():
@@ -125,6 +126,22 @@ def test_step_mdp_speed(
         exclude_reward=exclude_reward,
         exclude_done=exclude_done,
         exclude_action=exclude_action,
+    )
+
+
+@pytest.mark.parametrize("padding", ["same", "constant"])
+@pytest.mark.parametrize("N", [4, 16])
+def test_cat_frames_functional(benchmark, padding, N):
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    # batch of trajectories: (batch, time, channels)
+    tensor = torch.randn(32, 200, 8, device=device)
+    benchmark(
+        cat_frames,
+        tensor,
+        N,
+        dim=-1,
+        padding=padding,
+        time_dim=-2,
     )
 
 

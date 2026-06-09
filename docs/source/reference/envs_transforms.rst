@@ -331,6 +331,24 @@ Available Transforms
     VecNormV2
     gSDENoise
 
+Functional transforms
+---------------------
+
+Some transforms expose a pure, stateless functional core (the PyTorch
+``torch.nn.functional`` / ``torch.nn.Module`` split) that can be reused directly
+on plain tensors, outside the transform machinery. The stateful transform
+delegates to the functional so that the two stay equivalent.
+
+.. currentmodule:: torchrl.envs.transforms.functional
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    cat_frames
+
+.. currentmodule:: torchrl.envs.transforms
+
 Environments with masked actions
 --------------------------------
 

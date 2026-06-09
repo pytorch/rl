@@ -13,7 +13,7 @@ from typing import Any, Literal, TYPE_CHECKING
 import torch
 
 from tensordict import set_lazy_legacy, TensorDictBase, unravel_key
-from tensordict.utils import _zip_strict, expand_as_right, expand_right, NestedKey
+from tensordict.utils import _zip_strict, expand_right, NestedKey
 
 from torchrl.data.tensor_specs import ContinuousBox, TensorSpec
 from torchrl.envs.transforms import functional as F
@@ -965,6 +965,11 @@ class CatFrames(ObservationTransform):
         - A modified version of the transform suitable for use in replay buffers
         - A corresponding :class:`SliceSampler` to use with the buffer
 
+    .. seealso:: The offline (contiguous trajectory slice) windowing performed
+        by this transform is also available as a pure functional,
+        :func:`torchrl.envs.transforms.functional.cat_frames`, which operates
+        directly on a plain tensor.
+
     """
 
     inplace = False
@@ -1254,29 +1259,8 @@ class CatFrames(ObservationTransform):
             return self.unfolding(tensordict)
 
     def _apply_same_padding(self, dim, data, done_mask):
-        d = data.ndim + dim - 1
-        res = data.clone()
-        num_repeats_per_sample = done_mask.sum(dim=-1)
-
-        if num_repeats_per_sample.dim() > 2:
-            extra_dims = num_repeats_per_sample.dim() - 2
-            num_repeats_per_sample = num_repeats_per_sample.flatten(0, extra_dims)
-            res_flat_series = res.flatten(0, extra_dims)
-        else:
-            extra_dims = 0
-            res_flat_series = res
-
-        if d - 1 > extra_dims:
-            res_flat_series_flat_batch = res_flat_series.flatten(1, d - 1)
-        else:
-            res_flat_series_flat_batch = res_flat_series[:, None]
-
-        for sample_idx, num_repeats in enumerate(num_repeats_per_sample):
-            if num_repeats > 0:
-                res_slice = res_flat_series_flat_batch[sample_idx]
-                res_slice[:, :num_repeats] = res_slice[:, num_repeats : num_repeats + 1]
-
-        return res
+        # Kept for backward compatibility; delegates to the functional core.
+        return F._apply_same_padding(dim, data, done_mask)
 
     @set_lazy_legacy(False)
     def unfolding(self, tensordict: TensorDictBase) -> TensorDictBase:
@@ -1357,40 +1341,29 @@ class CatFrames(ObservationTransform):
                         data.ndim + self.dim, (self.N, n_feat)
                     )
 
-            idx = [slice(None)] * (tensordict.ndim - 1) + [0]
-            data0 = [
-                torch.full_like(data[tuple(idx)], self.padding_value).unsqueeze(
-                    tensordict.ndim - 1
-                )
-            ] * (self.N - 1)
-
-            data = torch.cat(data0 + [data], tensordict.ndim - 1)
-
-            data = data.unfold(tensordict.ndim - 1, self.N, 1)
-
-            # Place -1 dim at self.dim place before squashing
-            done_mask_expand = done_mask.view(
-                *done_mask.shape[: tensordict.ndim],
-                *(1,) * (data.ndim - 1 - tensordict.ndim),
-                done_mask.shape[-1],
+            # The time axis sits at ``tensordict.ndim - 1`` within ``data`` (the
+            # tensordict batch dims lead the tensor). Expressed relative to
+            # ``data`` it is the following negative ``time_dim``. Delegate the
+            # pure padding + sliding-window + done-mask concatenation to the
+            # ``cat_frames`` functional so that the offline transform stays
+            # byte-for-byte identical to its stateless core.
+            time_dim = (tensordict.ndim - 1) - data.ndim
+            data = F._cat_frames_windows(
+                data,
+                self.N,
+                self.dim,
+                padding=self.padding,
+                padding_value=self.padding_value,
+                time_dim=time_dim,
+                done_mask=done_mask,
             )
-            done_mask_expand = expand_as_right(done_mask_expand, data)
-            data = data.permute(
-                *range(0, data.ndim + self.dim - 1),
-                -1,
-                *range(data.ndim + self.dim - 1, data.ndim - 1),
-            )
-            done_mask_expand = done_mask_expand.permute(
-                *range(0, done_mask_expand.ndim + self.dim - 1),
-                -1,
-                *range(done_mask_expand.ndim + self.dim - 1, done_mask_expand.ndim - 1),
-            )
-            if self.padding != "same":
-                data = torch.where(done_mask_expand, self.padding_value, data)
-            else:
-                data = self._apply_same_padding(self.dim, data, done_mask)
 
             if first_val is not None:
+                data0_pad = torch.full_like(
+                    data_orig[tuple([slice(None)] * (tensordict.ndim - 1) + [0])],
+                    self.padding_value,
+                ).unsqueeze(tensordict.ndim - 1)
+                data0 = [data0_pad] * (self.N - 1)
                 # Aggregate reset along last dim
                 reset_any = reset.any(-1, False)
                 rexp = expand_right(
