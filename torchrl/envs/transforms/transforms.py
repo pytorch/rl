@@ -12,6 +12,7 @@ The implementations have been split into per-category modules
 from __future__ import annotations
 
 from torchrl.envs.transforms._action import (
+    ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
     ActionScaling,
@@ -109,6 +110,7 @@ from torchrl.envs.transforms._timer import Timer
 from torchrl.envs.transforms._video import DecodeVideoTransform
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",

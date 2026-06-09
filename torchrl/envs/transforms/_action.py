@@ -39,9 +39,12 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
+from torchrl.data.vla.schema import ACTION_CHUNK_KEY, ACTION_IS_PAD_KEY, ACTION_KEY
+from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
@@ -1468,3 +1471,149 @@ class FlattenAction(Transform):
             f"first_dim={int(self.first_dim)}, last_dim={int(self.last_dim)}, "
             f"in_keys_inv={self.in_keys_inv}, out_keys_inv={self.out_keys_inv})"
         )
+
+
+class ActionChunkTransform(Transform):
+    """Build fixed-length action chunks from a trajectory window.
+
+    Action *chunking* is the defining trait of modern VLA policies (ACT,
+    OpenVLA-OFT, pi0, SmolVLA): instead of predicting a single action, the
+    policy predicts a short horizon ``H`` of future actions. This transform
+    turns a per-step action tensor ``[*B, T, action_dim]`` into the
+    corresponding training target ``action_chunk`` of shape
+    ``[*B, T, H, action_dim]`` -- for each time step ``t`` it gathers the
+    actions ``a[t], a[t+1], ..., a[t+H-1]`` -- together with a boolean
+    ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
+    end of the window (and were filled by repeating the last available action).
+
+    It is a replay-buffer / offline transform that operates on **time-structured**
+    data: the action tensor must be shaped ``[*B, T, action_dim]`` and each row
+    along ``time_dim`` must be a single contiguous trajectory window. Chunks are
+    built independently per row and never cross a row boundary; the downstream
+    chunked behavior-cloning loss masks the padded steps out using
+    ``action_is_pad``.
+
+    .. note::
+        A :class:`~torchrl.data.SliceSampler` returns a *flat* ``[B * T, ...]``
+        batch -- reshape it to ``[num_slices, slice_len, ...]`` before applying
+        this transform, otherwise chunks would span across trajectory boundaries.
+        Datasets that store one trajectory window per item (e.g.
+        :class:`~torchrl.data.datasets.OpenXExperienceReplay`) already yield
+        time-structured ``[batch, T, ...]`` samples and can use this transform
+        directly. This transform cannot be used as a
+        :class:`~torchrl.envs.TransformedEnv` transform.
+
+    Args:
+        chunk_size (int): the horizon ``H`` of the action chunk.
+
+    Keyword Args:
+        action_key (NestedKey): the per-step action to read.
+            Defaults to ``"action"``.
+        chunk_key (NestedKey): where to write the action chunk.
+            Defaults to ``"action_chunk"``.
+        pad_key (NestedKey): where to write the padding mask.
+            Defaults to ``"action_is_pad"``.
+        time_dim (int): the time dimension of the action tensor (the action
+            dimension must come right after it). Defaults to ``-2``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import ActionChunkTransform
+        >>> t = ActionChunkTransform(chunk_size=3)
+        >>> td = TensorDict(
+        ...     {"action": torch.arange(4).view(1, 4, 1).float()}, batch_size=[1, 4]
+        ... )
+        >>> td = t(td)
+        >>> td["action_chunk"].shape
+        torch.Size([1, 4, 3, 1])
+        >>> td["action_chunk"][0, :, :, 0]
+        tensor([[0., 1., 2.],
+                [1., 2., 3.],
+                [2., 3., 3.],
+                [3., 3., 3.]])
+        >>> td["action_is_pad"][0]
+        tensor([[False, False, False],
+                [False, False, False],
+                [False, False,  True],
+                [False,  True,  True]])
+    """
+
+    ENV_ERR = (
+        "ActionChunkTransform is a replay-buffer / offline transform and cannot "
+        "be used as an environment transform."
+    )
+
+    def __init__(
+        self,
+        chunk_size: int,
+        *,
+        action_key: NestedKey = ACTION_KEY,
+        chunk_key: NestedKey = ACTION_CHUNK_KEY,
+        pad_key: NestedKey = ACTION_IS_PAD_KEY,
+        time_dim: int = -2,
+    ) -> None:
+        if chunk_size < 1:
+            raise ValueError(f"chunk_size must be >= 1, got {chunk_size}.")
+        self.chunk_size = int(chunk_size)
+        self.time_dim = int(time_dim)
+        super().__init__(in_keys=[action_key], out_keys=[chunk_key, pad_key])
+
+    @property
+    def action_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    @property
+    def chunk_key(self) -> NestedKey:
+        return self.out_keys[0]
+
+    @property
+    def pad_key(self) -> NestedKey:
+        return self.out_keys[1]
+
+    def _build_chunk(self, action: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        H = self.chunk_size
+        dim = self.time_dim if self.time_dim >= 0 else action.dim() + self.time_dim
+        if dim != action.dim() - 2:
+            raise ValueError(
+                f"{type(self).__name__} expects the action dimension to immediately "
+                f"follow the time dimension (action shaped [..., T, action_dim]); got "
+                f"action.shape={tuple(action.shape)} with time_dim={self.time_dim}."
+            )
+        T = action.shape[dim]
+        device = action.device
+        # idx[t, h] = t + h, clamped to the last valid step; is_pad marks h that
+        # ran past the end of the window.
+        idx = torch.arange(T, device=device).unsqueeze(-1) + torch.arange(
+            H, device=device
+        ).unsqueeze(0)
+        is_pad = idx >= T
+        idx = idx.clamp_max(T - 1).reshape(-1)
+        chunk = action.index_select(dim, idx).unflatten(dim, (T, H))
+        is_pad = is_pad.expand(chunk.shape[:-1]).contiguous()
+        return chunk, is_pad
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = tensordict.get(self.action_key, default=None)
+        if action is None:
+            if self.missing_tolerance:
+                return tensordict
+            raise KeyError(
+                f"{type(self).__name__}: '{self.action_key}' not found in tensordict "
+                f"{tensordict}."
+            )
+        chunk, is_pad = self._build_chunk(action)
+        tensordict.set(self.chunk_key, chunk)
+        tensordict.set(self.pad_key, is_pad)
+        return tensordict
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        raise ValueError(self.ENV_ERR)
+
+    def set_container(self, container) -> None:
+        if (
+            isinstance(container, EnvBase)
+            or getattr(container, "parent", None) is not None
+        ):
+            raise ValueError(self.ENV_ERR)
+        super().set_container(container)
