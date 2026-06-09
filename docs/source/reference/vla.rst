@@ -31,14 +31,18 @@ and the LeRobot dataset format::
         observation: TensorDict(
             image: {<camera>: uint8/float [*B, T, C, H, W]},  # or a single tensor
             state: float [*B, T, state_dim],                  # proprioception
-            language_instruction: NonTensorData | Text,       # raw or tokenized
         ),
+        language_instruction: NonTensorData | Text,           # raw or tokenized (per-traj)
         action: float [*B, T, action_dim],                    # raw, per-step
         action_chunk: float [*B, T, chunk, action_dim],       # built for training
         action_is_pad: bool [*B, T, chunk],                   # chunk validity mask
         action_tokens: long [*B, T, chunk, action_dim],       # tokenized actions
         next: TensorDict(...),                                 # TED layout
     )
+
+Like :class:`~torchrl.data.datasets.OpenXExperienceReplay`, the image and state
+live under ``observation`` while the (per-trajectory) language instruction and
+the action live at the tensordict root.
 
 The default keys are exported from :mod:`torchrl.data.vla` (``IMAGE_KEY``,
 ``STATE_KEY``, ``INSTRUCTION_KEY``, ``ACTION_KEY``, ``ACTION_CHUNK_KEY``,
@@ -97,3 +101,21 @@ a language-model head.
 
     ActionTokenizerBase
     UniformActionTokenizer
+
+Policies
+--------
+
+A VLA policy is an ordinary :class:`~tensordict.nn.TensorDictModuleBase` that
+maps images, optional proprioceptive state and a language instruction to an
+action chunk (continuous) or action tokens (discrete). :class:`~torchrl.modules.vla.VLAWrapperBase`
+fixes that contract; :class:`~torchrl.modules.vla.TinyVLA` is a small reference
+policy for tests and tutorials.
+
+.. currentmodule:: torchrl.modules.vla
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    VLAWrapperBase
+    TinyVLA

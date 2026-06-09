@@ -117,6 +117,7 @@ from .mcts import (  # usort:skip
     UCB1TunedScore,
     UCBScore,
 )
+from .vla import TinyVLA, VLAWrapperBase  # usort:skip
 
 __all__ = [
     "Actor",
@@ -210,10 +211,12 @@ __all__ = [
     "TanhDelta",
     "TanhModule",
     "TanhNormal",
+    "TinyVLA",
     "TruncatedNormal",
     "UCB1TunedScore",
     "UCBScore",
     "VDNMixer",
+    "VLAWrapperBase",
     "ValueNorm",
     "ValueOperator",
     "VmapModule",
