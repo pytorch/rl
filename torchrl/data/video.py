@@ -161,8 +161,12 @@ class VideoClipRef(TensorClass["nocast"]):
 
     Args:
         source (str): the video path / URI / file id. Required.
-        frame_index (torch.Tensor): a ``long`` tensor of frame positions whose
-            shape is the batch size.
+        frame_index (torch.Tensor, optional): a ``long`` tensor of frame positions
+            whose shape becomes the batch size. If omitted, it defaults to *every*
+            frame of ``source`` (``arange(num_frames)``) and the frame count is read
+            from the file metadata once at construction (this opens the file and
+            requires torchcodec). Pass it explicitly to reference a subset -- e.g.
+            one episode of a multi-episode / "bucketed" file -- with no metadata read.
 
     Keyword Args:
         stream (int, optional): the video stream index to decode from. ``None``
@@ -192,7 +196,7 @@ class VideoClipRef(TensorClass["nocast"]):
         >>> frames = frames.expand(16, 3, 8, 8).contiguous()
         >>> path = os.path.join(tempfile.mkdtemp(), "clip.mp4")
         >>> VideoEncoder(frames=frames, frame_rate=10).to_file(path)
-        >>> ref = VideoClipRef.from_file(path)
+        >>> ref = VideoClipRef(path)        # every frame; batch size read from file
         >>> ref.batch_size
         torch.Size([16])
         >>> clip = ref[4:8]            # lazy, no decoding
@@ -206,11 +210,34 @@ class VideoClipRef(TensorClass["nocast"]):
     """
 
     source: str
-    frame_index: torch.Tensor
+    frame_index: torch.Tensor | None = None
     stream: int | None = None
     auto_decode: bool = False
     out_device: Any = None
     out_dtype: Any = None
+
+    def __post_init__(self):
+        # Runs only on direct construction (``VideoClipRef(...)``), not on the
+        # internal ``_from_tensordict`` path used by indexing/stacking -- and even
+        # if it did run there, every branch below is a no-op once ``frame_index`` is
+        # a long tensor with a matching ``batch_size``.
+        frame_index = self.frame_index
+        if frame_index is None:
+            # No frame_index given: address every frame, reading the count from the
+            # file metadata once. This is the ``VideoClipRef(path)`` ergonomic.
+            frame_index = torch.arange(
+                _num_frames(_get_decoder(self.source, self.stream, None))
+            )
+        elif not torch.is_tensor(frame_index):
+            frame_index = torch.as_tensor(frame_index)
+        if frame_index.dtype != torch.long:
+            frame_index = frame_index.to(torch.long)
+        if frame_index is not self.frame_index:
+            self.frame_index = frame_index
+        # tensorclass does not infer batch_size from a tensor field, so set it here
+        # (the frames are the batch dimensions). A scalar (0-d) index stays scalar.
+        if self.batch_size == torch.Size([]) and frame_index.ndim >= 1:
+            self.batch_size = frame_index.shape
 
     @classmethod
     def from_file(
@@ -249,11 +276,10 @@ class VideoClipRef(TensorClass["nocast"]):
         """
         if isinstance(path, os.PathLike):
             path = os.fspath(path)
-        if frame_index is None:
-            if num_frames is None:
-                num_frames = _num_frames(_get_decoder(path, stream, None))
+        if frame_index is None and num_frames is not None:
             frame_index = torch.arange(int(num_frames))
-        frame_index = torch.as_tensor(frame_index, dtype=torch.long)
+        # ``frame_index=None`` lets ``__post_init__`` read the frame count from the
+        # file metadata; an explicit ``frame_index`` (or ``num_frames``) skips that.
         return cls(
             source=path,
             frame_index=frame_index,
@@ -261,7 +287,6 @@ class VideoClipRef(TensorClass["nocast"]):
             auto_decode=auto_decode,
             out_device=device,
             out_dtype=dtype,
-            batch_size=frame_index.shape,
         )
 
     @classmethod

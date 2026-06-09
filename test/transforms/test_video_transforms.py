@@ -78,6 +78,21 @@ class TestVideoClipRef:
         assert ref.batch_size == torch.Size([3])
         assert ref.frame_index.tolist() == [3, 1, 9]
 
+    def test_bare_constructor_reads_all_frames(self, video_path):
+        # VideoClipRef(path) auto-fills frame_index from the file metadata.
+        ref = VideoClipRef(video_path)
+        assert isinstance(ref, VideoClipRef)
+        assert ref.batch_size == torch.Size([20])
+        assert ref.frame_index.tolist() == list(range(20))
+        assert _aligned(ref[4:8].decode(), [4, 5, 6, 7])
+
+    def test_bare_constructor_explicit_frame_index(self, video_path):
+        # An explicit frame_index sets the batch size and skips the metadata read.
+        ref = VideoClipRef(video_path, frame_index=torch.tensor([3, 1, 9]))
+        assert ref.batch_size == torch.Size([3])
+        assert ref.frame_index.tolist() == [3, 1, 9]
+        assert _aligned(ref.decode(), [3, 1, 9])
+
     def test_slicing_is_lazy(self, video_path):
         ref = VideoClipRef.from_file(video_path)
         clip = ref[4:8]
