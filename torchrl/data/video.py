@@ -726,9 +726,11 @@ class VideoClipRef(TensorClass["nocast"]):
 
         Keyword Args:
             device (torch.device or str, optional): output device for the decoded
-                frames, overriding ``out_device``. A CUDA device uses GPU (NVDEC)
-                decoding when the torchcodec build supports it, and otherwise decodes
-                on CPU and moves the frames to the device.
+                frames, overriding ``out_device``. Defaults to ``out_device`` if set,
+                else the reference's own device (so ``td.to("cuda")`` on a tensordict
+                holding the reference decodes onto CUDA), else CPU. A CUDA device uses
+                GPU (NVDEC) decoding when the torchcodec build supports it, and
+                otherwise decodes on CPU and moves the frames to the device.
             dtype (torch.dtype, optional): dtype for the decoded frames, overriding
                 ``out_dtype``. Defaults to ``uint8``.
 
@@ -739,6 +741,11 @@ class VideoClipRef(TensorClass["nocast"]):
             raise ModuleNotFoundError(_TORCHCODEC_ERROR)
         if device is None:
             device = _first(self.out_device)
+        if device is None:
+            # Fall back to the reference's own (container) device, so moving the
+            # tensordict that holds it -- e.g. ``td.to("cuda")`` -- makes
+            # ``decode()`` materialize frames on that device.
+            device = self.device
         if dtype is None:
             dtype = _first(self.out_dtype)
         stream = _first(self.stream)
