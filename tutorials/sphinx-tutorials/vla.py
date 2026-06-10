@@ -34,6 +34,7 @@ warnings.filterwarnings("ignore")
 #
 # In this tutorial we will:
 #
+# - get a bird's-eye view of what VLAs are and how they are trained;
 # - meet the canonical VLA TensorDict schema;
 # - build action chunks and normalize actions with VLA transforms;
 # - train a small reference policy by chunked behavior cloning;
@@ -41,6 +42,86 @@ warnings.filterwarnings("ignore")
 # - run one step of RL fine-tuning of a token policy with a GRPO objective.
 #
 # Everything below runs on CPU with synthetic data and a tiny model.
+
+##############################################################################
+# VLAs in a nutshell
+# ------------------
+#
+# Structurally, a VLA is a vision-language model (VLM) with an *action head*.
+# The backbone -- a pretrained multimodal transformer such as PaliGemma (pi0),
+# SmolVLM (SmolVLA) or Llama/SigLIP stacks (OpenVLA) -- encodes the camera
+# images and the instruction; a comparatively small head turns that
+# representation into robot actions. Two head families dominate:
+#
+# - **token heads** (RT-2, OpenVLA): actions are discretized into tokens and
+#   emitted through the language-model head, autoregressively -- which is what
+#   makes LLM-style RL objectives applicable to robotics;
+# - **continuous chunk heads** (ACT, OpenVLA-OFT, pi0, SmolVLA): a regression,
+#   diffusion or flow-matching head predicts a short horizon of ``H`` future
+#   actions (an *action chunk*) in one forward pass.
+#
+# Chunking is the signature trick of the field: one (expensive) inference
+# yields several control steps, and the executor decides how many of them to
+# apply before re-planning.
+#
+# The training lifecycle
+# ----------------------
+#
+# Training a VLA is best understood as a pipeline of stages, each with its own
+# data, objective and -- importantly -- its own *practitioner profile*. Most
+# users only ever run the last two stages.
+#
+# 1. **VLM pre-training** (inherited). The multimodal backbone is trained on
+#    web-scale image-text data. Nobody does this *for* robotics: you inherit
+#    it by picking a pretrained VLM.
+# 2. **VLA pre-training** (sometimes called *mid-training*). The VLM + action
+#    head is trained by large-scale behavior cloning on cross-embodiment
+#    teleoperation corpora -- Open X-Embodiment (~1M episodes), DROID, the
+#    LeRobot community datasets. This is what turns a VLM into a *generalist*
+#    VLA, and it is compute-heavy (hundreds of GPU-days). In practice you
+#    consume its output as a released checkpoint: OpenVLA, pi0, SmolVLA.
+# 3. **Supervised post-training** (what most people mean by "training a
+#    VLA"). The generalist checkpoint is fine-tuned by behavior cloning on a
+#    small, task- and robot-specific dataset: typically 50-500 teleoperated
+#    episodes recorded in the LeRobot format. Needs: a checkpoint, your
+#    demonstrations, and dataset action statistics for normalization. This is
+#    a single-GPU affair.
+# 4. **RL post-training** (optional, increasingly standard). Behavior cloning
+#    is capped by demonstration quality and compounds errors over long
+#    horizons. RL fine-tuning against a sparse task-success reward
+#    (SimpleVLA-RL, RL4VLA -- GRPO / PPO-style objectives over action tokens)
+#    pushes success rates beyond the demos. Needs everything above *plus* a
+#    task you can roll out: a simulator, or a real robot with a success
+#    detector.
+# 5. **Evaluation / deployment**. Closed-loop rollout with chunked execution
+#    (receding horizon), measuring success rate over episodes.
+#
+# What do you need to bring?
+# --------------------------
+#
+# Depending on where you enter the pipeline:
+#
+# - *Evaluate a released VLA*: a checkpoint
+#   (:class:`~torchrl.modules.vla.LeRobotPolicyWrapper`) and a task --
+#   :class:`~torchrl.envs.transforms.ActionChunkExecutor` runs it closed-loop and
+#   :class:`~torchrl.envs.transforms.SuccessReward` scores it.
+# - *Fine-tune on your task* (stage 3, the common case): a checkpoint, your
+#   demos (:class:`~torchrl.data.datasets.LeRobotExperienceReplay`), chunk
+#   targets (:class:`~torchrl.envs.transforms.ActionChunkTransform`),
+#   normalization from the dataset statistics
+#   (:meth:`ActionScaling.from_metadata <torchrl.envs.transforms.ActionScaling.from_metadata>`)
+#   and :class:`~torchrl.objectives.vla.VLABCLoss`.
+# - *RL fine-tune* (stage 4): all of the above, a rollout-able task with a
+#   success signal, and :class:`~torchrl.objectives.vla.VLATokenGRPOLoss` for
+#   token policies.
+# - *Study the mechanics or research from scratch*: no checkpoint, no robot --
+#   a tiny reference policy (:class:`~torchrl.modules.vla.TinyVLA`) and
+#   synthetic data, which is exactly what this tutorial does. Every component
+#   below is the same one you would use at full scale; only the model and the
+#   data shrink.
+#
+# The rest of the tutorial walks the pipeline in that order: data schema,
+# transforms, behavior cloning, chunked execution, RL fine-tuning.
 
 import torch
 from tensordict import NonTensorStack, TensorDict
@@ -163,18 +244,28 @@ for _ in range(100):
 # -----------------
 #
 # At inference, a chunk policy predicts ``H`` actions but the environment
-# consumes one action per step. :class:`~torchrl.modules.ActionChunkExecutor`
-# (a general chunk-execution policy wrapper, not VLA-specific) wraps the policy
-# and emits one action per call, only re-invoking the (expensive) policy every
-# ``replan_interval`` steps (receding horizon). Used as a collector or
-# :meth:`~torchrl.envs.EnvBase.rollout` policy, it re-plans an environment when
-# it is reset (``is_init``). Here we step it by hand to see the per-step actions.
+# consumes one action per step.
+# :class:`~torchrl.envs.transforms.ActionChunkExecutor` (a general
+# chunk-execution transform, not VLA-specific) bridges the two without
+# wrapping anything: appended to the policy
+# (``TensorDictSequential(policy, executor)``) or to the environment
+# (``TransformedEnv(env, executor)``, where it also rewrites the policy-facing
+# action spec to the chunked shape), it emits one action per call, executing
+# ``replan_interval`` actions from the cached chunk before committing a fresh
+# prediction (receding horizon). Attached to an env it re-plans automatically
+# on (partial) resets; in the policy-side composition, call
+# :meth:`~torchrl.envs.transforms.ActionChunkExecutor.reset_state` between
+# rollouts. Here we use the policy-side composition and step it by hand.
 
-from torchrl.modules import ActionChunkExecutor
+from tensordict.nn import TensorDictSequential
+from torchrl.envs.transforms import ActionChunkExecutor
 
-executor = ActionChunkExecutor(policy, replan_interval=2)
-actions = [executor(make_observation())["action"] for _ in range(5)]
-# five [batch, action_dim] actions; the policy was only invoked on steps 0, 2, 4
+executor = ActionChunkExecutor(chunk_size=H, replan_interval=2)
+step_policy = TensorDictSequential(policy, executor)
+actions = [step_policy(make_observation())["action"] for _ in range(5)]
+# five [batch, action_dim] actions: chunk actions 0 and 1, then a re-plan,
+# and so on -- the policy still runs at every call, but only every second
+# prediction is committed
 [a.shape for a in actions]
 
 ##############################################################################
