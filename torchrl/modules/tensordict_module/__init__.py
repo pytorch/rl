@@ -54,7 +54,7 @@ from torchrl.modules.tensordict_module.rnn import (
     set_recurrent_mode,
 )
 from torchrl.modules.tensordict_module.sequence import SafeSequential
-from torchrl.modules.tensordict_module.world_models import WorldModelWrapper
+from torchrl.modules.tensordict_module.world_models import WorldModel, WorldModelWrapper
 
 __all__ = [
     "Actor",
@@ -99,5 +99,6 @@ __all__ = [
     "set_recurrent_matmul_precision",
     "set_recurrent_mode",
     "SafeSequential",
+    "WorldModel",
     "WorldModelWrapper",
 ]
