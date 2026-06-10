@@ -2848,6 +2848,14 @@ class ActionChunkExecutor(TensorDictModuleBase):
         ``ActionChunkExecutor`` adds receding-horizon re-planning
         (``replan_interval < chunk_size``) and caches state on the module rather
         than in the tensordict.
+
+    .. seealso::
+        :class:`~torchrl.envs.transforms.ActionChunkTransform` attached to a
+        :class:`~torchrl.envs.TransformedEnv` covers the re-plan-every-step
+        case instead: its inverse path forwards the first action of each
+        predicted chunk to the base env, calling the policy at every step.
+        Use this executor when policy inference is expensive and several
+        actions of a chunk should be executed per inference.
     """
 
     def __init__(

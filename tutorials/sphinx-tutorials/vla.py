@@ -89,7 +89,7 @@ obs = make_observation()
 # for every step ``t`` it gathers the next ``H`` actions. This is the training
 # target of modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
 
-from torchrl.envs.transforms import ActionChunkTransform, ActionNormalize
+from torchrl.envs.transforms import ActionChunkTransform, ActionScaling
 
 T, H = 6, 4
 window = TensorDict({"action": torch.randn(2, T, action_dim)}, batch_size=[2, T])
@@ -97,14 +97,17 @@ chunked = ActionChunkTransform(chunk_size=H)(window)
 chunked["action_chunk"].shape  # [2, T, H, action_dim]
 
 ##############################################################################
-# :class:`~torchrl.envs.transforms.ActionNormalize` is the action-space analogue
-# of :class:`~torchrl.envs.transforms.ObservationNorm`: it normalizes expert
-# actions for training and exposes :meth:`~torchrl.envs.transforms.ActionNormalize.denormalize`
-# to map a policy's predicted action back to the raw action space for execution.
+# :class:`~torchrl.envs.transforms.ActionScaling` handles action normalization.
+# With explicit statistics (``loc``/``scale``, or the
+# :meth:`~torchrl.envs.transforms.ActionScaling.from_stats` /
+# :meth:`~torchrl.envs.transforms.ActionScaling.from_metadata` constructors)
+# the transform normalizes expert actions on the replay-buffer sample path
+# (build it with ``in_keys_inv=[]`` for a buffer raw data is written to
+# through ``extend``, which applies the inverse) and denormalizes the policy's
+# predicted actions when attached to an environment (or explicitly via
+# :meth:`~torchrl.envs.transforms.ActionScaling.denormalize`).
 
-normalize = ActionNormalize(
-    loc=torch.zeros(action_dim), scale=torch.ones(action_dim) * 2
-)
+normalize = ActionScaling(loc=torch.zeros(action_dim), scale=torch.ones(action_dim) * 2)
 normalized = normalize(TensorDict({"action": torch.full((4, action_dim), 2.0)}, [4]))
 normalized["action"]  # all ones
 

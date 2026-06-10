@@ -79,11 +79,14 @@ pipeline) and they live alongside the other transforms, documented in full on th
 - :class:`~torchrl.envs.transforms.ActionChunkTransform` -- build fixed-length
   action chunks (``[*B, T, H, action_dim]``) and a padding mask from a sampled
   trajectory window, the standard training target for chunked VLA policies.
-- :class:`~torchrl.envs.transforms.ActionNormalize` -- affine action
-  normalization (the action-space analogue of
-  :class:`~torchrl.envs.transforms.ObservationNorm`); normalizes expert actions
-  for training and denormalizes a policy's predicted actions for execution,
-  with ``from_metadata`` / ``from_stats`` constructors.
+- :class:`~torchrl.envs.transforms.ActionScaling` -- affine action
+  normalization; built with the
+  :meth:`~torchrl.envs.transforms.ActionScaling.from_metadata` /
+  :meth:`~torchrl.envs.transforms.ActionScaling.from_stats` constructors it
+  normalizes expert actions on the replay-buffer sample path (pass
+  ``in_keys_inv=[]`` for a buffer that raw data is written to through
+  ``extend``, which applies the inverse) and denormalizes a policy's predicted
+  actions on the env action-input path.
 - :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- encode
   continuous actions into discrete tokens (wrapping an action tokenizer) for
   autoregressive token VLAs.
