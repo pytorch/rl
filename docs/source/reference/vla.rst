@@ -127,11 +127,15 @@ policy for tests and tutorials.
     LeRobotPolicyWrapper
 
 At inference a chunk policy predicts ``H`` actions while the environment consumes
-one per step. :class:`~torchrl.modules.ActionChunkExecutor` -- a general
-chunk-execution policy wrapper documented alongside the other actor modules --
-wraps any chunk-predicting policy, emits one action per step and re-plans every
-``replan_interval`` steps (receding horizon); it complements
-:class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`.
+one per step. :class:`~torchrl.envs.transforms.ActionChunkExecutor` -- a general
+chunk-execution transform documented alongside the other transforms -- bridges
+the two compositionally: append it to the policy
+(``TensorDictSequential(policy, executor)``) or to the environment
+(``TransformedEnv(env, executor)``) and it emits one action per step,
+re-planning every ``replan_interval`` steps (receding horizon) and whenever an
+environment is reset. :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`
+remains the policy-wrapper alternative that additionally skips the upstream
+policy call while its cache lasts (open-loop execution of expensive policies).
 
 Objectives
 ----------
