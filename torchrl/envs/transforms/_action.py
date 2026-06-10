@@ -674,6 +674,13 @@ class MultiAction(Transform):
             If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The
             stack dimension is the same as the action stack dimension. Defaults to ``False``.
 
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionChunkTransform` -- when
+        the stacked actions are a chunk policy's *prediction* (overlapping
+        per-step training targets) rather than a macro action to replay
+        verbatim. The chunk transform builds the training targets on the data
+        path and, attached to an env, executes only the first action of each
+        predicted chunk (re-planning at every step) instead of stepping the
+        base env once per action.
     """
 
     def __init__(
@@ -967,12 +974,36 @@ class ActionScaling(Transform):
         tensor([-1., -1., -1., -1., -1., -1., -1.])
         >>> env.action_spec.space.high
         tensor([1., 1., 1., 1., 1., 1., 1.])
-        >>> # dataset-statistics-driven normalization (no env required)
+        >>> # dataset-statistics-driven normalization (no env required): the
+        >>> # forward pass maps raw actions to the normalized space
+        >>> from tensordict import TensorDict
         >>> t = ActionScaling.from_stats(
         ...     mean=torch.tensor([1.0, 2.0]), std=torch.tensor([2.0, 4.0])
         ... )
-        >>> t.normalize(torch.tensor([[3.0, 6.0]]))
+        >>> td = TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1])
+        >>> t(td)["action"]
         tensor([[1., 1.]])
+        >>> # on a replay buffer, a forward-only instance (in_keys_inv=[])
+        >>> # normalizes on sample and leaves data written through extend
+        >>> # untouched (extend applies the inverse pass)
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> t = ActionScaling.from_stats(
+        ...     mean=torch.tensor([1.0, 2.0]),
+        ...     std=torch.tensor([2.0, 4.0]),
+        ...     in_keys_inv=[],
+        ... )
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(10), transform=t, batch_size=2
+        ... )
+        >>> raw = TensorDict(
+        ...     {"action": torch.tensor([[3.0, 6.0]]).expand(10, 2)}, batch_size=[10]
+        ... )
+        >>> indices = rb.extend(raw)  # stored as-is
+        >>> rb.sample()["action"]  # normalized with the dataset statistics
+        tensor([[1., 1.],
+                [1., 1.]])
+        >>> # the same affine map is exposed on raw tensors for execution-time
+        >>> # use, e.g. mapping a policy's normalized prediction to the robot
         >>> t.denormalize(torch.tensor([[1.0, 1.0]]))
         tensor([[3., 6.]])
     """
@@ -1664,6 +1695,26 @@ class ActionChunkTransform(Transform):
     ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
     end of the window (and were filled by repeating the last available action).
 
+    .. note:: **How to read "many actions in one tensor".** The ``H`` actions
+        of a chunk are *predictions* -- overlapping, stride-1 training targets
+        (each dataset step ``t`` gets its own window ``a[t..t+H-1]``, so a
+        given action appears in up to ``H`` different chunks) -- not a macro
+        action to be replayed verbatim. This transform never re-times the
+        environment: one outer step is always one base step, and on the
+        inverse path only the *first* action of a chunk is executed (the rest
+        are re-predicted at the next step). How many of the ``H`` predicted
+        actions actually get executed per policy call is a separate,
+        execution-time choice:
+
+        - :class:`~torchrl.envs.transforms.MultiAction` executes every action
+          in the tensor by stepping the base env once per action (one outer
+          step = ``H`` base steps, rewards stacked or aggregated);
+        - :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`
+          keeps the env timing unchanged and caches the actions on the policy
+          side, emitting one per step (open-loop);
+        - this transform's inverse path re-plans at every step (closed-loop:
+          only ``a[t]`` is executed).
+
     The forward (data) path operates on **time-structured** data: the action
     tensor must be shaped ``[*B, T, action_dim]`` and each row along
     ``time_dim`` must be a single contiguous trajectory window. Chunks are
@@ -1707,13 +1758,13 @@ class ActionChunkTransform(Transform):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from torchrl.envs.transforms import ActionChunkTransform
+        >>> # for each step t the chunk gathers a[t], a[t+1], a[t+2], repeating
+        >>> # the last action past the end of the window (masked by action_is_pad)
         >>> t = ActionChunkTransform(chunk_size=3)
         >>> td = TensorDict(
         ...     {"action": torch.arange(4).view(1, 4, 1).float()}, batch_size=[1, 4]
         ... )
         >>> td = t(td)
-        >>> td["action_chunk"].shape
-        torch.Size([1, 4, 3, 1])
         >>> td["action_chunk"][0, :, :, 0]
         tensor([[0., 1., 2.],
                 [1., 2., 3.],
@@ -1724,7 +1775,30 @@ class ActionChunkTransform(Transform):
                 [False, False, False],
                 [False, False,  True],
                 [False,  True,  True]])
-
+        >>> # on a replay buffer: extend with raw [T, action_dim] trajectory
+        >>> # windows (stored as-is), the chunks are built on the sample path
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(8),
+        ...     transform=ActionChunkTransform(chunk_size=3),
+        ...     batch_size=2,
+        ... )
+        >>> windows = TensorDict(
+        ...     {"action": torch.randn(8, 4, 1)}, batch_size=[8]
+        ... )  # 8 trajectory windows of T=4 steps each
+        >>> indices = rb.extend(windows)
+        >>> rb.sample()["action_chunk"].shape  # [batch, T, chunk_size, action_dim]
+        torch.Size([2, 4, 3, 1])
+        >>> # on an environment: the policy-facing action spec becomes the chunk
+        >>> # and the base env executes the first action of each predicted chunk
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> env = TransformedEnv(
+        ...     GymEnv("Pendulum-v1"), ActionChunkTransform(chunk_size=3)
+        ... )
+        >>> env.full_action_spec["action_chunk"].shape  # [chunk_size, action_dim]
+        torch.Size([3, 1])
+        >>> env.rollout(2)["action_chunk"].shape
+        torch.Size([2, 3, 1])
     """
 
     def __init__(

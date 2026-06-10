@@ -2242,17 +2242,24 @@ if __name__ == "__main__":
             env_id: int,
             max_steps: int = 10,
             sleep_odd_only: bool = False,
+            step_sleep: float = 0.0,
             **kwargs,
         ):
             """
             Args:
                 env_id: The ID to return as observation. This will be returned as a tensor.
                 max_steps: Maximum number of steps before the environment terminates.
+                sleep_odd_only: If ``True``, only odd ``env_id`` workers sleep (used
+                    to test preemption).
+                step_sleep: If ``> 0``, every worker sleeps this many seconds on each
+                    step regardless of ``env_id`` (used to make a rollout slower than
+                    ``_TIMEOUT``).
             """
             super().__init__(device="cpu", batch_size=torch.Size([]))
             self.env_id = env_id
             self.max_steps = max_steps
             self.sleep_odd_only = sleep_odd_only
+            self.step_sleep = step_sleep
             self._step_count = 0
 
             # Define specs
@@ -2301,6 +2308,8 @@ if __name__ == "__main__":
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
                 time.sleep(0.1)
+            if self.step_sleep:
+                time.sleep(self.step_sleep)
 
             return TensorDict(
                 {
@@ -2407,6 +2416,60 @@ if __name__ == "__main__":
                     ), f"Environment {env_idx} should produce observation {expected_id}, but got {actual_ids[0].item()}"
         finally:
             collector.shutdown()
+
+    def test_multi_sync_no_idle_after_all_outputs(self, monkeypatch):
+        """Regression test for https://github.com/pytorch/rl/issues/3840.
+
+        Without preemption, the worker-output gathering loop used to run a
+        fixed-length inner ``for _ in range(self.num_workers)`` that kept calling
+        ``queue_out.get(timeout=_TIMEOUT)`` even after every worker had already
+        reported. When an earlier ``get`` timed out (i.e. the first rollout takes
+        longer than ``_TIMEOUT``), ``len(recv)`` reached ``num_workers`` partway
+        through a later inner loop, leaving its remaining iterations to each waste
+        a full ``_TIMEOUT`` -- a total idle penalty of ``num_workers * _TIMEOUT``.
+
+        We shrink ``_TIMEOUT`` and make each worker's single step sleep longer than
+        it (so the first ``get`` is guaranteed to time out, which is the trigger),
+        then assert the batch is gathered well within ``num_workers * _TIMEOUT``.
+        """
+        timeout = 0.3
+        # The gather loop in the main process reads ``_TIMEOUT`` as a module global.
+        monkeypatch.setattr("torchrl.collectors._multi_sync._TIMEOUT", timeout)
+
+        num_workers = 8
+        # Each worker collects a single frame whose step sleeps > timeout, so the
+        # first ``queue_out.get(timeout=timeout)`` necessarily times out before any
+        # worker reports -- the precondition that used to shift the inner loop.
+        step_sleep = timeout * 1.5
+        env_factories = [
+            functools.partial(
+                self.FixedIDEnv, env_id=i, max_steps=10, step_sleep=step_sleep
+            )
+            for i in range(num_workers)
+        ]
+        collector = MultiSyncCollector(
+            create_env_fn=env_factories,
+            frames_per_batch=num_workers,
+            total_frames=num_workers,
+            device="cpu",
+            init_random_frames=num_workers,  # random actions, no policy needed
+            use_buffers=True,
+        )
+        try:
+            t0 = time.time()
+            next(iter(collector))
+            elapsed = time.time() - t0
+        finally:
+            collector.shutdown()
+
+        # Buggy path: ~num_workers * timeout (1 initial + num_workers - 1 trailing
+        # timeouts). Fixed path: ~step_sleep plus a little worker overhead. Half of
+        # the buggy budget is a comfortable separator that tolerates scheduling jitter.
+        max_elapsed = num_workers * timeout / 2
+        assert elapsed < max_elapsed, (
+            f"gathering took {elapsed:.3f}s, expected well under {max_elapsed:.3f}s; "
+            f"redundant get(timeout=_TIMEOUT) calls likely regressed (issue #3840)"
+        )
 
     def test_collector_next_method(self):
         """Non-regression test: next() should work correctly after __iter__.

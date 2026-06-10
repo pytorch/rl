@@ -252,15 +252,19 @@ class MultiSyncCollector(MultiCollector):
 
             recv = collections.deque()
             t0 = time.time()
+            # We pull one worker output at a time and re-check ``len(recv)`` on
+            # every iteration. A fixed-length inner loop would keep calling
+            # ``queue_out.get(timeout=_TIMEOUT)`` even after every worker has
+            # already reported, wasting up to ``(num_workers - 1) * _TIMEOUT``
+            # seconds on doomed gets whenever an earlier get timed out (see #3840).
             while len(recv) < self.num_workers and (
                 (time.time() - t0) < (_TIMEOUT * _MAX_IDLE_COUNT)
             ):
-                for _ in range(self.num_workers):
-                    try:
-                        new_data, j = self.queue_out.get(timeout=_TIMEOUT)
-                        recv.append((new_data, j))
-                    except (TimeoutError, Empty):
-                        _check_for_faulty_process(self.procs)
+                try:
+                    new_data, j = self.queue_out.get(timeout=_TIMEOUT)
+                    recv.append((new_data, j))
+                except (TimeoutError, Empty):
+                    _check_for_faulty_process(self.procs)
             if (time.time() - t0) > (_TIMEOUT * _MAX_IDLE_COUNT):
                 try:
                     self.shutdown()
