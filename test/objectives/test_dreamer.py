@@ -21,7 +21,7 @@ from torch import nn
 from torchrl.data import Unbounded
 from torchrl.envs.model_based.dreamer import DreamerEnv
 from torchrl.envs.transforms import TensorDictPrimer, TransformedEnv
-from torchrl.modules import SafeSequential, WorldModelWrapper
+from torchrl.modules import SafeSequential, WorldModel, WorldModelWrapper
 from torchrl.modules.distributions.continuous import TanhNormal
 from torchrl.modules.models.model_based import (
     DreamerActor,
@@ -34,6 +34,7 @@ from torchrl.modules.models.model_based import (
 from torchrl.modules.models.models import MLP
 from torchrl.objectives import DreamerActorLoss, DreamerModelLoss, DreamerValueLoss
 from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.world_model_loss import WorldModelLoss
 
 from torchrl.testing import (  # noqa
     call_value_nets as _call_value_nets,
@@ -524,3 +525,165 @@ class TestDreamer(LossModuleTestBase):
             "value": "state_value",
         }
         self.tensordict_keys_test(loss_fn, default_keys=default_keys)
+
+
+# ---------------------------------------------------------------------------
+# WorldModelLoss tests
+# (moved here from test/test_world_model.py per review consolidation request)
+# ---------------------------------------------------------------------------
+
+_WML_OBS_DIM = 8
+_WML_LATENT_DIM = 4
+_WML_ACTION_DIM = 2
+_WML_BATCH = 3
+
+
+class _WMLCatLinear(torch.nn.Module):
+    def __init__(self, in_features: int, out_features: int) -> None:
+        super().__init__()
+        self.linear = torch.nn.Linear(in_features, out_features)
+
+    def forward(self, *tensors: torch.Tensor) -> torch.Tensor:
+        return self.linear(torch.cat(tensors, dim=-1))
+
+
+def _wml_make_world_model(
+    with_done_head: bool = False, with_decoder: bool = False
+) -> WorldModel:
+    from tensordict.nn import TensorDictModule
+
+    encoder = TensorDictModule(
+        torch.nn.Linear(_WML_OBS_DIM, _WML_LATENT_DIM),
+        in_keys=["observation"],
+        out_keys=["latent"],
+    )
+    dynamics = TensorDictModule(
+        _WMLCatLinear(_WML_LATENT_DIM + _WML_ACTION_DIM, _WML_LATENT_DIM),
+        in_keys=["latent", "action"],
+        out_keys=[("next", "latent")],
+    )
+    reward_head = TensorDictModule(
+        torch.nn.Linear(_WML_LATENT_DIM, 1),
+        in_keys=[("next", "latent")],
+        out_keys=[("next", "reward")],
+    )
+    done_head = None
+    if with_done_head:
+        done_head = TensorDictModule(
+            torch.nn.Linear(_WML_LATENT_DIM, 1),
+            in_keys=[("next", "latent")],
+            out_keys=[("next", "done")],
+        )
+    decoder = None
+    if with_decoder:
+        decoder = TensorDictModule(
+            torch.nn.Linear(_WML_LATENT_DIM, _WML_OBS_DIM),
+            in_keys=["latent"],
+            out_keys=["reconstructed_observation"],
+        )
+    return WorldModel(
+        encoder, dynamics, reward_head, done_head=done_head, decoder=decoder
+    )
+
+
+def _wml_make_real_batch(with_done: bool = False) -> TensorDict:
+    data = {
+        "observation": torch.randn(_WML_BATCH, _WML_OBS_DIM),
+        "action": torch.randn(_WML_BATCH, _WML_ACTION_DIM),
+        "next": {
+            "reward": torch.randn(_WML_BATCH, 1),
+            "latent": torch.randn(_WML_BATCH, _WML_LATENT_DIM),
+        },
+    }
+    if with_done:
+        data["next"]["done"] = torch.zeros(_WML_BATCH, 1, dtype=torch.bool)
+        data["next"]["terminated"] = torch.zeros(_WML_BATCH, 1, dtype=torch.bool)
+    return TensorDict(data, batch_size=[_WML_BATCH])
+
+
+class TestWorldModelLoss:
+    def test_reward_loss_only(self):
+        wm = _wml_make_world_model()
+        loss = WorldModelLoss(wm, losses=["reward"])
+        batch = _wml_make_real_batch()
+        td_out = loss(batch)
+        assert "loss_reward" in td_out.keys()
+        assert td_out["loss_reward"].shape == torch.Size([])
+
+    def test_reconstruction_loss(self):
+        wm = _wml_make_world_model(with_decoder=True)
+        loss = WorldModelLoss(wm, losses=["reward", "reconstruction"])
+        batch = _wml_make_real_batch()
+        td_out = loss(batch)
+        assert "loss_reward" in td_out.keys()
+        assert "loss_reconstruction" in td_out.keys()
+
+    def test_latent_loss(self):
+        from tensordict.nn import TensorDictModule
+
+        encoder = TensorDictModule(
+            torch.nn.Linear(_WML_OBS_DIM, _WML_LATENT_DIM),
+            in_keys=["observation"],
+            out_keys=["latent"],
+        )
+        dynamics = TensorDictModule(
+            _WMLCatLinear(_WML_LATENT_DIM + _WML_ACTION_DIM, _WML_LATENT_DIM),
+            in_keys=["latent", "action"],
+            out_keys=["predicted_latent"],
+        )
+        reward_head = TensorDictModule(
+            torch.nn.Linear(_WML_LATENT_DIM, 1),
+            in_keys=["predicted_latent"],
+            out_keys=[("next", "reward")],
+        )
+        wm = WorldModel(encoder, dynamics, reward_head)
+        loss = WorldModelLoss(wm, losses=["reward", "latent"])
+        batch = TensorDict(
+            {
+                "observation": torch.randn(_WML_BATCH, _WML_OBS_DIM),
+                "action": torch.randn(_WML_BATCH, _WML_ACTION_DIM),
+                "predicted_latent": torch.randn(_WML_BATCH, _WML_LATENT_DIM),
+                "target_latent": torch.randn(_WML_BATCH, _WML_LATENT_DIM),
+                "next": {"reward": torch.randn(_WML_BATCH, 1)},
+            },
+            batch_size=[_WML_BATCH],
+        )
+        td_out = loss(batch)
+        assert "loss_latent" in td_out.keys()
+
+    def test_unknown_loss_raises(self):
+        wm = _wml_make_world_model()
+        with pytest.raises(ValueError, match="Unknown loss type"):
+            WorldModelLoss(wm, losses=["bad_loss"])
+
+    def test_set_keys(self):
+        wm = _wml_make_world_model()
+        loss = WorldModelLoss(wm, losses=["reward"])
+        loss.set_keys(reward="my_reward", true_reward="my_true_reward")
+        assert loss.tensor_keys.reward == "my_reward"
+        assert loss.tensor_keys.true_reward == "my_true_reward"
+
+    def test_weights_applied(self):
+        wm = _wml_make_world_model()
+        loss_1x = WorldModelLoss(wm, losses=["reward"], reward_weight=1.0)
+        loss_2x = WorldModelLoss(wm, losses=["reward"], reward_weight=2.0)
+        batch = _wml_make_real_batch()
+        out_1x = loss_1x(batch)
+        out_2x = loss_2x(batch)
+        assert torch.allclose(out_2x["loss_reward"], 2.0 * out_1x["loss_reward"])
+
+    def test_done_loss(self):
+        wm = _wml_make_world_model(with_done_head=True)
+        loss = WorldModelLoss(wm, losses=["reward", "done"])
+        batch = _wml_make_real_batch(with_done=True)
+        td_out = loss(batch)
+        assert "loss_done" in td_out.keys()
+
+    def test_loss_is_differentiable(self):
+        wm = _wml_make_world_model()
+        loss = WorldModelLoss(wm, losses=["reward"])
+        batch = _wml_make_real_batch()
+        td_out = loss(batch)
+        td_out["loss_reward"].backward()
+        for p in wm.parameters():
+            assert p.grad is not None
