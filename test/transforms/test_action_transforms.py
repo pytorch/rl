@@ -2409,11 +2409,24 @@ class TestActionTokenizerTransform:
         with pytest.raises(TypeError, match="ActionTokenizerBase"):
             ActionTokenizerTransform(object())
 
-    def test_cannot_be_env_transform(self):
+    def test_inv_decode_roundtrip(self):
+        # Bidirectional: forward encodes, inv decodes (within half a bin).
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        enc = t(TensorDict({"action": action}, batch_size=[1]))
+        dec = t.inv(TensorDict({"action_tokens": enc["action_tokens"]}, batch_size=[1]))
+        assert (dec["action"] - action).abs().max() <= (2.0 / (2 * 256)) + 1e-5
+
+    def test_usable_as_env_transform(self):
+        # No longer env-guarded: it attaches to a TransformedEnv (the inverse
+        # decodes a token policy's actions on the env action-input path) and its
+        # forward-on-obs path is a no-op (the action is not in ``next``).
         tok = UniformActionTokenizer(8, low=-1.0, high=1.0)
         t = ActionTokenizerTransform(tok)
-        with pytest.raises(ValueError, match="replay-buffer"):
-            t._call(TensorDict({"action": torch.zeros(2, 3)}, batch_size=[2]))
+        TransformedEnv(ContinuousActionVecMockEnv(), t)  # must not raise
+        td = TensorDict({"observation": torch.zeros(2, 3)}, batch_size=[2])
+        assert t._call(td) is td
 
 
 if __name__ == "__main__":
