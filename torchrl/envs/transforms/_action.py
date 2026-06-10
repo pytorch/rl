@@ -396,6 +396,13 @@ class ActionDiscretizer(Transform):
             ...         # Use logarithmic spacing instead of linear
             ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
 
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- a
+        spec-agnostic action <-> token codec built around an explicit
+        :class:`~torchrl.data.vla.ActionTokenizerBase` (no env / ``action_spec``
+        needed). Prefer ``ActionDiscretizer`` to *expose* a discrete action space
+        on a continuous env (it rewrites the ``action_spec``); prefer
+        ``ActionTokenizerTransform`` to encode/decode actions with your own
+        tokenizer, e.g. for an autoregressive token policy or offline tokenization.
     """
 
     class SamplingStrategy(IntEnum):
@@ -1810,24 +1817,33 @@ class ActionNormalize(Transform):
 
 
 class ActionTokenizerTransform(Transform):
-    """Encode continuous actions into discrete tokens with an action tokenizer.
+    """Encode and decode actions with an :class:`~torchrl.data.vla.ActionTokenizerBase`.
 
-    A replay-buffer / offline transform that wraps an
-    :class:`~torchrl.data.vla.ActionTokenizerBase`: on the forward path it
-    encodes the continuous action (or action chunk) at ``in_key`` into discrete
-    token ids at ``out_key`` -- the training target / input for an
-    autoregressive (RT-2 / OpenVLA-style) token VLA. Decoding tokens back to
-    continuous actions is done with the wrapped tokenizer's ``decode`` (the
-    transform itself is forward-only).
+    A bidirectional, spec-agnostic action <-> token codec wrapping an action
+    tokenizer (explicit bounds; no environment needed). Like any TorchRL
+    transform it plugs onto a replay buffer or an environment interchangeably:
+
+    - **forward** (``encode``): maps the continuous action (or action chunk) at
+      ``in_key`` to discrete token ids at ``out_key`` -- e.g. building the token
+      training target for an autoregressive (RT-2 / OpenVLA-style) token VLA on
+      the replay-buffer sample path.
+    - **inverse** (``decode``): maps token ids at ``out_key`` back to a continuous
+      action at ``in_key`` -- e.g. decoding the tokens a token-head policy emits,
+      on the environment action-input path, before the base env consumes them.
+
+    Unlike :class:`~torchrl.envs.transforms.ActionDiscretizer`, it does **not**
+    read or rewrite the environment's ``action_spec`` (the bins live in the
+    tokenizer), so the env keeps advertising its native action space; on the env
+    side it therefore targets a policy that already emits tokens through its own
+    head, rather than one sampling a discretized action spec.
 
     Args:
         tokenizer (ActionTokenizerBase): the tokenizer to apply.
 
     Keyword Args:
-        in_key (NestedKey): the continuous action to encode.
-            Defaults to ``"action"``.
-        out_key (NestedKey): where to write the token ids.
-            Defaults to ``"action_tokens"``.
+        in_key (NestedKey): the continuous action. Defaults to ``"action"``.
+        out_key (NestedKey): the discrete token ids. Defaults to
+            ``"action_tokens"``.
 
     Examples:
         >>> import torch
@@ -1839,12 +1855,19 @@ class ActionTokenizerTransform(Transform):
         >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
         >>> td["action_tokens"]
         tensor([[  0, 128, 255]])
-    """
+        >>> # the inverse decodes tokens back to a continuous action
+        >>> back = t.inv(TensorDict({"action_tokens": td["action_tokens"]}, batch_size=[1]))
+        >>> back["action"].shape
+        torch.Size([1, 3])
 
-    ENV_ERR = (
-        "ActionTokenizerTransform is a replay-buffer / offline transform and "
-        "cannot be used as an environment transform."
-    )
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionDiscretizer` -- the
+        env-side discretizer that derives its bins from (and rewrites) the
+        environment's bounded ``action_spec`` so a discrete-action policy can act
+        on a continuous env. Use ``ActionDiscretizer`` to *expose* a discrete
+        action space sampled from the spec; use ``ActionTokenizerTransform`` to
+        encode/decode with your own tokenizer (token-head VLA policies, or offline
+        tokenization), independent of any ``action_spec``.
+    """
 
     def __init__(
         self,
@@ -1857,7 +1880,17 @@ class ActionTokenizerTransform(Transform):
             raise TypeError(
                 f"tokenizer must be an ActionTokenizerBase, got {type(tokenizer)}."
             )
-        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        # forward encodes in_key -> out_key. The inverse decodes back: TorchRL's
+        # inverse pass reads ``out_keys_inv`` (the tokens) and writes
+        # ``in_keys_inv`` (the action), so the transform works on a replay buffer
+        # (encode on sample) and on an environment (decode a token policy's
+        # actions on the inverse path).
+        super().__init__(
+            in_keys=[in_key],
+            out_keys=[out_key],
+            in_keys_inv=[in_key],
+            out_keys_inv=[out_key],
+        )
         self.tokenizer = tokenizer
 
     @property
@@ -1871,13 +1904,12 @@ class ActionTokenizerTransform(Transform):
     def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
         return self.tokenizer.encode(action)
 
-    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        raise ValueError(self.ENV_ERR)
+    def _inv_apply_transform(self, tokens: torch.Tensor) -> torch.Tensor:
+        return self.tokenizer.decode(tokens)
 
-    def set_container(self, container) -> None:
-        if (
-            isinstance(container, EnvBase)
-            or getattr(container, "parent", None) is not None
-        ):
-            raise ValueError(self.ENV_ERR)
-        super().set_container(container)
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # On the env-step (forward) path the action is absent from ``next`` -- it
+        # flows through the inverse (decode) direction instead -- so this is a
+        # no-op (mirroring ActionScaling), while ``forward`` / ``_apply_transform``
+        # still encodes on the replay-buffer sample path.
+        return next_tensordict
