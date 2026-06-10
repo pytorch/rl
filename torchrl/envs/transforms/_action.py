@@ -49,6 +49,7 @@ from torchrl.data.vla.tokenizers import ActionTokenizerBase
 from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
+    "ActionChunkExecutor",
     "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
@@ -1724,13 +1725,15 @@ class ActionChunkTransform(Transform):
         - :class:`~torchrl.envs.transforms.MultiAction` executes every action
           in the tensor by stepping the base env once per action (one outer
           step = ``H`` base steps, rewards stacked or aggregated);
+        - :class:`~torchrl.envs.transforms.ActionChunkExecutor` keeps the env
+          timing unchanged and caches the chunk, executing
+          ``replan_interval`` of its actions before committing a fresh
+          prediction (receding horizon; appended to the policy or to the
+          env);
         - :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`
-          keeps the env timing unchanged and caches the actions on the policy
-          side, emitting one per step (open-loop);
-        - :class:`~torchrl.modules.ActionChunkExecutor` does the same with
-          receding-horizon re-planning (execute ``replan_interval`` actions,
-          then re-query the policy) -- use it when policy inference is
-          expensive and the policy call should be skipped between re-plans;
+          does the same open-loop as a policy wrapper, additionally skipping
+          the upstream actor call while its cache lasts (for expensive
+          policies);
         - this transform's inverse path re-plans at every step (closed-loop:
           only ``a[t]`` is executed).
 
@@ -1907,8 +1910,8 @@ class ActionChunkTransform(Transform):
         # passes through untouched. Attached to an env, a missing chunk on the
         # step path is an error (the rewritten action spec advertises it; a
         # policy writing the raw action key by mistake should not silently
-        # bypass the transform), while the reset preprocess runs with missing
-        # tolerance and skips.
+        # bypass the transform). The env reset path never reaches the inverse:
+        # ``enable_inv_on_reset`` defaults to False.
         if self.parent is None and tensordict.get(self.chunk_key, default=None) is None:
             return tensordict
         return super()._inv_call(tensordict)
@@ -1920,6 +1923,292 @@ class ActionChunkTransform(Transform):
         # per-step action is written on the inverse path's working copy and
         # consumed by the base env, so it never surfaces in the outer
         # tensordict (which keeps single and batched envs consistent).
+        action_key = unravel_key(self.action_key)
+        chunk_key = unravel_key(self.chunk_key)
+        try:
+            leaf_spec = self.parent.full_action_spec_unbatched[action_key]
+        except KeyError:
+            raise RuntimeError(
+                f"{type(self).__name__} could not find key {action_key!r} in "
+                f"the parent environment's action spec. Available keys: "
+                f"{list(self.parent.full_action_spec.keys(True, True))}."
+            )
+        if not leaf_spec.shape:
+            raise RuntimeError(
+                f"{type(self).__name__} requires an action spec with a "
+                f"trailing action dimension; got shape {tuple(leaf_spec.shape)}."
+            )
+        chunk_spec = leaf_spec.unsqueeze(-2).expand(
+            *leaf_spec.shape[:-1], self.chunk_size, leaf_spec.shape[-1]
+        )
+        batch_size = self.parent.batch_size
+        if batch_size:
+            chunk_spec = chunk_spec.expand(batch_size + chunk_spec.shape)
+        input_spec["full_action_spec", chunk_key] = chunk_spec
+        if chunk_key != action_key:
+            del input_spec["full_action_spec", action_key]
+        return input_spec
+
+
+class ActionChunkExecutor(Transform):
+    """Execute action chunks step by step with receding-horizon re-planning.
+
+    Chunk-predicting policies (action-chunking VLAs, ACT, diffusion policies)
+    emit an *action chunk* of ``chunk_size`` future actions per inference,
+    while environments consume one action per step. This transform bridges the
+    two as a composable module (appended, not wrapping): it caches the most
+    recent chunk per environment and emits one action per call, consuming
+    ``replan_interval`` actions from the cache before committing a fresh
+    prediction. The forward and inverse paths behave identically, so the same
+    instance can be
+
+    - appended to a policy, ``TensorDictSequential(policy, executor)``: the
+      executor pops from its cache on the forward path;
+    - appended to an environment, ``TransformedEnv(env, executor)``: the
+      policy-facing action spec is rewritten to the chunked shape
+      ``[chunk_size, action_dim]`` and the inverse (action-input) path pops
+      the per-step action the base env consumes. The env step path is a
+      no-op, and resets -- including partial resets of batched envs --
+      re-plan the affected environments automatically.
+
+    .. note::
+        Unlike a policy wrapper, this transform does not skip the upstream
+        policy call: between re-plans the policy's fresh prediction is simply
+        ignored. When inference is expensive and the call must actually be
+        skipped while the cache lasts (open-loop execution), use
+        :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`.
+
+    .. note::
+        The executor holds per-environment state. Attached to an environment,
+        resets manage it automatically; composed into a policy, call
+        :meth:`reset_state` between independent rollouts. The state follows
+        the batch shape of the chunks it sees: a batch of a different shape
+        re-initializes it (and re-plans everywhere).
+
+    .. warning::
+        With ``replan_interval > 1``, the ``action_chunk`` recorded in a
+        rollout or collector output at a given step is the policy's *fresh*
+        prediction for that step, which was only committed (and partially
+        executed) on re-plan steps -- on cached steps the recorded prediction
+        was discarded. When collecting data for training, prefer
+        ``replan_interval=1`` (the recorded chunk's first action is exactly
+        the executed action) or log the executed actions separately.
+
+    Args:
+        chunk_size (int): the horizon ``H`` of the action chunk.
+
+    Keyword Args:
+        replan_interval (int, optional): how many actions of a chunk are
+            executed before a fresh prediction is committed. Must be in
+            ``[1, chunk_size]``. Defaults to ``chunk_size`` (fully open-loop);
+            ``replan_interval=1`` re-plans at every step, which is what
+            :class:`ActionChunkTransform`'s inverse does statelessly.
+        action_key (NestedKey): the per-step action to write.
+            Defaults to ``"action"``.
+        chunk_key (NestedKey): the predicted action chunk to read.
+            Defaults to ``"action_chunk"``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.envs.transforms import ActionChunkExecutor
+        >>> t = ActionChunkExecutor(chunk_size=3, replan_interval=2)
+        >>> def step(value):
+        ...     # a fresh "prediction" arrives at every call
+        ...     chunk = torch.full((1, 3, 2), float(value))
+        ...     chunk[:, 1] += 0.5  # the second action of a chunk differs
+        ...     td = TensorDict({"action_chunk": chunk}, batch_size=[1])
+        ...     return t(td)["action"]
+        >>> step(1.0)[0, 0].item()  # commit chunk 1, execute its action 0
+        1.0
+        >>> step(2.0)[0, 0].item()  # cached: execute action 1 of chunk 1
+        1.5
+        >>> step(3.0)[0, 0].item()  # re-plan: commit chunk 3, execute action 0
+        3.0
+        >>> # appended to an environment: the policy-facing spec is chunked
+        >>> # and resets re-plan automatically
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> env = TransformedEnv(
+        ...     GymEnv("Pendulum-v1"),
+        ...     ActionChunkExecutor(chunk_size=3, replan_interval=2),
+        ... )
+        >>> env.full_action_spec["action_chunk"].shape
+        torch.Size([3, 1])
+        >>> env.rollout(3)["action_chunk"].shape
+        torch.Size([3, 3, 1])
+
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionChunkTransform` -- the
+        chunk *codec*: its forward builds the chunked training targets from
+        per-step data and its inverse statelessly executes the first action of
+        each prediction. This executor is the chunk *scheduler*, generalizing
+        that inverse to a cached receding horizon.
+    """
+
+    def __init__(
+        self,
+        chunk_size: int,
+        *,
+        replan_interval: int | None = None,
+        action_key: NestedKey = ACTION_KEY,
+        chunk_key: NestedKey = ACTION_CHUNK_KEY,
+    ) -> None:
+        if chunk_size < 1:
+            raise ValueError(f"chunk_size must be >= 1, got {chunk_size}.")
+        self.chunk_size = int(chunk_size)
+        interval = self.chunk_size if replan_interval is None else int(replan_interval)
+        if not 1 <= interval <= self.chunk_size:
+            raise ValueError(
+                f"replan_interval must be in [1, chunk_size={self.chunk_size}], "
+                f"got {interval}."
+            )
+        self.replan_interval = interval
+        # The forward and inverse directions perform the same chunk -> action
+        # pop. The forward out_key (the action) belongs to the env's *input*
+        # side, hence the transform_output_spec override below.
+        super().__init__(
+            in_keys=[chunk_key],
+            out_keys=[action_key],
+            in_keys_inv=[action_key],
+            out_keys_inv=[chunk_key],
+        )
+        self._cache: torch.Tensor | None = None
+        self._steps: torch.Tensor | None = None
+
+    @property
+    def action_key(self) -> NestedKey:
+        return self.out_keys[0]
+
+    @property
+    def chunk_key(self) -> NestedKey:
+        return self.in_keys[0]
+
+    def reset_state(self) -> None:
+        """Clear the cached chunk and per-environment positions.
+
+        Only needed for the policy-side composition
+        (``TensorDictSequential(policy, executor)``) between independent
+        rollouts; attached to an environment, resets handle this.
+        """
+        self._cache = None
+        self._steps = None
+
+    def _pop_action(self, tensordict: TensorDictBase) -> TensorDictBase:
+        chunk = tensordict.get(self.chunk_key, default=None)
+        if chunk is None:
+            if self.missing_tolerance:
+                return tensordict
+            raise KeyError(
+                f"{type(self).__name__}: '{self.chunk_key}' not found in "
+                f"tensordict {tensordict}."
+            )
+        if chunk.dim() < 2 or chunk.shape[-2] != self.chunk_size:
+            raise ValueError(
+                f"{type(self).__name__} expects an action chunk shaped "
+                f"[..., chunk_size={self.chunk_size}, action_dim]; got shape "
+                f"{tuple(chunk.shape)}."
+            )
+        if (
+            self._cache is None
+            or self._cache.shape != chunk.shape
+            or self._cache.device != chunk.device
+        ):
+            # cold start (or batch-shape change): commit everywhere
+            self._cache = chunk.clone()
+            self._steps = torch.zeros(
+                chunk.shape[:-2], dtype=torch.long, device=chunk.device
+            )
+        else:
+            replan = self._steps >= self.replan_interval
+            self._cache = torch.where(
+                replan.unsqueeze(-1).unsqueeze(-1), chunk, self._cache
+            )
+            self._steps = torch.where(
+                replan, torch.zeros_like(self._steps), self._steps
+            )
+        index = (
+            self._steps.unsqueeze(-1)
+            .unsqueeze(-1)
+            .expand(*self._steps.shape, 1, self._cache.shape[-1])
+        )
+        action = self._cache.gather(-2, index).squeeze(-2)
+        self._steps = self._steps + 1
+        tensordict.set(self.action_key, action)
+        return tensordict
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return self._pop_action(tensordict)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Without a parent env (replay-buffer ``extend``, standalone ``inv``),
+        # chunk-less data passes through untouched. Attached to an env, a
+        # missing chunk on the step path is an error (the rewritten action
+        # spec advertises it). The env reset path never reaches this method:
+        # ``enable_inv_on_reset`` defaults to False.
+        if self.parent is None and tensordict.get(self.chunk_key, default=None) is None:
+            return tensordict
+        return self._pop_action(tensordict)
+
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        # The chunk flows through the forward/inverse directions only; nothing
+        # to do on the env step (observation) path.
+        return next_tensordict
+
+    def _reset_mask(self, tensordict: TensorDictBase) -> torch.Tensor | None:
+        # Collapse the env's reset entries (root or nested, possibly several)
+        # to one boolean mask shaped like ``self._steps``. Returns ``None``
+        # when no mask is available (full reset).
+        if tensordict is None:
+            return None
+        if self.parent is not None:
+            reset_keys = [unravel_key(key) for key in self.parent._filtered_reset_keys]
+        else:
+            reset_keys = ["_reset"]
+        mask = None
+        found = False
+        for key in reset_keys:
+            reset = tensordict.get(key, default=None)
+            if reset is None:
+                continue
+            found = True
+            reset = reset.reshape(*self._steps.shape, -1).any(-1)
+            mask = reset if mask is None else mask | reset
+        if not found:
+            return None
+        return mask
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # Re-plan the environments being reset; a full reset (no mask) clears
+        # the state entirely.
+        if self._steps is not None:
+            reset = self._reset_mask(tensordict)
+            if reset is None:
+                self.reset_state()
+            else:
+                self._steps = self._steps.masked_fill(reset, self.replan_interval)
+        return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        # Native auto-reset envs (gym/gymnasium vector autoreset, Isaac Lab)
+        # signal episode boundaries through this hook instead of ``_reset``;
+        # the reset mask is carried in ``tensordict`` under the regular reset
+        # keys, so the same re-planning logic applies.
+        return self._reset(tensordict, tensordict_reset)
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        # The forward out_key (the action) is consumed by the base env through
+        # the inverse path and never appears in the env's outputs, so the
+        # base-class accounting of forward out_keys against the output specs
+        # does not apply.
+        return output_spec.clone()
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        # Expose the chunked action to the policy, exactly like
+        # ActionChunkTransform: replace the per-step action spec with a
+        # [chunk_size, action_dim] version and remove the original.
         action_key = unravel_key(self.action_key)
         chunk_key = unravel_key(self.chunk_key)
         try:
@@ -2082,8 +2371,8 @@ class ActionTokenizerTransform(Transform):
         # data passes through untouched. Attached to an env, missing tokens on
         # the step path are an error (the rewritten action spec advertises
         # them; a policy writing the raw action key by mistake should not
-        # silently bypass the decode), while the reset preprocess runs with
-        # missing tolerance and skips.
+        # silently bypass the decode). The env reset path never reaches the
+        # inverse: ``enable_inv_on_reset`` defaults to False.
         if self.parent is None and tensordict.get(self.out_key, default=None) is None:
             return tensordict
         return super()._inv_call(tensordict)

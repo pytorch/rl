@@ -245,6 +245,7 @@ Available Transforms
 
     Transform
     TransformedEnv
+    ActionChunkExecutor
     ActionChunkTransform
     ActionDiscretizer
     ActionMask
