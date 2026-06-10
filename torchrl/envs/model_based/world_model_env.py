@@ -5,12 +5,16 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import torch
 from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey
 from torchrl.envs.common import EnvBase
 from torchrl.envs.model_based.common import ModelBasedEnvBase
+
+if TYPE_CHECKING:
+    from torchrl.modules import WorldModel
 
 
 class WorldModelEnv(ModelBasedEnvBase):
@@ -99,7 +103,7 @@ class WorldModelEnv(ModelBasedEnvBase):
 
     def __init__(
         self,
-        world_model,
+        world_model: WorldModel,
         base_env: EnvBase,
         *,
         observation_spec=None,
@@ -160,36 +164,39 @@ class WorldModelEnv(ModelBasedEnvBase):
         :class:`~torchrl.envs.EnvBase`'s outer ``step`` machinery expects
         ``_step`` to return *root* keys and then re-wraps them under
         ``("next", *)`` itself. Without this remap, ``EnvBase`` would not
-        find the reward / observation / done at the keys it expects and
-        would either crash or silently produce empty fields.
+        find the reward / observation / done at the keys it expects.
+
+        Spec iteration walks the leaf keys (``include_nested=True,
+        leaves_only=True``) so that nested observation / reward / done specs
+        — common in multi-agent or hierarchical envs — are preserved
+        end-to-end.
         """
-        out = self.world_model(tensordict.clone(recurse=False))
+        out = self.world_model(tensordict.copy())
         next_td = out.get("next", default=None)
 
-        result = TensorDict({}, batch_size=self.batch_size, device=self.device)
-        # Observation, reward, done, terminated: pull from ("next", *) if the
-        # world model wrote them there, otherwise fall back to safe defaults.
-        for key in self.observation_spec.keys():
-            value = next_td.get(key, default=None) if next_td is not None else None
-            if value is None:
-                value = out.get(key, default=None)
+        result = TensorDict(batch_size=self.batch_size, device=self.device)
+        if next_td is None:
+            return result
+
+        # Observation: leaf keys present in the world model's "next" subtree
+        # are forwarded. Absent keys are skipped — EnvBase will spec-check
+        # what's missing and surface a clear error.
+        for key in self.observation_spec.keys(include_nested=True, leaves_only=True):
+            value = next_td.get(key, default=None)
             if value is not None:
                 result.set(key, value)
-        for key in self.full_reward_spec.keys():
-            value = next_td.get(key, default=None) if next_td is not None else None
+
+        # Reward / done leaves: forward what the world model wrote; fall
+        # back to the spec's zero tensor when the model did not emit the key.
+        for key in self.full_reward_spec.keys(include_nested=True, leaves_only=True):
+            value = next_td.get(key, default=None)
             if value is None:
-                value = out.get(key, default=None)
-            if value is None:
-                value = torch.zeros(*self.batch_size, 1, device=self.device)
+                value = self.full_reward_spec[key].zero()
             result.set(key, value)
-        for key in self.full_done_spec.keys():
-            value = next_td.get(key, default=None) if next_td is not None else None
+        for key in self.full_done_spec.keys(include_nested=True, leaves_only=True):
+            value = next_td.get(key, default=None)
             if value is None:
-                value = out.get(key, default=None)
-            if value is None:
-                value = torch.zeros(
-                    *self.batch_size, 1, dtype=torch.bool, device=self.device
-                )
+                value = self.full_done_spec[key].zero()
             result.set(key, value)
         return result
 
@@ -215,16 +222,12 @@ class WorldModelEnv(ModelBasedEnvBase):
                 f"`tensordict=` argument to `env.reset(...)` or "
                 f"`env.rollout(...)`."
             )
-        out = tensordict.clone(recurse=False)
-        # Done flags are always False at reset; the done head (if any) will
-        # determine termination on subsequent steps via ``_step``.
-        batch_shape = self.batch_size
-        out.set(
-            "done",
-            torch.zeros(*batch_shape, 1, dtype=torch.bool, device=self.device),
-        )
-        out.set(
-            "terminated",
-            torch.zeros(*batch_shape, 1, dtype=torch.bool, device=self.device),
-        )
+        out = tensordict.copy()
+        # Done flags are zeros at reset; the done head (if any) will
+        # determine termination on subsequent steps via ``_step``. Drawing
+        # them from ``full_done_spec.zero()`` keeps shapes / dtypes / nested
+        # done structure (e.g. multi-agent dones) consistent with the spec.
+        zero_done = self.full_done_spec.zero()
+        for key in zero_done.keys(include_nested=True, leaves_only=True):
+            out.set(key, zero_done.get(key))
         return out

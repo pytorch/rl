@@ -250,6 +250,6 @@ class WorldModelLoss(LossModule):
             ).mean()
             out["loss_latent"] = self.latent_weight * loss_lat
 
-        td_out = TensorDict(out, batch_size=[])
+        td_out = TensorDict(out)
         self._clear_weakrefs(tensordict, td_out)
         return td_out
