@@ -51,6 +51,7 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.vla import VLABCLoss, VLATokenGRPOLoss
+from torchrl.objectives.world_model_loss import WorldModelLoss
 
 __all__ = [
     "A2CLoss",
@@ -94,6 +95,7 @@ __all__ = [
     "VLABCLoss",
     "VLATokenGRPOLoss",
     "ValueEstimators",
+    "WorldModelLoss",
     "add_random_module",
     "categorical_kl_balanced",
     "default_value_kwargs",
