@@ -1005,7 +1005,10 @@ class SuccessReward(Transform):
 
     It is a standard leaf transform: it can be appended to a
     :class:`~torchrl.envs.TransformedEnv` (it overwrites the step reward from the
-    env's success signal) or applied to sampled data in a replay buffer.
+    env's success signal) or applied to sampled data in a replay buffer. When
+    attached to an environment, the reward spec is rewritten to a
+    :class:`~torchrl.data.Bounded` spec over ``{0, scale}`` (shaped like the
+    success entry); the reward is written at step time only, never at reset.
 
     Args:
         success_key (NestedKey): the boolean success signal to read.
@@ -1037,3 +1040,36 @@ class SuccessReward(Transform):
 
     def _apply_transform(self, success: torch.Tensor) -> torch.Tensor:
         return success.to(torch.get_default_dtype()) * self.scale
+
+    def transform_reward_spec(self, reward_spec: TensorSpec) -> TensorSpec:
+        # The written reward takes values in {0, scale}: advertise a bounded
+        # spec. Its shape follows the success entry when it can be found in
+        # the parent's output specs (success and reward shapes can
+        # legitimately differ), falling back to the existing reward leaf.
+        reward_key = unravel_key(self.out_keys[0])
+        success_key = unravel_key(self.in_keys[0])
+        shape = device = None
+        parent = self.parent
+        if parent is not None:
+            for spec in (parent.full_observation_spec, parent.full_done_spec):
+                if success_key in spec.keys(True, True):
+                    leaf = spec[success_key]
+                    shape, device = leaf.shape, leaf.device
+                    break
+        if shape is None and reward_key in reward_spec.keys(True, True):
+            leaf = reward_spec[reward_key]
+            shape, device = leaf.shape, leaf.device
+        if shape is None:
+            raise RuntimeError(
+                f"{type(self).__name__} could not infer the reward shape: "
+                f"{success_key!r} was not found in the parent output specs and "
+                f"{reward_key!r} is not an existing reward entry."
+            )
+        reward_spec[reward_key] = Bounded(
+            low=min(0.0, self.scale),
+            high=max(0.0, self.scale),
+            shape=shape,
+            device=device,
+            dtype=torch.get_default_dtype(),
+        )
+        return reward_spec
