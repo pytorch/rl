@@ -59,7 +59,6 @@ from .models import (
     VDNMixer,
 )
 from .tensordict_module import (
-    ActionChunkExecutor,
     Actor,
     ActorCriticOperator,
     ActorCriticWrapper,
@@ -122,7 +121,6 @@ from .mcts import (  # usort:skip
 from .vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase  # usort:skip
 
 __all__ = [
-    "ActionChunkExecutor",
     "Actor",
     "DiffusionActor",
     "ActorCriticOperator",

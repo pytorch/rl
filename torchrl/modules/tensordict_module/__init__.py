@@ -10,7 +10,6 @@ from torchrl.modules.tensordict_module._rnn_precision import (
     set_recurrent_matmul_precision,
 )
 from torchrl.modules.tensordict_module.actors import (
-    ActionChunkExecutor,
     Actor,
     ActorCriticOperator,
     ActorCriticWrapper,
@@ -58,7 +57,6 @@ from torchrl.modules.tensordict_module.sequence import SafeSequential
 from torchrl.modules.tensordict_module.world_models import WorldModel, WorldModelWrapper
 
 __all__ = [
-    "ActionChunkExecutor",
     "Actor",
     "ActorCriticOperator",
     "ActorCriticWrapper",
