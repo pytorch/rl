@@ -1,25 +1,18 @@
-# Flaky Test Report - 2026-06-09
+# Flaky Test Report - 2026-06-10
 
 ## Summary
 
-- **Flaky tests**: 1
-- **Newly flaky** (last 7 days): 1
+- **Flaky tests**: 0
+- **Newly flaky** (last 7 days): 0
 - **Resolved**: 0
-- **Total tests analyzed**: 28662
+- **Total tests analyzed**: 28885
 - **CI runs analyzed**: 15
 
 ---
 
-## Flaky Tests
+## No Flaky Tests Detected! 🎉
 
-| Test | Failure Rate | Failures | Flaky Score | Last Failed |
-|------|--------------|----------|-------------|-------------|
-| `...stLSTMModule::test_scan_backend_backward_matches_pad[gru]` 🆕 | 6.7% (10/149) | 10 | 0.13 | 2026-06-04 |
-
-
-### Newly Flaky Tests
-
-- `test/modules/test_rnn.py::TestLSTMModule::test_scan_backend_backward_matches_pad[gru]`
+All tests are passing consistently.
 
 ---
 
@@ -32,4 +25,4 @@
 
 ---
 
-*Generated at 2026-06-09T07:22:36.990213+00:00*
+*Generated at 2026-06-10T07:37:24.740852+00:00*
