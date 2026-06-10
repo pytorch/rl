@@ -18,6 +18,7 @@ from .r3m import R3MTransform
 from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform, NextStateReconstructor
 from .transforms import (
+    ActionChunkExecutor,
     ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
@@ -126,6 +127,7 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "ActionChunkExecutor",
     "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
