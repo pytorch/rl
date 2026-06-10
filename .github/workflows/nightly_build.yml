@@ -68,6 +68,10 @@ jobs:
           export PATH="/opt/python/${{ matrix.python_version[1] }}/bin:$PATH"
           python -mpip install build wheel
           ./build_nightly.sh
+          find dist -name '*whl' -exec bash -c ' mv $0 ${0/linux/manylinux1}' {} \;
+      # PyPI rejects the plain linux_x86_64 platform tag. pytorch/pytorch
+      # binaries are manylinux_2_17 compliant but pretend to be manylinux1
+      # compliant, so we do the same.
       - name: Upload wheel for the test-wheel job
         uses: actions/upload-artifact@v4
         with:
@@ -156,7 +160,9 @@ jobs:
     if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-unix
     runs-on: ${{ matrix.os[1] }}
-    continue-on-error: true
+    # No continue-on-error here: a failed PyPI upload must turn the run red.
+    # Silent upload failures kept the workflow green while torchrl-nightly
+    # went stale on PyPI for months.
     strategy:
       matrix:
         os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
@@ -314,7 +320,7 @@ jobs:
     # Don't run on forked repos.
     if: ${{ github.repository_owner == 'pytorch' && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
     needs: test-wheel-windows
-    continue-on-error: true
+    # No continue-on-error here: a failed PyPI upload must turn the run red.
     runs-on: windows-latest
     strategy:
       matrix:
