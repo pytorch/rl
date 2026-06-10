@@ -72,7 +72,13 @@ from .libs import (
     VmasEnv,
     VmasWrapper,
 )
-from .model_based import DreamerDecoder, DreamerEnv, ImaginedEnv, ModelBasedEnvBase
+from .model_based import (
+    DreamerDecoder,
+    DreamerEnv,
+    ImaginedEnv,
+    ModelBasedEnvBase,
+    WorldModelEnv,
+)
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
@@ -313,6 +319,7 @@ __all__ = [
     "VecNorm",
     "VmasEnv",
     "VmasWrapper",
+    "WorldModelEnv",
     "Walker2dEnv",
     "check_env_specs",
     "check_marl_grouping",
