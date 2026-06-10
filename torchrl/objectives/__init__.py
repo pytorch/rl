@@ -50,6 +50,7 @@ from torchrl.objectives.utils import (
     TargetNetUpdater,
     ValueEstimators,
 )
+from torchrl.objectives.world_model_loss import WorldModelLoss
 
 __all__ = [
     "A2CLoss",
@@ -91,6 +92,7 @@ __all__ = [
     "TD3Loss",
     "TargetNetUpdater",
     "ValueEstimators",
+    "WorldModelLoss",
     "add_random_module",
     "categorical_kl_balanced",
     "default_value_kwargs",
