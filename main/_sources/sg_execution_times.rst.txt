@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**50:32.457** total execution time for 24 files **from all galleries**:
+**50:23.768** total execution time for 24 files **from all galleries**:
 
 .. container::
 
@@ -33,74 +33,74 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_tutorials_mujoco_cube_bowl_macros.py` (``reference/generated/tutorials/mujoco_cube_bowl_macros.py``)
-     - 44:53.066
+     - 44:55.739
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_dqn.py` (``reference/generated/tutorials/coding_dqn.py``)
-     - 01:23.384
+     - 01:26.052
      - 0.0
    * - :ref:`sphx_glr_tutorials_pretrained_models.py` (``reference/generated/tutorials/pretrained_models.py``)
-     - 00:51.848
+     - 00:33.068
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ddpg.py` (``reference/generated/tutorials/coding_ddpg.py``)
-     - 00:29.690
+     - 00:30.284
      - 0.0
    * - :ref:`sphx_glr_tutorials_coding_ppo.py` (``reference/generated/tutorials/coding_ppo.py``)
-     - 00:28.662
+     - 00:29.204
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_ppo.py` (``reference/generated/tutorials/multiagent_ppo.py``)
-     - 00:27.609
+     - 00:28.627
      - 0.0
    * - :ref:`sphx_glr_tutorials_multiagent_competitive_ddpg.py` (``reference/generated/tutorials/multiagent_competitive_ddpg.py``)
-     - 00:26.914
+     - 00:27.861
      - 0.0
    * - :ref:`sphx_glr_tutorials_torchrl_envs.py` (``reference/generated/tutorials/torchrl_envs.py``)
-     - 00:25.382
+     - 00:25.249
      - 0.0
    * - :ref:`sphx_glr_tutorials_export.py` (``reference/generated/tutorials/export.py``)
-     - 00:23.183
+     - 00:23.175
      - 0.0
    * - :ref:`sphx_glr_tutorials_llm_wrappers.py` (``reference/generated/tutorials/llm_wrappers.py``)
-     - 00:08.019
+     - 00:09.628
      - 0.0
    * - :ref:`sphx_glr_tutorials_evaluator.py` (``reference/generated/tutorials/evaluator.py``)
-     - 00:07.061
+     - 00:07.027
      - 0.0
    * - :ref:`sphx_glr_tutorials_dqn_with_rnn.py` (``reference/generated/tutorials/dqn_with_rnn.py``)
-     - 00:05.899
+     - 00:05.927
      - 0.0
    * - :ref:`sphx_glr_tutorials_pendulum.py` (``reference/generated/tutorials/pendulum.py``)
-     - 00:05.645
-     - 0.0
-   * - :ref:`sphx_glr_tutorials_torchrl_demo.py` (``reference/generated/tutorials/torchrl_demo.py``)
-     - 00:05.054
+     - 00:05.809
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-5.py` (``reference/generated/tutorials/getting-started-5.py``)
-     - 00:05.020
+     - 00:05.145
+     - 0.0
+   * - :ref:`sphx_glr_tutorials_torchrl_demo.py` (``reference/generated/tutorials/torchrl_demo.py``)
+     - 00:04.934
      - 0.0
    * - :ref:`sphx_glr_tutorials_multi_task.py` (``reference/generated/tutorials/multi_task.py``)
      - 00:04.210
      - 0.0
    * - :ref:`sphx_glr_tutorials_rb_tutorial.py` (``reference/generated/tutorials/rb_tutorial.py``)
-     - 00:00.811
+     - 00:00.821
      - 0.0
    * - :ref:`sphx_glr_tutorials_memory_efficient_rl.py` (``reference/generated/tutorials/memory_efficient_rl.py``)
-     - 00:00.358
+     - 00:00.355
      - 0.0
    * - :ref:`sphx_glr_tutorials_collector_trajectory_assembly.py` (``reference/generated/tutorials/collector_trajectory_assembly.py``)
-     - 00:00.287
+     - 00:00.291
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-4.py` (``reference/generated/tutorials/getting-started-4.py``)
-     - 00:00.109
+     - 00:00.112
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-3.py` (``reference/generated/tutorials/getting-started-3.py``)
-     - 00:00.077
+     - 00:00.079
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-1.py` (``reference/generated/tutorials/getting-started-1.py``)
      - 00:00.073
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-2.py` (``reference/generated/tutorials/getting-started-2.py``)
-     - 00:00.063
+     - 00:00.065
      - 0.0
    * - :ref:`sphx_glr_tutorials_getting-started-0.py` (``reference/generated/tutorials/getting-started-0.py``)
-     - 00:00.031
+     - 00:00.032
      - 0.0

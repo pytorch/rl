@@ -135,7 +135,7 @@ entry will be reset at the corresponding indices.
 will be called before (sync) or after (async) each data collection.
 Defaults to `False`.
 - **preemptive_threshold** (`float`, optional) - a value between 0.0 and 1.0 that specifies the ratio of workers
-that will be allowed to finished collecting their rollout before the rest are forced to end early.
+that will be allowed to finish collecting their rollout before the rest are forced to end early.
 - **num_threads** (*int**,**optional*) - number of threads for this process.
 Defaults to the number of workers.
 - **num_sub_threads** (*int**,**optional*) - number of threads of the subprocesses.
