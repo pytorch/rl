@@ -44,16 +44,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Build the help comment with printf (format string is fixed; the
+          # PR title is a %s argument, emitted byte-for-byte — never spliced
+          # into a program string). Static table via single-quoted heredoc.
           post_help_comment() {
-            local reason="$1"
-            local current_title="$2"
-            cat > /tmp/pr_comment.md << 'COMMENT_EOF'
-          ## ⚠️ PR Title Label Error
-
-          REASON_PLACEHOLDER
-
-          **Current title:** `TITLE_PLACEHOLDER`
-
+            {
+              printf '## ⚠️ PR Title Label Error\n\n%s\n\n**Current title:** `%s`\n\n' "$1" "$2"
+              cat <<'TABLE'
           ### Supported Prefixes (case-sensitive)
 
           Your PR title must start with **exactly** one of these prefixes:
@@ -74,12 +71,8 @@ jobs:
           | `[Quality]` | Quality | `[Quality] Fix typos and add codespell` |
 
           **Note:** Common variations like singular/plural are supported (e.g., `[Doc]` or `[Docs]`).
-          COMMENT_EOF
-            # Strip leading spaces from heredoc (YAML indentation artifact)
-            sed -i 's/^          //' /tmp/pr_comment.md
-            sed -i "s/REASON_PLACEHOLDER/$reason/" /tmp/pr_comment.md
-            sed -i "s|TITLE_PLACEHOLDER|$current_title|" /tmp/pr_comment.md
-            gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr_comment.md
+          TABLE
+            } | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
           }
 
           echo "PR Title: $PR_TITLE"
