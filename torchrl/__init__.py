@@ -37,7 +37,11 @@ try:
     except ImportError:  # pragma: no cover
         from importlib_metadata import version as _dist_version  # type: ignore
 
-    __version__ = _dist_version("torchrl")
+    try:
+        __version__ = _dist_version("torchrl")
+    except Exception:
+        # Nightly builds ship under a different distribution name.
+        __version__ = _dist_version("torchrl-nightly")
 except Exception:
     try:
         from ._version import __version__
