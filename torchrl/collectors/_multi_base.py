@@ -27,8 +27,7 @@ from torchrl._utils import (
 )
 from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
-    _InterruptorManager,
-    _is_osx,
+    _Interruptor,
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
     INSTANTIATE_TIMEOUT,
@@ -221,7 +220,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
-            that will be allowed to finished collecting their rollout before the rest are forced to end early.
+            that will be allowed to finish collecting their rollout before the rest are forced to end early.
+            Frames that were not collected by the preempted workers are marked invalid: their
+            ``("collector", "traj_ids")`` entry is ``-1`` and, with ``cat_results="stack"``, a
+            ``("collector", "mask")`` entry flags the valid frames (with ``cat_results=-1`` the
+            invalid frames are dropped from the batch instead).
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
         num_sub_threads (int, optional): number of threads of the subprocesses.
@@ -899,14 +902,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
         """Set up preemptive threshold for early stopping."""
         if preemptive_threshold is not None:
-            if _is_osx:
-                raise NotImplementedError(
-                    "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
+            preemptive_threshold = float(preemptive_threshold)
+            if not 0.0 <= preemptive_threshold <= 1.0:
+                raise ValueError(
+                    f"preemptive_threshold must be between 0.0 and 1.0, got {preemptive_threshold}."
                 )
-            self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
-            manager = _InterruptorManager()
-            manager.start()
-            self.interruptor = manager._Interruptor()
+            self.preemptive_threshold = preemptive_threshold
+            # A threshold of 1.0 waits for every worker, so preemption can never
+            # fire: skip the interruptor and its per-step polling in the workers.
+            self.interruptor = _Interruptor() if preemptive_threshold < 1.0 else None
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None

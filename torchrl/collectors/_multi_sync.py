@@ -230,6 +230,13 @@ class MultiSyncCollector(MultiCollector):
             if self.update_at_each_batch:
                 self.update_policy_weights_()
 
+            if preempt:
+                # Raise the flag before dispatching "continue": a fast worker
+                # could otherwise complete its first step while the flag still
+                # carries the previous batch's stop signal and preempt its whole
+                # rollout after a single step.
+                self.interruptor.start_collection()
+
             for idx in range(self.num_workers):
                 if self._should_use_random_frames():
                     msg = "continue_random"
@@ -239,17 +246,6 @@ class MultiSyncCollector(MultiCollector):
 
             self._iter += 1
 
-            if preempt:
-                self.interruptor.start_collection()
-                while self.queue_out.qsize() < int(
-                    self.num_workers * self.preemptive_threshold
-                ):
-                    continue
-                self.interruptor.stop_collection()
-                # Now wait for stragglers to return
-                while self.queue_out.qsize() < int(self.num_workers):
-                    continue
-
             recv = collections.deque()
             t0 = time.time()
             # We pull one worker output at a time and re-check ``len(recv)`` on
@@ -257,9 +253,25 @@ class MultiSyncCollector(MultiCollector):
             # ``queue_out.get(timeout=_TIMEOUT)`` even after every worker has
             # already reported, wasting up to ``(num_workers - 1) * _TIMEOUT``
             # seconds on doomed gets whenever an earlier get timed out (see #3840).
+            # With preemption, once the threshold count of workers has reported we
+            # clear the interruptor flag so the stragglers deliver whatever they
+            # have at the next step boundary, then keep gathering until everyone
+            # has reported. Going through ``queue_out.get`` rather than spinning
+            # on ``queue_out.qsize()`` keeps the faulty-process checks and the
+            # time budget active while waiting (a dead straggler used to hang
+            # this loop forever) and works on platforms where ``qsize`` is not
+            # implemented (e.g. macOS).
+            if preempt:
+                # int() truncates, so preempt_count < num_workers always holds and
+                # the flag is guaranteed to be cleared before the last get.
+                preempt_count = int(self.num_workers * self.preemptive_threshold)
+                stop_sent = False
             while len(recv) < self.num_workers and (
                 (time.time() - t0) < (_TIMEOUT * _MAX_IDLE_COUNT)
             ):
+                if preempt and not stop_sent and len(recv) >= preempt_count:
+                    self.interruptor.stop_collection()
+                    stop_sent = True
                 try:
                     new_data, j = self.queue_out.get(timeout=_TIMEOUT)
                     recv.append((new_data, j))
@@ -274,6 +286,7 @@ class MultiSyncCollector(MultiCollector):
                         f"Increase the MAX_IDLE_COUNT environment variable to bypass this error."
                     )
 
+            received_idxs = []
             for _ in range(self.num_workers):
                 new_data, j = recv.popleft()
                 use_buffers = self._use_buffers
@@ -297,41 +310,7 @@ class MultiSyncCollector(MultiCollector):
                             raise
                 else:
                     idx = new_data
-
-                if preempt:
-                    # mask buffers if cat, and create a mask if stack
-                    if cat_results != "stack":
-                        buffers = [None] * self.num_workers
-                        for worker_idx, buffer in enumerate(self.buffers):
-                            # Skip preempted envs:
-                            if buffer is None:
-                                continue
-                            valid = buffer.get(("collector", "traj_ids")) != -1
-                            if valid.ndim > 2:
-                                valid = valid.flatten(0, -2)
-                            if valid.ndim == 2:
-                                valid = valid.any(0)
-                            buffers[worker_idx] = buffer[..., valid]
-                    else:
-                        for buffer in filter(lambda x: x is not None, self.buffers):
-                            with buffer.unlock_():
-                                buffer.set(
-                                    ("collector", "mask"),
-                                    buffer.get(("collector", "traj_ids")) != -1,
-                                )
-                        buffers = self.buffers
-                else:
-                    buffers = self.buffers
-
-                # Skip frame counting if this worker didn't send data this iteration
-                # (happens when reusing buffers or on first iteration with some workers)
-                if self.buffers[idx] is None:
-                    continue
-
-                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
-
-                if workers_frames[idx] >= self.total_frames:
-                    dones[idx] = True
+                received_idxs.append(idx)
 
             if self.replay_buffer is not None:
                 yield
@@ -340,6 +319,41 @@ class MultiSyncCollector(MultiCollector):
                     for worker_idx in range(self.num_workers)
                 )
                 continue
+
+            if preempt:
+                # mask buffers if cat, and create a mask if stack; done once now
+                # that every worker's buffer is final for this batch
+                if cat_results != "stack":
+                    buffers = [None] * self.num_workers
+                    for worker_idx, buffer in enumerate(self.buffers):
+                        # Skip preempted envs:
+                        if buffer is None:
+                            continue
+                        valid = buffer.get(("collector", "traj_ids")) != -1
+                        if valid.ndim > 2:
+                            valid = valid.flatten(0, -2)
+                        if valid.ndim == 2:
+                            valid = valid.any(0)
+                        buffers[worker_idx] = buffer[..., valid]
+                else:
+                    for buffer in filter(lambda x: x is not None, self.buffers):
+                        with buffer.unlock_():
+                            buffer.set(
+                                ("collector", "mask"),
+                                buffer.get(("collector", "traj_ids")) != -1,
+                            )
+                    buffers = self.buffers
+            else:
+                buffers = self.buffers
+
+            for idx in received_idxs:
+                # Skip frame counting if this worker didn't send data this iteration
+                # (happens when reusing buffers or on first iteration with some workers)
+                if self.buffers[idx] is None:
+                    continue
+                workers_frames[idx] = workers_frames[idx] + buffers[idx].numel()
+                if workers_frames[idx] >= self.total_frames:
+                    dones[idx] = True
 
             # we have to correct the traj_ids to make sure that they don't overlap
             # We can count the number of frames collected for free in this loop
