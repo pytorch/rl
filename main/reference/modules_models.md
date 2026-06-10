@@ -6,8 +6,9 @@ Policy architectures for robot manipulation and imitation learning.
 
 Modules for model-based reinforcement learning, including world models and dynamics models.
 
-| [`WorldModelWrapper`](generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper)(*args, **kwargs) | World model wrapper. |
+| [`WorldModel`](generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel)(*args, **kwargs) | A general, composable world model for model-based RL. |
 | --- | --- |
+| [`WorldModelWrapper`](generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper)(*args, **kwargs) | World model wrapper. |
 | [`DreamerActor`](generated/torchrl.modules.DreamerActor.html#torchrl.modules.DreamerActor)(out_features[, depth, ...]) | Dreamer actor network. |
 | [`ObsEncoder`](generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder)([channels, num_layers, ...]) | Observation encoder network. |
 | [`ObsDecoder`](generated/torchrl.modules.ObsDecoder.html#torchrl.modules.ObsDecoder)([channels, num_layers, ...]) | Observation decoder network. |

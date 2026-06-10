@@ -86,6 +86,7 @@ actor = ProbabilisticActor(
 - [Robot Learning](modules_models.html)
 - [World Models and Model-Based RL](modules_models.html#world-models-and-model-based-rl)
 
+- [WorldModel](generated/torchrl.modules.WorldModel.html)
 - [WorldModelWrapper](generated/torchrl.modules.WorldModelWrapper.html)
 - [DreamerActor](generated/torchrl.modules.DreamerActor.html)
 - [ObsEncoder](generated/torchrl.modules.ObsEncoder.html)

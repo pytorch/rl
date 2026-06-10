@@ -1435,7 +1435,166 @@ document.write(`
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span><span class="p">,</span> <span class="n">TensorDictModuleBase</span><span class="p">,</span> <span class="n">TensorDictSequential</span>
+
+
+<div class="viewcode-block" id="WorldModel">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel">[docs]</a>
+<span class="k">class</span> <span class="nc">WorldModel</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A general, composable world model for model-based RL.</span>
+
+<span class="sd">    ``WorldModel`` wraps an encoder, a dynamics model, a reward head, and</span>
+<span class="sd">    optionally a done head and a decoder into a single TensorDict-native</span>
+<span class="sd">    module. It owns *prediction and composition* — encoding observations,</span>
+<span class="sd">    advancing latent state, predicting rewards and termination — and exposes</span>
+<span class="sd">    named shortcuts (:meth:`encode`, :meth:`step`, :meth:`decode`) so each</span>
+<span class="sd">    component can be invoked individually.</span>
+
+<span class="sd">    Rollout semantics live elsewhere: wrap a ``WorldModel`` in</span>
+<span class="sd">    :class:`~torchrl.envs.model_based.WorldModelEnv` (or another</span>
+<span class="sd">    :class:`~torchrl.envs.model_based.ModelBasedEnvBase` subclass) and use</span>
+<span class="sd">    :meth:`~torchrl.envs.EnvBase.rollout` to generate imagined trajectories.</span>
+<span class="sd">    This keeps env-level concerns — reset/step contract, ``done`` handling,</span>
+<span class="sd">    spec validation — out of the prediction module and avoids forking a</span>
+<span class="sd">    second rollout implementation with subtly different semantics.</span>
+
+<span class="sd">    The module is key-driven: each component communicates through named</span>
+<span class="sd">    TensorDict keys defined by its ``in_keys`` / ``out_keys``. No specific</span>
+<span class="sd">    latent representation, observation space, or dynamics architecture is</span>
+<span class="sd">    assumed.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        encoder (TensorDictModule): maps an observation to a latent</span>
+<span class="sd">            representation, e.g. ``obs -&gt; latent``.</span>
+<span class="sd">        dynamics (TensorDictModule): advances the latent state given an</span>
+<span class="sd">            action, e.g. ``(latent, action) -&gt; (&quot;next&quot;, latent)``.</span>
+<span class="sd">        reward_head (TensorDictModule): predicts the reward from the next</span>
+<span class="sd">            latent, e.g. ``(&quot;next&quot;, latent) -&gt; (&quot;next&quot;, &quot;reward&quot;)``.</span>
+<span class="sd">        done_head (TensorDictModule, optional): predicts the done flag, e.g.</span>
+<span class="sd">            ``(&quot;next&quot;, latent) -&gt; (&quot;next&quot;, &quot;done&quot;)``. When provided,</span>
+<span class="sd">            :meth:`rollout` can terminate early when any trajectory is done.</span>
+<span class="sd">        decoder (TensorDictModule, optional): reconstructs an observation from</span>
+<span class="sd">            a latent, e.g. ``latent -&gt; obs_recon``. Required to call</span>
+<span class="sd">            :meth:`decode`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules import WorldModel</span>
+<span class="sd">        &gt;&gt;&gt; obs_dim, latent_dim, action_dim = 8, 4, 2</span>
+<span class="sd">        &gt;&gt;&gt; encoder = TensorDictModule(</span>
+<span class="sd">        ...     torch.nn.Linear(obs_dim, latent_dim),</span>
+<span class="sd">        ...     in_keys=[&quot;observation&quot;],</span>
+<span class="sd">        ...     out_keys=[&quot;latent&quot;],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; dynamics = TensorDictModule(</span>
+<span class="sd">        ...     torch.nn.Linear(latent_dim + action_dim, latent_dim),</span>
+<span class="sd">        ...     in_keys=[&quot;latent&quot;, &quot;action&quot;],</span>
+<span class="sd">        ...     out_keys=[(&quot;next&quot;, &quot;latent&quot;)],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; reward_head = TensorDictModule(</span>
+<span class="sd">        ...     torch.nn.Linear(latent_dim, 1),</span>
+<span class="sd">        ...     in_keys=[(&quot;next&quot;, &quot;latent&quot;)],</span>
+<span class="sd">        ...     out_keys=[(&quot;next&quot;, &quot;reward&quot;)],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; world_model = WorldModel(encoder, dynamics, reward_head)</span>
+<span class="sd">        &gt;&gt;&gt; td = TensorDict(</span>
+<span class="sd">        ...     {&quot;observation&quot;: torch.randn(2, obs_dim), &quot;action&quot;: torch.randn(2, action_dim)},</span>
+<span class="sd">        ...     batch_size=[2],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; out = world_model(td)</span>
+<span class="sd">        &gt;&gt;&gt; out.keys()</span>
+<span class="sd">        dict_keys([&#39;observation&#39;, &#39;action&#39;, &#39;latent&#39;, &#39;next&#39;])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">encoder</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
+        <span class="n">dynamics</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
+        <span class="n">reward_head</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">done_head</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">decoder</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">encoder</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dynamics</span> <span class="o">=</span> <span class="n">dynamics</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reward_head</span> <span class="o">=</span> <span class="n">reward_head</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">done_head</span> <span class="o">=</span> <span class="n">done_head</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">=</span> <span class="n">decoder</span>
+
+        <span class="c1"># Full forward sequence (encode + step).</span>
+        <span class="n">full_modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">encoder</span><span class="p">,</span> <span class="n">dynamics</span><span class="p">,</span> <span class="n">reward_head</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">done_head</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">full_modules</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">done_head</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">decoder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">full_modules</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">decoder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_full_seq</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="o">*</span><span class="n">full_modules</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_full_seq</span><span class="o">.</span><span class="n">in_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_full_seq</span><span class="o">.</span><span class="n">out_keys</span>
+
+        <span class="c1"># Step sequence (dynamics + heads, no encoder).</span>
+        <span class="n">step_modules</span> <span class="o">=</span> <span class="p">[</span><span class="n">dynamics</span><span class="p">,</span> <span class="n">reward_head</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">done_head</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">step_modules</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">done_head</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">decoder</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">step_modules</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">decoder</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_step_seq</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="o">*</span><span class="n">step_modules</span><span class="p">)</span>
+
+<div class="viewcode-block" id="WorldModel.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the full pipeline: encoder -&gt; dynamics -&gt; reward_head -&gt; [done_head] -&gt; [decoder].&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_full_seq</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="WorldModel.encode">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.encode">[docs]</a>
+    <span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Encode an observation into the latent space.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="WorldModel.step">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.step">[docs]</a>
+    <span class="k">def</span> <span class="nf">step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Take one imagined step: dynamics -&gt; reward_head -&gt; [done_head] -&gt; [decoder].</span>
+
+<span class="sd">        The encoder is *not* called; the tensordict must already contain the</span>
+<span class="sd">        current latent state as produced by :meth:`encode` or a previous call</span>
+<span class="sd">        to :meth:`step`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_seq</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="WorldModel.decode">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.decode">[docs]</a>
+    <span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Decode a latent back to observation space.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            RuntimeError: if no ``decoder`` was provided at construction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;WorldModel.decode requires a decoder module. Pass decoder= at construction.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">step_module</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictSequential</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;The step-only sequence (dynamics + heads, no encoder).</span>
+
+<span class="sd">        Exposed as a public attribute so :class:`~torchrl.envs.model_based.WorldModelEnv`</span>
+<span class="sd">        and other model-based env wrappers can drive the world model in latent</span>
+<span class="sd">        space, one step at a time, without rerunning the encoder on every step.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step_seq</span></div>
+
 
 
 <div class="viewcode-block" id="WorldModelWrapper">
@@ -1734,7 +1893,7 @@ document.write(`
        "headline": "torchrl.modules.tensordict_module.world_models",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/modules/tensordict_module/world_models.html",
-       "articleBody": "Source code for torchrl.modules.tensordict_module.world_models # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from tensordict.nn import TensorDictModule, TensorDictSequential [docs] class WorldModelWrapper(TensorDictSequential): \"\"\"World model wrapper. This module wraps together a transition model and a reward model. The transition model is used to predict an imaginary world state. The reward model is used to predict the reward of the imagined transition. Args: transition_model (TensorDictModule): a transition model that generates a new world states. reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward. \"\"\" def __init__( self, transition_model: TensorDictModule, reward_model: TensorDictModule ): super().__init__(transition_model, reward_model) [docs] def get_transition_model_operator(self) -\u003e TensorDictModule: \"\"\"Returns a transition operator that maps either an observation to a world state or a world state to the next world state.\"\"\" return self.module[0] [docs] def get_reward_operator(self) -\u003e TensorDictModule: \"\"\"Returns a reward operator that maps a world state to a reward.\"\"\" return self.module[1]",
+       "articleBody": "Source code for torchrl.modules.tensordict_module.world_models # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from tensordict import TensorDictBase from tensordict.nn import TensorDictModule, TensorDictModuleBase, TensorDictSequential [docs] class WorldModel(TensorDictModuleBase): \"\"\"A general, composable world model for model-based RL. ``WorldModel`` wraps an encoder, a dynamics model, a reward head, and optionally a done head and a decoder into a single TensorDict-native module. It owns *prediction and composition* \u2014 encoding observations, advancing latent state, predicting rewards and termination \u2014 and exposes named shortcuts (:meth:`encode`, :meth:`step`, :meth:`decode`) so each component can be invoked individually. Rollout semantics live elsewhere: wrap a ``WorldModel`` in :class:`~torchrl.envs.model_based.WorldModelEnv` (or another :class:`~torchrl.envs.model_based.ModelBasedEnvBase` subclass) and use :meth:`~torchrl.envs.EnvBase.rollout` to generate imagined trajectories. This keeps env-level concerns \u2014 reset/step contract, ``done`` handling, spec validation \u2014 out of the prediction module and avoids forking a second rollout implementation with subtly different semantics. The module is key-driven: each component communicates through named TensorDict keys defined by its ``in_keys`` / ``out_keys``. No specific latent representation, observation space, or dynamics architecture is assumed. Args: encoder (TensorDictModule): maps an observation to a latent representation, e.g. ``obs -\u003e latent``. dynamics (TensorDictModule): advances the latent state given an action, e.g. ``(latent, action) -\u003e (\"next\", latent)``. reward_head (TensorDictModule): predicts the reward from the next latent, e.g. ``(\"next\", latent) -\u003e (\"next\", \"reward\")``. done_head (TensorDictModule, optional): predicts the done flag, e.g. ``(\"next\", latent) -\u003e (\"next\", \"done\")``. When provided, :meth:`rollout` can terminate early when any trajectory is done. decoder (TensorDictModule, optional): reconstructs an observation from a latent, e.g. ``latent -\u003e obs_recon``. Required to call :meth:`decode`. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from tensordict.nn import TensorDictModule \u003e\u003e\u003e from torchrl.modules import WorldModel \u003e\u003e\u003e obs_dim, latent_dim, action_dim = 8, 4, 2 \u003e\u003e\u003e encoder = TensorDictModule( ... torch.nn.Linear(obs_dim, latent_dim), ... in_keys=[\"observation\"], ... out_keys=[\"latent\"], ... ) \u003e\u003e\u003e dynamics = TensorDictModule( ... torch.nn.Linear(latent_dim + action_dim, latent_dim), ... in_keys=[\"latent\", \"action\"], ... out_keys=[(\"next\", \"latent\")], ... ) \u003e\u003e\u003e reward_head = TensorDictModule( ... torch.nn.Linear(latent_dim, 1), ... in_keys=[(\"next\", \"latent\")], ... out_keys=[(\"next\", \"reward\")], ... ) \u003e\u003e\u003e world_model = WorldModel(encoder, dynamics, reward_head) \u003e\u003e\u003e td = TensorDict( ... {\"observation\": torch.randn(2, obs_dim), \"action\": torch.randn(2, action_dim)}, ... batch_size=[2], ... ) \u003e\u003e\u003e out = world_model(td) \u003e\u003e\u003e out.keys() dict_keys([\u0027observation\u0027, \u0027action\u0027, \u0027latent\u0027, \u0027next\u0027]) \"\"\" def __init__( self, encoder: TensorDictModule, dynamics: TensorDictModule, reward_head: TensorDictModule, *, done_head: TensorDictModule | None = None, decoder: TensorDictModule | None = None, ) -\u003e None: super().__init__() self.encoder = encoder self.dynamics = dynamics self.reward_head = reward_head self.done_head = done_head self.decoder = decoder # Full forward sequence (encode + step). full_modules = [encoder, dynamics, reward_head] if done_head is not None: full_modules.append(done_head) if decoder is not None: full_modules.append(decoder) self._full_seq = TensorDictSequential(*full_modules) self.in_keys = self._full_seq.in_keys self.out_keys = self._full_seq.out_keys # Step sequence (dynamics + heads, no encoder). step_modules = [dynamics, reward_head] if done_head is not None: step_modules.append(done_head) if decoder is not None: step_modules.append(decoder) self._step_seq = TensorDictSequential(*step_modules) [docs] def forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Run the full pipeline: encoder -\u003e dynamics -\u003e reward_head -\u003e [done_head] -\u003e [decoder].\"\"\" return self._full_seq(tensordict) [docs] def encode(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Encode an observation into the latent space.\"\"\" return self.encoder(tensordict) [docs] def step(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Take one imagined step: dynamics -\u003e reward_head -\u003e [done_head] -\u003e [decoder]. The encoder is *not* called; the tensordict must already contain the current latent state as produced by :meth:`encode` or a previous call to :meth:`step`. \"\"\" return self._step_seq(tensordict) [docs] def decode(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Decode a latent back to observation space. Raises: RuntimeError: if no ``decoder`` was provided at construction. \"\"\" if self.decoder is None: raise RuntimeError( \"WorldModel.decode requires a decoder module. Pass decoder= at construction.\" ) return self.decoder(tensordict) @property def step_module(self) -\u003e TensorDictSequential: \"\"\"The step-only sequence (dynamics + heads, no encoder). Exposed as a public attribute so :class:`~torchrl.envs.model_based.WorldModelEnv` and other model-based env wrappers can drive the world model in latent space, one step at a time, without rerunning the encoder on every step. \"\"\" return self._step_seq [docs] class WorldModelWrapper(TensorDictSequential): \"\"\"World model wrapper. This module wraps together a transition model and a reward model. The transition model is used to predict an imaginary world state. The reward model is used to predict the reward of the imagined transition. Args: transition_model (TensorDictModule): a transition model that generates a new world states. reward_model (TensorDictModule): a reward model, that reads the world state and returns a reward. \"\"\" def __init__( self, transition_model: TensorDictModule, reward_model: TensorDictModule ): super().__init__(transition_model, reward_model) [docs] def get_transition_model_operator(self) -\u003e TensorDictModule: \"\"\"Returns a transition operator that maps either an observation to a world state or a world state to the next world state.\"\"\" return self.module[0] [docs] def get_reward_operator(self) -\u003e TensorDictModule: \"\"\"Returns a reward operator that maps a world state to a reward.\"\"\" return self.module[1]",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

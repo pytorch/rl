@@ -327,6 +327,7 @@ local MuJoCo Menagerie UR5e + Robotiq 2F-85 scene.
 | [`model_based.dreamer.DreamerEnv`](generated/torchrl.envs.model_based.dreamer.DreamerEnv.html#torchrl.envs.model_based.dreamer.DreamerEnv)(*args, **kwargs) | Dreamer simulation environment. |
 | [`model_based.dreamer.DreamerDecoder`](generated/torchrl.envs.model_based.dreamer.DreamerDecoder.html#torchrl.envs.model_based.dreamer.DreamerDecoder)([...]) | A transform to record the decoded observations in Dreamer. |
 | [`model_based.imagined.ImaginedEnv`](generated/torchrl.envs.model_based.imagined.ImaginedEnv.html#torchrl.envs.model_based.imagined.ImaginedEnv)(*args, **kwargs) | Imagination environment for model-based policy search. |
+| [`model_based.world_model_env.WorldModelEnv`](generated/torchrl.envs.model_based.world_model_env.WorldModelEnv.html#torchrl.envs.model_based.world_model_env.WorldModelEnv)(...) | A generic environment wrapper around a [`WorldModel`](generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel). |
 
 ## Helpers
 

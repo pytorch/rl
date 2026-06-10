@@ -12,6 +12,7 @@ Additional loss modules for specialized algorithms.
 | [`DreamerActorLoss`](generated/torchrl.objectives.DreamerActorLoss.html#torchrl.objectives.DreamerActorLoss)(*args, **kwargs) | Dreamer Actor Loss. |
 | [`DreamerModelLoss`](generated/torchrl.objectives.DreamerModelLoss.html#torchrl.objectives.DreamerModelLoss)(*args, **kwargs) | Dreamer Model Loss. |
 | [`DreamerValueLoss`](generated/torchrl.objectives.DreamerValueLoss.html#torchrl.objectives.DreamerValueLoss)(*args, **kwargs) | Dreamer Value Loss. |
+| [`WorldModelLoss`](generated/torchrl.objectives.WorldModelLoss.html#torchrl.objectives.WorldModelLoss)(*args, **kwargs) | A general loss module for model-based world models. |
 | [`ExponentialQuadraticCost`](generated/torchrl.objectives.ExponentialQuadraticCost.html#torchrl.objectives.ExponentialQuadraticCost)(*args, **kwargs) | Computes the expected saturating cost for a Gaussian-distributed state. |
 
 ## DreamerV3

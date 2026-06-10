@@ -4658,7 +4658,11 @@ document.write(`
       <li><a href="reference/generated/torchrl.modules.DecisionTransformer.html#torchrl.modules.DecisionTransformer.DTConfig">DecisionTransformer.DTConfig (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.decode">decode() (torchrl.data.VideoClipRef method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.decode">(torchrl.modules.WorldModel method)</a>
 </li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.envs.transforms.DecodeVideoTransform.html#torchrl.envs.transforms.DecodeVideoTransform">DecodeVideoTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.ConvNet.html#torchrl.modules.ConvNet.default_atari_dqn">default_atari_dqn() (torchrl.modules.ConvNet class method)</a>
@@ -4729,6 +4733,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.TD3Loss.html#torchrl.objectives.TD3Loss.default_keys">(torchrl.objectives.TD3Loss attribute)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase.default_keys">(torchrl.objectives.value.ValueEstimatorBase attribute)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.WorldModelLoss.html#torchrl.objectives.WorldModelLoss.default_keys">(torchrl.objectives.WorldModelLoss attribute)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.IfEvalScorer.html#torchrl.envs.llm.IfEvalScorer.default_reward_aggregator">default_reward_aggregator() (torchrl.envs.llm.IfEvalScorer method)</a>
@@ -5723,6 +5729,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.UnboundedContinuous.html#torchrl.data.UnboundedContinuous.encode">(torchrl.data.UnboundedContinuous method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete.encode">(torchrl.data.UnboundedDiscrete method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.encode">(torchrl.modules.WorldModel method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.llm.transforms.RayDataLoadingPrimer.html#torchrl.envs.llm.transforms.RayDataLoadingPrimer.endless_dataloader">endless_dataloader (torchrl.envs.llm.transforms.RayDataLoadingPrimer property)</a>
@@ -6746,6 +6754,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.tensordict_module.TanhModule.html#torchrl.modules.tensordict_module.TanhModule.forward">(torchrl.modules.tensordict_module.TanhModule method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.forward">(torchrl.modules.WorldModel method)</a>
+</li>
         <li><a href="reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss.forward">(torchrl.objectives.A2CLoss method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss.forward">(torchrl.objectives.ACTLoss method)</a>
@@ -6837,6 +6847,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.value.ValueEstimatorBase.html#torchrl.objectives.value.ValueEstimatorBase.forward">(torchrl.objectives.value.ValueEstimatorBase method)</a>
 </li>
         <li><a href="reference/generated/torchrl.objectives.value.VTrace.html#torchrl.objectives.value.VTrace.forward">(torchrl.objectives.value.VTrace method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.objectives.WorldModelLoss.html#torchrl.objectives.WorldModelLoss.forward">(torchrl.objectives.WorldModelLoss method)</a>
 </li>
       </ul></li>
       <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.frames">frames (torchrl.data.VideoClipRef property)</a>
@@ -18116,6 +18128,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.modules.OrnsteinUhlenbeckProcessModule.html#torchrl.modules.OrnsteinUhlenbeckProcessModule.step">(torchrl.modules.OrnsteinUhlenbeckProcessModule method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.step">(torchrl.modules.WorldModel method)</a>
+</li>
       </ul></li>
       <li><a href="reference/generated/torchrl.envs.step_mdp.html#torchrl.envs.step_mdp">step_mdp() (in module torchrl.envs)</a>
 
@@ -18177,6 +18191,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv.step_mdp">(torchrl.envs.Walker2dEnv method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.step_module">step_module (torchrl.modules.WorldModel property)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter">StepCounter (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.StepCounterConfig.html#torchrl.trainers.algorithms.configs.transforms.StepCounterConfig">StepCounterConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -20414,6 +20430,12 @@ document.write(`
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.weight_update.llm.SGLangWeightSyncScheme.html#torchrl.weight_update.llm.SGLangWeightSyncScheme.world_size">world_size (torchrl.weight_update.llm.SGLangWeightSyncScheme property)</a>
+</li>
+      <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel">WorldModel (class in torchrl.modules)</a>
+</li>
+      <li><a href="reference/generated/torchrl.envs.model_based.world_model_env.WorldModelEnv.html#torchrl.envs.model_based.world_model_env.WorldModelEnv">WorldModelEnv() (in module torchrl.envs.model_based.world_model_env)</a>
+</li>
+      <li><a href="reference/generated/torchrl.objectives.WorldModelLoss.html#torchrl.objectives.WorldModelLoss">WorldModelLoss (class in torchrl.objectives)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.WorldModelWrapper.html#torchrl.modules.WorldModelWrapper">WorldModelWrapper (class in torchrl.modules)</a>
 </li>
