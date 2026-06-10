@@ -81,6 +81,7 @@ dm_control = ["dm_control"]
 replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
 video = ["torchcodec>=0.10.0"]
+notebook = ["jupyterlab"]
 rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",

@@ -33,7 +33,10 @@ jobs:
     with:
       repository: pytorch/rl
       runner: ${{ matrix.runner }}
-      timeout: 60
+      # The suite takes ~60 minutes; with timeout: 60 it regularly hit the
+      # limit, and a timed-out job is reported as "cancelled", polluting the
+      # nightly orchestrator's conclusion and dashboard.
+      timeout: 90
       test-infra-ref: main
       script: |
         set -euxo pipefail
