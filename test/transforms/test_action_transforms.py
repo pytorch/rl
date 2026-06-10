@@ -67,7 +67,7 @@ from torchrl.envs import (
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import ActionChunkTransform, ActionNormalize
+from torchrl.envs.transforms import ActionChunkTransform
 from torchrl.envs.transforms.transforms import (
     ActionDiscretizer,
     FORWARD_NOT_IMPLEMENTED,
@@ -90,6 +90,7 @@ from torchrl.testing.mocking_classes import (
     CountingEnv,
     DiscreteActionConvMockEnvNumpy,
     EnvWithScalarAction,
+    NestedCountingEnv,
     StateLessCountingEnv,
 )
 
@@ -888,6 +889,191 @@ class TestActionScaling(TransformBase):
         env.step(td)
         # normalized -1 -> env-scale -2 (low)
         assert torch.allclose(base_env.last_action, torch.full((7,), -2.0))
+
+    # dataset-statistics constructors (from_stats / from_metadata) and the
+    # explicit-loc/scale env behavior
+    def test_from_stats_mean_std(self):
+        t = ActionScaling.from_stats(mean=torch.tensor([2.0]), std=torch.tensor([3.0]))
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([5.0])), torch.tensor([1.0])
+        )
+        torch.testing.assert_close(
+            t.denormalize(torch.tensor([1.0])), torch.tensor([5.0])
+        )
+
+    def test_from_stats_low_high(self):
+        t = ActionScaling.from_stats(
+            low=torch.tensor([-2.0, 0.0]), high=torch.tensor([2.0, 10.0])
+        )
+        # min -> -1, max -> +1, midpoint -> 0
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([[-2.0, 10.0], [0.0, 5.0]])),
+            torch.tensor([[-1.0, 1.0], [0.0, 0.0]]),
+        )
+
+    def test_from_stats_requires_args(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            ActionScaling.from_stats()
+
+    def test_from_stats_both_pairs_raises(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            ActionScaling.from_stats(
+                mean=torch.zeros(2),
+                std=torch.ones(2),
+                low=-torch.ones(2),
+                high=torch.ones(2),
+            )
+
+    def test_from_stats_partial_pair_raises(self):
+        with pytest.raises(ValueError, match="together"):
+            ActionScaling.from_stats(mean=torch.zeros(2))
+
+    def test_from_stats_shape_mismatch_raises(self):
+        with pytest.raises(ValueError, match="same shape"):
+            ActionScaling.from_stats(mean=torch.zeros(3), std=torch.ones(2))
+
+    def test_from_stats_constant_dim_no_nan(self):
+        # std == 0 for a constant action dim: eps floor avoids NaN, value -> 0
+        t = ActionScaling.from_stats(mean=torch.tensor([5.0]), std=torch.tensor([0.0]))
+        out = t.normalize(torch.tensor([[5.0]]))
+        assert torch.isfinite(out).all()
+        torch.testing.assert_close(out, torch.zeros_like(out))
+
+    def test_normalize_denormalize_roundtrip(self):
+        t = ActionScaling(loc=torch.randn(5), scale=torch.rand(5) + 0.5)
+        action = torch.randn(4, 5)
+        torch.testing.assert_close(t.denormalize(t.normalize(action)), action)
+
+    def test_dim_mismatch_raises(self):
+        # per-dim loc/scale (len 7) vs an action whose last dim is 1 must not
+        # silently broadcast
+        t = ActionScaling(loc=torch.arange(7.0), scale=torch.ones(7))
+        with pytest.raises(ValueError, match="does not match"):
+            t.normalize(torch.zeros(4, 1))
+
+    def test_scalar_broadcasts(self):
+        # a scalar loc/scale broadcasts freely across any action shape
+        t = ActionScaling(loc=1.0, scale=2.0)
+        out = t.normalize(torch.full((4, 5), 3.0))
+        torch.testing.assert_close(out, torch.ones(4, 5))
+
+    def test_from_metadata_mean_std(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=2,
+            action_mean=torch.tensor([1.0, 2.0]),
+            action_std=torch.tensor([2.0, 4.0]),
+        )
+        t = ActionScaling.from_metadata(meta)
+        out = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
+        torch.testing.assert_close(out["action"], torch.tensor([[1.0, 1.0]]))
+
+    def test_from_metadata_low_high(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=1,
+            action_low=torch.tensor([-1.0]),
+            action_high=torch.tensor([1.0]),
+        )
+        t = ActionScaling.from_metadata(meta)
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([1.0])), torch.tensor([1.0])
+        )
+
+    def test_from_metadata_no_stats_raises(self):
+        meta = RobotDatasetMetadata("bridge", action_dim=2)
+        with pytest.raises(ValueError, match="no action normalization statistics"):
+            ActionScaling.from_metadata(meta)
+
+    def test_explicit_stats_bounded_env(self):
+        # With explicit loc/scale, the policy-facing bounds are the real bounds
+        # mapped through the affine, not an assumed [-1, 1].
+        t = ActionScaling.from_stats(mean=torch.zeros(7), std=torch.full((7,), 2.0))
+        env = TransformedEnv(self._bounded_env(low=-1.0, high=1.0), t)
+        check_env_specs(env)
+        spec = env.action_spec
+        assert torch.allclose(spec.space.low, torch.full((7,), -0.5))
+        assert torch.allclose(spec.space.high, torch.full((7,), 0.5))
+
+    def test_explicit_stats_unbounded_env(self):
+        # With explicit loc/scale an unbounded action spec is supported: the
+        # normalized space stays unbounded and the inverse path denormalizes.
+        captured = {}
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        t = ActionScaling.from_stats(
+            mean=torch.full((7,), 1.0), std=torch.full((7,), 3.0)
+        )
+        env = TransformedEnv(CaptureEnv(action_spec=Unbounded(shape=(7,))), t)
+        check_env_specs(env)
+        assert isinstance(env.action_spec, Unbounded)
+        td = env.reset()
+        td["action"] = torch.ones(7)
+        env.step(td)
+        # normalized +1 -> mean + std = 4
+        assert torch.allclose(captured["action"], torch.full((7,), 4.0))
+
+    def test_forward_only_rb(self):
+        # in_keys_inv=[]: normalize raw dataset actions on the sample path
+        # while extend leaves the stored (raw) data untouched.
+        t = ActionScaling(
+            in_keys_inv=[], loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0])
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10), transform=t, batch_size=4
+        )
+        raw = torch.tensor([[3.0, 6.0]]).expand(10, 2).clone()
+        rb.extend(TensorDict({"action": raw}, batch_size=[10]))
+        stored = rb._storage._storage
+        torch.testing.assert_close(stored["action"], raw)
+        sample = rb.sample()
+        torch.testing.assert_close(sample["action"], torch.ones_like(sample["action"]))
+
+    def test_forward_only_requires_explicit(self):
+        with pytest.raises(ValueError, match="forward-only"):
+            ActionScaling(in_keys_inv=[])
+
+    def test_forward_only_env_attach_noop(self):
+        # a forward-only instance attached to an env leaves the action
+        # interface untouched: same spec, no denormalization on the step path
+        captured = {}
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        t = ActionScaling(in_keys_inv=[], loc=1.0, scale=3.0)
+        env = TransformedEnv(CaptureEnv(), t)
+        check_env_specs(env)
+        assert torch.allclose(env.action_spec.space.low, -torch.ones(7))
+        assert torch.allclose(env.action_spec.space.high, torch.ones(7))
+        td = env.reset()
+        td["action"] = torch.full((7,), 0.5)
+        env.step(td)
+        assert torch.allclose(captured["action"], torch.full((7,), 0.5))
+
+    def test_from_metadata_forward_only_nested_key(self):
+        # forward-only mode keeps normalizing the metadata's action key on the
+        # sample path (it must not fall back to the generic "action")
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=2,
+            action_key=("robot", "action"),
+            action_mean=torch.tensor([1.0, 2.0]),
+            action_std=torch.tensor([2.0, 4.0]),
+        )
+        t = ActionScaling.from_metadata(meta, in_keys_inv=[])
+        td = t(
+            TensorDict(
+                {"robot": {"action": torch.tensor([[3.0, 6.0]])}}, batch_size=[1]
+            )
+        )
+        torch.testing.assert_close(td["robot", "action"], torch.tensor([[1.0, 1.0]]))
 
 
 class TestMacroPrimitiveTransform:
@@ -2146,14 +2332,122 @@ class TestFlattenAction(TransformBase):
         assert r["action"].shape == (4, 15)
 
 
-class TestActionChunkTransform:
-    def test_shapes(self):
+class TestActionChunkTransform(TransformBase):
+    @staticmethod
+    def _env(chunk_size=3):
+        return TransformedEnv(
+            ContinuousActionVecMockEnv(), ActionChunkTransform(chunk_size=chunk_size)
+        )
+
+    def test_single_trans_env_check(self):
+        env = self._env()
+        check_env_specs(env)
+        # the policy-facing action spec is the chunked one
+        assert env.full_action_spec["action_chunk"].shape[-2:] == torch.Size([3, 7])
+        assert "action" not in env.full_action_spec.keys(True, True)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, self._env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, self._env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv), ActionChunkTransform(3)
+        )
+        check_env_specs(env)
+        assert env.full_action_spec["action_chunk"].shape == torch.Size([2, 3, 7])
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
+            ActionChunkTransform(3),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
         t = ActionChunkTransform(chunk_size=4)
         out = t(TensorDict({"action": torch.randn(2, 6, 3)}, batch_size=[2, 6]))
         assert out["action_chunk"].shape == torch.Size([2, 6, 4, 3])
         assert out["action_is_pad"].shape == torch.Size([2, 6, 4])
         assert out["action_is_pad"].dtype == torch.bool
 
+    def test_transform_compose(self):
+        t = Compose(ActionChunkTransform(chunk_size=2))
+        out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
+        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out["action_is_pad"].shape == torch.Size([5, 2])
+
+    def test_transform_env(self):
+        captured = {}
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        env = TransformedEnv(CaptureEnv(), ActionChunkTransform(chunk_size=3))
+        td = env.reset()
+        assert "reward" not in td.keys()
+        td["action_chunk"] = torch.arange(21, dtype=torch.float).view(3, 7) / 21
+        env.step(td)
+        # the base env consumes the first action of the chunk
+        torch.testing.assert_close(captured["action"], td["action_chunk"][0])
+        r = env.rollout(3)
+        assert r["action_chunk"].shape == torch.Size([3, 3, 7])
+
+    def test_transform_model(self):
+        t = ActionChunkTransform(chunk_size=3)
+        model = nn.Sequential(t)
+        td = TensorDict({"action": torch.arange(4).view(1, 4, 1).float()}, [1, 4])
+        out = model(td)
+        expected_chunk = torch.tensor(
+            [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
+        assert torch.equal(out["action_is_pad"][0], expected_pad)
+
+    def test_transform_rb(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            transform=ActionChunkTransform(3),
+            batch_size=4,
+        )
+        # extend with raw (chunk-less) trajectory windows: the inverse is a
+        # no-op, and the chunks are built on the sample path only
+        rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
+        stored = rb._storage._storage
+        assert "action_chunk" not in stored.keys()
+        sample = rb.sample()
+        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
+        assert sample["action_is_pad"].shape[-1] == 3
+
+    def test_transform_inverse(self):
+        t = ActionChunkTransform(chunk_size=3)
+        chunk = torch.randn(2, 3, 5)
+        td = t.inv(TensorDict({"action_chunk": chunk}, batch_size=[2]))
+        torch.testing.assert_close(td["action"], chunk[..., 0, :])
+        # absent chunk: the inverse is a no-op
+        td = t.inv(TensorDict({"action": torch.randn(2, 5)}, batch_size=[2]))
+        assert "action_chunk" not in td.keys()
+
+    # ActionChunkTransform-specific tests
     def test_values_and_padding(self):
         t = ActionChunkTransform(chunk_size=3)
         action = torch.arange(4).view(1, 4, 1).float()
@@ -2194,23 +2488,41 @@ class TestActionChunkTransform:
         out = t(td)
         assert out["data", "chunk"].shape == torch.Size([2, 4, 2, 3])
         assert out["data", "pad"].shape == torch.Size([2, 4, 2])
+        # the inverse also resolves nested keys
+        back = t.inv(
+            TensorDict({"data": {"chunk": torch.randn(2, 2, 3)}}, batch_size=[2])
+        )
+        assert back["data", "action"].shape == torch.Size([2, 3])
+
+    def test_nested_action_key_env(self):
+        # the spec rewrite handles nested (tuple) action keys on a real env
+        env = TransformedEnv(
+            NestedCountingEnv(),
+            ActionChunkTransform(
+                2,
+                action_key=("data", "action"),
+                chunk_key=("data", "chunk"),
+                pad_key=("data", "pad"),
+            ),
+        )
+        check_env_specs(env)
+        assert ("data", "chunk") in env.full_action_spec.keys(True, True)
+        assert ("data", "action") not in env.full_action_spec.keys(True, True)
+        env.rollout(3)
+
+    def test_env_missing_chunk_raises(self):
+        # a policy mistakenly writing the raw action key must not silently
+        # bypass the transform when it is attached to an env
+        env = self._env()
+        td = env.reset()
+        td["action"] = torch.zeros(7)
+        with pytest.raises(KeyError, match="action_chunk"):
+            env.step(td)
 
     def test_missing_action_raises(self):
         t = ActionChunkTransform(chunk_size=2)
         with pytest.raises(KeyError):
             t(TensorDict({"other": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
-
-    def test_replay_buffer_integration(self):
-        rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(10),
-            transform=ActionChunkTransform(3),
-            batch_size=4,
-        )
-        # each stored item is a [T=5, A=2] trajectory window
-        rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
-        sample = rb.sample()
-        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
-        assert sample["action_is_pad"].shape[-1] == 3
 
     def test_no_cross_boundary_after_reshape(self):
         # Emulate a flat SliceSampler batch of two length-4 slices, then reshape
@@ -2228,11 +2540,6 @@ class TestActionChunkTransform:
         # the window tail is padded
         assert out["action_is_pad"][0, -1].tolist() == [False, True, True]
 
-    def test_cannot_be_env_transform(self):
-        t = ActionChunkTransform(2)
-        with pytest.raises(ValueError, match="replay-buffer"):
-            t._call(TensorDict({"action": torch.randn(2, 3)}, batch_size=[2]))
-
     def test_trailing_dim_enforced(self):
         # time_dim must point to the second-to-last dim (action_dim is last)
         t = ActionChunkTransform(2, time_dim=0)
@@ -2247,132 +2554,6 @@ class TestActionChunkTransform:
         c_chunk, c_pad = compiled(action)
         torch.testing.assert_close(c_chunk, eager_chunk)
         assert torch.equal(c_pad, eager_pad)
-
-
-class TestActionNormalize:
-    def test_normalize_values(self):
-        t = ActionNormalize(
-            loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0])
-        )
-        out = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
-        torch.testing.assert_close(out["action"], torch.tensor([[1.0, 1.0]]))
-
-    def test_denormalize_roundtrip(self):
-        t = ActionNormalize(loc=torch.randn(5), scale=torch.rand(5) + 0.5)
-        action = torch.randn(4, 5)
-        torch.testing.assert_close(t.denormalize(t.normalize(action)), action)
-
-    def test_from_stats_mean_std(self):
-        t = ActionNormalize.from_stats(
-            mean=torch.tensor([2.0]), std=torch.tensor([3.0])
-        )
-        torch.testing.assert_close(
-            t.normalize(torch.tensor([5.0])), torch.tensor([1.0])
-        )
-
-    def test_from_stats_low_high(self):
-        t = ActionNormalize.from_stats(
-            low=torch.tensor([-2.0, 0.0]), high=torch.tensor([2.0, 10.0])
-        )
-        # min -> -1, max -> +1, midpoint -> 0
-        torch.testing.assert_close(
-            t.normalize(torch.tensor([[-2.0, 10.0], [0.0, 5.0]])),
-            torch.tensor([[-1.0, 1.0], [0.0, 0.0]]),
-        )
-
-    def test_from_stats_requires_args(self):
-        with pytest.raises(ValueError, match="exactly one"):
-            ActionNormalize.from_stats()
-
-    def test_from_stats_both_pairs_raises(self):
-        with pytest.raises(ValueError, match="exactly one"):
-            ActionNormalize.from_stats(
-                mean=torch.zeros(2),
-                std=torch.ones(2),
-                low=-torch.ones(2),
-                high=torch.ones(2),
-            )
-
-    def test_from_stats_partial_pair_raises(self):
-        with pytest.raises(ValueError, match="together"):
-            ActionNormalize.from_stats(mean=torch.zeros(2))
-
-    def test_cannot_be_env_transform(self):
-        t = ActionNormalize(loc=0.0, scale=1.0)
-        with pytest.raises(ValueError, match="replay-buffer"):
-            t._call(TensorDict({"action": torch.randn(2, 3)}, batch_size=[2]))
-
-    def test_dim_mismatch_raises(self):
-        # per-dim loc/scale (len 7) vs an action whose last dim is 1 must not
-        # silently broadcast
-        t = ActionNormalize(loc=torch.arange(7.0), scale=torch.ones(7))
-        with pytest.raises(ValueError, match="does not match"):
-            t.normalize(torch.zeros(4, 1))
-
-    def test_scalar_broadcasts(self):
-        # a scalar loc/scale broadcasts freely across any action shape
-        t = ActionNormalize(loc=1.0, scale=2.0)
-        out = t.normalize(torch.full((4, 5), 3.0))
-        torch.testing.assert_close(out, torch.ones(4, 5))
-
-    def test_from_metadata_mean_std(self):
-        meta = RobotDatasetMetadata(
-            "bridge",
-            action_dim=2,
-            action_mean=torch.tensor([1.0, 2.0]),
-            action_std=torch.tensor([2.0, 4.0]),
-        )
-        t = ActionNormalize.from_metadata(meta)
-        out = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
-        torch.testing.assert_close(out["action"], torch.tensor([[1.0, 1.0]]))
-
-    def test_from_metadata_low_high(self):
-        meta = RobotDatasetMetadata(
-            "bridge",
-            action_dim=1,
-            action_low=torch.tensor([-1.0]),
-            action_high=torch.tensor([1.0]),
-        )
-        t = ActionNormalize.from_metadata(meta)
-        torch.testing.assert_close(
-            t.normalize(torch.tensor([1.0])), torch.tensor([1.0])
-        )
-
-    def test_from_metadata_no_stats_raises(self):
-        meta = RobotDatasetMetadata("bridge", action_dim=2)
-        with pytest.raises(ValueError, match="no action normalization statistics"):
-            ActionNormalize.from_metadata(meta)
-
-    def test_nested_action_key(self):
-        t = ActionNormalize(loc=0.0, scale=2.0, action_key=("data", "action"))
-        td = TensorDict({"data": {"action": torch.tensor([[4.0]])}}, batch_size=[1])
-        out = t(td)
-        torch.testing.assert_close(out["data", "action"], torch.tensor([[2.0]]))
-
-    def test_shape_mismatch_raises(self):
-        with pytest.raises(ValueError, match="same shape"):
-            ActionNormalize(loc=torch.zeros(3), scale=torch.ones(2))
-
-    def test_constant_dim_no_nan(self):
-        # std == 0 for a constant action dim: eps floor avoids NaN, value -> 0
-        t = ActionNormalize(loc=torch.tensor([5.0]), scale=torch.tensor([0.0]))
-        out = t.normalize(torch.tensor([[5.0]]))
-        assert torch.isfinite(out).all()
-        torch.testing.assert_close(out, torch.zeros_like(out))
-
-    def test_replay_buffer_safe(self):
-        # As an RB transform: normalize on sample, no-op on extend (no inverse
-        # wiring), so the round-trip yields normalized actions.
-        t = ActionNormalize(
-            loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0])
-        )
-        rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(10), transform=t, batch_size=4
-        )
-        raw = torch.tensor([[3.0, 6.0]]).expand(10, 2).clone()
-        rb.extend(TensorDict({"action": raw}, batch_size=[10]))
-        sample = rb.sample()
-        torch.testing.assert_close(sample["action"], torch.ones_like(sample["action"]))
 
 
 if __name__ == "__main__":
