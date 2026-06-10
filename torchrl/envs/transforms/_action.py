@@ -40,7 +40,6 @@ else:
     Self = Any
 
 from torchrl.data.vla.schema import ACTION_CHUNK_KEY, ACTION_IS_PAD_KEY, ACTION_KEY
-from torchrl.envs.common import EnvBase
 from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
@@ -1486,12 +1485,19 @@ class ActionChunkTransform(Transform):
     ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
     end of the window (and were filled by repeating the last available action).
 
-    It is a replay-buffer / offline transform that operates on **time-structured**
-    data: the action tensor must be shaped ``[*B, T, action_dim]`` and each row
-    along ``time_dim`` must be a single contiguous trajectory window. Chunks are
+    The forward (data) path operates on **time-structured** data: the action
+    tensor must be shaped ``[*B, T, action_dim]`` and each row along
+    ``time_dim`` must be a single contiguous trajectory window. Chunks are
     built independently per row and never cross a row boundary; the downstream
     chunked behavior-cloning loss masks the padded steps out using
     ``action_is_pad``.
+
+    The transform can also be attached to a :class:`~torchrl.envs.TransformedEnv`:
+    the policy-facing action spec is rewritten to the chunked shape
+    ``[H, action_dim]`` and, on the inverse (action-input) path, the first
+    action of the predicted ``action_chunk`` is forwarded to the base
+    environment. This re-plans at every step (closed-loop chunked control),
+    which calls the policy once per env step.
 
     .. note::
         A :class:`~torchrl.data.SliceSampler` returns a *flat* ``[B * T, ...]``
@@ -1500,8 +1506,10 @@ class ActionChunkTransform(Transform):
         Datasets that store one trajectory window per item (e.g.
         :class:`~torchrl.data.datasets.OpenXExperienceReplay`) already yield
         time-structured ``[batch, T, ...]`` samples and can use this transform
-        directly. This transform cannot be used as a
-        :class:`~torchrl.envs.TransformedEnv` transform.
+        directly. When this transform is appended to a replay buffer,
+        ``extend`` leaves raw (chunk-less) data untouched: the inverse pass is
+        a no-op when the chunk entry is absent. Attached to an environment, a
+        missing chunk on the step path raises instead.
 
     Args:
         chunk_size (int): the horizon ``H`` of the action chunk.
@@ -1537,12 +1545,8 @@ class ActionChunkTransform(Transform):
                 [False, False, False],
                 [False, False,  True],
                 [False,  True,  True]])
-    """
 
-    ENV_ERR = (
-        "ActionChunkTransform is a replay-buffer / offline transform and cannot "
-        "be used as an environment transform."
-    )
+    """
 
     def __init__(
         self,
@@ -1557,19 +1561,30 @@ class ActionChunkTransform(Transform):
             raise ValueError(f"chunk_size must be >= 1, got {chunk_size}.")
         self.chunk_size = int(chunk_size)
         self.time_dim = int(time_dim)
-        super().__init__(in_keys=[action_key], out_keys=[chunk_key, pad_key])
+        # ``forward`` is fully overridden (it writes the chunk and the pad mask
+        # from the action), so no forward keys are declared: the chunk and pad
+        # entries only exist on the data path, never in the env's output specs.
+        # The inverse direction reads ``out_keys_inv`` (the chunk) and writes
+        # ``in_keys_inv`` (the action passed to the base env).
+        super().__init__(
+            in_keys=[],
+            out_keys=[],
+            in_keys_inv=[action_key],
+            out_keys_inv=[chunk_key],
+        )
+        self._pad_key = pad_key
 
     @property
     def action_key(self) -> NestedKey:
-        return self.in_keys[0]
+        return self.in_keys_inv[0]
 
     @property
     def chunk_key(self) -> NestedKey:
-        return self.out_keys[0]
+        return self.out_keys_inv[0]
 
     @property
     def pad_key(self) -> NestedKey:
-        return self.out_keys[1]
+        return self._pad_key
 
     def _build_chunk(self, action: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         H = self.chunk_size
@@ -1607,13 +1622,54 @@ class ActionChunkTransform(Transform):
         tensordict.set(self.pad_key, is_pad)
         return tensordict
 
-    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
-        raise ValueError(self.ENV_ERR)
+    def _inv_apply_transform(self, chunk: torch.Tensor) -> torch.Tensor:
+        if chunk.dim() < 2:
+            raise ValueError(
+                f"{type(self).__name__} expects an action chunk shaped "
+                f"[..., chunk_size, action_dim]; got shape {tuple(chunk.shape)}."
+            )
+        return chunk[..., 0, :]
 
-    def set_container(self, container) -> None:
-        if (
-            isinstance(container, EnvBase)
-            or getattr(container, "parent", None) is not None
-        ):
-            raise ValueError(self.ENV_ERR)
-        super().set_container(container)
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Without a parent env (replay-buffer ``extend``), raw chunk-less data
+        # passes through untouched. Attached to an env, a missing chunk on the
+        # step path is an error (the rewritten action spec advertises it; a
+        # policy writing the raw action key by mistake should not silently
+        # bypass the transform), while the reset preprocess runs with missing
+        # tolerance and skips.
+        if self.parent is None and tensordict.get(self.chunk_key, default=None) is None:
+            return tensordict
+        return super()._inv_call(tensordict)
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        # Expose the chunked action to the policy: replace the base env's
+        # per-step action spec with a [chunk_size, action_dim] version. The
+        # per-step spec is removed rather than moved to the state spec: the
+        # per-step action is written on the inverse path's working copy and
+        # consumed by the base env, so it never surfaces in the outer
+        # tensordict (which keeps single and batched envs consistent).
+        action_key = unravel_key(self.action_key)
+        chunk_key = unravel_key(self.chunk_key)
+        try:
+            leaf_spec = self.parent.full_action_spec_unbatched[action_key]
+        except KeyError:
+            raise RuntimeError(
+                f"{type(self).__name__} could not find key {action_key!r} in "
+                f"the parent environment's action spec. Available keys: "
+                f"{list(self.parent.full_action_spec.keys(True, True))}."
+            )
+        if not leaf_spec.shape:
+            raise RuntimeError(
+                f"{type(self).__name__} requires an action spec with a "
+                f"trailing action dimension; got shape {tuple(leaf_spec.shape)}."
+            )
+        chunk_spec = leaf_spec.unsqueeze(-2).expand(
+            *leaf_spec.shape[:-1], self.chunk_size, leaf_spec.shape[-1]
+        )
+        batch_size = self.parent.batch_size
+        if batch_size:
+            chunk_spec = chunk_spec.expand(batch_size + chunk_spec.shape)
+        input_spec["full_action_spec", chunk_key] = chunk_spec
+        if chunk_key != action_key:
+            del input_spec["full_action_spec", action_key]
+        return input_spec
