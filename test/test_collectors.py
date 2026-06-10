@@ -2342,11 +2342,6 @@ if __name__ == "__main__":
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
         """
-        if with_preempt and IS_OSX:
-            pytest.skip(
-                "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
-            )
-
         # Create environment factories using partial - one for each env_id
         # This pattern mirrors CrossPlayEvaluator._rollout usage
         env_factories = [
@@ -3509,8 +3504,62 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-@pytest.mark.skipif(IS_OSX, reason="Queue.qsize does not work on osx.")
+def _stop_interruptor(interruptor):
+    interruptor.stop_collection()
+
+
 class TestPreemptiveThreshold:
+    def test_interruptor_shared_memory(self):
+        """_Interruptor is a shared-memory flag: no manager process, no proxies.
+
+        The flag must hold its start/stop semantics in-process and be visible
+        from a child process when inherited at process-creation time.
+        """
+        interruptor = _Interruptor()
+        assert not interruptor.collection_stopped()
+        interruptor.stop_collection()
+        assert interruptor.collection_stopped()
+        interruptor.start_collection()
+        assert not interruptor.collection_stopped()
+
+        ctx = torch.multiprocessing.get_context("spawn")
+        proc = ctx.Process(target=_stop_interruptor, args=(interruptor,))
+        proc.start()
+        proc.join(timeout=100)
+        assert proc.exitcode == 0
+        assert interruptor.collection_stopped()
+
+    def test_preemptive_threshold_validation(self):
+        """Out-of-range thresholds raise; 1.0 disables the interruptor machinery."""
+        env_fn = make_make_env("vec")
+        for bad_threshold in (-0.1, 1.5):
+            with pytest.raises(ValueError, match="preemptive_threshold"):
+                MultiSyncCollector(
+                    create_env_fn=[env_fn] * 2,
+                    policy=make_policy("vec"),
+                    frames_per_batch=20,
+                    total_frames=20,
+                    preemptive_threshold=bad_threshold,
+                )
+
+        collector = MultiSyncCollector(
+            create_env_fn=[env_fn] * 2,
+            policy=make_policy("vec"),
+            frames_per_batch=20,
+            total_frames=20,
+            preemptive_threshold=1.0,
+            cat_results="stack",
+        )
+        try:
+            # Preemption can never fire at 1.0: no interruptor should be built
+            # and every collected frame should be valid.
+            assert collector.interruptor is None
+            assert collector.preemptive_threshold == 1.0
+            for batch in collector:
+                assert (batch["collector", "traj_ids"] != -1).all()
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
         def env_fn(seed):
