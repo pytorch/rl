@@ -89,6 +89,7 @@ from torchrl.testing.mocking_classes import (
     CountingEnv,
     DiscreteActionConvMockEnvNumpy,
     EnvWithScalarAction,
+    NestedCountingEnv,
     StateLessCountingEnv,
 )
 
@@ -2145,14 +2146,122 @@ class TestFlattenAction(TransformBase):
         assert r["action"].shape == (4, 15)
 
 
-class TestActionChunkTransform:
-    def test_shapes(self):
+class TestActionChunkTransform(TransformBase):
+    @staticmethod
+    def _env(chunk_size=3):
+        return TransformedEnv(
+            ContinuousActionVecMockEnv(), ActionChunkTransform(chunk_size=chunk_size)
+        )
+
+    def test_single_trans_env_check(self):
+        env = self._env()
+        check_env_specs(env)
+        # the policy-facing action spec is the chunked one
+        assert env.full_action_spec["action_chunk"].shape[-2:] == torch.Size([3, 7])
+        assert "action" not in env.full_action_spec.keys(True, True)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, self._env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, self._env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv), ActionChunkTransform(3)
+        )
+        check_env_specs(env)
+        assert env.full_action_spec["action_chunk"].shape == torch.Size([2, 3, 7])
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
+            ActionChunkTransform(3),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
         t = ActionChunkTransform(chunk_size=4)
         out = t(TensorDict({"action": torch.randn(2, 6, 3)}, batch_size=[2, 6]))
         assert out["action_chunk"].shape == torch.Size([2, 6, 4, 3])
         assert out["action_is_pad"].shape == torch.Size([2, 6, 4])
         assert out["action_is_pad"].dtype == torch.bool
 
+    def test_transform_compose(self):
+        t = Compose(ActionChunkTransform(chunk_size=2))
+        out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
+        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out["action_is_pad"].shape == torch.Size([5, 2])
+
+    def test_transform_env(self):
+        captured = {}
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        env = TransformedEnv(CaptureEnv(), ActionChunkTransform(chunk_size=3))
+        td = env.reset()
+        assert "reward" not in td.keys()
+        td["action_chunk"] = torch.arange(21, dtype=torch.float).view(3, 7) / 21
+        env.step(td)
+        # the base env consumes the first action of the chunk
+        torch.testing.assert_close(captured["action"], td["action_chunk"][0])
+        r = env.rollout(3)
+        assert r["action_chunk"].shape == torch.Size([3, 3, 7])
+
+    def test_transform_model(self):
+        t = ActionChunkTransform(chunk_size=3)
+        model = nn.Sequential(t)
+        td = TensorDict({"action": torch.arange(4).view(1, 4, 1).float()}, [1, 4])
+        out = model(td)
+        expected_chunk = torch.tensor(
+            [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
+        assert torch.equal(out["action_is_pad"][0], expected_pad)
+
+    def test_transform_rb(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            transform=ActionChunkTransform(3),
+            batch_size=4,
+        )
+        # extend with raw (chunk-less) trajectory windows: the inverse is a
+        # no-op, and the chunks are built on the sample path only
+        rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
+        stored = rb._storage._storage
+        assert "action_chunk" not in stored.keys()
+        sample = rb.sample()
+        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
+        assert sample["action_is_pad"].shape[-1] == 3
+
+    def test_transform_inverse(self):
+        t = ActionChunkTransform(chunk_size=3)
+        chunk = torch.randn(2, 3, 5)
+        td = t.inv(TensorDict({"action_chunk": chunk}, batch_size=[2]))
+        torch.testing.assert_close(td["action"], chunk[..., 0, :])
+        # absent chunk: the inverse is a no-op
+        td = t.inv(TensorDict({"action": torch.randn(2, 5)}, batch_size=[2]))
+        assert "action_chunk" not in td.keys()
+
+    # ActionChunkTransform-specific tests
     def test_values_and_padding(self):
         t = ActionChunkTransform(chunk_size=3)
         action = torch.arange(4).view(1, 4, 1).float()
@@ -2193,23 +2302,41 @@ class TestActionChunkTransform:
         out = t(td)
         assert out["data", "chunk"].shape == torch.Size([2, 4, 2, 3])
         assert out["data", "pad"].shape == torch.Size([2, 4, 2])
+        # the inverse also resolves nested keys
+        back = t.inv(
+            TensorDict({"data": {"chunk": torch.randn(2, 2, 3)}}, batch_size=[2])
+        )
+        assert back["data", "action"].shape == torch.Size([2, 3])
+
+    def test_nested_action_key_env(self):
+        # the spec rewrite handles nested (tuple) action keys on a real env
+        env = TransformedEnv(
+            NestedCountingEnv(),
+            ActionChunkTransform(
+                2,
+                action_key=("data", "action"),
+                chunk_key=("data", "chunk"),
+                pad_key=("data", "pad"),
+            ),
+        )
+        check_env_specs(env)
+        assert ("data", "chunk") in env.full_action_spec.keys(True, True)
+        assert ("data", "action") not in env.full_action_spec.keys(True, True)
+        env.rollout(3)
+
+    def test_env_missing_chunk_raises(self):
+        # a policy mistakenly writing the raw action key must not silently
+        # bypass the transform when it is attached to an env
+        env = self._env()
+        td = env.reset()
+        td["action"] = torch.zeros(7)
+        with pytest.raises(KeyError, match="action_chunk"):
+            env.step(td)
 
     def test_missing_action_raises(self):
         t = ActionChunkTransform(chunk_size=2)
         with pytest.raises(KeyError):
             t(TensorDict({"other": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
-
-    def test_replay_buffer_integration(self):
-        rb = TensorDictReplayBuffer(
-            storage=LazyTensorStorage(10),
-            transform=ActionChunkTransform(3),
-            batch_size=4,
-        )
-        # each stored item is a [T=5, A=2] trajectory window
-        rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
-        sample = rb.sample()
-        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
-        assert sample["action_is_pad"].shape[-1] == 3
 
     def test_no_cross_boundary_after_reshape(self):
         # Emulate a flat SliceSampler batch of two length-4 slices, then reshape
@@ -2226,11 +2353,6 @@ class TestActionChunkTransform:
         assert chunk[1].min() >= 10
         # the window tail is padded
         assert out["action_is_pad"][0, -1].tolist() == [False, True, True]
-
-    def test_cannot_be_env_transform(self):
-        t = ActionChunkTransform(2)
-        with pytest.raises(ValueError, match="replay-buffer"):
-            t._call(TensorDict({"action": torch.randn(2, 3)}, batch_size=[2]))
 
     def test_trailing_dim_enforced(self):
         # time_dim must point to the second-to-last dim (action_dim is last)
