@@ -24,28 +24,31 @@ print(f"Checking version: {version}")
 
 date_pattern = r"^\d{4}\.\d{1,2}\.\d{1,2}$"
 if not isinstance(version, str) or not version:
-    print(
-        "WARNING: torchrl.__version__ is missing; skipping nightly version "
-        "format validation."
+    # A missing version must be fatal: when __version__ was None this check
+    # silently passed while PyPI rejected the wheels.
+    raise ValueError(
+        "torchrl.__version__ is missing or empty; nightly wheels must expose "
+        "a YYYY.M.D version string."
     )
-else:
-    # Check that version is not the major version (0.9.0)
-    if re.match(r"^\d+\.\d+\.\d+$", version):
-        raise ValueError(f"Version should not be the major version: {version}")
 
-    # Check that version matches date format (YYYY.M.D)
-    if not re.match(date_pattern, version):
-        raise ValueError(f"Version should match date format YYYY.M.D, got: {version}")
+# Check that version is not the major version (0.9.0)
+if re.match(r"^\d+\.\d+\.\d+$", version):
+    raise ValueError(f"Version should not be the major version: {version}")
 
-    # Verify it's today's date
-    today = date.today()
-    expected_version = f"{today.year}.{today.month}.{today.day}"
-    if version != expected_version:
-        raise ValueError(
-            f"Version should be today date {expected_version}, got: {version}"
-        )
+# Check that version matches date format (YYYY.M.D). This also rejects PEP 440
+# local version identifiers (e.g. 2026.6.9+g<sha>), which PyPI refuses.
+if not re.match(date_pattern, version):
+    raise ValueError(f"Version should match date format YYYY.M.D, got: {version}")
 
-    print(f"Version {version} is correctly formatted as nightly date")
+# Verify it's today's date
+today = date.today()
+expected_version = f"{today.year}.{today.month}.{today.day}"
+if version != expected_version:
+    raise ValueError(
+        f"Version should be today date {expected_version}, got: {version}"
+    )
+
+print(f"Version {version} is correctly formatted as nightly date")
 
 # Check that tensordict-nightly is installed (not stable tensordict)
 try:
