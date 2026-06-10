@@ -100,6 +100,7 @@ from .tensordict_module import (
     TanhModule,
     ValueOperator,
     VmapModule,
+    WorldModel,
     WorldModelWrapper,
 )
 from .tensordict_module.exploration import (
@@ -220,6 +221,7 @@ __all__ = [
     "ValueNorm",
     "ValueOperator",
     "VmapModule",
+    "WorldModel",
     "WorldModelWrapper",
     "distributions_maps",
     "get_env_transforms_from_module",
