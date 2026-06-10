@@ -162,6 +162,15 @@ jobs:
       id-token: write
       contents: read
 
+  # The four build-wheels-* jobs run sequentially, not in parallel. The
+  # pytorch/test-infra build_wheels_{linux,macos,windows}.yml reusable
+  # workflows they call each define a workflow-level concurrency group keyed
+  # on the caller's workflow name and sha (identical for all four when called
+  # from this orchestrator) with cancel-in-progress: true. When invoked in
+  # parallel, each new claim of the group cancels the previous child's jobs,
+  # which marked every scheduled orchestrator run as cancelled. Chaining via
+  # needs serializes the claims; !cancelled() keeps the chain (and the status
+  # dashboard coverage) going when an earlier wheel build fails.
   build-wheels-linux:
     needs: config
     if: needs.config.outputs.run_tests == 'true'
@@ -172,8 +181,10 @@ jobs:
       contents: read
 
   build-wheels-m1:
-    needs: config
-    if: needs.config.outputs.run_tests == 'true'
+    needs:
+      - config
+      - build-wheels-linux
+    if: ${{ !cancelled() && needs.config.outputs.run_tests == 'true' }}
     uses: ./.github/workflows/build-wheels-m1.yml
     secrets: inherit
     permissions:
@@ -181,8 +192,10 @@ jobs:
       contents: read
 
   build-wheels-windows:
-    needs: config
-    if: needs.config.outputs.run_tests == 'true'
+    needs:
+      - config
+      - build-wheels-m1
+    if: ${{ !cancelled() && needs.config.outputs.run_tests == 'true' }}
     uses: ./.github/workflows/build-wheels-windows.yml
     secrets: inherit
     permissions:
@@ -190,8 +203,10 @@ jobs:
       contents: read
 
   build-wheels-aarch64-linux:
-    needs: config
-    if: needs.config.outputs.run_tests == 'true'
+    needs:
+      - config
+      - build-wheels-windows
+    if: ${{ !cancelled() && needs.config.outputs.run_tests == 'true' }}
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     secrets: inherit
     permissions:
