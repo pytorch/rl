@@ -1233,9 +1233,188 @@ class TestLeRobotExperienceReplay:
             assert (ep == ep[0]).all()
         assert sample.get("language_instruction") is not None
 
-    def test_download_requires_lerobot(self, tmp_path):
-        with pytest.raises(ImportError, match="lerobot"):
+    def test_download_requires_hf_packages(self, tmp_path, monkeypatch):
+        import torchrl.data.datasets.lerobot as lerobot_module
+
+        monkeypatch.setattr(lerobot_module, "_has_datasets", False)
+        with pytest.raises(ImportError, match="datasets"):
             LeRobotExperienceReplay("fake/repo", root=str(tmp_path), download=True)
+
+    def test_next_keys_get_trailing_singleton(self):
+        # TED convention: per-step signals under "next" carry a trailing
+        # singleton dim (SliceSampler combines them with its own [batch, 1]
+        # truncated flag), while index-like columns stay 1-D.
+        td = lerobot_columns_to_tensordict(
+            {
+                "next.done": torch.zeros(4, dtype=torch.bool),
+                "next.reward": torch.zeros(4),
+                "episode_index": torch.zeros(4, dtype=torch.long),
+            }
+        )
+        assert td["next", "done"].shape == torch.Size([4, 1])
+        assert td["next", "reward"].shape == torch.Size([4, 1])
+        assert td["episode"].shape == torch.Size([4])
+
+    @staticmethod
+    def _snapshot(major_version, info, episodes):
+        from torchrl.data.datasets.lerobot import _LeRobotSnapshot
+
+        snap = _LeRobotSnapshot.__new__(_LeRobotSnapshot)
+        snap.root = Path("/data")
+        snap.info = info
+        snap.fps = float(info.get("fps", 10))
+        snap.major_version = major_version
+        snap.episodes = episodes
+        return snap
+
+    def test_video_segments_v3_grouping(self):
+        # v3: episodes are concatenated back-to-back inside shared files; the
+        # segments group consecutive episodes per file and sum their lengths
+        snap = self._snapshot(
+            3,
+            {
+                "fps": 10,
+                "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
+            },
+            [
+                {
+                    "episode_index": ep,
+                    "length": length,
+                    "videos/cam/chunk_index": 0,
+                    "videos/cam/file_index": file,
+                    "videos/cam/from_timestamp": start,
+                }
+                for ep, (length, file, start) in enumerate(
+                    [(10, 0, 0.0), (20, 0, 1.0), (5, 1, 0.0)]
+                )
+            ],
+        )
+        paths, counts = snap.video_segments("cam")
+        assert counts == [30, 5]
+        assert paths == [
+            str(Path("/data/videos/cam/chunk-000/file-000.mp4")),
+            str(Path("/data/videos/cam/chunk-000/file-001.mp4")),
+        ]
+
+    def test_rehydrate_next_obs(self):
+        columns = {
+            "observation.state": torch.arange(8, dtype=torch.float32).view(8, 1),
+            "action": torch.zeros(8, 2),
+            "episode_index": torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+            "frame_index": torch.tensor([0, 1, 2, 3, 0, 1, 2, 3]),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=4, batch_size=8, rehydrate=True
+        )
+        # the invariant must hold on every draw, whichever episodes the
+        # sampler picks: a position mirrors its successor iff the successor is
+        # the true next step (same episode AND consecutive frame counter)
+        for _ in range(20):
+            sample = rb.sample()
+            state = sample["observation", "state"].squeeze(-1)
+            next_state = sample["next", "observation", "state"].squeeze(-1)
+            episode = sample["episode"]
+            frame = sample["frame"]
+            consecutive = (episode[1:] == episode[:-1]) & (frame[1:] == frame[:-1] + 1)
+            assert (next_state[:-1][consecutive] == state[1:][consecutive]).all()
+            assert next_state[:-1][~consecutive].isnan().all()
+            assert next_state[-1].isnan()
+
+    def test_rehydrate_splice_is_filled(self):
+        # a single episode guarantees back-to-back slices of the same episode:
+        # the splice position must be filled (frame counter check), not given
+        # the first row of the following slice
+        columns = {
+            "observation.state": torch.arange(8, dtype=torch.float32).view(8, 1),
+            "episode_index": torch.zeros(8, dtype=torch.long),
+            "frame_index": torch.arange(8),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=4, batch_size=8, rehydrate=True
+        )
+        for _ in range(20):
+            sample = rb.sample()
+            state = sample["observation", "state"].squeeze(-1)
+            next_state = sample["next", "observation", "state"].squeeze(-1)
+            frame = sample["frame"]
+            splice = frame[4] != frame[3] + 1
+            if splice:
+                assert next_state[3].isnan()
+            else:
+                assert next_state[3] == state[4]
+            assert next_state[7].isnan()
+
+    def test_rehydrate_requires_episode(self):
+        columns = {
+            "observation.state": torch.zeros(4, 1),
+            "task": ["t"] * 4,
+        }
+        with pytest.raises(ValueError, match="episode"):
+            LeRobotExperienceReplay.from_columns(columns, batch_size=4, rehydrate=True)
+
+    def test_rehydrate_integer_fill(self):
+        # integer leaves (e.g. uint8 frames) cannot hold NaN: they are
+        # zero-filled at slice boundaries instead
+        columns = {
+            "observation.state": torch.zeros(8, 1),
+            "observation.images.cam": torch.arange(1, 9, dtype=torch.uint8)
+            .view(8, 1, 1, 1)
+            .expand(8, 3, 2, 2)
+            .clone(),
+            "episode_index": torch.zeros(8, dtype=torch.long),
+            "frame_index": torch.arange(8),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=8, batch_size=8, rehydrate=True
+        )
+        sample = rb.sample()
+        img = sample["observation", "image", "cam"]
+        next_img = sample["next", "observation", "image", "cam"]
+        assert next_img.dtype == torch.uint8
+        assert (next_img[:-1] == img[1:]).all()
+        assert (next_img[-1] == 0).all()
+        assert sample["next", "observation", "state"][-1].isnan().all()
+
+    def test_rehydrate_skips_undecoded_refs(self):
+        # an undecoded video reference cannot be shifted: it is skipped (with
+        # a warning) while the tensor observations are still re-hydrated
+        ref = VideoClipRef.from_files(["/tmp/fake.mp4"], num_frames_per_file=[8])
+        columns = {
+            "observation.state": torch.arange(8, dtype=torch.float32).view(8, 1),
+            "observation.images.cam": ref,
+            "episode_index": torch.zeros(8, dtype=torch.long),
+            "frame_index": torch.arange(8),
+            "task": ["t"] * 8,
+        }
+        rb = LeRobotExperienceReplay.from_columns(
+            columns, slice_len=8, batch_size=8, rehydrate=True, decode_video=False
+        )
+        sample = rb.sample()
+        assert ("next", "observation", "state") in sample.keys(True, True)
+        assert sample.get(("next", "observation", "image"), None) is None
+
+    def test_video_segments_v2_per_episode(self):
+        # v2.x: one video file per episode, chunked by episode index
+        snap = self._snapshot(
+            2,
+            {
+                "fps": 10,
+                "chunks_size": 2,
+                "video_path": "videos/chunk-{episode_chunk:03d}/{video_key}/episode_{episode_index:06d}.mp4",
+            },
+            [
+                {"episode_index": 0, "length": 3},
+                {"episode_index": 1, "length": 4},
+                {"episode_index": 2, "length": 5},
+            ],
+        )
+        paths, counts = snap.video_segments("cam")
+        assert counts == [3, 4, 5]
+        assert paths[0] == str(Path("/data/videos/chunk-000/cam/episode_000000.mp4"))
+        assert paths[2] == str(Path("/data/videos/chunk-001/cam/episode_000002.mp4"))
 
     def test_load_missing_raises(self, tmp_path):
         with pytest.raises(RuntimeError, match="not found"):
