@@ -164,6 +164,10 @@ jobs:
     # Silent upload failures kept the workflow green while torchrl-nightly
     # went stale on PyPI for months.
     strategy:
+      # Without continue-on-error, one failed upload would otherwise fail-fast
+      # cancel every sibling upload; each platform/python must report its own
+      # result.
+      fail-fast: false
       matrix:
         os: [['linux', 'ubuntu-22.04'], ['macos', 'macos-latest']]
         python_version: [
@@ -323,6 +327,10 @@ jobs:
     # No continue-on-error here: a failed PyPI upload must turn the run red.
     runs-on: windows-latest
     strategy:
+      # Without continue-on-error, one failed upload would otherwise fail-fast
+      # cancel every sibling upload; each platform/python must report its own
+      # result.
+      fail-fast: false
       matrix:
         python_version: [
           ["3.10", "3.10.3"],
