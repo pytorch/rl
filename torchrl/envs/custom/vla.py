@@ -29,8 +29,9 @@ class ToyVLAEnv(EnvBase):
     under ``observation``, plus a constant ``language_instruction`` at the
     root. The state's first ``action_dim`` entries echo the action executed at
     the previous step, which makes execution machinery directly observable:
-    the cadence of :class:`~torchrl.envs.transforms.ActionChunkExecutor`, for
-    instance, can be read off ``("next", "observation", "state")``. The reward
+    the cadence of a chunk-executing policy (e.g.
+    :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`) can be
+    read off ``("next", "observation", "state")``. The reward
     is the negative action norm (an effort penalty) and episodes never
     terminate on their own.
 
@@ -55,9 +56,11 @@ class ToyVLAEnv(EnvBase):
 
     Examples:
         >>> import torch
+        >>> from tensordict.nn import TensorDictModule
         >>> from torchrl.envs import TransformedEnv
         >>> from torchrl.envs.custom import ToyVLAEnv
-        >>> from torchrl.envs.transforms import ActionChunkExecutor
+        >>> from torchrl.envs.transforms import InitTracker
+        >>> from torchrl.modules import MultiStepActorWrapper
         >>> env = ToyVLAEnv(batch_size=[2])
         >>> td = env.reset()
         >>> td["observation", "image"].shape, td["observation", "image"].dtype
@@ -68,13 +71,17 @@ class ToyVLAEnv(EnvBase):
         >>> td["action"] = 0.5 * torch.ones(2, 4)
         >>> env.step(td)["next", "observation", "state"][:, :4].unique()
         tensor([0.5000])
-        >>> # attach a chunk executor for closed-loop chunked control
-        >>> env = TransformedEnv(
-        ...     ToyVLAEnv(batch_size=[2]),
-        ...     ActionChunkExecutor(chunk_size=3, replan_interval=2),
+        >>> # pair it with a chunk-executing policy: the actor predicts 3
+        >>> # actions per call and is only re-queried when the cache is empty
+        >>> chunk_actor = TensorDictModule(
+        ...     lambda state: state[..., :4].unsqueeze(-2).expand(2, 3, 4) + 0.1,
+        ...     in_keys=[("observation", "state")],
+        ...     out_keys=["action"],
         ... )
-        >>> env.full_action_spec["action_chunk"].shape
-        torch.Size([2, 3, 4])
+        >>> policy = MultiStepActorWrapper(chunk_actor, n_steps=3)
+        >>> env = TransformedEnv(ToyVLAEnv(batch_size=[2]), InitTracker())
+        >>> env.rollout(4, policy)["action"].shape
+        torch.Size([2, 4, 4])
     """
 
     def __init__(
@@ -109,9 +116,7 @@ class ToyVLAEnv(EnvBase):
                     dtype=torch.uint8,
                     device=self.device,
                 ),
-                state=Unbounded(
-                    shape=(*batch, self.state_dim), device=self.device
-                ),
+                state=Unbounded(shape=(*batch, self.state_dim), device=self.device),
                 shape=batch,
             ),
             language_instruction=NonTensor(

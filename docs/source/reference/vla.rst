@@ -88,8 +88,6 @@ replay buffers and transformed environments. They are documented in full on the
 - :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- encode
   continuous actions into discrete tokens (wrapping an action tokenizer) for
   autoregressive token VLAs.
-- :class:`~torchrl.envs.transforms.SuccessReward` -- a sparse 0/1 success
-  reward for RL fine-tuning.
 
 Action representations
 ----------------------
@@ -127,30 +125,39 @@ policy for tests and tutorials.
     LeRobotPolicyWrapper
 
 At inference a chunk policy predicts ``H`` actions while the environment consumes
-one per step. :class:`~torchrl.envs.transforms.ActionChunkExecutor` -- a general
-chunk-execution transform documented alongside the other transforms -- bridges
-the two compositionally: append it to the policy
-(``TensorDictSequential(policy, executor)``) or to the environment
-(``TransformedEnv(env, executor)``) and it emits one action per step,
-re-planning every ``replan_interval`` steps (receding horizon) and whenever an
-environment is reset. :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`
-remains the policy-wrapper alternative that additionally skips the upstream
-policy call while its cache lasts (open-loop execution of expensive policies).
-:class:`~torchrl.envs.ToyVLAEnv` -- a tiny synthetic env speaking the canonical
-schema, whose state echoes the executed action -- lets you smoke-test this
-machinery without any simulator dependency.
+one per step -- and chunking only pays off if the (expensive) policy is *not*
+queried at every step.
+:class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` provides
+this: it caches the predicted actions, emits one per step and skips the
+wrapped actor while the cache lasts -- open-loop by default, receding horizon
+with ``replan_interval``, re-planning on env resets via ``is_init``.
+:class:`~torchrl.envs.transforms.MultiAction` is the env-side alternative
+(one base step per chunk action, a single policy call per chunk, at the price
+of a re-timed MDP). :class:`~torchrl.envs.ToyVLAEnv` -- a tiny synthetic env
+speaking the canonical schema, whose state echoes the executed action -- lets
+you smoke-test this machinery without any simulator dependency.
 
 Objectives
 ----------
 
-Fine-tuning objectives for VLA policies: chunked behavior cloning, and
-reinforcement fine-tuning for token policies (GRPO / PPO-clip).
+VLA fine-tuning needs no dedicated loss classes; the standard objectives
+apply directly:
 
-.. currentmodule:: torchrl.objectives.vla
+- *Chunked behavior cloning* is :class:`~torchrl.objectives.BCLoss` with the
+  action chunk as the ``action`` and the chunk-padding mask excluded via its
+  ``pad_mask`` key::
 
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_noinherit.rst
+      loss = BCLoss(policy, loss_function="l1")
+      loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
 
-    VLABCLoss
-    VLATokenGRPOLoss
+- *Token RL fine-tuning* (GRPO-style, following SimpleVLA-RL / RL4VLA) is
+  :class:`~torchrl.objectives.ClipPPOLoss` over the action tokens: advantages
+  are precomputed (group-relative), so no critic is needed, and the token
+  head's sequence-level log-probabilities match the ``sample_log_prob``
+  contract. The advantage carries the trailing singleton value-dim the PPO
+  losses expect (``[batch, 1]``, not ``[batch]``)::
+
+      loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False)
+      loss.set_keys(
+          action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+      )
