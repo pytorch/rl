@@ -56,3 +56,15 @@ Data and metadata
 
     RobotDatasetMetadata
     validate_vla_tensordict
+
+Transforms
+----------
+
+VLA-specific transforms are standard :class:`~torchrl.envs.transforms.Transform`
+subclasses, so they compose with :class:`~torchrl.envs.transforms.Compose`,
+replay buffers and transformed environments. They are documented in full on the
+:ref:`transforms reference page <transforms>`.
+
+- :class:`~torchrl.envs.transforms.ActionChunkTransform` -- build fixed-length
+  action chunks (``[*B, T, H, action_dim]``) and a padding mask from a sampled
+  trajectory window, the standard training target for chunked VLA policies.
