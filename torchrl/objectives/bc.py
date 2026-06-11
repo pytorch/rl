@@ -17,7 +17,6 @@ from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce
 
 
 class BCLoss(LossModule):
@@ -312,6 +311,13 @@ class BCLoss(LossModule):
                 log_prob = dist.log_prob(action_expert)
                 loss = -log_prob
 
+        # Precedence:
+        # 1. An explicit ``tensor_keys.pad_mask`` (set by VLA / chunked-BC
+        #    callers) wins — it carries domain-specific dimension validation.
+        # 2. Otherwise, ``_reduce_loss`` auto-detects ``("collector", "mask")``
+        #    from SliceSampler(pad_output=True) (PR #3695), falling back to
+        #    the legacy ``shifted_valid`` key. When neither is present, the
+        #    behavior is byte-identical to the old plain ``.mean()`` path.
         mask = None
         if self.tensor_keys.pad_mask is not None:
             pad = tensordict.get(self.tensor_keys.pad_mask, default=None)
@@ -328,7 +334,7 @@ class BCLoss(LossModule):
                 while mask.ndim < loss.ndim:
                     mask = mask.unsqueeze(-1)
                 mask = mask.expand_as(loss)
-        loss = _reduce(loss, reduction=self.reduction, mask=mask)
+        loss = self._reduce_loss(loss, tensordict=tensordict, mask=mask)
 
         td_out = TensorDict({"loss_bc": loss})
         self._clear_weakrefs(
