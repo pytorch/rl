@@ -32,7 +32,7 @@ from torchrl.data.tensor_specs import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from torchrl.data.vla import RobotDatasetMetadata
 
 if TYPE_CHECKING:
     from typing import Self
@@ -909,13 +909,18 @@ class ActionScaling(Transform):
         in_keys_inv (sequence of NestedKey, optional): keys read during the
             ``inv`` direction (policy -> env). Defaults to ``["action"]``. A
             single key per :class:`ActionScaling` instance is supported; compose
-            several instances to scale several actions.
+            several instances to scale several actions. Pass an empty list for
+            a forward-only transform (normalize raw dataset actions on the
+            replay-buffer sample path while leaving ``extend`` and the env-side
+            action interface untouched); this requires explicit ``loc`` and
+            ``scale``.
         out_keys_inv (sequence of NestedKey, optional): keys written during the
             ``inv`` direction. Defaults to ``in_keys_inv``.
         in_keys (sequence of NestedKey, optional): keys read during the forward
             direction (env action -> normalized action, used by replay buffers
             and inside :class:`~torch.nn.Module` chains). Defaults to
-            ``in_keys_inv``.
+            ``in_keys_inv``, or ``["action"]`` when ``in_keys_inv=[]``
+            (forward-only mode).
         out_keys (sequence of NestedKey, optional): keys written during the
             forward direction. Defaults to ``in_keys``.
 
@@ -933,8 +938,28 @@ class ActionScaling(Transform):
             space is ``[0, 1]``.
 
     Raises:
-        RuntimeError: if the action spec is unbounded or partially unbounded
-            (any bound is non-finite).
+        RuntimeError: if ``loc`` and ``scale`` are derived from the spec (no
+            explicit values passed) and the action spec is unbounded or
+            partially unbounded (any bound is non-finite). With explicit
+            ``loc``/``scale``, a bounded spec is mapped through the affine
+            transform and an unbounded (or partially unbounded) spec is
+            advertised as ``Unbounded`` instead of raising.
+
+    With explicit ``loc`` and ``scale`` the transform is fully spec-independent
+    -- the standard workflow when training on dataset action statistics, e.g.
+    for VLA policies. Use :meth:`from_stats` (``mean``/``std`` or
+    ``low``/``high``) or :meth:`from_metadata` to build such an instance from
+    dataset statistics. Attached to an environment, it denormalizes the
+    policy's actions on the inverse path: a bounded action spec is mapped
+    through the affine transform (and an unbounded action spec stays
+    unbounded), so the advertised normalized space reflects the actual
+    statistics rather than being assumed ``[-1, 1]``. Appended to a replay
+    buffer, it normalizes actions on the ``sample`` path; beware that
+    ``ReplayBuffer.extend`` applies the *inverse* transform, so when raw
+    (env-scale) data is written through ``extend``, use a forward-only
+    instance (``in_keys_inv=[]``) to leave the stored data untouched -- the
+    default bidirectional keys suit the env side and pre-populated dataset
+    storages.
 
     Examples:
         >>> import torch
@@ -949,6 +974,38 @@ class ActionScaling(Transform):
         tensor([-1., -1., -1., -1., -1., -1., -1.])
         >>> env.action_spec.space.high
         tensor([1., 1., 1., 1., 1., 1., 1.])
+        >>> # dataset-statistics-driven normalization (no env required): the
+        >>> # forward pass maps raw actions to the normalized space
+        >>> from tensordict import TensorDict
+        >>> t = ActionScaling.from_stats(
+        ...     mean=torch.tensor([1.0, 2.0]), std=torch.tensor([2.0, 4.0])
+        ... )
+        >>> td = TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1])
+        >>> t(td)["action"]
+        tensor([[1., 1.]])
+        >>> # on a replay buffer, a forward-only instance (in_keys_inv=[])
+        >>> # normalizes on sample and leaves data written through extend
+        >>> # untouched (extend applies the inverse pass)
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> t = ActionScaling.from_stats(
+        ...     mean=torch.tensor([1.0, 2.0]),
+        ...     std=torch.tensor([2.0, 4.0]),
+        ...     in_keys_inv=[],
+        ... )
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(10), transform=t, batch_size=2
+        ... )
+        >>> raw = TensorDict(
+        ...     {"action": torch.tensor([[3.0, 6.0]]).expand(10, 2)}, batch_size=[10]
+        ... )
+        >>> indices = rb.extend(raw)  # stored as-is
+        >>> rb.sample()["action"]  # normalized with the dataset statistics
+        tensor([[1., 1.],
+                [1., 1.]])
+        >>> # the same affine map is exposed on raw tensors for execution-time
+        >>> # use, e.g. mapping a policy's normalized prediction to the robot
+        >>> t.denormalize(torch.tensor([[1.0, 1.0]]))
+        tensor([[3., 6.]])
     """
 
     invertible = True
@@ -968,7 +1025,7 @@ class ActionScaling(Transform):
             in_keys_inv = ["action"]
         if not isinstance(in_keys_inv, (list, tuple)):
             in_keys_inv = [in_keys_inv]
-        if len(in_keys_inv) != 1:
+        if len(in_keys_inv) > 1:
             raise ValueError(
                 "ActionScaling only supports a single action key per instance. "
                 "Compose several ActionScaling transforms to scale multiple actions."
@@ -976,7 +1033,9 @@ class ActionScaling(Transform):
         if out_keys_inv is None:
             out_keys_inv = copy(in_keys_inv)
         if in_keys is None:
-            in_keys = copy(in_keys_inv)
+            # Forward-only mode (``in_keys_inv=[]``) still normalizes "action"
+            # on the forward (sample) path by default.
+            in_keys = copy(in_keys_inv) if in_keys_inv else ["action"]
         if out_keys is None:
             out_keys = copy(in_keys)
         super().__init__(
@@ -992,6 +1051,12 @@ class ActionScaling(Transform):
                 "loc and scale must either both be provided or both be None."
             )
         self._explicit = loc is not None
+        if not in_keys_inv and not self._explicit:
+            raise ValueError(
+                "in_keys_inv=[] (forward-only mode) requires explicit loc and "
+                "scale: without an inverse action key there is no action spec "
+                "to derive them from."
+            )
         if loc is not None:
             loc = torch.as_tensor(loc)
             scale = torch.as_tensor(scale)
@@ -1097,28 +1162,67 @@ class ActionScaling(Transform):
             )
         return low, high
 
+    @staticmethod
+    def _is_finitely_bounded(leaf_spec: TensorSpec) -> bool:
+        # ``Unbounded`` (and partially-unbounded ``Bounded``) specs encode the
+        # open sides with ``finfo`` extremes; mapping those through the affine
+        # would overflow, so they are treated as unbounded instead.
+        if isinstance(leaf_spec, Unbounded):
+            return False
+        low, high = leaf_spec.space.low, leaf_spec.space.high
+        if low.dtype.is_floating_point:
+            extreme_low = torch.finfo(low.dtype).min
+            extreme_high = torch.finfo(high.dtype).max
+            if (low == extreme_low).any() or (high == extreme_high).any():
+                return False
+        return bool(torch.isfinite(low).all() and torch.isfinite(high).all())
+
     def _transform_leaf(self, leaf_spec: TensorSpec) -> TensorSpec:
-        # Validate the leaf action spec, lazily populate ``loc``/``scale`` from
-        # the bounds and return a new bounded spec in normalized space.
-        if not self._explicit and not self.initialized:
-            self._init_from_spec(leaf_spec)
-        else:
-            # Still validate so that downstream users get a consistent error
-            # message for unbounded / partially-unbounded specs.
-            self._validate_bounded(leaf_spec)
         dtype = (
             leaf_spec.dtype
             if leaf_spec.dtype.is_floating_point
             else torch.get_default_dtype()
         )
-        low = leaf_spec.space.low.to(dtype)
-        high = leaf_spec.space.high.to(dtype)
-        if self.standard_normal:
-            new_low = torch.full_like(low, -1.0)
-            new_high = torch.full_like(high, 1.0)
+        if self._explicit:
+            # Explicit loc/scale: no bounds are required from the spec. A
+            # bounded spec is mapped through the forward affine (monotonic,
+            # scale > 0); an unbounded (or partially unbounded) spec stays
+            # unbounded, since the affine image of an unbounded space is
+            # unbounded.
+            space = getattr(leaf_spec, "space", None)
+            if not isinstance(space, ContinuousBox):
+                raise RuntimeError(
+                    f"ActionScaling requires a continuous action spec, got "
+                    f"{type(leaf_spec).__name__}. Discrete action specs are "
+                    "not supported."
+                )
+            if not self._is_finitely_bounded(leaf_spec):
+                return Unbounded(
+                    shape=leaf_spec.shape,
+                    device=leaf_spec.device,
+                    dtype=leaf_spec.dtype,
+                )
+            loc, scale = self._loc_scale(space.low.device)
+            new_low = (space.low.to(dtype) - loc) / scale
+            new_high = (space.high.to(dtype) - loc) / scale
+            if not self.standard_normal:
+                new_low = (new_low + 1) / 2
+                new_high = (new_high + 1) / 2
         else:
-            new_low = torch.zeros_like(low)
-            new_high = torch.ones_like(high)
+            # Spec-derived loc/scale: bounds are mandatory and define the
+            # normalized space exactly ([-1, 1] or [0, 1]).
+            if not self.initialized:
+                self._init_from_spec(leaf_spec)
+            else:
+                self._validate_bounded(leaf_spec)
+            low = leaf_spec.space.low.to(dtype)
+            high = leaf_spec.space.high.to(dtype)
+            if self.standard_normal:
+                new_low = torch.full_like(low, -1.0)
+                new_high = torch.full_like(high, 1.0)
+            else:
+                new_low = torch.zeros_like(low)
+                new_high = torch.ones_like(high)
         return Bounded(
             low=new_low,
             high=new_high,
@@ -1134,6 +1238,9 @@ class ActionScaling(Transform):
         # top-level keys (``input_spec.keys(False, True)``) and silently skips
         # nested action keys. Iterating ourselves makes dict-structured action
         # spaces (e.g. ``("agent", "action")``) work like flat ones.
+        if not self.in_keys_inv:
+            # Forward-only mode: the env-side action interface is untouched.
+            return action_spec
         if not isinstance(action_spec, Composite):
             return self._transform_leaf(action_spec)
         action_spec = action_spec.clone()
@@ -1158,8 +1265,21 @@ class ActionScaling(Transform):
             scale = scale.to(device)
         return loc, scale
 
+    def _check_dim(self, action: torch.Tensor) -> None:
+        # Guard the silent-broadcast hazard: a per-dimension loc/scale must
+        # match the action's trailing dim. A scalar (or shape-[1]) loc/scale
+        # broadcasts freely and is left alone.
+        if self.loc.numel() > 1 and (
+            action.ndim == 0 or action.shape[-1] != self.loc.shape[-1]
+        ):
+            raise ValueError(
+                f"action shape {tuple(action.shape)} does not match the "
+                f"loc/scale dimension {self.loc.shape[-1]} on its last dim."
+            )
+
     def _apply_transform(self, action: torch.Tensor) -> torch.Tensor:
         self._ensure_initialized()
+        self._check_dim(action)
         loc, scale = self._loc_scale(action.device)
         normalized = (action - loc) / scale
         if not self.standard_normal:
@@ -1168,10 +1288,93 @@ class ActionScaling(Transform):
 
     def _inv_apply_transform(self, action: torch.Tensor) -> torch.Tensor:
         self._ensure_initialized()
+        self._check_dim(action)
         loc, scale = self._loc_scale(action.device)
         if not self.standard_normal:
             action = action * 2 - 1
         return action * scale + loc
+
+    def normalize(self, action: torch.Tensor) -> torch.Tensor:
+        """Map an env-scale action to the normalized space (the forward map)."""
+        return self._apply_transform(action)
+
+    def denormalize(self, action: torch.Tensor) -> torch.Tensor:
+        """Map a normalized action back to the env scale (the inverse map)."""
+        return self._inv_apply_transform(action)
+
+    @classmethod
+    def from_stats(
+        cls,
+        *,
+        mean: torch.Tensor | None = None,
+        std: torch.Tensor | None = None,
+        low: torch.Tensor | None = None,
+        high: torch.Tensor | None = None,
+        eps: float = 1e-6,
+        **kwargs,
+    ) -> ActionScaling:
+        """Build an :class:`ActionScaling` from dataset action statistics.
+
+        Provide exactly one complete pair: ``mean`` and ``std`` (zero-mean,
+        unit-std normalized space) or ``low`` and ``high`` (maps the range to
+        ``[-1, 1]``).
+
+        Keyword Args:
+            mean (torch.Tensor, optional): per-dimension action mean.
+            std (torch.Tensor, optional): per-dimension action std.
+            low (torch.Tensor, optional): per-dimension action minimum.
+            high (torch.Tensor, optional): per-dimension action maximum.
+            eps (float, optional): floor applied to the scale to avoid division
+                by zero on constant action dimensions. Defaults to ``1e-6``.
+            **kwargs: forwarded to the constructor (e.g. ``in_keys_inv``,
+                ``standard_normal``).
+        """
+        if (mean is None) != (std is None):
+            raise ValueError("mean and std must be provided together.")
+        if (low is None) != (high is None):
+            raise ValueError("low and high must be provided together.")
+        if (mean is not None) == (low is not None):
+            raise ValueError("Provide exactly one of (mean, std) or (low, high).")
+        if mean is not None:
+            loc = torch.as_tensor(mean, dtype=torch.get_default_dtype())
+            scale = torch.as_tensor(std, dtype=torch.get_default_dtype())
+        else:
+            low = torch.as_tensor(low, dtype=torch.get_default_dtype())
+            high = torch.as_tensor(high, dtype=torch.get_default_dtype())
+            loc = (low + high) / 2
+            scale = (high - low) / 2
+        if loc.shape != scale.shape:
+            raise ValueError(
+                f"loc and scale must have the same shape, got {tuple(loc.shape)} "
+                f"and {tuple(scale.shape)}."
+            )
+        return cls(loc=loc, scale=scale.clamp_min(eps), **kwargs)
+
+    @classmethod
+    def from_metadata(cls, metadata: RobotDatasetMetadata, **kwargs) -> ActionScaling:
+        """Build from the action statistics of a :class:`~torchrl.data.vla.RobotDatasetMetadata`.
+
+        Uses ``action_mean``/``action_std`` when available, falling back to
+        ``action_low``/``action_high``. The action key defaults to the
+        metadata's ``action_key``.
+        """
+        kwargs.setdefault("in_keys_inv", [metadata.action_key])
+        if not kwargs["in_keys_inv"]:
+            # Forward-only mode: keep normalizing the metadata's action key on
+            # the sample path rather than falling back to the generic "action".
+            kwargs.setdefault("in_keys", [metadata.action_key])
+        if metadata.action_mean is not None and metadata.action_std is not None:
+            return cls.from_stats(
+                mean=metadata.action_mean, std=metadata.action_std, **kwargs
+            )
+        if metadata.action_low is not None and metadata.action_high is not None:
+            return cls.from_stats(
+                low=metadata.action_low, high=metadata.action_high, **kwargs
+            )
+        raise ValueError(
+            f"metadata {metadata.dataset_id!r} has no action normalization statistics "
+            "(set action_mean/action_std or action_low/action_high)."
+        )
 
     def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
         # The action only flows through the inv direction during env stepping;
