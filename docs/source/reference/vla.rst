@@ -122,3 +122,4 @@ policy for tests and tutorials.
 
     VLAWrapperBase
     TinyVLA
+    LeRobotPolicyWrapper
