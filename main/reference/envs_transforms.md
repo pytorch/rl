@@ -319,6 +319,7 @@ to be able to create this other composition:
 | [`SqueezeTransform`](generated/torchrl.envs.transforms.SqueezeTransform.html#torchrl.envs.transforms.SqueezeTransform)(*args, **kwargs) | Removes a dimension of size one at the specified position. |
 | [`Stack`](generated/torchrl.envs.transforms.Stack.html#torchrl.envs.transforms.Stack)(in_keys, out_key[, in_key_inv, ...]) | Stacks tensors and tensordicts. |
 | [`StepCounter`](generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter)([max_steps, truncated_key, ...]) | Counts the steps from a reset and optionally sets the truncated state to `True` after a certain number of steps. |
+| [`SuccessReward`](generated/torchrl.envs.transforms.SuccessReward.html#torchrl.envs.transforms.SuccessReward)([success_key, reward_key, scale]) | Sparse 0/1 success reward for reinforcement fine-tuning. |
 | [`TargetReturn`](generated/torchrl.envs.transforms.TargetReturn.html#torchrl.envs.transforms.TargetReturn)(target_return[, mode, in_keys, ...]) | Sets a target return for the agent to achieve in the environment. |
 | [`TensorDictPrimer`](generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer)([primers, random, ...]) | A primer for TensorDict initialization at reset time. |
 | [`TerminateTransform`](generated/torchrl.envs.transforms.TerminateTransform.html#torchrl.envs.transforms.TerminateTransform)(stop, *[, write_done]) | Terminate a rollout when a user-supplied predicate becomes true. |

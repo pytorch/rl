@@ -101,6 +101,7 @@ and navigate to the previous ones whenever you want to learn more!
 - [Using Replay Buffers](tutorials/rb_tutorial.html)
 - [Memory-Efficient RL Training](tutorials/memory_efficient_rl.html)
 - [Exporting TorchRL modules](tutorials/export.html)
+- [Vision-Language-Action (VLA) policies with TorchRL](tutorials/vla.html)
 
 ## Advanced
 
@@ -186,6 +187,8 @@ and navigate to the previous ones whenever you want to learn more!
 - [Data and metadata](reference/vla.html#data-and-metadata)
 - [Transforms](reference/vla.html#transforms)
 - [Action representations](reference/vla.html#action-representations)
+- [Policies](reference/vla.html#policies)
+- [Objectives](reference/vla.html#objectives)
 - [TorchRL Configuration System](reference/config.html)
 
 - [Quick Start with a Simple Example](reference/config.html#quick-start-with-a-simple-example)

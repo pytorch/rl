@@ -52,7 +52,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="torchrl.trainers.algorithms.configs.common.ConfigBase" href="generated/torchrl.trainers.algorithms.configs.common.ConfigBase.html" />
-    <link rel="prev" title="UniformActionTokenizer" href="generated/torchrl.data.vla.UniformActionTokenizer.html" />
+    <link rel="prev" title="LeRobotPolicyWrapper" href="generated/torchrl.modules.vla.LeRobotPolicyWrapper.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -635,6 +635,12 @@
             </li>
           
             <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
               <a class="nav-link dropdown-item nav-internal" href="../tutorials/multiagent_competitive_ddpg.html">
                 Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
               </a>
@@ -1005,6 +1011,15 @@ document.write(`
       <li class="nav-item">
         
           
+          <a class="nav-link nav-internal" href="../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
           <a class="nav-link nav-internal" href="../tutorials/multiagent_competitive_ddpg.html">
             Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
           </a>
@@ -1046,7 +1061,7 @@ document.write(`
               API Reference
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-24">
+          <ul class="dropdown-menu" id="dropdown-25">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="collectors.html">
@@ -1144,7 +1159,7 @@ document.write(`
               Knowledge Base
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-25">
+          <ul class="dropdown-menu" id="dropdown-26">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="generated/knowledge_base/DEBUGGING_RL.html">
@@ -1475,6 +1490,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.LLMHashingEnv.html">LLMHashingEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.PendulumEnv.html">PendulumEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.TicTacToeEnv.html">TicTacToeEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.ToyVLAEnv.html">ToyVLAEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MujocoEnv.html">MujocoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.AntEnv.html">AntEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.CubeBowlEnv.html">CubeBowlEnv</a></li>
@@ -1577,6 +1593,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.SqueezeTransform.html">SqueezeTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.Stack.html">Stack</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.StepCounter.html">StepCounter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.SuccessReward.html">SuccessReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TargetReturn.html">TargetReturn</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TensorDictPrimer.html">TensorDictPrimer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TerminateTransform.html">TerminateTransform</a></li>
@@ -1967,6 +1984,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.validate_vla_tensordict.html">validate_vla_tensordict</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.ActionTokenizerBase.html">ActionTokenizerBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.UniformActionTokenizer.html">UniformActionTokenizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.vla.VLAWrapperBase.html">VLAWrapperBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.vla.TinyVLA.html">TinyVLA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.vla.LeRobotPolicyWrapper.html">LeRobotPolicyWrapper</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">TorchRL Configuration System</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -3184,12 +3204,12 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="generated/torchrl.data.vla.UniformActionTokenizer.html"
+       href="generated/torchrl.modules.vla.LeRobotPolicyWrapper.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">UniformActionTokenizer</p>
+        <p class="prev-next-title">LeRobotPolicyWrapper</p>
       </div>
     </a>
     <a class="right-next"
@@ -3223,12 +3243,12 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="generated/torchrl.data.vla.UniformActionTokenizer.html"
+       href="generated/torchrl.modules.vla.LeRobotPolicyWrapper.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">UniformActionTokenizer</p>
+        <p class="prev-next-title">LeRobotPolicyWrapper</p>
       </div>
     </a>
     <a class="right-next"

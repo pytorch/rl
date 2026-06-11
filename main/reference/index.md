@@ -168,6 +168,12 @@
 
 - [ActionTokenizerBase](generated/torchrl.data.vla.ActionTokenizerBase.html)
 - [UniformActionTokenizer](generated/torchrl.data.vla.UniformActionTokenizer.html)
+- [Policies](vla.html#policies)
+
+- [VLAWrapperBase](generated/torchrl.modules.vla.VLAWrapperBase.html)
+- [TinyVLA](generated/torchrl.modules.vla.TinyVLA.html)
+- [LeRobotPolicyWrapper](generated/torchrl.modules.vla.LeRobotPolicyWrapper.html)
+- [Objectives](vla.html#objectives)
 - [TorchRL Configuration System](config.html)
 
 - [Quick Start with a Simple Example](config.html#quick-start-with-a-simple-example)

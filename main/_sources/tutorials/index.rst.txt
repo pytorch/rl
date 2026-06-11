@@ -193,6 +193,23 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
 
 .. only:: html
 
+  .. image:: /tutorials/images/thumb/sphx_glr_vla_thumb.png
+    :alt:
+
+  :doc:`/tutorials/vla`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Vision-Language-Action (VLA) policies with TorchRL</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Author: Vincent Moens">
+
+.. only:: html
+
   .. image:: /tutorials/images/thumb/sphx_glr_dqn_with_rnn_thumb.png
     :alt:
 
@@ -445,6 +462,7 @@ Check the tutorials on torchrl documentation: https://pytorch.org/rl
    /tutorials/collector_trajectory_assembly
    /tutorials/getting-started-1
    /tutorials/multi_task
+   /tutorials/vla
    /tutorials/dqn_with_rnn
    /tutorials/memory_efficient_rl
    /tutorials/torchrl_demo

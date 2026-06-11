@@ -52,6 +52,11 @@ Get started with TorchRL's modules
 [Task-specific policy in multi-task environments](multi_task.html)
 
 Task-specific policy in multi-task environments
+![](../_images/sphx_glr_vla_thumb.png)
+
+[Vision-Language-Action (VLA) policies with TorchRL](vla.html)
+
+Vision-Language-Action (VLA) policies with TorchRL
 ![](../_images/sphx_glr_dqn_with_rnn_thumb.png)
 
 [Recurrent DQN: Training recurrent policies](dqn_with_rnn.html)

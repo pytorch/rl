@@ -312,6 +312,7 @@ TorchRL offers a series of custom built-in environments.
     LLMHashingEnv
     PendulumEnv
     TicTacToeEnv
+    ToyVLAEnv
 
 MuJoCo custom environments
 --------------------------

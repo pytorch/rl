@@ -635,6 +635,12 @@
             </li>
           
             <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
               <a class="nav-link dropdown-item nav-internal" href="../../tutorials/multiagent_competitive_ddpg.html">
                 Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
               </a>
@@ -1005,6 +1011,15 @@ document.write(`
       <li class="nav-item">
         
           
+          <a class="nav-link nav-internal" href="../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
           <a class="nav-link nav-internal" href="../../tutorials/multiagent_competitive_ddpg.html">
             Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
           </a>
@@ -1046,7 +1061,7 @@ document.write(`
               API Reference
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-24">
+          <ul class="dropdown-menu" id="dropdown-25">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../collectors.html">
@@ -1144,7 +1159,7 @@ document.write(`
               Knowledge Base
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-25">
+          <ul class="dropdown-menu" id="dropdown-26">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="knowledge_base/DEBUGGING_RL.html">
@@ -1475,6 +1490,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.LLMHashingEnv.html">LLMHashingEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.PendulumEnv.html">PendulumEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.TicTacToeEnv.html">TicTacToeEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.ToyVLAEnv.html">ToyVLAEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.MujocoEnv.html">MujocoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.AntEnv.html">AntEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.CubeBowlEnv.html">CubeBowlEnv</a></li>
@@ -1577,6 +1593,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.SqueezeTransform.html">SqueezeTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.Stack.html">Stack</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.StepCounter.html">StepCounter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.SuccessReward.html">SuccessReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.TargetReturn.html">TargetReturn</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.TensorDictPrimer.html">TensorDictPrimer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.TerminateTransform.html">TerminateTransform</a></li>
@@ -1967,6 +1984,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.validate_vla_tensordict.html">validate_vla_tensordict</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.ActionTokenizerBase.html">ActionTokenizerBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.UniformActionTokenizer.html">UniformActionTokenizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.modules.vla.VLAWrapperBase.html">VLAWrapperBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.modules.vla.TinyVLA.html">TinyVLA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.modules.vla.LeRobotPolicyWrapper.html">LeRobotPolicyWrapper</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../config.html">TorchRL Configuration System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2319,6 +2339,15 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;i
 <a class="reference internal" href="torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker" title="torchrl.envs.transforms.InitTracker"><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code></a> transform.</p></li>
 <li><p><strong>keep_dim</strong> (<em>bool</em><em>, </em><em>optional</em>) – whether to keep the time dimension of
 the macro during indexing. Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+<li><p><strong>replan_interval</strong> (<em>int</em><em>, </em><em>optional</em>) – re-query the wrapped actor after this
+many actions have been consumed from the cache (receding-horizon
+execution; the actor call is skipped in between, which is the
+point of action chunking for expensive policies such as VLAs).
+Must be in <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">n_steps]</span></code>; <code class="docutils literal notranslate"><span class="pre">replan_interval=1</span></code> re-plans at
+every step (closed loop). Defaults to <code class="docutils literal notranslate"><span class="pre">None</span></code>, i.e. the whole
+cache is consumed before re-querying (open loop). With
+<code class="docutils literal notranslate"><span class="pre">n_steps=None</span></code> the bound is enforced at execution time against
+the actual chunk length instead.</p></li>
 </ul>
 </dd>
 </dl>
@@ -2785,7 +2814,7 @@ registered hooks while the latter silently ignores them.</p>
        "headline": "MultiStepActorWrapper",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.modules.tensordict_module.MultiStepActorWrapper.html",
-       "articleBody": "MultiStepActorWrapper# class torchrl.modules.tensordict_module.MultiStepActorWrapper(*args, **kwargs)[source]# A wrapper around a multi-action actor. This class enables macros to be executed in an environment. The actor action(s) entry must have an additional time dimension to be consumed. It must be placed adjacent to the last dimension of the input tensordict (i.e. at tensordict.ndim). The action entry keys are retrieved automatically from the actor if not provided using a simple heuristic (any nested key ending with the \"action\" string). An \"is_init\" entry must also be present in the input tensordict to track which and when the current collection should be interrupted because a \u201cdone\u201d state has been encountered. Unlike action_keys, this key must be unique. Parameters: actor (TensorDictModuleBase) \u2013 An actor. n_steps (int, optional) \u2013 the number of actions the actor outputs at once (lookahead window). Defaults to None. Keyword Arguments: action_keys (list of NestedKeys, optional) \u2013 the action keys from the environment. Can be retrieved from env.action_keys. Defaults to all out_keys of the actor which end with the \"action\" string. init_key (NestedKey, optional) \u2013 the key of the entry indicating when the environment has gone through a reset. Defaults to \"is_init\" which is the out_key from the InitTracker transform. keep_dim (bool, optional) \u2013 whether to keep the time dimension of the macro during indexing. Defaults to False. Examples \u003e\u003e\u003e import torch.nn \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import MultiStepActorWrapper, Actor \u003e\u003e\u003e from torchrl.envs import CatFrames, GymEnv, TransformedEnv, SerialEnv, InitTracker, Compose \u003e\u003e\u003e from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod \u003e\u003e\u003e \u003e\u003e\u003e time_steps = 6 \u003e\u003e\u003e n_obs = 4 \u003e\u003e\u003e n_action = 2 \u003e\u003e\u003e batch = 5 \u003e\u003e\u003e \u003e\u003e\u003e # Transforms a CatFrames in a stack of frames \u003e\u003e\u003e def reshape_cat(data: torch.Tensor): ... return data.unflatten(-1, (time_steps, n_obs)) \u003e\u003e\u003e # an actor that reads `time_steps` frames and outputs one action per frame \u003e\u003e\u003e # (actions are conditioned on the observation of `time_steps` in the past) \u003e\u003e\u003e actor_base = Seq( ... Mod(reshape_cat, in_keys=[\"obs_cat\"], out_keys=[\"obs_cat_reshape\"]), ... Mod(torch.nn.Linear(n_obs, n_action), in_keys=[\"obs_cat_reshape\"], out_keys=[\"action\"]) ... ) \u003e\u003e\u003e # Wrap the actor to dispatch the actions \u003e\u003e\u003e actor = MultiStepActorWrapper(actor_base, n_steps=time_steps) \u003e\u003e\u003e \u003e\u003e\u003e env = TransformedEnv( ... SerialEnv(batch, lambda: GymEnv(\"CartPole-v1\")), ... Compose( ... InitTracker(), ... CatFrames(N=time_steps, in_keys=[\"observation\"], out_keys=[\"obs_cat\"], dim=-1) ... ) ... ) \u003e\u003e\u003e \u003e\u003e\u003e print(env.rollout(100, policy=actor, break_when_any_done=False)) TensorDict( fields={ action: Tensor(shape=torch.Size([5, 100, 2]), device=cpu, dtype=torch.float32, is_shared=False), action_orig: Tensor(shape=torch.Size([5, 100, 6, 2]), device=cpu, dtype=torch.float32, is_shared=False), counter: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.int32, is_shared=False), done: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), is_init: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), is_init: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), obs_cat: Tensor(shape=torch.Size([5, 100, 24]), device=cpu, dtype=torch.float32, is_shared=False), observation: Tensor(shape=torch.Size([5, 100, 4]), device=cpu, dtype=torch.float32, is_shared=False), reward: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.float32, is_shared=False), terminated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([5, 100]), device=cpu, is_shared=False), obs_cat: Tensor(shape=torch.Size([5, 100, 24]), device=cpu, dtype=torch.float32, is_shared=False), observation: Tensor(shape=torch.Size([5, 100, 4]), device=cpu, dtype=torch.float32, is_shared=False), terminated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([5, 100]), device=cpu, is_shared=False) See also torchrl.envs.MultiStepEnvWrapper is the EnvBase alter-ego of this wrapper: It wraps an environment and unbinds the action, executing it one element at a time. forward(tensordict: TensorDictBase) \u2192 TensorDictBase[source]# Define the computation performed at every call. Should be overridden by all subclasses. Note Although the recipe for forward pass needs to be defined within this function, one should call the Module instance afterwards instead of this since the former takes care of running the registered hooks while the latter silently ignores them. property init_key: NestedKey# The indicator of the initial step for a given element of the batch.",
+       "articleBody": "MultiStepActorWrapper# class torchrl.modules.tensordict_module.MultiStepActorWrapper(*args, **kwargs)[source]# A wrapper around a multi-action actor. This class enables macros to be executed in an environment. The actor action(s) entry must have an additional time dimension to be consumed. It must be placed adjacent to the last dimension of the input tensordict (i.e. at tensordict.ndim). The action entry keys are retrieved automatically from the actor if not provided using a simple heuristic (any nested key ending with the \"action\" string). An \"is_init\" entry must also be present in the input tensordict to track which and when the current collection should be interrupted because a \u201cdone\u201d state has been encountered. Unlike action_keys, this key must be unique. Parameters: actor (TensorDictModuleBase) \u2013 An actor. n_steps (int, optional) \u2013 the number of actions the actor outputs at once (lookahead window). Defaults to None. Keyword Arguments: action_keys (list of NestedKeys, optional) \u2013 the action keys from the environment. Can be retrieved from env.action_keys. Defaults to all out_keys of the actor which end with the \"action\" string. init_key (NestedKey, optional) \u2013 the key of the entry indicating when the environment has gone through a reset. Defaults to \"is_init\" which is the out_key from the InitTracker transform. keep_dim (bool, optional) \u2013 whether to keep the time dimension of the macro during indexing. Defaults to False. replan_interval (int, optional) \u2013 re-query the wrapped actor after this many actions have been consumed from the cache (receding-horizon execution; the actor call is skipped in between, which is the point of action chunking for expensive policies such as VLAs). Must be in [1, n_steps]; replan_interval=1 re-plans at every step (closed loop). Defaults to None, i.e. the whole cache is consumed before re-querying (open loop). With n_steps=None the bound is enforced at execution time against the actual chunk length instead. Examples \u003e\u003e\u003e import torch.nn \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import MultiStepActorWrapper, Actor \u003e\u003e\u003e from torchrl.envs import CatFrames, GymEnv, TransformedEnv, SerialEnv, InitTracker, Compose \u003e\u003e\u003e from tensordict.nn import TensorDictSequential as Seq, TensorDictModule as Mod \u003e\u003e\u003e \u003e\u003e\u003e time_steps = 6 \u003e\u003e\u003e n_obs = 4 \u003e\u003e\u003e n_action = 2 \u003e\u003e\u003e batch = 5 \u003e\u003e\u003e \u003e\u003e\u003e # Transforms a CatFrames in a stack of frames \u003e\u003e\u003e def reshape_cat(data: torch.Tensor): ... return data.unflatten(-1, (time_steps, n_obs)) \u003e\u003e\u003e # an actor that reads `time_steps` frames and outputs one action per frame \u003e\u003e\u003e # (actions are conditioned on the observation of `time_steps` in the past) \u003e\u003e\u003e actor_base = Seq( ... Mod(reshape_cat, in_keys=[\"obs_cat\"], out_keys=[\"obs_cat_reshape\"]), ... Mod(torch.nn.Linear(n_obs, n_action), in_keys=[\"obs_cat_reshape\"], out_keys=[\"action\"]) ... ) \u003e\u003e\u003e # Wrap the actor to dispatch the actions \u003e\u003e\u003e actor = MultiStepActorWrapper(actor_base, n_steps=time_steps) \u003e\u003e\u003e \u003e\u003e\u003e env = TransformedEnv( ... SerialEnv(batch, lambda: GymEnv(\"CartPole-v1\")), ... Compose( ... InitTracker(), ... CatFrames(N=time_steps, in_keys=[\"observation\"], out_keys=[\"obs_cat\"], dim=-1) ... ) ... ) \u003e\u003e\u003e \u003e\u003e\u003e print(env.rollout(100, policy=actor, break_when_any_done=False)) TensorDict( fields={ action: Tensor(shape=torch.Size([5, 100, 2]), device=cpu, dtype=torch.float32, is_shared=False), action_orig: Tensor(shape=torch.Size([5, 100, 6, 2]), device=cpu, dtype=torch.float32, is_shared=False), counter: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.int32, is_shared=False), done: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), is_init: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), next: TensorDict( fields={ done: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), is_init: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), obs_cat: Tensor(shape=torch.Size([5, 100, 24]), device=cpu, dtype=torch.float32, is_shared=False), observation: Tensor(shape=torch.Size([5, 100, 4]), device=cpu, dtype=torch.float32, is_shared=False), reward: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.float32, is_shared=False), terminated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([5, 100]), device=cpu, is_shared=False), obs_cat: Tensor(shape=torch.Size([5, 100, 24]), device=cpu, dtype=torch.float32, is_shared=False), observation: Tensor(shape=torch.Size([5, 100, 4]), device=cpu, dtype=torch.float32, is_shared=False), terminated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False), truncated: Tensor(shape=torch.Size([5, 100, 1]), device=cpu, dtype=torch.bool, is_shared=False)}, batch_size=torch.Size([5, 100]), device=cpu, is_shared=False) See also torchrl.envs.MultiStepEnvWrapper is the EnvBase alter-ego of this wrapper: It wraps an environment and unbinds the action, executing it one element at a time. forward(tensordict: TensorDictBase) \u2192 TensorDictBase[source]# Define the computation performed at every call. Should be overridden by all subclasses. Note Although the recipe for forward pass needs to be defined within this function, one should call the Module instance afterwards instead of this since the former takes care of running the registered hooks while the latter silently ignores them. property init_key: NestedKey# The indicator of the initial step for a given element of the batch.",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

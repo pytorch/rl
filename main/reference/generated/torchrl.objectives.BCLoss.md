@@ -83,6 +83,29 @@ Examples
 >>> loss_bc.backward()
 ```
 
+Chunked (VLA-style) behavior cloning is the same loss with the action
+chunk as the `action` and the padding mask excluded via `pad_mask`:
+
+Examples
+
+```
+>>> from tensordict.nn import TensorDictModule
+>>> chunk_actor = TensorDictModule(
+... nn.Sequential(nn.Linear(n_obs, 8), nn.Unflatten(-1, (2, 4))),
+... in_keys=["observation"],
+... out_keys=["action_chunk"],
+... )
+>>> loss = BCLoss(chunk_actor, loss_function="l1")
+>>> loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+>>> data = TensorDict({
+... "observation": torch.randn(2, n_obs),
+... "action_chunk": torch.randn(2, 2, 4),
+... "action_is_pad": torch.tensor([[False, False], [False, True]]),
+... }, [2])
+>>> loss(data)["loss_bc"].shape
+torch.Size([])
+```
+
 default_keys
 
 alias of `_AcceptedKeys`
@@ -98,3 +121,17 @@ Parameters:
 Returns:
 
 TensorDict with key "loss_bc".
+
+set_keys(***kwargs*) → None[[source]](../../_modules/torchrl/objectives/bc.html#BCLoss.set_keys)
+
+Set tensordict key names.
+
+Examples
+
+```
+>>> from torchrl.objectives import DQNLoss
+>>> # initialize the DQN loss
+>>> actor = torch.nn.Linear(3, 4)
+>>> dqn_loss = DQNLoss(actor, action_space="one-hot")
+>>> dqn_loss.set_keys(priority_key="td_error", action_value_key="action_value")
+```

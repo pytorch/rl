@@ -289,6 +289,7 @@ TorchRL offers a series of custom built-in environments.
 | [`LLMHashingEnv`](generated/torchrl.envs.LLMHashingEnv.html#torchrl.envs.LLMHashingEnv)(*args, **kwargs) | A text generation environment that uses a hashing module to identify unique observations. |
 | [`PendulumEnv`](generated/torchrl.envs.PendulumEnv.html#torchrl.envs.PendulumEnv)(*args, **kwargs) | A stateless Pendulum environment. |
 | [`TicTacToeEnv`](generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv)(*args, **kwargs) | A Tic-Tac-Toe implementation. |
+| [`ToyVLAEnv`](generated/torchrl.envs.ToyVLAEnv.html#torchrl.envs.ToyVLAEnv)(*args, **kwargs) | A minimal synthetic environment speaking the canonical VLA TensorDict schema. |
 
 ## MuJoCo custom environments
 

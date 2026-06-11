@@ -632,6 +632,12 @@
             </li>
           
             <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
               <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
                 Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
               </a>
@@ -1000,6 +1006,15 @@ document.write(`
       <li class="nav-item">
         
           
+          <a class="nav-link nav-internal" href="../../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
           <a class="nav-link nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
             Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
           </a>
@@ -1041,7 +1056,7 @@ document.write(`
               API Reference
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-24">
+          <ul class="dropdown-menu" id="dropdown-25">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../../reference/collectors.html">
@@ -1139,7 +1154,7 @@ document.write(`
               Knowledge Base
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-25">
+          <ul class="dropdown-menu" id="dropdown-26">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
@@ -1441,6 +1456,7 @@ document.write(`
 <span class="c1"># LICENSE file in the root directory of this source tree.</span>
 <span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span> <span class="nn">warnings</span>
 <span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Callable</span>
 
 <span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
@@ -1531,6 +1547,26 @@ document.write(`
 <span class="sd">        ...     action=spec.rand(batch))</span>
 <span class="sd">        &gt;&gt;&gt; loss_bc.backward()</span>
 
+<span class="sd">    Chunked (VLA-style) behavior cloning is the same loss with the action</span>
+<span class="sd">    chunk as the ``action`` and the padding mask excluded via ``pad_mask``:</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict.nn import TensorDictModule</span>
+<span class="sd">        &gt;&gt;&gt; chunk_actor = TensorDictModule(</span>
+<span class="sd">        ...     nn.Sequential(nn.Linear(n_obs, 8), nn.Unflatten(-1, (2, 4))),</span>
+<span class="sd">        ...     in_keys=[&quot;observation&quot;],</span>
+<span class="sd">        ...     out_keys=[&quot;action_chunk&quot;],</span>
+<span class="sd">        ... )</span>
+<span class="sd">        &gt;&gt;&gt; loss = BCLoss(chunk_actor, loss_function=&quot;l1&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; loss.set_keys(action=&quot;action_chunk&quot;, pad_mask=&quot;action_is_pad&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; data = TensorDict({</span>
+<span class="sd">        ...     &quot;observation&quot;: torch.randn(2, n_obs),</span>
+<span class="sd">        ...     &quot;action_chunk&quot;: torch.randn(2, 2, 4),</span>
+<span class="sd">        ...     &quot;action_is_pad&quot;: torch.tensor([[False, False], [False, True]]),</span>
+<span class="sd">        ... }, [2])</span>
+<span class="sd">        &gt;&gt;&gt; loss(data)[&quot;loss_bc&quot;].shape</span>
+<span class="sd">        torch.Size([])</span>
+
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="nd">@dataclass</span>
@@ -1540,9 +1576,31 @@ document.write(`
 <span class="sd">        Attributes:</span>
 <span class="sd">            action (NestedKey): The input tensordict key where the action is expected.</span>
 <span class="sd">                Defaults to &quot;action&quot;.</span>
+
+<span class="sd">                .. versionchanged:: 0.14</span>
+<span class="sd">                    The action key now also selects the actor&#39;s prediction:</span>
+<span class="sd">                    the actor should write its prediction at this key (it</span>
+<span class="sd">                    previously was read from the hardcoded ``&quot;action&quot;`` key,</span>
+<span class="sd">                    regardless of ``set_keys``). An actor writing ``&quot;action&quot;``</span>
+<span class="sd">                    while the loss uses a different action key still works</span>
+<span class="sd">                    but emits a ``FutureWarning`` (removal in v0.16); an</span>
+<span class="sd">                    actor writing neither key raises a ``RuntimeError``</span>
+<span class="sd">                    instead of silently comparing the expert action with</span>
+<span class="sd">                    itself.</span>
+<span class="sd">            pad_mask (NestedKey, optional): a boolean entry marking padded</span>
+<span class="sd">                action elements to exclude from the loss (``True`` = padded),</span>
+<span class="sd">                e.g. the ``action_is_pad`` mask of chunked (VLA-style)</span>
+<span class="sd">                behavior cloning. Trailing dimensions are broadcast: a</span>
+<span class="sd">                ``[*B, H]`` mask applies to a ``[*B, H, action_dim]`` loss.</span>
+<span class="sd">                Only supported with elementwise losses (not the</span>
+<span class="sd">                distribution-based NLL or cross-entropy paths). A wholly</span>
+<span class="sd">                padded batch yields ``NaN`` under ``&quot;mean&quot;`` reduction, and</span>
+<span class="sd">                ``reduction=&quot;none&quot;`` returns the flat 1D tensor of unmasked</span>
+<span class="sd">                loss elements. Defaults to ``None`` (no masking).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="n">action</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span>
+        <span class="n">pad_mask</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
     <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
@@ -1576,12 +1634,50 @@ document.write(`
     <span class="k">def</span> <span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">pass</span>
 
+    <span class="k">def</span> <span class="nf">_get_prediction</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the actor&#39;s prediction at the configured action key.</span>
+
+<span class="sd">        Falls back to the legacy hardcoded ``&quot;action&quot;`` key (with a</span>
+<span class="sd">        ``FutureWarning``) when the actor did not write the configured key,</span>
+<span class="sd">        and raises if no prediction was written at all.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">action_pred</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action_pred</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">action_expert</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">action_pred</span>
+        <span class="n">legacy</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">legacy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">legacy</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">action_expert</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The actor wrote its prediction at &#39;action&#39; while the loss&#39;s &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;action key is </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="si">!r}</span><span class="s2">. Reading the &quot;</span>
+                <span class="s2">&quot;prediction from the hardcoded &#39;action&#39; key is deprecated and &quot;</span>
+                <span class="s2">&quot;will be removed in v0.16: make the actor&#39;s out_keys match &quot;</span>
+                <span class="s2">&quot;the loss&#39;s action key.&quot;</span><span class="p">,</span>
+                <span class="ne">FutureWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">legacy</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;The actor did not write a prediction at &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="si">!r}</span><span class="s2">: make sure the actor&#39;s &quot;</span>
+            <span class="s2">&quot;out_keys match the loss&#39;s action key.&quot;</span>
+        <span class="p">)</span>
+
     <span class="k">def</span> <span class="nf">_set_in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,</span>
             <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span>
         <span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">pad_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">pad_mask</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span>
+
+<div class="viewcode-block" id="BCLoss.set_keys">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss.set_keys">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_in_keys</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># invalidate the cached in_keys</span></div>
+
 
     <span class="nd">@property</span>
     <span class="k">def</span> <span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -1618,7 +1714,7 @@ document.write(`
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_function</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="c1"># Use provided loss function on predicted and expert actions</span>
-                <span class="n">action_pred</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span>
+                <span class="n">action_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_prediction</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">)</span>
                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_function</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_function</span> <span class="o">==</span> <span class="s2">&quot;l1&quot;</span><span class="p">:</span>
                         <span class="n">loss</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">l1_loss</span><span class="p">(</span><span class="n">action_pred</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">)</span>
@@ -1642,13 +1738,13 @@ document.write(`
                         <span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_function</span><span class="p">(</span><span class="n">action_pred</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="s2">&quot;action&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="p">:</span>
                 <span class="c1"># Determine loss type based on action dtype and actor structure</span>
-                <span class="n">action_pred</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">)</span>
 
                 <span class="c1"># Priority 1: If expert actions are discrete (integers), use cross-entropy</span>
                 <span class="k">if</span> <span class="n">action_expert</span><span class="o">.</span><span class="n">dtype</span> <span class="ow">in</span> <span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">):</span>
                     <span class="c1"># For discrete actions: target is 1D class indices, prediction is [batch, num_classes]</span>
+                    <span class="n">action_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_prediction</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">)</span>
                     <span class="n">loss</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span>
                         <span class="n">action_pred</span><span class="p">,</span>
                         <span class="n">action_expert</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
@@ -1667,6 +1763,7 @@ document.write(`
                     <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_prob</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="c1"># Default: use MSE for continuous deterministic actions</span>
+                    <span class="n">action_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_prediction</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">)</span>
                     <span class="n">loss</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="n">action_pred</span><span class="p">,</span> <span class="n">action_expert</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;none&quot;</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="c1"># Use distribution-based negative log probability</span>
@@ -1674,7 +1771,23 @@ document.write(`
                 <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action_expert</span><span class="p">)</span>
                 <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_prob</span>
 
-        <span class="n">loss</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">pad_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pad</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">pad_mask</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pad</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">pad</span>
+                <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="n">loss</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;pad_mask </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">pad_mask</span><span class="si">!r}</span><span class="s2"> has more &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;dimensions (</span><span class="si">{</span><span class="n">mask</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2">) than the computed loss &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">loss</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2">): per-element masking requires an &quot;</span>
+                        <span class="s2">&quot;elementwise loss (e.g. loss_function=&#39;l1&#39;), not a &quot;</span>
+                        <span class="s2">&quot;distribution-based (NLL) or cross-entropy loss.&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">while</span> <span class="n">mask</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="n">loss</span><span class="o">.</span><span class="n">ndim</span><span class="p">:</span>
+                    <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">loss</span><span class="p">)</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">_reduce</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">reduction</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">mask</span><span class="p">)</span>
 
         <span class="n">td_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;loss_bc&quot;</span><span class="p">:</span> <span class="n">loss</span><span class="p">})</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
@@ -1947,7 +2060,7 @@ document.write(`
        "headline": "torchrl.objectives.bc",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/_modules/torchrl/objectives/bc.html",
-       "articleBody": "Source code for torchrl.objectives.bc # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations from collections.abc import Callable from dataclasses import dataclass from typing import Literal import torch import torch.nn.functional as F from tensordict import TensorDict, TensorDictBase, TensorDictParams from tensordict.nn import dispatch, TensorDictModule from tensordict.utils import NestedKey from torchrl.objectives.common import LossModule from torchrl.objectives.utils import _reduce [docs] class BCLoss(LossModule): \"\"\"Behavior Cloning Loss Module. Implements behavior cloning loss for both stochastic and deterministic policies. Minimizes the negative log-likelihood: -E[log \u03c0(a_expert | s)] where \u03c0 is the policy being trained and a_expert are the expert actions from the demonstration dataset. Works with any actor network that implements :meth:`~tensordict.nn.TensorDictModule.get_dist` method, including both stochastic and deterministic policies. Reference: \"Integrating Behavior Cloning and Reinforcement Learning for Improved Performance in Dense and Sparse Reward Environments\" https://arxiv.org/abs/1910.04281 Args: actor_network (TensorDictModule): the actor network to be trained. Keyword Args: reduction (str, optional): Specifies the reduction to apply to the output: ``\"none\"`` | ``\"mean\"`` | ``\"sum\"``. ``\"none\"``: no reduction will be applied, ``\"mean\"``: the sum of the output will be divided by the number of elements in the output, ``\"sum\"``: the output will be summed. Default: ``\"mean\"``. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.data.tensor_specs import Bounded \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import Actor \u003e\u003e\u003e from torchrl.objectives.bc import BCLoss \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e n_act, n_obs = 4, 3 \u003e\u003e\u003e spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,)) \u003e\u003e\u003e module = nn.Linear(n_obs, n_act) \u003e\u003e\u003e actor = Actor(module=module, spec=spec) \u003e\u003e\u003e loss = BCLoss(actor) \u003e\u003e\u003e batch = [2, ] \u003e\u003e\u003e data = TensorDict({ ... \"observation\": torch.randn(*batch, n_obs), ... \"action\": spec.rand(batch), ... }, batch) \u003e\u003e\u003e loss(data) TensorDict( fields={ loss_bc: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) This class is compatible with non-tensordict based modules too and can be used without recurring to any tensordict-related primitive. In this case, the expected keyword arguments are the actor\u0027s ``in_keys`` + ``[\"action\"]``. The return value is a tensor corresponding to the loss. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.data.tensor_specs import Bounded \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import Actor \u003e\u003e\u003e from torchrl.objectives.bc import BCLoss \u003e\u003e\u003e n_act, n_obs = 4, 3 \u003e\u003e\u003e spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,)) \u003e\u003e\u003e module = nn.Linear(n_obs, n_act) \u003e\u003e\u003e actor = Actor(module=module, spec=spec) \u003e\u003e\u003e loss = BCLoss(actor) \u003e\u003e\u003e _ = loss.select_out_keys(\"loss_bc\") \u003e\u003e\u003e batch = [2, ] \u003e\u003e\u003e loss_bc = loss( ... observation=torch.randn(*batch, n_obs), ... action=spec.rand(batch)) \u003e\u003e\u003e loss_bc.backward() \"\"\" @dataclass class _AcceptedKeys: \"\"\"Maintains default values for all configurable tensordict keys. Attributes: action (NestedKey): The input tensordict key where the action is expected. Defaults to \"action\". \"\"\" action: NestedKey = \"action\" tensor_keys: _AcceptedKeys default_keys = _AcceptedKeys out_keys = [\"loss_bc\"] actor_network: TensorDictModule actor_network_params: TensorDictParams def __init__( self, actor_network: TensorDictModule, *, loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | Literal[\"l1\", \"l2\", \"mse\", \"smooth_l1\", \"cross_entropy\"] | None = None, reduction: Literal[\"mean\", \"sum\", \"none\"] | None = None, ) -\u003e None: if reduction is None: reduction = \"mean\" super().__init__() self._in_keys = None self.convert_to_functional( actor_network, \"actor_network\", ) self.reduction = reduction self.loss_function = loss_function def _forward_value_estimator_keys(self, **kwargs) -\u003e None: pass def _set_in_keys(self): keys = [ self.tensor_keys.action, *self.actor_network.in_keys, ] self._in_keys = list(set(keys)) @property def in_keys(self): if self._in_keys is None: self._set_in_keys() return self._in_keys @in_keys.setter def in_keys(self, values): self._in_keys = values [docs] @dispatch def forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Compute the behavior cloning loss. Args: tensordict (TensorDictBase): input data containing observations and expert actions. Returns: TensorDict with key \"loss_bc\". \"\"\" tensordict = tensordict.copy() # Get expert action action_expert = tensordict.get(self.tensor_keys.action) # Forward pass through actor with self.actor_network_params.to_module( self.actor_network, preserve_module_state=False ): tensordict = self.actor_network(tensordict) if self.loss_function is not None: # Use provided loss function on predicted and expert actions action_pred = tensordict.get(\"action\") if isinstance(self.loss_function, str): if self.loss_function == \"l1\": loss = F.l1_loss(action_pred, action_expert, reduction=\"none\") elif self.loss_function == \"l2\" or self.loss_function == \"mse\": loss = F.mse_loss(action_pred, action_expert, reduction=\"none\") elif self.loss_function == \"smooth_l1\": loss = F.smooth_l1_loss( action_pred, action_expert, reduction=\"none\" ) elif self.loss_function == \"cross_entropy\": loss = F.cross_entropy( action_pred, action_expert.squeeze(-1) if action_expert.ndim \u003e 1 else action_expert, reduction=\"none\", ) else: raise ValueError( f\"Unsupported loss_function: {self.loss_function}\" ) else: loss = self.loss_function(action_pred, action_expert) elif \"action\" in tensordict: # Determine loss type based on action dtype and actor structure action_pred = tensordict.get(\"action\") # Priority 1: If expert actions are discrete (integers), use cross-entropy if action_expert.dtype in (torch.long, torch.int32, torch.int64): # For discrete actions: target is 1D class indices, prediction is [batch, num_classes] loss = F.cross_entropy( action_pred, action_expert.squeeze(-1) if action_expert.ndim \u003e 1 else action_expert, reduction=\"none\", ) # Priority 2: Check if actor has distributional outputs (stochastic actor) elif hasattr(self.actor_network, \"out_keys\") and any( k in self.actor_network.out_keys for k in [\"loc\", \"scale\", \"logits\", \"probs\"] ): # Stochastic actor: use NLL loss dist = self.actor_network.get_dist(tensordict) log_prob = dist.log_prob(action_expert) loss = -log_prob else: # Default: use MSE for continuous deterministic actions loss = F.mse_loss(action_pred, action_expert, reduction=\"none\") else: # Use distribution-based negative log probability dist = self.actor_network.get_dist(tensordict) log_prob = dist.log_prob(action_expert) loss = -log_prob loss = _reduce(loss, reduction=self.reduction) td_out = TensorDict({\"loss_bc\": loss}) self._clear_weakrefs( tensordict, td_out, \"actor_network_params\", ) return td_out",
+       "articleBody": "Source code for torchrl.objectives.bc # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import warnings from collections.abc import Callable from dataclasses import dataclass from typing import Literal import torch import torch.nn.functional as F from tensordict import TensorDict, TensorDictBase, TensorDictParams from tensordict.nn import dispatch, TensorDictModule from tensordict.utils import NestedKey from torchrl.objectives.common import LossModule from torchrl.objectives.utils import _reduce [docs] class BCLoss(LossModule): \"\"\"Behavior Cloning Loss Module. Implements behavior cloning loss for both stochastic and deterministic policies. Minimizes the negative log-likelihood: -E[log \u03c0(a_expert | s)] where \u03c0 is the policy being trained and a_expert are the expert actions from the demonstration dataset. Works with any actor network that implements :meth:`~tensordict.nn.TensorDictModule.get_dist` method, including both stochastic and deterministic policies. Reference: \"Integrating Behavior Cloning and Reinforcement Learning for Improved Performance in Dense and Sparse Reward Environments\" https://arxiv.org/abs/1910.04281 Args: actor_network (TensorDictModule): the actor network to be trained. Keyword Args: reduction (str, optional): Specifies the reduction to apply to the output: ``\"none\"`` | ``\"mean\"`` | ``\"sum\"``. ``\"none\"``: no reduction will be applied, ``\"mean\"``: the sum of the output will be divided by the number of elements in the output, ``\"sum\"``: the output will be summed. Default: ``\"mean\"``. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.data.tensor_specs import Bounded \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import Actor \u003e\u003e\u003e from torchrl.objectives.bc import BCLoss \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e n_act, n_obs = 4, 3 \u003e\u003e\u003e spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,)) \u003e\u003e\u003e module = nn.Linear(n_obs, n_act) \u003e\u003e\u003e actor = Actor(module=module, spec=spec) \u003e\u003e\u003e loss = BCLoss(actor) \u003e\u003e\u003e batch = [2, ] \u003e\u003e\u003e data = TensorDict({ ... \"observation\": torch.randn(*batch, n_obs), ... \"action\": spec.rand(batch), ... }, batch) \u003e\u003e\u003e loss(data) TensorDict( fields={ loss_bc: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) This class is compatible with non-tensordict based modules too and can be used without recurring to any tensordict-related primitive. In this case, the expected keyword arguments are the actor\u0027s ``in_keys`` + ``[\"action\"]``. The return value is a tensor corresponding to the loss. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.data.tensor_specs import Bounded \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import Actor \u003e\u003e\u003e from torchrl.objectives.bc import BCLoss \u003e\u003e\u003e n_act, n_obs = 4, 3 \u003e\u003e\u003e spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,)) \u003e\u003e\u003e module = nn.Linear(n_obs, n_act) \u003e\u003e\u003e actor = Actor(module=module, spec=spec) \u003e\u003e\u003e loss = BCLoss(actor) \u003e\u003e\u003e _ = loss.select_out_keys(\"loss_bc\") \u003e\u003e\u003e batch = [2, ] \u003e\u003e\u003e loss_bc = loss( ... observation=torch.randn(*batch, n_obs), ... action=spec.rand(batch)) \u003e\u003e\u003e loss_bc.backward() Chunked (VLA-style) behavior cloning is the same loss with the action chunk as the ``action`` and the padding mask excluded via ``pad_mask``: Examples: \u003e\u003e\u003e from tensordict.nn import TensorDictModule \u003e\u003e\u003e chunk_actor = TensorDictModule( ... nn.Sequential(nn.Linear(n_obs, 8), nn.Unflatten(-1, (2, 4))), ... in_keys=[\"observation\"], ... out_keys=[\"action_chunk\"], ... ) \u003e\u003e\u003e loss = BCLoss(chunk_actor, loss_function=\"l1\") \u003e\u003e\u003e loss.set_keys(action=\"action_chunk\", pad_mask=\"action_is_pad\") \u003e\u003e\u003e data = TensorDict({ ... \"observation\": torch.randn(2, n_obs), ... \"action_chunk\": torch.randn(2, 2, 4), ... \"action_is_pad\": torch.tensor([[False, False], [False, True]]), ... }, [2]) \u003e\u003e\u003e loss(data)[\"loss_bc\"].shape torch.Size([]) \"\"\" @dataclass class _AcceptedKeys: \"\"\"Maintains default values for all configurable tensordict keys. Attributes: action (NestedKey): The input tensordict key where the action is expected. Defaults to \"action\". .. versionchanged:: 0.14 The action key now also selects the actor\u0027s prediction: the actor should write its prediction at this key (it previously was read from the hardcoded ``\"action\"`` key, regardless of ``set_keys``). An actor writing ``\"action\"`` while the loss uses a different action key still works but emits a ``FutureWarning`` (removal in v0.16); an actor writing neither key raises a ``RuntimeError`` instead of silently comparing the expert action with itself. pad_mask (NestedKey, optional): a boolean entry marking padded action elements to exclude from the loss (``True`` = padded), e.g. the ``action_is_pad`` mask of chunked (VLA-style) behavior cloning. Trailing dimensions are broadcast: a ``[*B, H]`` mask applies to a ``[*B, H, action_dim]`` loss. Only supported with elementwise losses (not the distribution-based NLL or cross-entropy paths). A wholly padded batch yields ``NaN`` under ``\"mean\"`` reduction, and ``reduction=\"none\"`` returns the flat 1D tensor of unmasked loss elements. Defaults to ``None`` (no masking). \"\"\" action: NestedKey = \"action\" pad_mask: NestedKey | None = None tensor_keys: _AcceptedKeys default_keys = _AcceptedKeys out_keys = [\"loss_bc\"] actor_network: TensorDictModule actor_network_params: TensorDictParams def __init__( self, actor_network: TensorDictModule, *, loss_function: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] | Literal[\"l1\", \"l2\", \"mse\", \"smooth_l1\", \"cross_entropy\"] | None = None, reduction: Literal[\"mean\", \"sum\", \"none\"] | None = None, ) -\u003e None: if reduction is None: reduction = \"mean\" super().__init__() self._in_keys = None self.convert_to_functional( actor_network, \"actor_network\", ) self.reduction = reduction self.loss_function = loss_function def _forward_value_estimator_keys(self, **kwargs) -\u003e None: pass def _get_prediction( self, tensordict: TensorDictBase, action_expert: torch.Tensor ) -\u003e torch.Tensor: \"\"\"Return the actor\u0027s prediction at the configured action key. Falls back to the legacy hardcoded ``\"action\"`` key (with a ``FutureWarning``) when the actor did not write the configured key, and raises if no prediction was written at all. \"\"\" action_pred = tensordict.get(self.tensor_keys.action) if action_pred is not action_expert: return action_pred legacy = tensordict.get(\"action\", default=None) if legacy is not None and legacy is not action_expert: warnings.warn( f\"The actor wrote its prediction at \u0027action\u0027 while the loss\u0027s \" f\"action key is {self.tensor_keys.action!r}. Reading the \" \"prediction from the hardcoded \u0027action\u0027 key is deprecated and \" \"will be removed in v0.16: make the actor\u0027s out_keys match \" \"the loss\u0027s action key.\", FutureWarning, ) return legacy raise RuntimeError( f\"The actor did not write a prediction at \" f\"{self.tensor_keys.action!r}: make sure the actor\u0027s \" \"out_keys match the loss\u0027s action key.\" ) def _set_in_keys(self): keys = [ self.tensor_keys.action, *self.actor_network.in_keys, ] if self.tensor_keys.pad_mask is not None: keys.append(self.tensor_keys.pad_mask) self._in_keys = list(set(keys)) [docs] def set_keys(self, **kwargs) -\u003e None: super().set_keys(**kwargs) self._in_keys = None # invalidate the cached in_keys @property def in_keys(self): if self._in_keys is None: self._set_in_keys() return self._in_keys @in_keys.setter def in_keys(self, values): self._in_keys = values [docs] @dispatch def forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: \"\"\"Compute the behavior cloning loss. Args: tensordict (TensorDictBase): input data containing observations and expert actions. Returns: TensorDict with key \"loss_bc\". \"\"\" tensordict = tensordict.copy() # Get expert action action_expert = tensordict.get(self.tensor_keys.action) # Forward pass through actor with self.actor_network_params.to_module( self.actor_network, preserve_module_state=False ): tensordict = self.actor_network(tensordict) if self.loss_function is not None: # Use provided loss function on predicted and expert actions action_pred = self._get_prediction(tensordict, action_expert) if isinstance(self.loss_function, str): if self.loss_function == \"l1\": loss = F.l1_loss(action_pred, action_expert, reduction=\"none\") elif self.loss_function == \"l2\" or self.loss_function == \"mse\": loss = F.mse_loss(action_pred, action_expert, reduction=\"none\") elif self.loss_function == \"smooth_l1\": loss = F.smooth_l1_loss( action_pred, action_expert, reduction=\"none\" ) elif self.loss_function == \"cross_entropy\": loss = F.cross_entropy( action_pred, action_expert.squeeze(-1) if action_expert.ndim \u003e 1 else action_expert, reduction=\"none\", ) else: raise ValueError( f\"Unsupported loss_function: {self.loss_function}\" ) else: loss = self.loss_function(action_pred, action_expert) elif self.tensor_keys.action in tensordict: # Determine loss type based on action dtype and actor structure # Priority 1: If expert actions are discrete (integers), use cross-entropy if action_expert.dtype in (torch.long, torch.int32, torch.int64): # For discrete actions: target is 1D class indices, prediction is [batch, num_classes] action_pred = self._get_prediction(tensordict, action_expert) loss = F.cross_entropy( action_pred, action_expert.squeeze(-1) if action_expert.ndim \u003e 1 else action_expert, reduction=\"none\", ) # Priority 2: Check if actor has distributional outputs (stochastic actor) elif hasattr(self.actor_network, \"out_keys\") and any( k in self.actor_network.out_keys for k in [\"loc\", \"scale\", \"logits\", \"probs\"] ): # Stochastic actor: use NLL loss dist = self.actor_network.get_dist(tensordict) log_prob = dist.log_prob(action_expert) loss = -log_prob else: # Default: use MSE for continuous deterministic actions action_pred = self._get_prediction(tensordict, action_expert) loss = F.mse_loss(action_pred, action_expert, reduction=\"none\") else: # Use distribution-based negative log probability dist = self.actor_network.get_dist(tensordict) log_prob = dist.log_prob(action_expert) loss = -log_prob mask = None if self.tensor_keys.pad_mask is not None: pad = tensordict.get(self.tensor_keys.pad_mask, default=None) if pad is not None: mask = ~pad if mask.ndim \u003e loss.ndim: raise RuntimeError( f\"pad_mask {self.tensor_keys.pad_mask!r} has more \" f\"dimensions ({mask.ndim}) than the computed loss \" f\"({loss.ndim}): per-element masking requires an \" \"elementwise loss (e.g. loss_function=\u0027l1\u0027), not a \" \"distribution-based (NLL) or cross-entropy loss.\" ) while mask.ndim \u003c loss.ndim: mask = mask.unsqueeze(-1) mask = mask.expand_as(loss) loss = _reduce(loss, reduction=self.reduction, mask=mask) td_out = TensorDict({\"loss_bc\": loss}) self._clear_weakrefs( tensordict, td_out, \"actor_network_params\", ) return td_out",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

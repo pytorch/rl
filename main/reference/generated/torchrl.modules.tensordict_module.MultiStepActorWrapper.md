@@ -36,6 +36,15 @@ Defaults to `"is_init"` which is the `out_key` from the
 [`InitTracker`](torchrl.envs.transforms.InitTracker.html#torchrl.envs.transforms.InitTracker) transform.
 - **keep_dim** (*bool**,**optional*) - whether to keep the time dimension of
 the macro during indexing. Defaults to `False`.
+- **replan_interval** (*int**,**optional*) - re-query the wrapped actor after this
+many actions have been consumed from the cache (receding-horizon
+execution; the actor call is skipped in between, which is the
+point of action chunking for expensive policies such as VLAs).
+Must be in `[1, n_steps]`; `replan_interval=1` re-plans at
+every step (closed loop). Defaults to `None`, i.e. the whole
+cache is consumed before re-querying (open loop). With
+`n_steps=None` the bound is enforced at execution time against
+the actual chunk length instead.
 
 Examples
 

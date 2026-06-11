@@ -635,6 +635,12 @@
             </li>
           
             <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
               <a class="nav-link dropdown-item nav-internal" href="../tutorials/multiagent_competitive_ddpg.html">
                 Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
               </a>
@@ -1005,6 +1011,15 @@ document.write(`
       <li class="nav-item">
         
           
+          <a class="nav-link nav-internal" href="../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
           <a class="nav-link nav-internal" href="../tutorials/multiagent_competitive_ddpg.html">
             Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
           </a>
@@ -1046,7 +1061,7 @@ document.write(`
               API Reference
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-24">
+          <ul class="dropdown-menu" id="dropdown-25">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="collectors.html">
@@ -1144,7 +1159,7 @@ document.write(`
               Knowledge Base
             </a>
           </div>
-          <ul class="dropdown-menu" id="dropdown-25">
+          <ul class="dropdown-menu" id="dropdown-26">
             
               <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="generated/knowledge_base/DEBUGGING_RL.html">
@@ -1475,6 +1490,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.LLMHashingEnv.html">LLMHashingEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.PendulumEnv.html">PendulumEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.TicTacToeEnv.html">TicTacToeEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.ToyVLAEnv.html">ToyVLAEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.MujocoEnv.html">MujocoEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.AntEnv.html">AntEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.CubeBowlEnv.html">CubeBowlEnv</a></li>
@@ -1577,6 +1593,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.SqueezeTransform.html">SqueezeTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.Stack.html">Stack</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.StepCounter.html">StepCounter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.SuccessReward.html">SuccessReward</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TargetReturn.html">TargetReturn</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TensorDictPrimer.html">TensorDictPrimer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TerminateTransform.html">TerminateTransform</a></li>
@@ -1967,6 +1984,9 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.validate_vla_tensordict.html">validate_vla_tensordict</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.ActionTokenizerBase.html">ActionTokenizerBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.UniformActionTokenizer.html">UniformActionTokenizer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.vla.VLAWrapperBase.html">VLAWrapperBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.vla.TinyVLA.html">TinyVLA</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.modules.vla.LeRobotPolicyWrapper.html">LeRobotPolicyWrapper</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="config.html">TorchRL Configuration System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -2271,7 +2291,8 @@ treats a VLA as an ordinary TensorDict-first policy: a <a class="reference exter
 fed by composable transforms, trained by a <a class="reference internal" href="generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule" title="torchrl.objectives.LossModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LossModule</span></code></a>,
 and rolled out by the standard collectors. This page documents the data
 schema, transforms, policies and objectives that make robot VLA workflows
-TensorDict-native.</p>
+TensorDict-native. See the <a class="reference internal" href="../tutorials/vla.html#vla-tuto"><span class="std std-ref">VLA tutorial</span></a> for an end-to-end
+example (data, chunking, behavior cloning, chunked inference and RL fine-tuning).</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>The VLA stack never hard-depends on the robot-learning ecosystem. Packages
@@ -2288,8 +2309,8 @@ and the LeRobot dataset format:</p>
     <span class="n">observation</span><span class="p">:</span> <span class="n">TensorDict</span><span class="p">(</span>
         <span class="n">image</span><span class="p">:</span> <span class="p">{</span><span class="o">&lt;</span><span class="n">camera</span><span class="o">&gt;</span><span class="p">:</span> <span class="n">uint8</span><span class="o">/</span><span class="nb">float</span> <span class="p">[</span><span class="o">*</span><span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span><span class="p">]},</span>  <span class="c1"># or a single tensor</span>
         <span class="n">state</span><span class="p">:</span> <span class="nb">float</span> <span class="p">[</span><span class="o">*</span><span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">state_dim</span><span class="p">],</span>                  <span class="c1"># proprioception</span>
-        <span class="n">language_instruction</span><span class="p">:</span> <span class="n">NonTensorData</span> <span class="o">|</span> <span class="n">Text</span><span class="p">,</span>       <span class="c1"># raw or tokenized</span>
     <span class="p">),</span>
+    <span class="n">language_instruction</span><span class="p">:</span> <span class="n">NonTensorData</span> <span class="o">|</span> <span class="n">Text</span><span class="p">,</span>           <span class="c1"># raw or tokenized (per-traj)</span>
     <span class="n">action</span><span class="p">:</span> <span class="nb">float</span> <span class="p">[</span><span class="o">*</span><span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">action_dim</span><span class="p">],</span>                    <span class="c1"># raw, per-step</span>
     <span class="n">action_chunk</span><span class="p">:</span> <span class="nb">float</span> <span class="p">[</span><span class="o">*</span><span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">chunk</span><span class="p">,</span> <span class="n">action_dim</span><span class="p">],</span>       <span class="c1"># built for training</span>
     <span class="n">action_is_pad</span><span class="p">:</span> <span class="nb">bool</span> <span class="p">[</span><span class="o">*</span><span class="n">B</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">chunk</span><span class="p">],</span>                   <span class="c1"># chunk validity mask</span>
@@ -2298,10 +2319,14 @@ and the LeRobot dataset format:</p>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>The default keys are exported from <code class="xref py py-mod docutils literal notranslate"><span class="pre">torchrl.data.vla</span></code> (<code class="docutils literal notranslate"><span class="pre">IMAGE_KEY</span></code>,
-<code class="docutils literal notranslate"><span class="pre">STATE_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">INSTRUCTION_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTION_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTION_CHUNK_KEY</span></code>,
-<code class="docutils literal notranslate"><span class="pre">ACTION_IS_PAD_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTION_TOKENS_KEY</span></code>). Every component also lets you
-override its keys, so these are merely the shared defaults.</p>
+<p>Like <a class="reference internal" href="generated/torchrl.data.datasets.OpenXExperienceReplay.html#torchrl.data.datasets.OpenXExperienceReplay" title="torchrl.data.datasets.OpenXExperienceReplay"><code class="xref py py-class docutils literal notranslate"><span class="pre">OpenXExperienceReplay</span></code></a>, the image and state
+live under <code class="docutils literal notranslate"><span class="pre">observation</span></code> while the (per-trajectory) language instruction and
+the action live at the tensordict root.</p>
+<p>The default keys are exported from <code class="xref py py-mod docutils literal notranslate"><span class="pre">torchrl.data.vla</span></code> (<code class="docutils literal notranslate"><span class="pre">OBSERVATION_KEY</span></code>,
+<code class="docutils literal notranslate"><span class="pre">IMAGE_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">STATE_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">INSTRUCTION_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTION_KEY</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ACTION_CHUNK_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTION_IS_PAD_KEY</span></code>, <code class="docutils literal notranslate"><span class="pre">ACTION_TOKENS_KEY</span></code>). Every
+component also lets you override its keys, so these are merely the shared
+defaults.</p>
 </section>
 <section id="data-and-metadata">
 <h2>Data and metadata<a class="headerlink" href="#data-and-metadata" title="Link to this heading">#</a></h2>
@@ -2323,10 +2348,10 @@ both of which expose trajectory-aware slice sampling.</p>
 </section>
 <section id="transforms">
 <h2>Transforms<a class="headerlink" href="#transforms" title="Link to this heading">#</a></h2>
-<p>VLA-specific transforms are standard <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>
-subclasses, so they compose with <a class="reference internal" href="generated/torchrl.envs.transforms.Compose.html#torchrl.envs.transforms.Compose" title="torchrl.envs.transforms.Compose"><code class="xref py py-class docutils literal notranslate"><span class="pre">Compose</span></code></a>,
-replay buffers and transformed environments. They are documented in full on the
-<a class="reference internal" href="envs_transforms.html#transforms"><span class="std std-ref">transforms reference page</span></a>.</p>
+<p>The VLA data path is built from general <a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform" title="torchrl.envs.transforms.Transform"><code class="xref py py-class docutils literal notranslate"><span class="pre">Transform</span></code></a>
+subclasses – none of them are VLA-specific (they apply to any action-based
+pipeline) and they live alongside the other transforms, documented in full on the
+<a class="reference internal" href="envs_transforms.html#transforms"><span class="std std-ref">transforms reference page</span></a>. Here is how they combine for VLA:</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="generated/torchrl.envs.transforms.ActionChunkTransform.html#torchrl.envs.transforms.ActionChunkTransform" title="torchrl.envs.transforms.ActionChunkTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionChunkTransform</span></code></a> – build fixed-length
 action chunks (<code class="docutils literal notranslate"><span class="pre">[*B,</span> <span class="pre">T,</span> <span class="pre">H,</span> <span class="pre">action_dim]</span></code>) and a padding mask from a sampled
@@ -2342,6 +2367,8 @@ actions on the env action-input path.</p></li>
 <li><p><a class="reference internal" href="generated/torchrl.envs.transforms.ActionTokenizerTransform.html#torchrl.envs.transforms.ActionTokenizerTransform" title="torchrl.envs.transforms.ActionTokenizerTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionTokenizerTransform</span></code></a> – encode
 continuous actions into discrete tokens (wrapping an action tokenizer) for
 autoregressive token VLAs.</p></li>
+<li><p><a class="reference internal" href="generated/torchrl.envs.transforms.SuccessReward.html#torchrl.envs.transforms.SuccessReward" title="torchrl.envs.transforms.SuccessReward"><code class="xref py py-class docutils literal notranslate"><span class="pre">SuccessReward</span></code></a> – a sparse 0/1 success
+reward for RL fine-tuning.</p></li>
 </ul>
 </section>
 <section id="action-representations">
@@ -2360,6 +2387,68 @@ a language-model head.</p>
 </tbody>
 </table>
 </div>
+</section>
+<section id="policies">
+<h2>Policies<a class="headerlink" href="#policies" title="Link to this heading">#</a></h2>
+<p>A VLA policy is an ordinary <a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModuleBase.html#tensordict.nn.TensorDictModuleBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictModuleBase</span></code></a> that
+maps images, optional proprioceptive state and a language instruction to an
+action chunk (continuous) or action tokens (discrete). <a class="reference internal" href="generated/torchrl.modules.vla.VLAWrapperBase.html#torchrl.modules.vla.VLAWrapperBase" title="torchrl.modules.vla.VLAWrapperBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">VLAWrapperBase</span></code></a>
+fixes that contract; <a class="reference internal" href="generated/torchrl.modules.vla.TinyVLA.html#torchrl.modules.vla.TinyVLA" title="torchrl.modules.vla.TinyVLA"><code class="xref py py-class docutils literal notranslate"><span class="pre">TinyVLA</span></code></a> is a small reference
+policy for tests and tutorials.</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table autosummary">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.vla.VLAWrapperBase.html#torchrl.modules.vla.VLAWrapperBase" title="torchrl.modules.vla.VLAWrapperBase"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VLAWrapperBase</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Base class for Vision-Language-Action policies.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/torchrl.modules.vla.TinyVLA.html#torchrl.modules.vla.TinyVLA" title="torchrl.modules.vla.TinyVLA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TinyVLA</span></code></a>(*args, **kwargs)</p></td>
+<td><p>A tiny, dependency-free reference VLA policy for CI and tutorials.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/torchrl.modules.vla.LeRobotPolicyWrapper.html#torchrl.modules.vla.LeRobotPolicyWrapper" title="torchrl.modules.vla.LeRobotPolicyWrapper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LeRobotPolicyWrapper</span></code></a>(*args, **kwargs)</p></td>
+<td><p>Expose an external (LeRobot-style) policy as a TorchRL VLA policy.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>At inference a chunk policy predicts <code class="docutils literal notranslate"><span class="pre">H</span></code> actions while the environment consumes
+one per step – and chunking only pays off if the (expensive) policy is <em>not</em>
+queried at every step.
+<a class="reference internal" href="generated/torchrl.modules.tensordict_module.MultiStepActorWrapper.html#torchrl.modules.tensordict_module.MultiStepActorWrapper" title="torchrl.modules.tensordict_module.MultiStepActorWrapper"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiStepActorWrapper</span></code></a> provides
+this: it caches the predicted actions, emits one per step and skips the
+wrapped actor while the cache lasts – open-loop by default, receding horizon
+with <code class="docutils literal notranslate"><span class="pre">replan_interval</span></code>, re-planning on env resets via <code class="docutils literal notranslate"><span class="pre">is_init</span></code>.
+<a class="reference internal" href="generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction" title="torchrl.envs.transforms.MultiAction"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAction</span></code></a> is the env-side alternative
+(one base step per chunk action, a single policy call per chunk, at the price
+of a re-timed MDP). <a class="reference internal" href="generated/torchrl.envs.ToyVLAEnv.html#torchrl.envs.ToyVLAEnv" title="torchrl.envs.ToyVLAEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">ToyVLAEnv</span></code></a> – a tiny synthetic env
+speaking the canonical schema, whose state echoes the executed action – lets
+you smoke-test this machinery without any simulator dependency.</p>
+</section>
+<section id="objectives">
+<h2>Objectives<a class="headerlink" href="#objectives" title="Link to this heading">#</a></h2>
+<p>VLA fine-tuning needs no dedicated loss classes; the standard objectives
+apply directly:</p>
+<ul>
+<li><p><em>Chunked behavior cloning</em> is <a class="reference internal" href="generated/torchrl.objectives.BCLoss.html#torchrl.objectives.BCLoss" title="torchrl.objectives.BCLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">BCLoss</span></code></a> with the
+action chunk as the <code class="docutils literal notranslate"><span class="pre">action</span></code> and the chunk-padding mask excluded via its
+<code class="docutils literal notranslate"><span class="pre">pad_mask</span></code> key:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">loss</span> <span class="o">=</span> <span class="n">BCLoss</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">loss_function</span><span class="o">=</span><span class="s2">&quot;l1&quot;</span><span class="p">)</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">&quot;action_chunk&quot;</span><span class="p">,</span> <span class="n">pad_mask</span><span class="o">=</span><span class="s2">&quot;action_is_pad&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</li>
+<li><p><em>Token RL fine-tuning</em> (GRPO-style, following SimpleVLA-RL / RL4VLA) is
+<a class="reference internal" href="generated/torchrl.objectives.ClipPPOLoss.html#torchrl.objectives.ClipPPOLoss" title="torchrl.objectives.ClipPPOLoss"><code class="xref py py-class docutils literal notranslate"><span class="pre">ClipPPOLoss</span></code></a> over the action tokens: advantages
+are precomputed (group-relative), so no critic is needed, and the token
+head’s sequence-level log-probabilities match the <code class="docutils literal notranslate"><span class="pre">sample_log_prob</span></code>
+contract. The advantage carries the trailing singleton value-dim the PPO
+losses expect (<code class="docutils literal notranslate"><span class="pre">[batch,</span> <span class="pre">1]</span></code>, not <code class="docutils literal notranslate"><span class="pre">[batch]</span></code>):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">loss</span> <span class="o">=</span> <span class="n">ClipPPOLoss</span><span class="p">(</span><span class="n">policy</span><span class="p">,</span> <span class="n">critic_network</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">entropy_bonus</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">loss</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;action_tokens&quot;</span><span class="p">,</span> <span class="n">sample_log_prob</span><span class="o">=</span><span class="s2">&quot;log_probs&quot;</span><span class="p">,</span> <span class="n">advantage</span><span class="o">=</span><span class="s2">&quot;advantage&quot;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</li>
+</ul>
 </section>
 </section>
 
@@ -2484,6 +2573,8 @@ a language-model head.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#data-and-metadata">Data and metadata</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#transforms">Transforms</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#action-representations">Action representations</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policies">Policies</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#objectives">Objectives</a></li>
 </ul>
   </nav></div>
     
@@ -2736,7 +2827,7 @@ a language-model head.</p>
        "headline": "Vision-Language-Action (VLA)",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/vla.html",
-       "articleBody": "Vision-Language-Action (VLA)# Vision-Language-Action (VLA) models map one or more camera images, optional proprioceptive state, and a natural-language instruction to robot actions \u2013 usually emitted as a short action chunk of future steps. TorchRL treats a VLA as an ordinary TensorDict-first policy: a TensorDictModule fed by composable transforms, trained by a LossModule, and rolled out by the standard collectors. This page documents the data schema, transforms, policies and objectives that make robot VLA workflows TensorDict-native. Note The VLA stack never hard-depends on the robot-learning ecosystem. Packages such as transformers, lerobot or simulator backends are optional and imported lazily; import torchrl stays lightweight. Canonical TensorDict schema# VLA components agree on a single NestedKey layout so that datasets, transforms, policies and losses interoperate without lossy conversion. The layout mirrors OpenXExperienceReplay and the LeRobot dataset format: TensorDict( observation: TensorDict( image: {\u003ccamera\u003e: uint8/float [*B, T, C, H, W]}, # or a single tensor state: float [*B, T, state_dim], # proprioception language_instruction: NonTensorData | Text, # raw or tokenized ), action: float [*B, T, action_dim], # raw, per-step action_chunk: float [*B, T, chunk, action_dim], # built for training action_is_pad: bool [*B, T, chunk], # chunk validity mask action_tokens: long [*B, T, chunk, action_dim], # tokenized actions next: TensorDict(...), # TED layout ) The default keys are exported from torchrl.data.vla (IMAGE_KEY, STATE_KEY, INSTRUCTION_KEY, ACTION_KEY, ACTION_CHUNK_KEY, ACTION_IS_PAD_KEY, ACTION_TOKENS_KEY). Every component also lets you override its keys, so these are merely the shared defaults. Data and metadata# RobotDatasetMetadata(dataset_id[, ...]) validate_vla_tensordict(tensordict, *[, ...]) Validate that a tensordict follows the canonical VLA schema. Robot VLA trajectories can be loaded into the canonical schema from OpenXExperienceReplay (Open X-Embodiment) and LeRobotExperienceReplay (the LeRobot format), both of which expose trajectory-aware slice sampling. Transforms# VLA-specific transforms are standard Transform subclasses, so they compose with Compose, replay buffers and transformed environments. They are documented in full on the transforms reference page. ActionChunkTransform \u2013 build fixed-length action chunks ([*B, T, H, action_dim]) and a padding mask from a sampled trajectory window, the standard training target for chunked VLA policies. ActionScaling \u2013 affine action normalization; built with the from_metadata() / from_stats() constructors it normalizes expert actions on the replay-buffer sample path (pass in_keys_inv=[] for a buffer that raw data is written to through extend, which applies the inverse) and denormalizes a policy\u2019s predicted actions on the env action-input path. ActionTokenizerTransform \u2013 encode continuous actions into discrete tokens (wrapping an action tokenizer) for autoregressive token VLAs. Action representations# Action tokenizers map continuous actions to discrete token ids and back, so that autoregressive (RT-2 / OpenVLA-style) VLA policies can emit actions through a language-model head. ActionTokenizerBase(*args, **kwargs) Base class for action tokenizers. UniformActionTokenizer(num_bins, *, low, high) Per-dimension uniform-bin action tokenizer (RT-2 / OpenVLA style).",
+       "articleBody": "Vision-Language-Action (VLA)# Vision-Language-Action (VLA) models map one or more camera images, optional proprioceptive state, and a natural-language instruction to robot actions \u2013 usually emitted as a short action chunk of future steps. TorchRL treats a VLA as an ordinary TensorDict-first policy: a TensorDictModule fed by composable transforms, trained by a LossModule, and rolled out by the standard collectors. This page documents the data schema, transforms, policies and objectives that make robot VLA workflows TensorDict-native. See the VLA tutorial for an end-to-end example (data, chunking, behavior cloning, chunked inference and RL fine-tuning). Note The VLA stack never hard-depends on the robot-learning ecosystem. Packages such as transformers, lerobot or simulator backends are optional and imported lazily; import torchrl stays lightweight. Canonical TensorDict schema# VLA components agree on a single NestedKey layout so that datasets, transforms, policies and losses interoperate without lossy conversion. The layout mirrors OpenXExperienceReplay and the LeRobot dataset format: TensorDict( observation: TensorDict( image: {\u003ccamera\u003e: uint8/float [*B, T, C, H, W]}, # or a single tensor state: float [*B, T, state_dim], # proprioception ), language_instruction: NonTensorData | Text, # raw or tokenized (per-traj) action: float [*B, T, action_dim], # raw, per-step action_chunk: float [*B, T, chunk, action_dim], # built for training action_is_pad: bool [*B, T, chunk], # chunk validity mask action_tokens: long [*B, T, chunk, action_dim], # tokenized actions next: TensorDict(...), # TED layout ) Like OpenXExperienceReplay, the image and state live under observation while the (per-trajectory) language instruction and the action live at the tensordict root. The default keys are exported from torchrl.data.vla (OBSERVATION_KEY, IMAGE_KEY, STATE_KEY, INSTRUCTION_KEY, ACTION_KEY, ACTION_CHUNK_KEY, ACTION_IS_PAD_KEY, ACTION_TOKENS_KEY). Every component also lets you override its keys, so these are merely the shared defaults. Data and metadata# RobotDatasetMetadata(dataset_id[, ...]) validate_vla_tensordict(tensordict, *[, ...]) Validate that a tensordict follows the canonical VLA schema. Robot VLA trajectories can be loaded into the canonical schema from OpenXExperienceReplay (Open X-Embodiment) and LeRobotExperienceReplay (the LeRobot format), both of which expose trajectory-aware slice sampling. Transforms# The VLA data path is built from general Transform subclasses \u2013 none of them are VLA-specific (they apply to any action-based pipeline) and they live alongside the other transforms, documented in full on the transforms reference page. Here is how they combine for VLA: ActionChunkTransform \u2013 build fixed-length action chunks ([*B, T, H, action_dim]) and a padding mask from a sampled trajectory window, the standard training target for chunked VLA policies. ActionScaling \u2013 affine action normalization; built with the from_metadata() / from_stats() constructors it normalizes expert actions on the replay-buffer sample path (pass in_keys_inv=[] for a buffer that raw data is written to through extend, which applies the inverse) and denormalizes a policy\u2019s predicted actions on the env action-input path. ActionTokenizerTransform \u2013 encode continuous actions into discrete tokens (wrapping an action tokenizer) for autoregressive token VLAs. SuccessReward \u2013 a sparse 0/1 success reward for RL fine-tuning. Action representations# Action tokenizers map continuous actions to discrete token ids and back, so that autoregressive (RT-2 / OpenVLA-style) VLA policies can emit actions through a language-model head. ActionTokenizerBase(*args, **kwargs) Base class for action tokenizers. UniformActionTokenizer(num_bins, *, low, high) Per-dimension uniform-bin action tokenizer (RT-2 / OpenVLA style). Policies# A VLA policy is an ordinary TensorDictModuleBase that maps images, optional proprioceptive state and a language instruction to an action chunk (continuous) or action tokens (discrete). VLAWrapperBase fixes that contract; TinyVLA is a small reference policy for tests and tutorials. VLAWrapperBase(*args, **kwargs) Base class for Vision-Language-Action policies. TinyVLA(*args, **kwargs) A tiny, dependency-free reference VLA policy for CI and tutorials. LeRobotPolicyWrapper(*args, **kwargs) Expose an external (LeRobot-style) policy as a TorchRL VLA policy. At inference a chunk policy predicts H actions while the environment consumes one per step \u2013 and chunking only pays off if the (expensive) policy is not queried at every step. MultiStepActorWrapper provides this: it caches the predicted actions, emits one per step and skips the wrapped actor while the cache lasts \u2013 open-loop by default, receding horizon with replan_interval, re-planning on env resets via is_init. MultiAction is the env-side alternative (one base step per chunk action, a single policy call per chunk, at the price of a re-timed MDP). ToyVLAEnv \u2013 a tiny synthetic env speaking the canonical schema, whose state echoes the executed action \u2013 lets you smoke-test this machinery without any simulator dependency. Objectives# VLA fine-tuning needs no dedicated loss classes; the standard objectives apply directly: Chunked behavior cloning is BCLoss with the action chunk as the action and the chunk-padding mask excluded via its pad_mask key: loss = BCLoss(policy, loss_function=\"l1\") loss.set_keys(action=\"action_chunk\", pad_mask=\"action_is_pad\") Token RL fine-tuning (GRPO-style, following SimpleVLA-RL / RL4VLA) is ClipPPOLoss over the action tokens: advantages are precomputed (group-relative), so no critic is needed, and the token head\u2019s sequence-level log-probabilities match the sample_log_prob contract. The advantage carries the trailing singleton value-dim the PPO losses expect ([batch, 1], not [batch]): loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False) loss.set_keys( action=\"action_tokens\", sample_log_prob=\"log_probs\", advantage=\"advantage\" )",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",
