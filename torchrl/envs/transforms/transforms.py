@@ -98,6 +98,7 @@ from torchrl.envs.transforms._reward import (
     RewardClipping,
     RewardSum,
     SignTransform,
+    SuccessReward,
     TargetReturn,
 )
 from torchrl.envs.transforms._tensor import (
@@ -168,6 +169,7 @@ __all__ = [
     "SqueezeTransform",
     "Stack",
     "StepCounter",
+    "SuccessReward",
     "TargetReturn",
     "TensorDictPrimer",
     "TerminateTransform",
