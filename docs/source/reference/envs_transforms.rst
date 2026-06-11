@@ -249,6 +249,7 @@ Available Transforms
     ActionDiscretizer
     ActionMask
     ActionScaling
+    ActionTokenizerTransform
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform

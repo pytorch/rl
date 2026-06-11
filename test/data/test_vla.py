@@ -15,8 +15,10 @@ from tensordict import NonTensorData, TensorDict
 
 from torchrl.data.vla import (
     ACTION_KEY,
+    ActionTokenizerBase,
     INSTRUCTION_KEY,
     RobotDatasetMetadata,
+    UniformActionTokenizer,
     validate_vla_tensordict,
 )
 
@@ -235,6 +237,67 @@ class TestVLASchema:
             )
             == []
         )
+
+
+class TestActionTokenizer:
+    def test_encode_values(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        tokens = tok.encode(torch.tensor([-1.0, 0.0, 1.0]))
+        assert tokens.tolist() == [0, 128, 255]
+        assert tokens.dtype == torch.long
+
+    def test_roundtrip_tolerance(self):
+        tok = UniformActionTokenizer(64, low=-2.0, high=2.0)
+        actions = torch.empty(1000).uniform_(-2.0, 2.0)
+        recon = tok.decode(tok.encode(actions))
+        bin_width = (2.0 - (-2.0)) / 64
+        assert (recon - actions).abs().max() <= bin_width / 2 + 1e-5
+
+    def test_is_base_subclass(self):
+        assert issubclass(UniformActionTokenizer, ActionTokenizerBase)
+
+    def test_vocab_and_action_dim(self):
+        tok = UniformActionTokenizer(10, low=0.0, high=1.0)
+        assert tok.vocab_size == 10
+        assert tok.action_dim is None  # scalar bounds
+        tok2 = UniformActionTokenizer(10, low=0.0, high=1.0, action_dim=4)
+        assert tok2.action_dim == 4
+        assert tok2.low.shape == torch.Size([4])
+
+    def test_per_dim_bounds_chunk(self):
+        low = torch.tensor([-1.0, 0.0, -2.0])
+        high = torch.tensor([1.0, 2.0, 0.0])
+        tok = UniformActionTokenizer(32, low=low, high=high)
+        actions = torch.rand(2, 4, 5, 3)  # [B, T, chunk, A]
+        actions = low + actions * (high - low)
+        tokens = tok.encode(actions)
+        assert tokens.shape == torch.Size([2, 4, 5, 3])
+        recon = tok.decode(tokens)
+        assert (recon - actions).abs().max() <= ((high - low) / (2 * 32)).max() + 1e-5
+
+    def test_invalid_num_bins(self):
+        with pytest.raises(ValueError, match="num_bins"):
+            UniformActionTokenizer(0, low=-1.0, high=1.0)
+
+    def test_invalid_bounds(self):
+        with pytest.raises(ValueError, match="strictly greater"):
+            UniformActionTokenizer(10, low=1.0, high=1.0)
+
+    def test_from_metadata(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=2,
+            action_low=torch.tensor([-1.0, -1.0]),
+            action_high=torch.tensor([1.0, 1.0]),
+        )
+        tok = UniformActionTokenizer.from_metadata(meta, num_bins=128)
+        assert tok.vocab_size == 128
+        assert tok.action_dim == 2
+
+    def test_from_metadata_no_bounds_raises(self):
+        meta = RobotDatasetMetadata("bridge", action_dim=2)
+        with pytest.raises(ValueError, match="no action bounds"):
+            UniformActionTokenizer.from_metadata(meta, num_bins=128)
 
 
 if __name__ == "__main__":

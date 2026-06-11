@@ -40,7 +40,7 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
-from torchrl.data.vla import RobotDatasetMetadata
+from torchrl.data.vla import RobotDatasetMetadata, UniformActionTokenizer
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
@@ -67,7 +67,7 @@ from torchrl.envs import (
     URScriptPrimitiveTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
-from torchrl.envs.transforms import ActionChunkTransform
+from torchrl.envs.transforms import ActionChunkTransform, ActionTokenizerTransform
 from torchrl.envs.transforms.transforms import (
     ActionDiscretizer,
     FORWARD_NOT_IMPLEMENTED,
@@ -90,6 +90,7 @@ from torchrl.testing.mocking_classes import (
     CountingEnv,
     DiscreteActionConvMockEnvNumpy,
     EnvWithScalarAction,
+    NestedCountingEnv,
     StateLessCountingEnv,
 )
 
@@ -2522,6 +2523,183 @@ class TestActionChunkTransform(TransformBase):
         c_chunk, c_pad = compiled(action)
         torch.testing.assert_close(c_chunk, eager_chunk)
         assert torch.equal(c_pad, eager_pad)
+
+
+class TestActionTokenizerTransform(TransformBase):
+    @staticmethod
+    def _env():
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        return TransformedEnv(
+            ContinuousActionVecMockEnv(), ActionTokenizerTransform(tok)
+        )
+
+    def test_single_trans_env_check(self):
+        env = self._env()
+        check_env_specs(env)
+        # the policy-facing action spec is the token interface
+        token_spec = env.full_action_spec["action_tokens"]
+        assert isinstance(token_spec, Categorical)
+        assert token_spec.shape == torch.Size([7])
+        assert token_spec.dtype == torch.long
+        assert "action" not in env.full_action_spec.keys(True, True)
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, self._env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, self._env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        env = TransformedEnv(
+            SerialEnv(2, ContinuousActionVecMockEnv), ActionTokenizerTransform(tok)
+        )
+        check_env_specs(env)
+        assert env.full_action_spec["action_tokens"].shape == torch.Size([2, 7])
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, ContinuousActionVecMockEnv),
+            ActionTokenizerTransform(tok),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+
+    def test_transform_compose(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = Compose(ActionTokenizerTransform(tok))
+        td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+
+    def test_transform_env(self):
+        captured = {}
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        env = TransformedEnv(CaptureEnv(), ActionTokenizerTransform(tok))
+        td = env.reset()
+        td["action_tokens"] = torch.arange(7, dtype=torch.long)
+        env.step(td)
+        # the base env consumes the decoded (continuous) action
+        torch.testing.assert_close(captured["action"], tok.decode(td["action_tokens"]))
+        r = env.rollout(3)
+        assert r["action_tokens"].dtype == torch.long
+        assert (r["action_tokens"] < 16).all()
+
+    def test_transform_model(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        model = nn.Sequential(t)
+        td = model(
+            TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1])
+        )
+        assert td["action_tokens"].tolist() == [[0, 128, 255]]
+
+    def test_transform_rb(self):
+        tok = UniformActionTokenizer(16, low=-1.0, high=1.0)
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            transform=ActionTokenizerTransform(tok),
+            batch_size=4,
+        )
+        # extend with raw (untokenized) actions: the inverse is a no-op, the
+        # tokens are built on the sample path only
+        rb.extend(TensorDict({"action": torch.rand(10, 3) * 2 - 1}, batch_size=[10]))
+        stored = rb._storage._storage
+        assert "action_tokens" not in stored.keys()
+        sample = rb.sample()
+        assert sample["action_tokens"].dtype == torch.long
+        assert (sample["action_tokens"] < 16).all()
+
+    def test_transform_inverse(self):
+        # forward encodes, inv decodes (within half a bin)
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        enc = t(TensorDict({"action": action}, batch_size=[1]))
+        dec = t.inv(TensorDict({"action_tokens": enc["action_tokens"]}, batch_size=[1]))
+        assert (dec["action"] - action).abs().max() <= (2.0 / (2 * 256)) + 1e-5
+        # absent tokens: the inverse is a no-op
+        td = t.inv(TensorDict({"action": action}, batch_size=[1]))
+        assert "action_tokens" not in td.keys()
+
+    # ActionTokenizerTransform-specific tests
+    def test_decode_via_tokenizer(self):
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(tok)
+        assert t.tokenizer is tok
+        action = torch.tensor([[-0.5, 0.25, 0.5]])
+        td = t(TensorDict({"action": action}, batch_size=[1]))
+        recon = t.tokenizer.decode(td["action_tokens"])
+        assert (recon - action).abs().max() <= (2.0 / (2 * 256)) + 1e-5
+
+    def test_nested_keys_and_chunk(self):
+        tok = UniformActionTokenizer(64, low=-1.0, high=1.0)
+        t = ActionTokenizerTransform(
+            tok, in_key="action_chunk", out_key=("tokens", "action")
+        )
+        td = TensorDict({"action_chunk": torch.zeros(2, 3, 4, 5)}, batch_size=[2, 3])
+        out = t(td)
+        assert out["tokens", "action"].shape == torch.Size([2, 3, 4, 5])
+        # the inverse also resolves nested keys
+        back = t.inv(
+            TensorDict(
+                {"tokens": {"action": torch.zeros(2, 4, 5, dtype=torch.long)}},
+                batch_size=[2],
+            )
+        )
+        assert back["action_chunk"].shape == torch.Size([2, 4, 5])
+
+    def test_nested_action_key_env(self):
+        # the spec rewrite handles nested (tuple) action keys on a real env
+        tok = UniformActionTokenizer(8, low=-1.0, high=1.0)
+        env = TransformedEnv(
+            NestedCountingEnv(),
+            ActionTokenizerTransform(
+                tok, in_key=("data", "action"), out_key=("data", "tokens")
+            ),
+        )
+        check_env_specs(env)
+        assert ("data", "tokens") in env.full_action_spec.keys(True, True)
+        assert ("data", "action") not in env.full_action_spec.keys(True, True)
+        env.rollout(3)
+
+    def test_env_missing_tokens_raises(self):
+        # a policy mistakenly writing the raw action key must not silently
+        # bypass the decode when the transform is attached to an env
+        env = self._env()
+        td = env.reset()
+        td["action"] = torch.zeros(7)
+        with pytest.raises(KeyError, match="action_tokens"):
+            env.step(td)
+
+    def test_requires_tokenizer(self):
+        with pytest.raises(TypeError, match="ActionTokenizerBase"):
+            ActionTokenizerTransform(object())
 
 
 if __name__ == "__main__":
