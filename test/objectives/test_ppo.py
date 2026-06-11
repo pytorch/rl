@@ -1315,6 +1315,82 @@ class TestPPO(LossModuleTestBase):
             loss = loss_fn(td)
             assert "loss_critic" in loss.keys()
 
+    def test_ppo_asymmetric_clip_epsilon(self):
+        # a (low, high) clip_epsilon pair registers DAPO-style separate
+        # bounds; a float keeps the legacy schedulable clip_epsilon buffer
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_ppo()
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        advantage = GAE(gamma=0.9, lmbda=0.9, value_network=value)
+        advantage(td)
+
+        loss_sym = ClipPPOLoss(actor, value, clip_epsilon=0.2)
+        loss_asym = ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.28))
+        sym_buffers = dict(loss_sym.named_buffers())
+        asym_buffers = dict(loss_asym.named_buffers())
+        assert "clip_epsilon" in sym_buffers
+        assert "clip_epsilon_low" not in sym_buffers
+        assert "clip_epsilon" not in asym_buffers
+        assert asym_buffers["clip_epsilon_low"] == 0.2
+        assert asym_buffers["clip_epsilon_high"] == 0.28
+        low, high = loss_asym._clip_bounds
+        torch.testing.assert_close(low, torch.tensor(0.8).log())
+        torch.testing.assert_close(high, torch.tensor(1.28).log())
+
+        # an equal-bounds tuple matches the symmetric float exactly
+        loss_eq = ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.2))
+        torch.manual_seed(self.seed)
+        out_sym = loss_sym(td.clone())
+        torch.manual_seed(self.seed)
+        out_eq = loss_eq(td.clone())
+        torch.testing.assert_close(out_sym["loss_objective"], out_eq["loss_objective"])
+        # the asymmetric loss runs end-to-end
+        loss_asym(td.clone())
+
+        # both buffer flavors accept scheduled scalar assignment
+        loss_sym.clip_epsilon = 0.1
+        assert loss_sym.clip_epsilon == 0.1
+        loss_asym.clip_epsilon_high = 0.5
+        assert loss_asym.clip_epsilon_high == 0.5
+        assert isinstance(loss_asym.clip_epsilon_high, torch.Tensor)
+        # scheduling the wrong flavor fails loudly instead of silently
+        # creating a shadow attribute that the clipping never reads
+        with pytest.raises(AttributeError, match="asymmetric"):
+            loss_asym.clip_epsilon = 0.1
+        with pytest.raises(AttributeError, match="symmetric"):
+            loss_sym.clip_epsilon_low = 0.1
+
+    def test_ppo_asymmetric_clip_epsilon_validation(self):
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        with pytest.raises(ValueError, match="length 2"):
+            ClipPPOLoss(actor, value, clip_epsilon=(0.1, 0.2, 0.3))
+        with pytest.raises(ValueError, match="non-negative"):
+            ClipPPOLoss(actor, value, clip_epsilon=(-0.1, 0.2))
+        with pytest.raises(ValueError, match="must be < 1"):
+            ClipPPOLoss(actor, value, clip_epsilon=(1.0, 0.2))
+        with pytest.raises(ValueError, match="clip_value=True"):
+            ClipPPOLoss(actor, value, clip_epsilon=(0.2, 0.28), clip_value=True)
+
+    @pytest.mark.parametrize("loss_class", (PPOLoss, ClipPPOLoss, KLPENPPOLoss))
+    def test_ppo_flat_advantage_raises(self, loss_class):
+        # a flat [B] advantage against the [B, 1] log-weight would silently
+        # broadcast to a [B, B] outer product: the loss must refuse it
+        torch.manual_seed(self.seed)
+        td = self._create_mock_data_ppo()
+        actor = self._create_mock_actor()
+        value = self._create_mock_value()
+        loss_fn = loss_class(actor, value)
+        td["advantage"] = torch.randn(td.shape)
+        td["value_target"] = torch.randn(*td.shape, 1)
+        td["state_value"] = torch.randn(*td.shape, 1)
+        with pytest.raises(ValueError, match="outer\\s+product"):
+            loss_fn(td)
+        # the canonical [B, 1] advantage passes
+        td["advantage"] = td["advantage"].unsqueeze(-1)
+        loss_fn(td)
+
     def test_ppo_composite_dists(self):
         d = torch.distributions
 

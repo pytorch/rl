@@ -30,7 +30,7 @@ from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce, _sum_td_features
+from torchrl.objectives.utils import _reduce, _sum_td_features, _validate_clip_epsilon
 
 
 class LLMLossOutput(TensorClass["nocast"]):
@@ -233,24 +233,7 @@ class GRPOLoss(LossModule):
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
         # Accept symmetric or asymmetric thresholds
-        if isinstance(clip_epsilon, (tuple, list)):
-            if len(clip_epsilon) != 2:
-                raise ValueError(
-                    f"clip_epsilon tuple must have length 2, got {clip_epsilon}."
-                )
-            eps_low, eps_high = clip_epsilon
-        else:
-            eps_low = float(clip_epsilon)
-            eps_high = float(clip_epsilon)
-        # Basic validation
-        if eps_low < 0 or eps_high < 0:
-            raise ValueError(
-                f"clip_epsilon values must be non-negative, got ({eps_low}, {eps_high})."
-            )
-        if eps_low >= 1.0:
-            raise ValueError(
-                f"clip_epsilon low must be < 1 (to keep 1 - eps_low > 0), got {eps_low}."
-            )
+        eps_low, eps_high = _validate_clip_epsilon(clip_epsilon)
         # Register buffers
         self.register_buffer("clip_epsilon_low", torch.tensor(eps_low, device=device))
         self.register_buffer("clip_epsilon_high", torch.tensor(eps_high, device=device))
