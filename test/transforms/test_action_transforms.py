@@ -2340,11 +2340,11 @@ class TestActionChunkTransform(TransformBase):
         )
 
     def test_single_trans_env_check(self):
+        # a pure data-path transform: env attachment is a documented no-op
         env = self._env()
         check_env_specs(env)
-        # the policy-facing action spec is the chunked one
-        assert env.full_action_spec["action_chunk"].shape[-2:] == torch.Size([3, 7])
-        assert "action" not in env.full_action_spec.keys(True, True)
+        assert "action" in env.full_action_spec.keys(True, True)
+        assert "action_chunk" not in env.full_action_spec.keys(True, True)
 
     def test_serial_trans_env_check(self):
         env = SerialEnv(2, self._env)
@@ -2365,7 +2365,7 @@ class TestActionChunkTransform(TransformBase):
             SerialEnv(2, ContinuousActionVecMockEnv), ActionChunkTransform(3)
         )
         check_env_specs(env)
-        assert env.full_action_spec["action_chunk"].shape == torch.Size([2, 3, 7])
+        assert env.full_action_spec["action"].shape == torch.Size([2, 7])
 
     def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
         env = TransformedEnv(
@@ -2394,6 +2394,8 @@ class TestActionChunkTransform(TransformBase):
         assert out["action_is_pad"].shape == torch.Size([5, 2])
 
     def test_transform_env(self):
+        # attached to an env, the transform leaves stepping untouched (chunk
+        # execution is the job of MultiStepActorWrapper / MultiAction)
         captured = {}
 
         class CaptureEnv(ContinuousActionVecMockEnv):
@@ -2403,13 +2405,11 @@ class TestActionChunkTransform(TransformBase):
 
         env = TransformedEnv(CaptureEnv(), ActionChunkTransform(chunk_size=3))
         td = env.reset()
-        assert "reward" not in td.keys()
-        td["action_chunk"] = torch.arange(21, dtype=torch.float).view(3, 7) / 21
+        td["action"] = torch.full((7,), 0.5)
         env.step(td)
-        # the base env consumes the first action of the chunk
-        torch.testing.assert_close(captured["action"], td["action_chunk"][0])
+        torch.testing.assert_close(captured["action"], td["action"])
         r = env.rollout(3)
-        assert r["action_chunk"].shape == torch.Size([3, 3, 7])
+        assert "action_chunk" not in r.keys()
 
     def test_transform_model(self):
         t = ActionChunkTransform(chunk_size=3)
@@ -2439,12 +2439,11 @@ class TestActionChunkTransform(TransformBase):
         assert sample["action_is_pad"].shape[-1] == 3
 
     def test_transform_inverse(self):
+        # no inverse: extend-time data passes through untouched
         t = ActionChunkTransform(chunk_size=3)
-        chunk = torch.randn(2, 3, 5)
-        td = t.inv(TensorDict({"action_chunk": chunk}, batch_size=[2]))
-        torch.testing.assert_close(td["action"], chunk[..., 0, :])
-        # absent chunk: the inverse is a no-op
-        td = t.inv(TensorDict({"action": torch.randn(2, 5)}, batch_size=[2]))
+        action = torch.randn(2, 5)
+        td = t.inv(TensorDict({"action": action}, batch_size=[2]))
+        torch.testing.assert_close(td["action"], action)
         assert "action_chunk" not in td.keys()
 
     # ActionChunkTransform-specific tests
@@ -2488,36 +2487,6 @@ class TestActionChunkTransform(TransformBase):
         out = t(td)
         assert out["data", "chunk"].shape == torch.Size([2, 4, 2, 3])
         assert out["data", "pad"].shape == torch.Size([2, 4, 2])
-        # the inverse also resolves nested keys
-        back = t.inv(
-            TensorDict({"data": {"chunk": torch.randn(2, 2, 3)}}, batch_size=[2])
-        )
-        assert back["data", "action"].shape == torch.Size([2, 3])
-
-    def test_nested_action_key_env(self):
-        # the spec rewrite handles nested (tuple) action keys on a real env
-        env = TransformedEnv(
-            NestedCountingEnv(),
-            ActionChunkTransform(
-                2,
-                action_key=("data", "action"),
-                chunk_key=("data", "chunk"),
-                pad_key=("data", "pad"),
-            ),
-        )
-        check_env_specs(env)
-        assert ("data", "chunk") in env.full_action_spec.keys(True, True)
-        assert ("data", "action") not in env.full_action_spec.keys(True, True)
-        env.rollout(3)
-
-    def test_env_missing_chunk_raises(self):
-        # a policy mistakenly writing the raw action key must not silently
-        # bypass the transform when it is attached to an env
-        env = self._env()
-        td = env.reset()
-        td["action"] = torch.zeros(7)
-        with pytest.raises(KeyError, match="action_chunk"):
-            env.step(td)
 
     def test_missing_action_raises(self):
         t = ActionChunkTransform(chunk_size=2)
