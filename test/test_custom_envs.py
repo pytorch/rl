@@ -11,7 +11,13 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from torchrl.envs import check_env_specs, LLMHashingEnv, PendulumEnv, TicTacToeEnv
+from torchrl.envs import (
+    check_env_specs,
+    LLMHashingEnv,
+    PendulumEnv,
+    TicTacToeEnv,
+    ToyVLAEnv,
+)
 from torchrl.envs.custom.trading import FinancialRegimeEnv
 from torchrl.testing import get_default_devices
 
@@ -200,6 +206,58 @@ class TestPendulum:
         td = env.make_tensordict("some sentence")
         assert isinstance(td, TensorDict)
         env.check_env_specs(tensordict=td)
+
+
+class TestToyVLAEnv:
+    @pytest.mark.parametrize("batch_size", [(), (2,)])
+    def test_env_specs(self, batch_size):
+        env = ToyVLAEnv(batch_size=batch_size)
+        check_env_specs(env)
+        td = env.reset()
+        assert td["observation", "image"].dtype == torch.uint8
+        assert td["observation", "image"].shape == torch.Size([*batch_size, 3, 16, 16])
+        instruction = td["language_instruction"]
+        if batch_size:
+            instruction = instruction[0]
+        assert isinstance(instruction, str)
+
+    def test_state_echoes_action(self):
+        env = ToyVLAEnv(action_dim=3, state_dim=5, batch_size=[2])
+        td = env.reset()
+        td["action"] = torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        nxt = env.step(td)["next", "observation", "state"]
+        torch.testing.assert_close(nxt[..., :3], td["action"])
+        assert (nxt[..., 3:] == 0).all()
+        # reward is the negative action norm
+        rew = env.step(td)["next", "reward"]
+        torch.testing.assert_close(rew, -td["action"].norm(dim=-1, keepdim=True))
+
+    def test_seeding(self):
+        img1 = ToyVLAEnv(seed=7).reset()["observation", "image"]
+        img2 = ToyVLAEnv(seed=7).reset()["observation", "image"]
+        img3 = ToyVLAEnv(seed=8).reset()["observation", "image"]
+        assert torch.equal(img1, img2)
+        assert not torch.equal(img1, img3)
+
+    def test_state_dim_validation(self):
+        with pytest.raises(ValueError, match="state_dim"):
+            ToyVLAEnv(action_dim=5, state_dim=3)
+
+    def test_with_chunk_executor(self):
+        from torchrl.envs import TransformedEnv
+        from torchrl.envs.transforms import ActionChunkExecutor
+
+        env = TransformedEnv(
+            ToyVLAEnv(batch_size=[2]),
+            ActionChunkExecutor(chunk_size=3, replan_interval=2),
+        )
+        check_env_specs(env)
+        rollout = env.rollout(4)
+        # the state echo exposes the executed action: cached steps execute the
+        # committed chunk's successive actions
+        executed = rollout["next", "observation", "state"][..., :4]
+        torch.testing.assert_close(executed[:, 0], rollout["action_chunk"][:, 0, 0])
+        torch.testing.assert_close(executed[:, 1], rollout["action_chunk"][:, 0, 1])
 
 
 if __name__ == "__main__":
