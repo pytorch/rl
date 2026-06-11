@@ -2,8 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Integration tests for chunked (VLA-style) behavior cloning via
-:class:`~torchrl.objectives.BCLoss` and its ``pad_mask`` key."""
+"""Integration tests for VLA fine-tuning with the standard objectives:
+chunked behavior cloning via :class:`~torchrl.objectives.BCLoss` (with its
+``pad_mask`` key) and token RL fine-tuning via
+:class:`~torchrl.objectives.ClipPPOLoss`."""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +15,7 @@ import torch
 from tensordict import NonTensorStack, TensorDict
 
 from torchrl.modules.vla import TinyVLA
-from torchrl.objectives import BCLoss
+from torchrl.objectives import BCLoss, ClipPPOLoss
 
 
 def _make_bc_td(batch=4, chunk=4, action_dim=3, pad=False):
@@ -109,6 +111,120 @@ class TestChunkedBC:
             loss(td)["loss_bc"].backward()
             opt.step()
         assert loss(td)["loss_bc"].item() < 0.5 * l0
+
+
+def _make_obs_td(batch=2, h=16, state_dim=5):
+    return TensorDict(
+        {
+            "observation": {
+                "image": torch.zeros(batch, 3, h, h, dtype=torch.uint8),
+                "state": torch.randn(batch, state_dim),
+            },
+            "language_instruction": NonTensorStack(
+                *[f"task {i}" for i in range(batch)]
+            ),
+        },
+        batch_size=[batch],
+    )
+
+
+def _make_token_ppo_loss(policy, **kwargs):
+    # token RL fine-tuning (GRPO-style: precomputed group advantages, no
+    # critic) is plain ClipPPOLoss over the action tokens
+    kwargs.setdefault("clip_epsilon", 0.2)
+    loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False, **kwargs)
+    loss.set_keys(
+        action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+    )
+    return loss
+
+
+class TestTokenPPO:
+    @staticmethod
+    def _setup(mode="sample", advantage=1.0, batch=8):
+        torch.manual_seed(0)
+        policy = TinyVLA(
+            action_dim=2, chunk_size=2, action_head="tokens", vocab_size=8, mode=mode
+        )
+        obs = _make_obs_td(batch=batch)
+        with torch.no_grad():
+            coll = policy(obs.clone())
+        td = obs.clone()
+        td["action_tokens"] = coll["action_tokens"]
+        td["log_probs"] = coll["log_probs"].detach()
+        # the advantage carries the trailing singleton value-dim the PPO
+        # losses expect; a flat [batch] advantage would broadcast wrong
+        td["advantage"] = torch.full((batch, 1), float(advantage))
+        return policy, obs, td
+
+    def test_loss_keys(self):
+        policy, _, td = self._setup()
+        out = _make_token_ppo_loss(policy)(td)
+        assert "loss_objective" in out.keys()
+        assert "clip_fraction" in out.keys()
+        assert out["loss_objective"].shape == torch.Size([])
+
+    def test_sequence_level_log_probs(self):
+        # the token head emits one (summed) log-prob per sample, matching the
+        # sample_log_prob contract of the PPO losses
+        policy, obs, td = self._setup(batch=3)
+        assert td["log_probs"].shape == torch.Size([3])
+        dist = policy.get_dist(obs.clone())
+        assert dist.log_prob(td["action_tokens"]).shape == torch.Size([3])
+
+    def _taken_logprob(self, policy, obs, td):
+        with torch.no_grad():
+            return (
+                policy.get_dist(obs.clone()).log_prob(td["action_tokens"]).sum().item()
+            )
+
+    def test_positive_advantage_increases_logprob(self):
+        policy, obs, td = self._setup(advantage=1.0)
+        loss = _make_token_ppo_loss(policy)
+        before = self._taken_logprob(policy, obs, td)
+        opt = torch.optim.Adam(loss.parameters(), lr=2e-3)
+        for _ in range(20):
+            opt.zero_grad()
+            loss(td)["loss_objective"].backward()
+            opt.step()
+        assert self._taken_logprob(policy, obs, td) > before
+
+    def test_negative_advantage_decreases_logprob(self):
+        policy, obs, td = self._setup(advantage=-1.0)
+        loss = _make_token_ppo_loss(policy)
+        before = self._taken_logprob(policy, obs, td)
+        opt = torch.optim.Adam(loss.parameters(), lr=2e-3)
+        for _ in range(20):
+            opt.zero_grad()
+            loss(td)["loss_objective"].backward()
+            opt.step()
+        assert self._taken_logprob(policy, obs, td) < before
+
+    def test_single_sample_batch(self):
+        policy, _, td = self._setup(batch=1)
+        out = _make_token_ppo_loss(policy, reduction="none")(td)
+        assert out["loss_objective"].shape == torch.Size([1])
+
+    def test_per_sample_objective_matches_reference(self):
+        # non-constant advantage against a hand-computed clipped surrogate:
+        # guards against a flat [batch] advantage broadcasting into a
+        # [batch, batch] outer product inside the PPO loss
+        policy, obs, td = self._setup(batch=4)
+        td["advantage"] = torch.tensor([[1.0], [-1.0], [2.0], [0.5]])
+        td["log_probs"] = td["log_probs"] + 0.3  # ratio != 1 so clipping bites
+        out = _make_token_ppo_loss(policy, reduction="none")(td)["loss_objective"]
+        assert out.shape == torch.Size([4])
+        with torch.no_grad():
+            log_weight = (
+                policy.get_dist(obs.clone()).log_prob(td["action_tokens"])
+                - td["log_probs"]
+            )
+        ratio = log_weight.exp().unsqueeze(-1)
+        gain = torch.min(
+            ratio * td["advantage"],
+            ratio.clamp(1 - 0.2, 1 + 0.2) * td["advantage"],
+        )
+        torch.testing.assert_close(out, -gain.squeeze(-1))
 
 
 if __name__ == "__main__":

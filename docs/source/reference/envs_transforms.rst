@@ -314,6 +314,7 @@ Available Transforms
     SqueezeTransform
     Stack
     StepCounter
+    SuccessReward
     TargetReturn
     TensorDictPrimer
     TerminateTransform

@@ -149,3 +149,15 @@ apply directly:
 
       loss = BCLoss(policy, loss_function="l1")
       loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+
+- *Token RL fine-tuning* (GRPO-style, following SimpleVLA-RL / RL4VLA) is
+  :class:`~torchrl.objectives.ClipPPOLoss` over the action tokens: advantages
+  are precomputed (group-relative), so no critic is needed, and the token
+  head's sequence-level log-probabilities match the ``sample_log_prob``
+  contract. The advantage carries the trailing singleton value-dim the PPO
+  losses expect (``[batch, 1]``, not ``[batch]``)::
+
+      loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False)
+      loss.set_keys(
+          action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+      )
