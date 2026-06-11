@@ -12,7 +12,8 @@ treats a VLA as an ordinary TensorDict-first policy: a :class:`~tensordict.nn.Te
 fed by composable transforms, trained by a :class:`~torchrl.objectives.LossModule`,
 and rolled out by the standard collectors. This page documents the data
 schema, transforms, policies and objectives that make robot VLA workflows
-TensorDict-native.
+TensorDict-native. See the :ref:`VLA tutorial <vla_tuto>` for an end-to-end
+example (data, chunking, behavior cloning, chunked inference and RL fine-tuning).
 
 .. note::
     The VLA stack never hard-depends on the robot-learning ecosystem. Packages
@@ -44,10 +45,11 @@ Like :class:`~torchrl.data.datasets.OpenXExperienceReplay`, the image and state
 live under ``observation`` while the (per-trajectory) language instruction and
 the action live at the tensordict root.
 
-The default keys are exported from :mod:`torchrl.data.vla` (``IMAGE_KEY``,
-``STATE_KEY``, ``INSTRUCTION_KEY``, ``ACTION_KEY``, ``ACTION_CHUNK_KEY``,
-``ACTION_IS_PAD_KEY``, ``ACTION_TOKENS_KEY``). Every component also lets you
-override its keys, so these are merely the shared defaults.
+The default keys are exported from :mod:`torchrl.data.vla` (``OBSERVATION_KEY``,
+``IMAGE_KEY``, ``STATE_KEY``, ``INSTRUCTION_KEY``, ``ACTION_KEY``,
+``ACTION_CHUNK_KEY``, ``ACTION_IS_PAD_KEY``, ``ACTION_TOKENS_KEY``). Every
+component also lets you override its keys, so these are merely the shared
+defaults.
 
 Data and metadata
 -----------------
@@ -69,10 +71,10 @@ both of which expose trajectory-aware slice sampling.
 Transforms
 ----------
 
-VLA-specific transforms are standard :class:`~torchrl.envs.transforms.Transform`
-subclasses, so they compose with :class:`~torchrl.envs.transforms.Compose`,
-replay buffers and transformed environments. They are documented in full on the
-:ref:`transforms reference page <transforms>`.
+The VLA data path is built from general :class:`~torchrl.envs.transforms.Transform`
+subclasses -- none of them are VLA-specific (they apply to any action-based
+pipeline) and they live alongside the other transforms, documented in full on the
+:ref:`transforms reference page <transforms>`. Here is how they combine for VLA:
 
 - :class:`~torchrl.envs.transforms.ActionChunkTransform` -- build fixed-length
   action chunks (``[*B, T, H, action_dim]``) and a padding mask from a sampled
@@ -88,6 +90,8 @@ replay buffers and transformed environments. They are documented in full on the
 - :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- encode
   continuous actions into discrete tokens (wrapping an action tokenizer) for
   autoregressive token VLAs.
+- :class:`~torchrl.envs.transforms.SuccessReward` -- a sparse 0/1 success
+  reward for RL fine-tuning.
 
 Action representations
 ----------------------
