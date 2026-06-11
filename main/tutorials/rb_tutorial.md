@@ -239,8 +239,8 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpu4ku0fmf/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpu4ku0fmf/b/c.memmap
+the 'a' tensor is stored in /tmp/tmpy7y56g4j/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpy7y56g4j/b/c.memmap
 samples: a= tensor([[ 8, 9, 10, 11],
  [ 4, 5, 6, 7],
  [ 0, 1, 2, 3],
@@ -1211,7 +1211,7 @@ which are based on our Replay Buffer API;
 such as [`TensorDictMaxValueWriter`](../reference/generated/torchrl.data.replay_buffers.TensorDictMaxValueWriter.html#torchrl.data.replay_buffers.TensorDictMaxValueWriter).
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.815 seconds)
+**Total running time of the script:** (0 minutes 0.830 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
