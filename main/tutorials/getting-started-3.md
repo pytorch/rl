@@ -270,7 +270,7 @@ see [Complete trajectory collection with trajs_per_batch](../reference/collector
 and sample clean trajectory slices from the replay buffer, especially
 with multi-process collectors.
 
-**Total running time of the script:** (0 minutes 0.078 seconds)
+**Total running time of the script:** (0 minutes 0.079 seconds)
 
 [`Download Jupyter notebook: getting-started-3.ipynb`](../_downloads/5cb0ffc0980a276546c9aeed94b0aa13/getting-started-3.ipynb)
 
