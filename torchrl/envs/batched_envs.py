@@ -44,7 +44,7 @@ from torchrl._utils import (
     timeit,
     VERBOSE,
 )
-from torchrl.data.tensor_specs import Composite, NonTensor
+from torchrl.data.tensor_specs import Composite, NonTensor, Stacked
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 
@@ -987,7 +987,14 @@ class BatchedEnvBase(EnvBase):
                 "batched environment base tensordict has the wrong shape"
             )
 
-        # Non-tensor keys
+        # Non-tensor keys. Heterogeneous workers (e.g. different language
+        # instructions) stack NonTensor leaves into a Stacked spec, so the
+        # check must look through the stack as well.
+        def _is_non_tensor(spec) -> bool:
+            if isinstance(spec, NonTensor):
+                return True
+            return isinstance(spec, Stacked) and isinstance(spec[0], NonTensor)
+
         non_tensor_keys = []
         for spec in (
             self.full_action_spec,
@@ -997,7 +1004,7 @@ class BatchedEnvBase(EnvBase):
             self.full_done_spec,
         ):
             for key, _spec in spec.items(True, True):
-                if isinstance(_spec, NonTensor):
+                if _is_non_tensor(_spec):
                     non_tensor_keys.append(key)
         self._non_tensor_keys = non_tensor_keys
 
