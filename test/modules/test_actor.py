@@ -883,6 +883,16 @@ class TestVLAWrapperBase:
         with pytest.raises(NotImplementedError):
             base._predict(TensorDict({}, batch_size=[]))
 
+    def test_invalid_log_probs_mode(self):
+        with pytest.raises(ValueError, match="log_probs_mode"):
+            VLAWrapperBase(
+                action_dim=2,
+                chunk_size=2,
+                action_head="tokens",
+                vocab_size=8,
+                log_probs_mode="word",
+            )
+
 
 class TestTinyVLA:
     def test_continuous(self):
@@ -905,6 +915,32 @@ class TestTinyVLA:
         dist = policy.get_dist(_make_obs_td())
         assert dist.base_dist.logits.shape == torch.Size([2, 4, 7, 64])
         assert dist.log_prob(out["action_tokens"]).shape == torch.Size([2])
+
+    def test_tokens_per_token_log_probs(self):
+        # log_probs_mode="token": per-token log-probabilities, the groundwork
+        # for token-level (DAPO-style) importance ratios
+        policy = TinyVLA(
+            action_dim=7,
+            chunk_size=4,
+            action_head="tokens",
+            vocab_size=64,
+            log_probs_mode="token",
+        )
+        obs = _make_obs_td()
+        out = policy(obs.clone())
+        assert out["action_tokens"].shape == torch.Size([2, 4, 7])
+        assert out["log_probs"].shape == torch.Size([2, 4, 7])
+        dist = policy.get_dist(obs.clone())
+        per_token = dist.log_prob(out["action_tokens"])
+        assert per_token.shape == torch.Size([2, 4, 7])
+        # per-token log-probs sum to the sequence-level ones for the same
+        # weights, observations and tokens
+        policy_seq = TinyVLA(
+            action_dim=7, chunk_size=4, action_head="tokens", vocab_size=64
+        )
+        policy_seq.load_state_dict(policy.state_dict())
+        seq = policy_seq.get_dist(obs.clone()).log_prob(out["action_tokens"])
+        torch.testing.assert_close(per_token.sum((-2, -1)), seq)
 
     def test_get_dist_continuous_raises(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)

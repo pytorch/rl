@@ -13,7 +13,12 @@ from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.models import ConvNet, MLP
-from torchrl.modules.vla.common import ActionHead, SamplingMode, VLAWrapperBase
+from torchrl.modules.vla.common import (
+    ActionHead,
+    LogProbsMode,
+    SamplingMode,
+    VLAWrapperBase,
+)
 
 __all__ = ["TinyVLA"]
 
@@ -84,6 +89,7 @@ class TinyVLA(VLAWrapperBase):
         text_vocab: int = 256,
         text_dim: int = 32,
         mode: SamplingMode = "greedy",
+        log_probs_mode: LogProbsMode = "sequence",
         device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__(
@@ -93,6 +99,7 @@ class TinyVLA(VLAWrapperBase):
             vocab_size=vocab_size,
             use_state=use_state,
             mode=mode,
+            log_probs_mode=log_probs_mode,
         )
         self.hidden_dim = int(hidden_dim)
         self.text_vocab = int(text_vocab)

@@ -53,8 +53,48 @@ Checkpointing: `checkpoint_latest.pt` is written to the hydra run directory
 every `checkpoint.save_iter` iterations; resume with
 `checkpoint.resume=/path/to/checkpoint_latest.pt`.
 
+## The OpenVLA-OFT (token) policy
+
+`openvla.py` wraps the SimpleVLA-RL token variant of OpenVLA-OFT (parallel
+decoding and action chunking, with the continuous L1 head reverted to
+discrete action tokens) as a `VLAWrapperBase`: one forward emits the whole
+56-token chunk, sampled from the 256-way categorical over the action-token
+window at the tail of the LLaMA-2 vocabulary. The modeling code is vendored
+verbatim from [SimpleVLA-RL](https://github.com/PRIME-RL/SimpleVLA-RL) (MIT)
+under `openvla_oft/` -- the official OpenVLA-OFT checkpoints are
+*incompatible* with this variant; use the SimpleVLA-RL SFT checkpoints
+(HF: `Haozhan72/*`):
+
+```python
+from openvla import OpenVLAOFTWrapper
+
+policy = OpenVLAOFTWrapper.from_pretrained(
+    "Haozhan72/Openvla-oft-SFT-libero10-traj1",
+    temperature=1.6,
+    device="cuda",
+)
+tokenizer = policy.action_tokenizer()  # decode tokens -> env actions
+```
+
+The wrapper owns all model-side preprocessing (prompt construction, image
+transforms) and applies the temperature identically when sampling and when
+recomputing log-probabilities at loss time, so the PPO importance ratio is
+exactly 1 with identical weights -- `test_openvla.py` pins this contract on
+a tiny random-weight model of the same token layout (no checkpoint
+download; requires `transformers`, `timm`, `Pillow`):
+
+```bash
+pytest sota-implementations/vla_grpo/test_openvla.py
+```
+
+Before spending RL compute on a checkpoint, validate the loading path by
+evaluating the SFT checkpoint greedily on its LIBERO suite through
+`torchrl.envs.LiberoEnv` (`init_state_mode="cycle"`, 50 trials/task) and
+comparing to the SimpleVLA-RL paper's SFT numbers (e.g. LIBERO-Spatial
+one-trajectory SFT: ~63.6%, +-3pts).
+
 ## Scaling up
 
-The LIBERO / OpenVLA-OFT (7B) configuration of the same recipe lands in
-follow-up versions of this script (LIBERO env adapter, vendored token-OFT
-policy, multi-GPU topology).
+The full LIBERO 8xH100 configuration of this recipe (grouped LIBERO
+collection, FSDP training, multi-GPU topology) lands in the follow-up
+version of this script.

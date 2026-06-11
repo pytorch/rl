@@ -1,0 +1,318 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+"""OpenVLA-OFT (token variant) policy wrapper for the VLA GRPO recipe.
+
+Wraps the vendored SimpleVLA-RL token-OFT model (see ``openvla_oft/``) as a
+:class:`~torchrl.modules.vla.VLAWrapperBase`: one forward emits the whole
+action chunk (parallel decoding -- ``chunk_size * action_dim`` tokens in a
+single language-model pass, no autoregressive loop), sampled from the 256-way
+categorical over the action-token window at the tail of the LLaMA-2
+vocabulary.
+
+The wrapper owns ALL model-side preprocessing (prompt construction, image
+transforms) and the temperature scaling, and both rollout sampling and
+loss-time recomputation go through the same :meth:`get_dist`, so with
+identical weights the PPO importance ratio is exactly 1 -- the temperature
+contract a T != 1 rollout requires.
+"""
+from __future__ import annotations
+
+import importlib.util
+
+import numpy as np
+import torch
+from tensordict import TensorDictBase
+from torch.nn.utils.rnn import pad_sequence
+
+from torchrl.data.vla import VocabTailActionTokenizer
+from torchrl.modules.vla import VLAWrapperBase
+from torchrl.modules.vla.common import LogProbsMode, SamplingMode
+
+_has_transformers = importlib.util.find_spec("transformers") is not None
+_has_timm = importlib.util.find_spec("timm") is not None
+_has_pil = importlib.util.find_spec("PIL") is not None
+
+# the special empty token LLaMA-2 emits after "Out:" at training time
+_EMPTY_TOKEN_ID = 29871
+
+PROMPT_TEMPLATE = "In: What action should the robot take to {instruction}?\nOut:"
+
+
+def register_openvla_oft() -> None:
+    """Register the vendored token-OFT classes with the transformers Auto* APIs."""
+    from openvla_oft.configuration_prismatic import OpenVLAConfig
+    from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
+    from openvla_oft.processing_prismatic import (
+        PrismaticImageProcessor,
+        PrismaticProcessor,
+    )
+    from transformers import (
+        AutoConfig,
+        AutoImageProcessor,
+        AutoModelForVision2Seq,
+        AutoProcessor,
+    )
+
+    try:
+        AutoConfig.register("openvla", OpenVLAConfig)
+        AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
+        AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
+        AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
+    except ValueError:
+        # already registered
+        pass
+
+
+class OpenVLAOFTWrapper(VLAWrapperBase):
+    """Token-head OpenVLA-OFT policy speaking the canonical VLA TensorDict schema.
+
+    Reads ``("observation", "image")`` (uint8 ``[*B, 3, H, W]``), optionally
+    ``("observation", "wrist_image")``, and ``language_instruction``; writes
+    ``action_tokens`` (``[*B, chunk_size, action_dim]`` ids in the 256-way
+    action-token *window*) and their ``log_probs``. Decode the tokens to
+    environment actions with :meth:`action_tokenizer` (e.g. through
+    :class:`~torchrl.envs.transforms.ActionTokenizerTransform`).
+
+    Args:
+        model: a vendored ``OpenVLAForActionPrediction`` (token variant).
+        processor: the matching ``PrismaticProcessor``.
+
+    Keyword Args:
+        unnorm_key (str, optional): dataset key of the normalization
+            statistics (e.g. ``"libero_spatial_no_noops"``). Defaults to the
+            checkpoint's single key when unambiguous.
+        temperature (float, optional): sampling temperature, applied
+            identically when sampling rollout actions and when recomputing
+            log-probabilities at loss time. Defaults to ``1.0``.
+        mode (str, optional): ``"sample"`` or ``"greedy"``. Defaults to
+            ``"sample"``.
+        log_probs_mode (str, optional): ``"sequence"`` or ``"token"``. See
+            :class:`~torchrl.modules.vla.VLAWrapperBase`. Defaults to
+            ``"sequence"``.
+        use_wrist_image (bool, optional): read
+            ``("observation", "wrist_image")`` as the second camera (the
+            checkpoint must have been trained with two input images).
+            Defaults to ``False``.
+        center_crop (bool, optional): center-crop the images to 90% area
+            before the processor resize, as in SimpleVLA-RL evaluation with
+            augmented training. Defaults to ``False``.
+    """
+
+    def __init__(
+        self,
+        model,
+        processor,
+        *,
+        unnorm_key: str | None = None,
+        temperature: float = 1.0,
+        mode: SamplingMode = "sample",
+        log_probs_mode: LogProbsMode = "sequence",
+        use_wrist_image: bool = False,
+        center_crop: bool = False,
+    ) -> None:
+        from openvla_oft.constants import ACTION_DIM, NUM_ACTIONS_CHUNK
+
+        if temperature <= 0:
+            raise ValueError(f"temperature must be > 0, got {temperature}.")
+        num_bins = len(model.bin_centers) + 1
+        super().__init__(
+            action_dim=ACTION_DIM,
+            chunk_size=NUM_ACTIONS_CHUNK,
+            action_head="tokens",
+            vocab_size=num_bins,
+            use_state=False,
+            mode=mode,
+            log_probs_mode=log_probs_mode,
+        )
+        self.model = model
+        self.processor = processor
+        self.temperature = float(temperature)
+        self.use_wrist_image = bool(use_wrist_image)
+        self.center_crop = bool(center_crop)
+        self.num_bins = num_bins
+        if unnorm_key is None and model.norm_stats is not None:
+            if len(model.norm_stats) != 1:
+                raise ValueError(
+                    "the checkpoint carries statistics for several datasets; "
+                    f"pass unnorm_key explicitly (options: {sorted(model.norm_stats)})."
+                )
+            unnorm_key = next(iter(model.norm_stats))
+        self.unnorm_key = unnorm_key
+        if self.use_wrist_image:
+            self.in_keys = [*self.in_keys, ("observation", "wrist_image")]
+
+    # -- loading ----------------------------------------------------------
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *,
+        torch_dtype: torch.dtype = torch.bfloat16,
+        device: torch.device | str | None = None,
+        **kwargs,
+    ) -> OpenVLAOFTWrapper:
+        """Load a SimpleVLA-RL token-OFT checkpoint (e.g. ``Haozhan72/...``)."""
+        from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
+        from openvla_oft.processing_prismatic import PrismaticProcessor
+
+        register_openvla_oft()
+        model = OpenVLAForActionPrediction.from_pretrained(
+            pretrained_model_name_or_path,
+            torch_dtype=torch_dtype,
+            low_cpu_mem_usage=True,
+            trust_remote_code=False,
+        )
+        if device is not None:
+            model = model.to(device)
+        model.eval()
+        processor = PrismaticProcessor.from_pretrained(
+            pretrained_model_name_or_path, trust_remote_code=False
+        )
+        return cls(model, processor, **kwargs)
+
+    def action_tokenizer(self) -> VocabTailActionTokenizer:
+        """The matching window-id tokenizer (decode tokens -> env actions)."""
+        return VocabTailActionTokenizer.from_norm_stats(
+            self.model.norm_stats, self.unnorm_key, num_bins=self.num_bins
+        )
+
+    # -- preprocessing (shared by rollout and loss-time recompute) ---------
+    def _to_pil(self, image: torch.Tensor):
+        from PIL import Image
+
+        array = image.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        pil = Image.fromarray(array).convert("RGB")
+        if self.center_crop:
+            width, height = pil.size
+            crop_w, crop_h = int(width * 0.9), int(height * 0.9)
+            left = (width - crop_w) // 2
+            top = (height - crop_h) // 2
+            pil = pil.crop((left, top, left + crop_w, top + crop_h)).resize(
+                (width, height)
+            )
+        return pil
+
+    def _instructions(self, tensordict: TensorDictBase, batch: int) -> list[str]:
+        instruction = tensordict.get(self.tensor_keys.instruction)
+        data = getattr(instruction, "tolist", lambda: instruction)()
+        if isinstance(data, str):
+            data = [data] * batch
+        return [str(item) for item in data]
+
+    def _preprocess(self, images, wrist_images, instructions):
+        pad_token_id = self.processor.tokenizer.pad_token_id
+        input_ids_list, pixel_values_list = [], []
+        for index, instruction in enumerate(instructions):
+            prompt = PROMPT_TEMPLATE.format(instruction=instruction.lower())
+            image = self._to_pil(images[index])
+            features = self.processor(prompt, image)
+            input_ids = features["input_ids"]
+            pixel_values = [features["pixel_values"]]
+            if wrist_images is not None:
+                wrist = self.processor(prompt, self._to_pil(wrist_images[index]))
+                pixel_values.append(wrist["pixel_values"])
+            if not torch.all(input_ids[:, -1] == _EMPTY_TOKEN_ID):
+                input_ids = torch.cat(
+                    (input_ids, torch.tensor([[_EMPTY_TOKEN_ID]], dtype=torch.long)),
+                    dim=1,
+                )
+            input_ids_list.append(input_ids.squeeze(0))
+            pixel_values_list.append(torch.cat(pixel_values, dim=1))
+        input_ids = pad_sequence(
+            input_ids_list, batch_first=True, padding_value=pad_token_id
+        )
+        attention_mask = input_ids.ne(pad_token_id).long()
+        pixel_values = torch.cat(pixel_values_list, dim=0)
+        device = next(self.model.parameters()).device
+        dtype = next(self.model.parameters()).dtype
+        return (
+            input_ids.to(device),
+            attention_mask.to(device),
+            pixel_values.to(device=device, dtype=dtype),
+        )
+
+    # -- the parallel-decoding forward -------------------------------------
+    def _window_logits(self, input_ids, attention_mask, pixel_values):
+        from openvla_oft.constants import IGNORE_INDEX
+
+        model = self.model
+        pad_token_id = self.processor.tokenizer.pad_token_id
+        labels = input_ids.clone()
+        labels[:] = IGNORE_INDEX
+        num_prompt_tokens = input_ids.ne(pad_token_id).sum(dim=1) - 1
+        input_ids, attention_mask = model._prepare_input_for_action_prediction(
+            input_ids, attention_mask
+        )
+        labels = model._prepare_labels_for_action_prediction(labels, input_ids)
+        # _prepare_input_for_action_prediction appends the action placeholders
+        # and stop token AFTER the padding of shorter rows: sort the padding
+        # to the end of each row (input ids, attention mask AND labels with
+        # the same permutation, as in the vendored generate_action_verl) so
+        # that the action block sits at num_prompt_tokens for every row.
+        padding_mask = (~input_ids.ne(pad_token_id)).int()
+        sorted_indices = torch.argsort(
+            padding_mask, dim=1, descending=False, stable=True
+        )
+        input_ids = torch.gather(input_ids, 1, sorted_indices)
+        attention_mask = torch.gather(attention_mask, 1, sorted_indices)
+        labels = torch.gather(labels, 1, sorted_indices)
+        input_embeddings = model.get_input_embeddings()(input_ids)
+        all_actions_mask = model._process_action_masks(labels)
+        language_embeddings = input_embeddings[~all_actions_mask].reshape(
+            input_embeddings.shape[0], -1, input_embeddings.shape[2]
+        )
+        projected_patch_embeddings = model._process_vision_features(
+            pixel_values, language_embeddings, False
+        )
+        num_patches = (
+            model.vision_backbone.get_num_patches()
+            * model.vision_backbone.get_num_images_in_input()
+        )
+        input_embeddings = input_embeddings * ~all_actions_mask.unsqueeze(-1)
+        (
+            multimodal_embeddings,
+            multimodal_attention_mask,
+        ) = model._build_multimodal_attention(
+            input_embeddings, projected_patch_embeddings, attention_mask
+        )
+        output = model.language_model(
+            input_ids=None,
+            attention_mask=multimodal_attention_mask,
+            inputs_embeds=multimodal_embeddings,
+            use_cache=False,
+            return_dict=True,
+        )
+        batch_size = output.logits.shape[0]
+        device = output.logits.device
+        start = (num_prompt_tokens.to(device) + num_patches).unsqueeze(1)
+        offsets = torch.arange(
+            self.chunk_size * self.action_dim, device=device
+        ).unsqueeze(0)
+        positions = start + offsets
+        logits = output.logits[
+            torch.arange(batch_size, device=device).unsqueeze(-1), positions, :
+        ]
+        # restrict to the action-token window at the tail of the (true,
+        # unpadded) vocabulary: the policy is a num_bins-way categorical
+        window = logits[..., model.vocab_size - self.num_bins : model.vocab_size]
+        return window
+
+    def _action_logits(self, tensordict: TensorDictBase) -> torch.Tensor:
+        images = tensordict.get(self.tensor_keys.image)
+        batch_dims = images.shape[:-3]
+        images = images.reshape(-1, *images.shape[-3:])
+        wrist_images = None
+        if self.use_wrist_image:
+            wrist_images = tensordict.get(("observation", "wrist_image"))
+            wrist_images = wrist_images.reshape(-1, *wrist_images.shape[-3:])
+        instructions = self._instructions(tensordict, images.shape[0])
+        input_ids, attention_mask, pixel_values = self._preprocess(
+            images, wrist_images, instructions
+        )
+        window = self._window_logits(input_ids, attention_mask, pixel_values)
+        window = window.float() / self.temperature
+        return window.reshape(
+            *batch_dims, self.chunk_size, self.action_dim, self.num_bins
+        )

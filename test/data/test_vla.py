@@ -20,6 +20,7 @@ from torchrl.data.vla import (
     RobotDatasetMetadata,
     UniformActionTokenizer,
     validate_vla_tensordict,
+    VocabTailActionTokenizer,
 )
 
 
@@ -298,6 +299,100 @@ class TestActionTokenizer:
         meta = RobotDatasetMetadata("bridge", action_dim=2)
         with pytest.raises(ValueError, match="no action bounds"):
             UniformActionTokenizer.from_metadata(meta, num_bins=128)
+
+
+class TestVocabTailActionTokenizer:
+    def test_matches_openvla_reference(self):
+        # oracle: the OpenVLA ActionTokenizer formulas (numpy), see
+        # https://github.com/openvla/openvla/blob/main/prismatic/vla/action_tokenizer.py
+        import numpy as np
+
+        vocab, n_bins = 32000, 256
+        tok = VocabTailActionTokenizer(n_bins, full_vocab_size=vocab)
+        bins = tok.bins.numpy()
+        centers = (bins[:-1] + bins[1:]) / 2.0
+        actions = torch.linspace(-1.3, 1.3, 1001)
+        ref_tokens = vocab - np.digitize(np.clip(actions.numpy(), -1.0, 1.0), bins)
+        tokens = tok.encode(actions)
+        assert (tokens.numpy() == ref_tokens).all()
+        ref_decoded = centers[np.clip(vocab - ref_tokens - 1, 0, centers.shape[0] - 1)]
+        torch.testing.assert_close(
+            tok.decode(tokens), torch.as_tensor(ref_decoded, dtype=torch.float32)
+        )
+
+    def test_window_vs_full_convention(self):
+        vocab, n_bins = 32000, 256
+        window = VocabTailActionTokenizer(n_bins)
+        full = VocabTailActionTokenizer(n_bins, full_vocab_size=vocab)
+        actions = torch.linspace(-1.0, 1.0, 257)
+        window_tokens = window.encode(actions)
+        full_tokens = full.encode(actions)
+        assert (full_tokens == window_tokens + vocab - n_bins).all()
+        assert window_tokens.min() >= 0
+        assert window_tokens.max() < n_bins
+        torch.testing.assert_close(
+            window.decode(window_tokens), full.decode(full_tokens)
+        )
+
+    def test_roundtrip_tolerance(self):
+        tok = VocabTailActionTokenizer(256)
+        actions = torch.empty(1000).uniform_(-1.0, 1.0)
+        recon = tok.decode(tok.encode(actions))
+        bin_width = 2.0 / 255
+        assert (recon - actions).abs().max() <= bin_width / 2 + 1e-5
+
+    def test_norm_stats_unnormalization(self):
+        # masked dims roundtrip through the q01/q99 affine map; unmasked
+        # (gripper) dims pass through in [-1, 1]
+        norm_low = torch.tensor([-0.5, 0.0, -1.0])
+        norm_high = torch.tensor([0.5, 2.0, -1.0 + 2.0])
+        mask = torch.tensor([True, True, False])
+        tok = VocabTailActionTokenizer(
+            256, norm_low=norm_low, norm_high=norm_high, norm_mask=mask
+        )
+        actions = torch.tensor([[-0.25, 1.5, 1.0], [0.4, 0.1, -1.0]])
+        recon = tok.decode(tok.encode(actions))
+        scale = (norm_high - norm_low) / 255
+        assert (recon[:, :2] - actions[:, :2]).abs().max() <= scale.max() / 2 + 1e-5
+        # gripper dim decodes near the un-normalized [-1, 1] poles
+        assert (recon[:, 2] - actions[:, 2]).abs().max() <= 2.0 / 255 + 1e-5
+
+    def test_from_norm_stats(self):
+        norm_stats = {
+            "libero_spatial_no_noops": {
+                "action": {
+                    "q01": [-0.5] * 7,
+                    "q99": [0.5] * 7,
+                    "mask": [True] * 6 + [False],
+                }
+            }
+        }
+        tok = VocabTailActionTokenizer.from_norm_stats(
+            norm_stats, "libero_spatial_no_noops", full_vocab_size=32000
+        )
+        assert tok.vocab_size == 32000
+        assert tok.norm_mask.tolist() == [True] * 6 + [False]
+        with pytest.raises(KeyError, match="unnorm_key"):
+            VocabTailActionTokenizer.from_norm_stats(norm_stats, "bad_key")
+
+    def test_validation(self):
+        with pytest.raises(ValueError, match="num_bins"):
+            VocabTailActionTokenizer(1)
+        with pytest.raises(ValueError, match="full_vocab_size"):
+            VocabTailActionTokenizer(256, full_vocab_size=128)
+        with pytest.raises(ValueError, match="together"):
+            VocabTailActionTokenizer(256, norm_low=torch.zeros(3))
+
+    def test_chunk_shapes(self):
+        tok = VocabTailActionTokenizer(256)
+        actions = torch.empty(2, 4, 8, 7).uniform_(-1.0, 1.0)
+        tokens = tok.encode(actions)
+        assert tokens.shape == actions.shape
+        assert tokens.dtype == torch.long
+        assert tok.decode(tokens).shape == actions.shape
+
+    def test_is_base_subclass(self):
+        assert issubclass(VocabTailActionTokenizer, ActionTokenizerBase)
 
 
 if __name__ == "__main__":

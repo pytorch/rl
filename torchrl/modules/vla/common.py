@@ -26,6 +26,7 @@ __all__ = ["VLAWrapperBase"]
 
 ActionHead = Literal["continuous", "tokens"]
 SamplingMode = Literal["greedy", "sample"]
+LogProbsMode = Literal["sequence", "token"]
 
 
 class VLAWrapperBase(TensorDictModuleBase):
@@ -44,9 +45,13 @@ class VLAWrapperBase(TensorDictModuleBase):
       shape ``[*B, chunk_size, action_dim]`` under ``action_chunk``;
     - ``"tokens"``: :meth:`forward` writes discrete action tokens
       ``[*B, chunk_size, action_dim]`` under ``action_tokens`` and their
-      per-sample (sequence-level, summed over the chunk) log-probabilities
-      under ``log_probs``; :meth:`get_dist` returns
+      log-probabilities under ``log_probs``; :meth:`get_dist` returns
       the token distribution for log-prob/entropy-based RL fine-tuning.
+      With ``log_probs_mode="sequence"`` (default) the log-probabilities are
+      summed over the chunk (one scalar per sample, the ``sample_log_prob``
+      contract of the PPO losses); with ``log_probs_mode="token"`` they are
+      per-token, shaped ``[*B, chunk_size, action_dim]`` (the groundwork for
+      token-level DAPO-style ratios).
 
     Keys are configurable through :meth:`set_keys`. The wrapper is a
     :class:`~tensordict.nn.TensorDictModuleBase`, so it composes with the
@@ -62,6 +67,10 @@ class VLAWrapperBase(TensorDictModuleBase):
             Defaults to ``True``.
         mode (str): ``"greedy"`` (default, argmax) or ``"sample"`` token
             sampling for the ``"tokens"`` head (ignored by the continuous head).
+        log_probs_mode (str): ``"sequence"`` (default; one summed
+            log-probability per sample) or ``"token"`` (per-token
+            log-probabilities, ``[*B, chunk_size, action_dim]``) for the
+            ``"tokens"`` head.
 
     .. note::
         This base deliberately does **not** inherit from the text-generation
@@ -92,6 +101,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         vocab_size: int | None = None,
         use_state: bool = True,
         mode: SamplingMode = "greedy",
+        log_probs_mode: LogProbsMode = "sequence",
     ) -> None:
         super().__init__()
         if action_head not in ("continuous", "tokens"):
@@ -102,12 +112,17 @@ class VLAWrapperBase(TensorDictModuleBase):
             raise ValueError("vocab_size must be set for the 'tokens' action head.")
         if mode not in ("greedy", "sample"):
             raise ValueError(f"mode must be 'greedy' or 'sample', got {mode!r}.")
+        if log_probs_mode not in ("sequence", "token"):
+            raise ValueError(
+                f"log_probs_mode must be 'sequence' or 'token', got {log_probs_mode!r}."
+            )
         self.action_dim = int(action_dim)
         self.chunk_size = int(chunk_size)
         self.action_head = action_head
         self.vocab_size = vocab_size
         self.use_state = bool(use_state)
         self.mode = mode
+        self.log_probs_mode = log_probs_mode
         self._tensor_keys = self._AcceptedKeys()
         self._update_keys()
 
@@ -166,33 +181,39 @@ class VLAWrapperBase(TensorDictModuleBase):
             tensordict.set(self._tensor_keys.action_chunk, chunk)
         else:
             dist = self.get_dist(tensordict)
-            tokens = (
-                dist.sample()
-                if self.mode == "sample"
-                else dist.base_dist.logits.argmax(-1)
+            logits = (
+                dist.base_dist.logits
+                if isinstance(dist, torch_dist.Independent)
+                else dist.logits
             )
+            tokens = dist.sample() if self.mode == "sample" else logits.argmax(-1)
             tensordict.set(self._tensor_keys.action_tokens, tokens)
             tensordict.set(self._tensor_keys.log_probs, dist.log_prob(tokens))
         return tensordict
 
-    def get_dist(self, tensordict: TensorDictBase) -> torch_dist.Independent:
+    def get_dist(self, tensordict: TensorDictBase) -> torch_dist.Distribution:
         """Return the action-token distribution.
 
         Only defined for the ``"tokens"`` action head: a
-        :class:`~torch.distributions.Categorical` over the vocabulary,
-        wrapped in :class:`~torch.distributions.Independent` over the
+        :class:`~torch.distributions.Categorical` over the vocabulary. With
+        ``log_probs_mode="sequence"`` (default) it is wrapped in
+        :class:`~torch.distributions.Independent` over the
         ``(chunk_size, action_dim)`` token dims, so ``log_prob`` returns one
         *sequence-level* log-probability per sample. This is the contract
         PPO-style objectives expect: token RL fine-tuning works directly with
         :class:`~torchrl.objectives.ClipPPOLoss` (pass
         ``critic_network=None``, ``entropy_bonus=False`` and remap the keys
-        via ``set_keys``).
+        via ``set_keys``). With ``log_probs_mode="token"``, the bare
+        per-token :class:`~torch.distributions.Categorical` is returned and
+        ``log_prob`` is per token, ``[*B, chunk_size, action_dim]`` -- one
+        importance ratio per token for DAPO-style objectives.
         """
         if self.action_head != "tokens":
             raise RuntimeError(
                 "get_dist is only defined for the 'tokens' action head; the "
                 "'continuous' head is a deterministic regressor."
             )
-        return torch_dist.Independent(
-            torch_dist.Categorical(logits=self._action_logits(tensordict)), 2
-        )
+        dist = torch_dist.Categorical(logits=self._action_logits(tensordict))
+        if self.log_probs_mode == "sequence":
+            return torch_dist.Independent(dist, 2)
+        return dist
