@@ -105,8 +105,14 @@ def test_parallel_worker_wait(benchmark, worker_wait):
         lambda: DMControlEnv("cheetah", "run", device=device),
         worker_wait=worker_wait,
     )
-    env.rollout(3)
-    benchmark(execute_env, env)
+    try:
+        env.rollout(3)
+        benchmark(execute_env, env)
+    finally:
+        # Close eagerly: in "spin" mode idle workers busy-wait at 100% CPU and
+        # would otherwise keep burning cores for the rest of the pytest session,
+        # skewing every subsequent benchmark.
+        env.close()
 
 
 @pytest.mark.parametrize("nested", [True, False])
