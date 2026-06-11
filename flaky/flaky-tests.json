@@ -1,17 +1,81 @@
 {
-  "generated_at": "2026-06-10T07:37:24.740852+00:00",
+  "generated_at": "2026-06-11T07:51:08.354730+00:00",
   "analysis_period": {
-    "start": "2026-06-06",
-    "end": "2026-06-09",
+    "start": "2026-06-08",
+    "end": "2026-06-10",
     "runs_analyzed": 15
   },
   "summary": {
-    "total_tests": 28885,
-    "flaky_count": 0,
-    "new_flaky_count": 0,
+    "total_tests": 28908,
+    "flaky_count": 3,
+    "new_flaky_count": 3,
     "resolved_count": 0
   },
-  "flaky_tests": [],
+  "flaky_tests": [
+    {
+      "nodeid": "test/test_custom_envs.py::TestPendulum::test_pendulum_env[None]",
+      "executions": 149,
+      "failures": 10,
+      "failure_rate": 0.0671,
+      "flaky_score": 0.1342,
+      "passed": 139,
+      "failed": 10,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.111,
+      "recent_failures": [
+        "2026-06-09T11:39:12Z",
+        "2026-06-10T09:25:50Z",
+        "2026-06-10T09:25:50Z",
+        "2026-06-10T16:17:10Z",
+        "2026-06-10T16:17:10Z"
+      ],
+      "first_seen_flaky": "2026-06-08T12:01:43Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_custom_envs.py::TestPendulum::test_pendulum_env[device1]",
+      "executions": 149,
+      "failures": 10,
+      "failure_rate": 0.0671,
+      "flaky_score": 0.1342,
+      "passed": 139,
+      "failed": 10,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 0.125,
+      "recent_failures": [
+        "2026-06-09T11:39:12Z",
+        "2026-06-10T09:25:50Z",
+        "2026-06-10T09:25:50Z",
+        "2026-06-10T16:17:10Z",
+        "2026-06-10T16:17:10Z"
+      ],
+      "first_seen_flaky": "2026-06-08T12:01:43Z",
+      "is_new": true
+    },
+    {
+      "nodeid": "test/test_collectors.py::TestCollectorGeneric::test_multi_sync_data_collector_ordering[stack-True-8-5]",
+      "executions": 149,
+      "failures": 8,
+      "failure_rate": 0.0537,
+      "flaky_score": 0.1074,
+      "passed": 141,
+      "failed": 8,
+      "error": 0,
+      "reruns": 0,
+      "avg_duration": 3.549,
+      "recent_failures": [
+        "2026-06-10T13:46:22Z",
+        "2026-06-10T14:39:42Z",
+        "2026-06-10T14:39:42Z",
+        "2026-06-10T14:39:42Z",
+        "2026-06-10T14:39:42Z"
+      ],
+      "first_seen_flaky": "2026-06-10T13:26:37Z",
+      "is_new": true
+    }
+  ],
   "thresholds": {
     "min_failure_rate": 0.05,
     "max_failure_rate": 0.95,
