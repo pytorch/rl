@@ -40,6 +40,7 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
+from torchrl.data.vla import RobotDatasetMetadata
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
@@ -887,6 +888,191 @@ class TestActionScaling(TransformBase):
         env.step(td)
         # normalized -1 -> env-scale -2 (low)
         assert torch.allclose(base_env.last_action, torch.full((7,), -2.0))
+
+    # dataset-statistics constructors (from_stats / from_metadata) and the
+    # explicit-loc/scale env behavior
+    def test_from_stats_mean_std(self):
+        t = ActionScaling.from_stats(mean=torch.tensor([2.0]), std=torch.tensor([3.0]))
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([5.0])), torch.tensor([1.0])
+        )
+        torch.testing.assert_close(
+            t.denormalize(torch.tensor([1.0])), torch.tensor([5.0])
+        )
+
+    def test_from_stats_low_high(self):
+        t = ActionScaling.from_stats(
+            low=torch.tensor([-2.0, 0.0]), high=torch.tensor([2.0, 10.0])
+        )
+        # min -> -1, max -> +1, midpoint -> 0
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([[-2.0, 10.0], [0.0, 5.0]])),
+            torch.tensor([[-1.0, 1.0], [0.0, 0.0]]),
+        )
+
+    def test_from_stats_requires_args(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            ActionScaling.from_stats()
+
+    def test_from_stats_both_pairs_raises(self):
+        with pytest.raises(ValueError, match="exactly one"):
+            ActionScaling.from_stats(
+                mean=torch.zeros(2),
+                std=torch.ones(2),
+                low=-torch.ones(2),
+                high=torch.ones(2),
+            )
+
+    def test_from_stats_partial_pair_raises(self):
+        with pytest.raises(ValueError, match="together"):
+            ActionScaling.from_stats(mean=torch.zeros(2))
+
+    def test_from_stats_shape_mismatch_raises(self):
+        with pytest.raises(ValueError, match="same shape"):
+            ActionScaling.from_stats(mean=torch.zeros(3), std=torch.ones(2))
+
+    def test_from_stats_constant_dim_no_nan(self):
+        # std == 0 for a constant action dim: eps floor avoids NaN, value -> 0
+        t = ActionScaling.from_stats(mean=torch.tensor([5.0]), std=torch.tensor([0.0]))
+        out = t.normalize(torch.tensor([[5.0]]))
+        assert torch.isfinite(out).all()
+        torch.testing.assert_close(out, torch.zeros_like(out))
+
+    def test_normalize_denormalize_roundtrip(self):
+        t = ActionScaling(loc=torch.randn(5), scale=torch.rand(5) + 0.5)
+        action = torch.randn(4, 5)
+        torch.testing.assert_close(t.denormalize(t.normalize(action)), action)
+
+    def test_dim_mismatch_raises(self):
+        # per-dim loc/scale (len 7) vs an action whose last dim is 1 must not
+        # silently broadcast
+        t = ActionScaling(loc=torch.arange(7.0), scale=torch.ones(7))
+        with pytest.raises(ValueError, match="does not match"):
+            t.normalize(torch.zeros(4, 1))
+
+    def test_scalar_broadcasts(self):
+        # a scalar loc/scale broadcasts freely across any action shape
+        t = ActionScaling(loc=1.0, scale=2.0)
+        out = t.normalize(torch.full((4, 5), 3.0))
+        torch.testing.assert_close(out, torch.ones(4, 5))
+
+    def test_from_metadata_mean_std(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=2,
+            action_mean=torch.tensor([1.0, 2.0]),
+            action_std=torch.tensor([2.0, 4.0]),
+        )
+        t = ActionScaling.from_metadata(meta)
+        out = t(TensorDict({"action": torch.tensor([[3.0, 6.0]])}, batch_size=[1]))
+        torch.testing.assert_close(out["action"], torch.tensor([[1.0, 1.0]]))
+
+    def test_from_metadata_low_high(self):
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=1,
+            action_low=torch.tensor([-1.0]),
+            action_high=torch.tensor([1.0]),
+        )
+        t = ActionScaling.from_metadata(meta)
+        torch.testing.assert_close(
+            t.normalize(torch.tensor([1.0])), torch.tensor([1.0])
+        )
+
+    def test_from_metadata_no_stats_raises(self):
+        meta = RobotDatasetMetadata("bridge", action_dim=2)
+        with pytest.raises(ValueError, match="no action normalization statistics"):
+            ActionScaling.from_metadata(meta)
+
+    def test_explicit_stats_bounded_env(self):
+        # With explicit loc/scale, the policy-facing bounds are the real bounds
+        # mapped through the affine, not an assumed [-1, 1].
+        t = ActionScaling.from_stats(mean=torch.zeros(7), std=torch.full((7,), 2.0))
+        env = TransformedEnv(self._bounded_env(low=-1.0, high=1.0), t)
+        check_env_specs(env)
+        spec = env.action_spec
+        assert torch.allclose(spec.space.low, torch.full((7,), -0.5))
+        assert torch.allclose(spec.space.high, torch.full((7,), 0.5))
+
+    def test_explicit_stats_unbounded_env(self):
+        # With explicit loc/scale an unbounded action spec is supported: the
+        # normalized space stays unbounded and the inverse path denormalizes.
+        captured = {}
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        t = ActionScaling.from_stats(
+            mean=torch.full((7,), 1.0), std=torch.full((7,), 3.0)
+        )
+        env = TransformedEnv(CaptureEnv(action_spec=Unbounded(shape=(7,))), t)
+        check_env_specs(env)
+        assert isinstance(env.action_spec, Unbounded)
+        td = env.reset()
+        td["action"] = torch.ones(7)
+        env.step(td)
+        # normalized +1 -> mean + std = 4
+        assert torch.allclose(captured["action"], torch.full((7,), 4.0))
+
+    def test_forward_only_rb(self):
+        # in_keys_inv=[]: normalize raw dataset actions on the sample path
+        # while extend leaves the stored (raw) data untouched.
+        t = ActionScaling(
+            in_keys_inv=[], loc=torch.tensor([1.0, 2.0]), scale=torch.tensor([2.0, 4.0])
+        )
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10), transform=t, batch_size=4
+        )
+        raw = torch.tensor([[3.0, 6.0]]).expand(10, 2).clone()
+        rb.extend(TensorDict({"action": raw}, batch_size=[10]))
+        stored = rb._storage._storage
+        torch.testing.assert_close(stored["action"], raw)
+        sample = rb.sample()
+        torch.testing.assert_close(sample["action"], torch.ones_like(sample["action"]))
+
+    def test_forward_only_requires_explicit(self):
+        with pytest.raises(ValueError, match="forward-only"):
+            ActionScaling(in_keys_inv=[])
+
+    def test_forward_only_env_attach_noop(self):
+        # a forward-only instance attached to an env leaves the action
+        # interface untouched: same spec, no denormalization on the step path
+        captured = {}
+
+        class CaptureEnv(ContinuousActionVecMockEnv):
+            def _step(self, td):
+                captured["action"] = td["action"].clone()
+                return super()._step(td)
+
+        t = ActionScaling(in_keys_inv=[], loc=1.0, scale=3.0)
+        env = TransformedEnv(CaptureEnv(), t)
+        check_env_specs(env)
+        assert torch.allclose(env.action_spec.space.low, -torch.ones(7))
+        assert torch.allclose(env.action_spec.space.high, torch.ones(7))
+        td = env.reset()
+        td["action"] = torch.full((7,), 0.5)
+        env.step(td)
+        assert torch.allclose(captured["action"], torch.full((7,), 0.5))
+
+    def test_from_metadata_forward_only_nested_key(self):
+        # forward-only mode keeps normalizing the metadata's action key on the
+        # sample path (it must not fall back to the generic "action")
+        meta = RobotDatasetMetadata(
+            "bridge",
+            action_dim=2,
+            action_key=("robot", "action"),
+            action_mean=torch.tensor([1.0, 2.0]),
+            action_std=torch.tensor([2.0, 4.0]),
+        )
+        t = ActionScaling.from_metadata(meta, in_keys_inv=[])
+        td = t(
+            TensorDict(
+                {"robot": {"action": torch.tensor([[3.0, 6.0]])}}, batch_size=[1]
+            )
+        )
+        torch.testing.assert_close(td["robot", "action"], torch.tensor([[1.0, 1.0]]))
 
 
 class TestMacroPrimitiveTransform:

@@ -68,3 +68,11 @@ replay buffers and transformed environments. They are documented in full on the
 - :class:`~torchrl.envs.transforms.ActionChunkTransform` -- build fixed-length
   action chunks (``[*B, T, H, action_dim]``) and a padding mask from a sampled
   trajectory window, the standard training target for chunked VLA policies.
+- :class:`~torchrl.envs.transforms.ActionScaling` -- affine action
+  normalization; built with the
+  :meth:`~torchrl.envs.transforms.ActionScaling.from_metadata` /
+  :meth:`~torchrl.envs.transforms.ActionScaling.from_stats` constructors it
+  normalizes expert actions on the replay-buffer sample path (pass
+  ``in_keys_inv=[]`` for a buffer that raw data is written to through
+  ``extend``, which applies the inverse) and denormalizes a policy's predicted
+  actions on the env action-input path.
