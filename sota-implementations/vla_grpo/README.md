@@ -93,8 +93,46 @@ evaluating the SFT checkpoint greedily on its LIBERO suite through
 comparing to the SimpleVLA-RL paper's SFT numbers (e.g. LIBERO-Spatial
 one-trajectory SFT: ~63.6%, +-3pts).
 
-## Scaling up
+## LIBERO scale
 
-The full LIBERO 8xH100 configuration of this recipe (grouped LIBERO
-collection, FSDP training, multi-GPU topology) lands in the follow-up
-version of this script.
+`config/vla_grpo_libero.yaml` carries the full SimpleVLA-RL hyper-parameter
+set: groups of n=8 rollouts over 64 initial states per iteration (512
+trajectories), 512 env steps / 64 chunk decisions per episode, asymmetric
+clip (0.2, 0.28) applied to *per-token* importance ratios
+(`loss.ratio_level: token`, the paper's semantics -- a single summed ratio
+over the 56-token chunk saturates these bounds almost immediately; the
+sequence-level variant remains available as a config switch for ablations),
+rollout temperature 1.6 with greedy evaluation, dynamic sampling bounds
+(0.1, 0.9), LR 5e-6 with constant-with-warmup scheduling, gradient
+accumulation, gradient clip 1.0, evaluation every 4 iterations on cycled
+initial states (one cycle slot per counted trial). LIBERO simulation runs in parallel worker processes
+(`env.num_envs`, one MuJoCo instance each, batched policy forwards across
+workers); each worker owns a disjoint `group_id` block so group advantages
+never mix across workers.
+
+```bash
+export MUJOCO_GL=egl ROBOT_PLATFORM=LIBERO
+python sota-implementations/vla_grpo/vla-grpo.py --config-name vla_grpo_libero
+# or: sbatch sota-implementations/vla_grpo/vla-grpo.sbatch
+```
+
+Requirements beyond the toy scale: LIBERO (see the
+`torchrl.envs.LiberoEnv` docs for install notes), `transformers`, `timm`,
+`Pillow`, and `peft` when `policy.lora_rank` is set.
+
+Hardware notes:
+
+- The default configuration trains a LoRA adapter (`policy.lora_rank: 32`,
+  the RL4VLA-validated de-risk path) on a single GPU while the simulation
+  workers occupy CPU cores. Rollout wall-clock dominates: scale
+  `env.num_envs` with the available cores first.
+- Full-parameter fine-tuning of the 7B model requires sharded training
+  (FSDP) and a multi-GPU inference/training split with explicit weight
+  synchronization. That topology should be sized on the target hardware
+  (profile the sync split before committing to async overlap or
+  colocation); it is the next step for this script, not covered by this
+  configuration.
+
+Before any RL run, validate the checkpoint loading path: evaluate the SFT
+checkpoint greedily (50 cycled trials/task) and compare against the
+SimpleVLA-RL paper's SFT numbers (see the policy section above).

@@ -2,6 +2,7 @@
 # Single process, single device, no simulator dependencies.
 
 env:
+  backend: toy
   action_dim: 2
   state_dim: 4
   image_shape: [3, 16, 16]
@@ -15,6 +16,7 @@ tokenizer:
   vocab_size: 64
 
 policy:
+  backend: tiny
   hidden_dim: 128
   device: null # null = auto (cuda if available)
 
@@ -27,13 +29,20 @@ advantage:
   trajectory_return: sum # binary success return per trajectory
   keep_return_bounds: [0.05, 0.95] # dynamic sampling; null disables
 
+buffer:
+  device: null # null = training device
+
 loss:
   clip_epsilon: [0.2, 0.28] # asymmetric DAPO clip; a float gives symmetric clipping
+  ratio_level: sequence # sequence: one ratio per decision; token: one per action token
   ppo_epochs: 1
-  mini_batch_size: 64 # decisions per optimization batch
+  mini_batch_size: 64 # decisions per micro-batch
+  accumulate_batches: 1 # optimizer step every N micro-batches
 
 optim:
   lr: 1e-3
+  weight_decay: 0.0
+  warmup_updates: 1 # linear LR warmup, in optimizer steps (1 = no warmup)
   max_grad_norm: 1.0
 
 logger:

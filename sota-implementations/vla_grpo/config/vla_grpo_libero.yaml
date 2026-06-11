@@ -1,0 +1,75 @@
+# SimpleVLA-RL (arXiv:2509.09674) on LIBERO: OpenVLA-OFT token variant (7B),
+# the paper's hyper-parameters. Parallel MuJoCo workers (one process each)
+# feed a single training device; see the README for the multi-GPU notes and
+# the LoRA fallback. Requires LIBERO (and its deps) plus transformers/timm.
+#
+# Per-iteration accounting: groups_per_iter x group_size = 512 trajectories,
+# each up to max_outer_steps = 64 chunk decisions (512 env steps / chunk 8).
+
+env:
+  backend: libero
+  task_suite: libero_spatial # libero_spatial | libero_object | libero_goal | libero_10
+  task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] # one worker per task (num_envs must cover them)
+  num_envs: 10 # parallel MuJoCo processes (training); >= len(task_ids)
+  eval_num_envs: 10 # parallel MuJoCo processes (evaluation); >= len(task_ids)
+  camera_height: 256
+  camera_width: 256
+  chunk_size: 8 # NUM_ACTIONS_CHUNK of the checkpoint
+  max_env_steps: 512 # base env steps per episode (the paper's cap)
+  max_outer_steps: 64 # = max_env_steps / chunk_size, in chunk decisions
+  seed: 0
+
+tokenizer:
+  vocab_size: 256 # unused for the openvla backend (codec comes from the checkpoint)
+
+policy:
+  backend: openvla
+  # the checkpoint MUST match task_suite (it fixes the SFT policy AND the
+  # action statistics unnorm_key resolves into)
+  checkpoint: Haozhan72/Openvla-oft-SFT-libero-spatial-traj1
+  unnorm_key: libero_spatial_no_noops
+  dtype: bfloat16
+  temperature: 1.6 # rollout sampling temperature (greedy eval)
+  use_wrist_image: false
+  center_crop: true # the SimpleVLA-RL checkpoints are trained with augmentations
+  lora_rank: 32 # de-risk fallback; set to 0/null for full fine-tuning (needs FSDP)
+  lora_target_modules: [q_proj, k_proj, v_proj, o_proj]
+  device: null # null = auto (cuda if available)
+
+collector:
+  group_size: 8 # n: rollouts per initial state (GRPO group)
+  groups_per_iter: 64 # initial states per iteration (512 trajectories)
+  total_iters: 100 # the paper's total_epochs
+
+advantage:
+  trajectory_return: sum # binary success return per trajectory
+  keep_return_bounds: [0.1, 0.9] # dynamic sampling: drop all-fail / all-success groups
+
+buffer:
+  device: cpu # decisions hold raw uint8 images; keep the buffer off-GPU
+
+loss:
+  clip_epsilon: [0.2, 0.28] # asymmetric DAPO Clip-Higher (per-token, see ratio_level)
+  ratio_level: token # the paper's semantics: one clipped ratio per action token
+  ppo_epochs: 1
+  mini_batch_size: 16 # decisions per micro-batch (one forward)
+  accumulate_batches: 8 # optimizer step every N micro-batches (grad accumulation)
+
+optim:
+  lr: 5e-6
+  weight_decay: 0.0
+  warmup_updates: 10 # constant-with-warmup, in optimizer steps
+  max_grad_norm: 1.0
+
+logger:
+  backend: wandb
+  project_name: torchrl-sota-vla-grpo
+  group_name: null
+  exp_name: vla_grpo_libero
+  mode: online
+  eval_iter: 4 # evaluate every N iterations (the paper's cadence)
+  eval_episodes: 50 # greedy episodes per evaluation (cycled init states)
+
+checkpoint:
+  save_iter: 25
+  resume: null

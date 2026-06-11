@@ -12,82 +12,196 @@ transform decodes them into the continuous chunk on the inverse path;
 action; ``SuccessReward`` and ``StepCounter`` run once per outer step, so the
 decision reward is the binary success flag and episodes are truncated in
 decisions.
+
+Two backends share the loop: the dependency-free toy scale (``env.backend:
+toy`` + ``policy.backend: tiny``) and the SimpleVLA-RL LIBERO scale
+(``env.backend: libero`` + ``policy.backend: openvla``, one MuJoCo process
+per parallel worker, grouped initial states with per-worker group-id
+offsets).
 """
 from __future__ import annotations
 
+import warnings
+from functools import partial
+
 import torch
 
+from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.vla import UniformActionTokenizer
+from torchrl.data.vla import ActionTokenizerBase, UniformActionTokenizer
 from torchrl.envs import (
     ActionTokenizerTransform,
     Compose,
+    EnvBase,
+    LiberoEnv,
     MultiAction,
+    ParallelEnv,
     StepCounter,
     SuccessReward,
     ToyVLAEnv,
     TransformedEnv,
 )
-from torchrl.modules.vla import TinyVLA
+from torchrl.modules.vla import TinyVLA, VLAWrapperBase
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.llm import MCAdvantage
 
+# group ids must be unique across parallel workers: each worker gets a
+# disjoint offset block
+GROUP_ID_OFFSET = 10**6
 
-def make_tokenizer(cfg) -> UniformActionTokenizer:
+
+def make_policy(cfg, device: torch.device) -> VLAWrapperBase:
+    # ratio_level="token" gives one importance ratio per action token (the
+    # SimpleVLA-RL / DAPO semantics: the clip thresholds are per-token);
+    # "sequence" sums the chunk's log-probs into a single ratio per decision.
+    log_probs_mode = "token" if cfg.loss.ratio_level == "token" else "sequence"
+    if cfg.policy.backend == "tiny":
+        return TinyVLA(
+            action_dim=cfg.env.action_dim,
+            chunk_size=cfg.env.chunk_size,
+            action_head="tokens",
+            vocab_size=cfg.tokenizer.vocab_size,
+            hidden_dim=cfg.policy.hidden_dim,
+            mode="sample",
+            log_probs_mode=log_probs_mode,
+            device=device,
+        )
+    if cfg.policy.backend == "openvla":
+        # local import: pulls in transformers/timm via the vendored modeling
+        from openvla import OpenVLAOFTWrapper
+
+        policy = OpenVLAOFTWrapper.from_pretrained(
+            cfg.policy.checkpoint,
+            torch_dtype=getattr(torch, cfg.policy.dtype),
+            device=device,
+            unnorm_key=cfg.policy.unnorm_key,
+            temperature=cfg.policy.temperature,
+            log_probs_mode=log_probs_mode,
+            use_wrist_image=cfg.policy.use_wrist_image,
+            center_crop=cfg.policy.center_crop,
+        )
+        if cfg.policy.lora_rank:
+            # de-risk fallback to full fine-tuning (RL4VLA shows LoRA r=32
+            # works); validate on the target hardware
+            from peft import get_peft_model, LoraConfig
+
+            policy.model = get_peft_model(
+                policy.model,
+                LoraConfig(
+                    r=cfg.policy.lora_rank,
+                    lora_alpha=2 * cfg.policy.lora_rank,
+                    target_modules=list(cfg.policy.lora_target_modules),
+                ),
+            )
+        return policy
+    raise ValueError(f"Unknown policy backend {cfg.policy.backend!r}.")
+
+
+def make_action_tokenizer(cfg, policy: VLAWrapperBase) -> ActionTokenizerBase:
+    if cfg.policy.backend == "openvla":
+        # the codec lives in the checkpoint (vocab-tail mapping + norm_stats)
+        return policy.action_tokenizer()
     return UniformActionTokenizer(cfg.tokenizer.vocab_size, low=-1.0, high=1.0)
 
 
-def make_env(
-    cfg,
-    tokenizer: UniformActionTokenizer,
-    *,
-    group_repeats: int | None = None,
-    seed: int | None = None,
-    device: torch.device | None = None,
-) -> TransformedEnv:
-    base = ToyVLAEnv(
-        action_dim=cfg.env.action_dim,
-        state_dim=cfg.env.state_dim,
-        image_shape=tuple(cfg.env.image_shape),
-        success_steps=cfg.env.success_steps,
-        success_tol=cfg.env.success_tol,
-        group_repeats=group_repeats,
-        batch_size=[1],
-        seed=seed,
-        device=device,
-    )
+def _chunk_transform(cfg, tokenizer: ActionTokenizerBase) -> Compose:
     # The compose order is load-bearing: the inverse (action-input) path runs
     # in reverse, so the tokenizer decode happens before MultiAction unbinds
     # the chunk; on the step path SuccessReward and StepCounter run after
     # MultiAction, i.e. once per outer (decision) step. stack_rewards=False
     # keeps the outer transition dense when an episode ends inside a chunk
     # (the decision reward comes from the outer success flag instead).
-    transform = Compose(
+    return Compose(
         MultiAction(stack_rewards=False),
         ActionTokenizerTransform(tokenizer),
         SuccessReward(),
         StepCounter(max_steps=cfg.env.max_outer_steps),
     )
-    return TransformedEnv(base, transform)
 
 
-def make_policy(cfg, device: torch.device) -> TinyVLA:
-    return TinyVLA(
-        action_dim=cfg.env.action_dim,
-        chunk_size=cfg.env.chunk_size,
-        action_head="tokens",
-        vocab_size=cfg.tokenizer.vocab_size,
-        hidden_dim=cfg.policy.hidden_dim,
-        mode="sample",
-        device=device,
+def _make_libero_worker(cfg, worker_idx: int, *, group_repeats=None, eval_mode=False):
+    task_ids = list(cfg.env.task_ids)
+    task_id = task_ids[worker_idx % len(task_ids)]
+    return LiberoEnv(
+        cfg.env.task_suite,
+        task_id=task_id,
+        camera_height=cfg.env.camera_height,
+        camera_width=cfg.env.camera_width,
+        wrist_camera="robot0_eye_in_hand" if cfg.policy.use_wrist_image else None,
+        max_episode_steps=cfg.env.max_env_steps,
+        init_state_mode="cycle" if eval_mode else "random",
+        group_repeats=group_repeats,
+        group_id_offset=worker_idx * GROUP_ID_OFFSET,
     )
 
 
-def make_replay_buffer(cfg, device: torch.device) -> TensorDictReplayBuffer:
+def make_env(
+    cfg,
+    tokenizer: ActionTokenizerBase,
+    *,
+    group_repeats: int | None = None,
+    seed: int | None = None,
+    device: torch.device | None = None,
+    eval_mode: bool = False,
+) -> TransformedEnv:
+    if cfg.env.backend == "toy":
+        base = ToyVLAEnv(
+            action_dim=cfg.env.action_dim,
+            state_dim=cfg.env.state_dim,
+            image_shape=tuple(cfg.env.image_shape),
+            success_steps=cfg.env.success_steps,
+            success_tol=cfg.env.success_tol,
+            group_repeats=group_repeats,
+            batch_size=[1],
+            seed=seed,
+            device=device,
+        )
+    elif cfg.env.backend == "libero":
+        num_envs = cfg.env.eval_num_envs if eval_mode else cfg.env.num_envs
+        task_ids = list(cfg.env.task_ids)
+        # each worker hosts ONE MuJoCo task for its whole lifetime: fewer
+        # workers than tasks would silently drop tasks from the run
+        if num_envs < len(task_ids):
+            raise ValueError(
+                f"{'eval_num_envs' if eval_mode else 'num_envs'} ({num_envs}) "
+                f"must cover task_ids ({len(task_ids)} tasks): each worker is "
+                "bound to one task; fewer workers would silently drop tasks."
+            )
+        if num_envs % len(task_ids):
+            warnings.warn(
+                f"num_envs ({num_envs}) is not a multiple of the number of "
+                f"tasks ({len(task_ids)}): tasks will be sampled unevenly."
+            )
+        base = ParallelEnv(
+            num_envs,
+            [
+                partial(
+                    _make_libero_worker,
+                    cfg,
+                    worker_idx,
+                    group_repeats=group_repeats,
+                    eval_mode=eval_mode,
+                )
+                for worker_idx in range(num_envs)
+            ],
+            mp_start_method="spawn",
+        )
+        if seed is not None:
+            base.set_seed(seed)
+    else:
+        raise ValueError(f"Unknown env backend {cfg.env.backend!r}.")
+    return TransformedEnv(base, _chunk_transform(cfg, tokenizer))
+
+
+def make_replay_buffer(
+    cfg, device: torch.device
+) -> tuple[TensorDictReplayBuffer, MCAdvantage]:
     # The buffer holds one iteration's decisions; the write path computes the
     # group-relative advantage (and drops degenerate groups) on whole
-    # trajectories, the read path samples decisions without replacement.
+    # trajectories, the read path samples decisions without replacement. The
+    # advantage transform is returned too so the training loop can flush its
+    # incomplete-group queues at iteration boundaries.
     capacity = (
         cfg.collector.groups_per_iter
         * cfg.collector.group_size
@@ -101,18 +215,17 @@ def make_replay_buffer(cfg, device: torch.device) -> TensorDictReplayBuffer:
         sampler=SamplerWithoutReplacement(drop_last=False),
         batch_size=cfg.loss.mini_batch_size,
     )
-    rb.append_transform(
-        MCAdvantage(
-            grpo_size=cfg.collector.group_size,
-            prompt_key="group_id",
-            trajectory_return=cfg.advantage.trajectory_return,
-            keep_return_bounds=keep_return_bounds,
-        )
+    advantage = MCAdvantage(
+        grpo_size=cfg.collector.group_size,
+        prompt_key="group_id",
+        trajectory_return=cfg.advantage.trajectory_return,
+        keep_return_bounds=keep_return_bounds,
     )
-    return rb
+    rb.append_transform(advantage)
+    return rb, advantage
 
 
-def make_loss_module(cfg, policy: TinyVLA) -> ClipPPOLoss:
+def make_loss_module(cfg, policy: VLAWrapperBase) -> ClipPPOLoss:
     clip_epsilon = cfg.loss.clip_epsilon
     if not isinstance(clip_epsilon, float):
         clip_epsilon = tuple(clip_epsilon)
@@ -128,17 +241,73 @@ def make_loss_module(cfg, policy: TinyVLA) -> ClipPPOLoss:
     return loss_module
 
 
-def evaluate(env: TransformedEnv, policy: TinyVLA, cfg) -> float:
-    """Greedy success rate over ``cfg.logger.eval_episodes`` episodes."""
+def make_optimizer(cfg, loss_module: ClipPPOLoss):
+    optim = torch.optim.AdamW(
+        loss_module.parameters(), lr=cfg.optim.lr, weight_decay=cfg.optim.weight_decay
+    )
+    warmup = max(int(cfg.optim.warmup_updates), 1)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optim, lambda step: min((step + 1) / warmup, 1.0)
+    )
+    return optim, scheduler
+
+
+def make_collector(cfg, env: EnvBase, policy: VLAWrapperBase, device) -> Collector:
+    """Endless synchronous collector yielding whole-trajectory batches.
+
+    Each yielded batch holds exactly one iteration's worth of complete,
+    done-terminated trajectories, zero-padded along time with a
+    ``("collector", "mask")`` marking the valid steps
+    (``trajs_per_batch``; episodes spanning internal collection steps are
+    reassembled by the collector, in-flight episodes are held back). The
+    policy is held by reference (in-place optimizer updates and ``mode``
+    flips apply immediately) and observations/actions are cast between the
+    env's and the policy's devices by the collector.
+    """
+    num_envs = env.batch_size[0] if env.batch_size else 1
+    return Collector(
+        env,
+        policy,
+        frames_per_batch=num_envs * cfg.env.max_outer_steps,
+        total_frames=-1,
+        trajs_per_batch=cfg.collector.groups_per_iter * cfg.collector.group_size,
+        policy_device=device,
+        reset_at_each_iter=False,
+    )
+
+
+def evaluate(env: TransformedEnv, policy: VLAWrapperBase, cfg) -> float:
+    """Greedy success rate over (at least) ``cfg.logger.eval_episodes`` episodes.
+
+    One evaluation round = one reset per env row + one episode per row, with
+    no auto-resets in between (``break_when_all_done`` freezes finished rows
+    and stops once every row is done). Each LIBERO reset therefore consumes
+    exactly one cycled initial state, keeping the fixed-trials evaluation
+    protocol exact, and no collected episode is discarded.
+    """
     mode = policy.mode
     policy.mode = "greedy"
-    successes = 0
+    successes = 0.0
+    episodes = 0
     with torch.no_grad():
-        for _ in range(cfg.logger.eval_episodes):
-            rollout = env.rollout(cfg.env.max_outer_steps, policy)
-            successes += int(rollout["next", "success"].any())
+        while episodes < cfg.logger.eval_episodes:
+            reset_td = env.reset()
+            rollout = env.rollout(
+                cfg.env.max_outer_steps,
+                policy,
+                break_when_any_done=False,
+                break_when_all_done=True,
+                auto_reset=False,
+                tensordict=reset_td,
+                auto_cast_to_device=True,
+            )
+            # one episode per row: success anywhere along the (frozen-once-
+            # done) row
+            row_success = rollout["next", "success"].any(-2)
+            successes += float(row_success.sum())
+            episodes += int(row_success.numel())
     policy.mode = mode
-    return successes / cfg.logger.eval_episodes
+    return successes / max(episodes, 1)
 
 
 def log_metrics(logger, metrics: dict, step: int) -> None:
