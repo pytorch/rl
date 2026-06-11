@@ -766,10 +766,13 @@ class TestTinyVLA:
         )
         out = policy(_make_obs_td())
         assert out["action_tokens"].shape == torch.Size([2, 4, 7])
-        assert out["log_probs"].shape == torch.Size([2, 4, 7])
+        # one sequence-level log-prob per sample (summed over the chunk): the
+        # contract PPO-style objectives expect from sample_log_prob
+        assert out["log_probs"].shape == torch.Size([2])
         assert (out["action_tokens"] >= 0).all() and (out["action_tokens"] < 64).all()
         dist = policy.get_dist(_make_obs_td())
-        assert dist.logits.shape == torch.Size([2, 4, 7, 64])
+        assert dist.base_dist.logits.shape == torch.Size([2, 4, 7, 64])
+        assert dist.log_prob(out["action_tokens"]).shape == torch.Size([2])
 
     def test_get_dist_continuous_raises(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)
