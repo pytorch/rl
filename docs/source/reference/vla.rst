@@ -127,12 +127,12 @@ policy for tests and tutorials.
 Objectives
 ----------
 
-Fine-tuning objectives for VLA policies.
+VLA fine-tuning needs no dedicated loss classes; the standard objectives
+apply directly:
 
-.. currentmodule:: torchrl.objectives.vla
+- *Chunked behavior cloning* is :class:`~torchrl.objectives.BCLoss` with the
+  action chunk as the ``action`` and the chunk-padding mask excluded via its
+  ``pad_mask`` key::
 
-.. autosummary::
-    :toctree: generated/
-    :template: rl_template_noinherit.rst
-
-    VLABCLoss
+      loss = BCLoss(policy, loss_function="l1")
+      loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
