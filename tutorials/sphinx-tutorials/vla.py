@@ -169,6 +169,40 @@ obs = make_observation()
 # ``action_chunk`` ``[*B, T, H, action_dim]`` (plus an ``action_is_pad`` mask):
 # for every step ``t`` it gathers the next ``H`` actions. This is the training
 # target of modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
+#
+# Chunks mean different things on the two sides of the pipeline, and keeping
+# the two pictures apart avoids a classic confusion::
+#
+#     Training (behavior cloning)        |  Inference (closed loop)
+#     -----------------------------------+----------------------------------
+#     dataset actions: a0 a1 a2 a3 ...   |  o_t --> VLA --> chunk [b0 b1 b2]
+#          |                             |          (one chunk per query)
+#          | sample a trajectory slice   |               |
+#          v                             |               v
+#     ActionChunkTransform               |     ActionChunkExecutor
+#          |                             |     (env transform, 1 action per
+#          v                             |     base step, re-plans on resets)
+#     [[a0, a1, a2],  <- target at t=0   |     or MultiAction (re-timed env:
+#      [a1, a2, a3],  <- target at t=1   |     one base step per chunk action)
+#      [a2, a3, a3],  <- target at t=2   |               |
+#      ...] + action_is_pad mask         |               v
+#          |                             |  step: b0 -> b1 -> b2 -> re-query
+#          v                             |        --> [c0 c1 c2] -> c0 -> ...
+#     VLABCLoss(policy(o_t), row t)      |
+#                                        |  executed trace (open loop):
+#     overlapping rows, one per dataset  |    b0 b1 b2 | c0 c1 c2 | ...
+#     step: the policy may be queried    |  non-overlapping tiles of time
+#     at any t                           |
+#
+# The *training table* (left) is stride-1 and overlapping -- one supervised
+# example per dataset step, because at deployment the policy can be queried at
+# any phase. The *executed trace* (right) tiles time without overlap when run
+# open-loop: each committed chunk is consumed before the next one. Both
+# :class:`~torchrl.envs.transforms.ActionChunkExecutor` (with
+# ``replan_interval=H``; used later in this tutorial, since the same object
+# also covers receding-horizon re-planning and reset handling) and
+# :class:`~torchrl.envs.transforms.MultiAction` (which re-times the env
+# instead, stepping it once per chunk action) realize that open-loop trace.
 
 from torchrl.envs.transforms import ActionChunkTransform, ActionScaling
 
