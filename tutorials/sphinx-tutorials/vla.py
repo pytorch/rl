@@ -288,78 +288,37 @@ for _ in range(100):
 # automatically whenever an environment resets).
 #
 # To see it in action we need an environment. Real evaluations would use a
-# simulator (e.g. ``gym-pusht``) or a robot; here we write the smallest
-# possible :class:`~torchrl.envs.EnvBase` that speaks the canonical VLA
-# schema -- two vectorized copies, camera + state observations, a constant
-# instruction -- and whose state echoes the executed action, so we can watch
-# the executor work.
+# simulator (e.g. ``gym-pusht``) or a robot; TorchRL ships
+# :class:`~torchrl.envs.ToyVLAEnv`, a tiny synthetic env that speaks the
+# canonical VLA schema and whose state echoes the executed action -- ideal for
+# watching execution machinery work (its ~40-line source is also a template
+# for wrapping your own robot in :class:`~torchrl.envs.EnvBase`). Its specs
+# tell us exactly what it consumes and produces: camera image (``uint8``) and
+# proprioceptive state under ``observation``, the instruction at the root.
 
-from torchrl.data import (
-    Bounded,
-    Categorical as CategoricalSpec,
-    Composite,
-    NonTensor,
-    Unbounded,
-)
-from torchrl.envs import EnvBase
-
+from torchrl.envs import ToyVLAEnv
 from torchrl.envs.transforms import ActionChunkExecutor, TransformedEnv
 
-INSTRUCTION = "push the T-shaped block onto the target"
+base_env = ToyVLAEnv(
+    action_dim=action_dim,
+    state_dim=state_dim,
+    image_shape=(n_cam_c, hw, hw),
+    batch_size=[2],
+)
+base_env.observation_spec
 
+##############################################################################
+# The native action interface is a single continuous action per step:
 
-class ToyVLAEnv(EnvBase):
-    """Two vectorized toy robots: the state's first ``action_dim`` entries echo the executed action."""
+base_env.action_spec
 
-    def __init__(self):
-        super().__init__(batch_size=torch.Size([2]))
-        self.observation_spec = Composite(
-            observation=Composite(
-                image=Unbounded(shape=(2, n_cam_c, hw, hw), dtype=torch.uint8),
-                state=Unbounded(shape=(2, state_dim)),
-                shape=(2,),
-            ),
-            language_instruction=NonTensor(shape=(2,), example_data=INSTRUCTION),
-            shape=(2,),
-        )
-        self.action_spec = Bounded(-1.0, 1.0, shape=(2, action_dim))
-        self.reward_spec = Unbounded(shape=(2, 1))
-        self.done_spec = CategoricalSpec(2, dtype=torch.bool, shape=(2, 1))
+##############################################################################
+# Appending the executor rewrites the policy-facing action spec to the
+# chunked shape -- compare with ``base_env.action_spec`` above: the
+# environment now asks the policy for ``action_chunk`` instead of ``action``.
 
-    def _obs(self, state):
-        return TensorDict(
-            {
-                "observation": {
-                    "image": torch.randint(
-                        0, 255, (2, n_cam_c, hw, hw), dtype=torch.uint8
-                    ),
-                    "state": state,
-                },
-                "language_instruction": NonTensorStack(INSTRUCTION, INSTRUCTION),
-            },
-            batch_size=[2],
-        )
-
-    def _reset(self, tensordict=None, **kwargs):
-        out = self._obs(torch.zeros(2, state_dim))
-        out.update(self.full_done_spec.zero())
-        return out
-
-    def _step(self, tensordict):
-        action = tensordict["action"]
-        state = torch.zeros(2, state_dim)
-        state[:, :action_dim] = action  # the executed action, visible to us
-        out = self._obs(state)
-        out["reward"] = -action.norm(dim=-1, keepdim=True)  # effort penalty
-        out.update(self.full_done_spec.zero())
-        return out
-
-    def _set_seed(self, seed):
-        return seed
-
-
-env = TransformedEnv(ToyVLAEnv(), ActionChunkExecutor(chunk_size=H, replan_interval=2))
-env.full_action_spec["action_chunk"].shape  # the policy-facing spec is chunked
+env = TransformedEnv(base_env, ActionChunkExecutor(chunk_size=H, replan_interval=2))
+env.full_action_spec["action_chunk"]
 
 ##############################################################################
 # Now a plain :meth:`~torchrl.envs.EnvBase.rollout` with the policy we just
