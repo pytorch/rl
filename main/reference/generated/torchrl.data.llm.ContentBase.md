@@ -1,6 +1,6 @@
 # ContentBase
 
-*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7ff874657740>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
+*class*torchrl.data.llm.ContentBase(*type: "Literal['text'*, *'image'*, *'audio'*, *'video'*, *'file'*, *'function_call']" = <function _wrap_td_method.<locals>.wrapped_func at 0x7fdd4aa13600>*, *text: 'str | None' = None*, *url: 'str | None' = None*, *data: 'str | None' = None*, *mime_type: 'str | None' = None*, *name: 'str | None' = None*, *size: 'int | None' = None*, *function_name: 'str | None' = None*, *function_args: 'dict | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/data/llm/history.html#ContentBase)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -539,41 +539,6 @@ Examples
 >>> torch.utils._pytree.tree_map(check, pytree, pytree_recon)
 >>> assert weird_key in pytree_recon[1]
 ```
-
-from_remote_init(*group: 'ProcessGroup' | None = None*, *device: [torch.device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*, *use_broadcast: bool = False*) → Self
-
-Creates a new tensordict instance initialized from remotely sent metadata.
-
-This class method receives consolidated metadata and a single storage buffer
-sent by `init_remote()`, then reconstructs the full tensordict.
-
-Two transport modes are available (must match the sender's choice):
-
-- **Point-to-point** (default): uses `recv_object_list` +
-`dist.recv`. Only sender and receiver participate.
-- **Broadcast** (`use_broadcast=True`): delegates to
-`broadcast()`. All ranks must participate.
-
-Parameters:
-
-- **src** (*int*) - The rank of the source process that sent the metadata.
-- **group** (*"ProcessGroup"**,**optional*) - The process group to use for communication. Defaults to None.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - The device to use for tensor operations. Defaults to None.
-- **use_broadcast** (*bool*) - If `True`, use `broadcast()` instead
-of point-to-point recv. Must match the sender's setting.
-Defaults to `False`.
-
-Returns:
-
-A new tensordict instance initialized with the received metadata and content.
-
-Return type:
-
-TensorDict
-
-See also
-
-The sending process should have called ~.init_remote to send the metadata and content.
 
 from_schema(***, *batch_size: Sequence[int] | [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | None = None*, *storage: str | None = None*, *device=None*, ***kwargs*) → [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)
 
