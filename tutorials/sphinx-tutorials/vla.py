@@ -247,26 +247,114 @@ for _ in range(100):
 # consumes one action per step.
 # :class:`~torchrl.envs.transforms.ActionChunkExecutor` (a general
 # chunk-execution transform, not VLA-specific) bridges the two without
-# wrapping anything: appended to the policy
-# (``TensorDictSequential(policy, executor)``) or to the environment
-# (``TransformedEnv(env, executor)``, where it also rewrites the policy-facing
-# action spec to the chunked shape), it emits one action per call, executing
-# ``replan_interval`` actions from the cached chunk before committing a fresh
-# prediction (receding horizon). Attached to an env it re-plans automatically
-# on (partial) resets; in the policy-side composition, call
-# :meth:`~torchrl.envs.transforms.ActionChunkExecutor.reset_state` between
-# rollouts. Here we use the policy-side composition and step it by hand.
+# wrapping anything: appended to the environment, it rewrites the
+# policy-facing action spec to the chunked shape and, at every step, either
+# serves the next action of the cached chunk or commits the policy's fresh
+# prediction (every ``replan_interval`` steps -- receding horizon -- and
+# automatically whenever an environment resets).
+#
+# To see it in action we need an environment. Real evaluations would use a
+# simulator (e.g. ``gym-pusht``) or a robot; here we write the smallest
+# possible :class:`~torchrl.envs.EnvBase` that speaks the canonical VLA
+# schema -- two vectorized copies, camera + state observations, a constant
+# instruction -- and whose state echoes the executed action, so we can watch
+# the executor work.
 
-from tensordict.nn import TensorDictSequential
-from torchrl.envs.transforms import ActionChunkExecutor
+from torchrl.data import (
+    Bounded,
+    Categorical as CategoricalSpec,
+    Composite,
+    NonTensor,
+    Unbounded,
+)
+from torchrl.envs import EnvBase
 
-executor = ActionChunkExecutor(chunk_size=H, replan_interval=2)
-step_policy = TensorDictSequential(policy, executor)
-actions = [step_policy(make_observation())["action"] for _ in range(5)]
-# five [batch, action_dim] actions: chunk actions 0 and 1, then a re-plan,
-# and so on -- the policy still runs at every call, but only every second
-# prediction is committed
-[a.shape for a in actions]
+from torchrl.envs.transforms import ActionChunkExecutor, TransformedEnv
+
+INSTRUCTION = "push the T-shaped block onto the target"
+
+
+class ToyVLAEnv(EnvBase):
+    """Two vectorized toy robots: the state's first ``action_dim`` entries echo the executed action."""
+
+    def __init__(self):
+        super().__init__(batch_size=torch.Size([2]))
+        self.observation_spec = Composite(
+            observation=Composite(
+                image=Unbounded(shape=(2, n_cam_c, hw, hw), dtype=torch.uint8),
+                state=Unbounded(shape=(2, state_dim)),
+                shape=(2,),
+            ),
+            language_instruction=NonTensor(shape=(2,), example_data=INSTRUCTION),
+            shape=(2,),
+        )
+        self.action_spec = Bounded(-1.0, 1.0, shape=(2, action_dim))
+        self.reward_spec = Unbounded(shape=(2, 1))
+        self.done_spec = CategoricalSpec(2, dtype=torch.bool, shape=(2, 1))
+
+    def _obs(self, state):
+        return TensorDict(
+            {
+                "observation": {
+                    "image": torch.randint(
+                        0, 255, (2, n_cam_c, hw, hw), dtype=torch.uint8
+                    ),
+                    "state": state,
+                },
+                "language_instruction": NonTensorStack(INSTRUCTION, INSTRUCTION),
+            },
+            batch_size=[2],
+        )
+
+    def _reset(self, tensordict=None, **kwargs):
+        out = self._obs(torch.zeros(2, state_dim))
+        out.update(self.full_done_spec.zero())
+        return out
+
+    def _step(self, tensordict):
+        action = tensordict["action"]
+        state = torch.zeros(2, state_dim)
+        state[:, :action_dim] = action  # the executed action, visible to us
+        out = self._obs(state)
+        out["reward"] = -action.norm(dim=-1, keepdim=True)  # effort penalty
+        out.update(self.full_done_spec.zero())
+        return out
+
+    def _set_seed(self, seed):
+        return seed
+
+
+env = TransformedEnv(ToyVLAEnv(), ActionChunkExecutor(chunk_size=H, replan_interval=2))
+env.full_action_spec["action_chunk"].shape  # the policy-facing spec is chunked
+
+##############################################################################
+# Now a plain :meth:`~torchrl.envs.EnvBase.rollout` with the policy we just
+# trained runs the whole closed loop: the policy predicts a chunk at every
+# step, and the executor decides which action actually reaches the env.
+
+eval_rollout = env.rollout(6, policy)
+eval_rollout["action_chunk"].shape  # [2, 6, H, action_dim]: a fresh prediction per step
+
+##############################################################################
+# The env's state echoes the executed action, so we can verify the receding
+# horizon: at step 0 the fresh chunk is committed and its first action
+# executed; at step 1 the executor serves the *cached* chunk's second action
+# and the step-1 prediction is discarded.
+
+executed = eval_rollout["next", "observation", "state"][..., :action_dim]
+torch.allclose(executed[:, 0], eval_rollout["action_chunk"][:, 0, 0])  # True: re-plan
+torch.allclose(executed[:, 1], eval_rollout["action_chunk"][:, 0, 1])  # True: cached
+torch.allclose(
+    executed[:, 1], eval_rollout["action_chunk"][:, 1, 0]
+)  # False: discarded
+
+##############################################################################
+# The same instance can instead be appended to the policy
+# (``TensorDictSequential(policy, executor)``) when you cannot touch the env;
+# call :meth:`~torchrl.envs.transforms.ActionChunkExecutor.reset_state`
+# between rollouts in that mode. When policy inference is expensive and the
+# call must actually be *skipped* between re-plans, wrap the policy in
+# :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` instead.
 
 ##############################################################################
 # RL fine-tuning
