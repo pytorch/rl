@@ -139,6 +139,20 @@ class TestPendulum:
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
+    def test_pendulum_angle_wrapped(self):
+        # ``th`` must stay within the ``Bounded(-pi, pi)`` observation/state
+        # spec even when the dynamics push the angle past the boundary;
+        # unbounded drift made ``check_env_specs`` flaky (#3798).
+        env = PendulumEnv()
+        td = env.reset()
+        td["th"] = torch.tensor(torch.pi - 1e-3)
+        td["thdot"] = torch.tensor(8.0)  # max speed, pushes past +pi
+        td["action"] = torch.ones(1)
+        for _ in range(10):
+            td = env.step(td)["next"]
+            assert env.observation_spec["th"].is_in(td["th"]), td["th"]
+            td["action"] = torch.ones(1)
+
     def test_pendulum_set_state(self):
         env = PendulumEnv()
         torch.manual_seed(0)

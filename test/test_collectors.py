@@ -2286,7 +2286,10 @@ if __name__ == "__main__":
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
             elif self.env_id % 2 == 1:
-                time.sleep(0.1)
+                # Long enough that the preemption stop flag lands well before
+                # the slow envs can complete a full rollout, even on loaded CI
+                # runners (#3798)
+                time.sleep(0.3)
 
             self._step_count = 0
             return TensorDict(
@@ -2307,7 +2310,7 @@ if __name__ == "__main__":
             done = self._step_count >= self.max_steps
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
-                time.sleep(0.1)
+                time.sleep(0.3)
             if self.step_sleep:
                 time.sleep(self.step_sleep)
 
@@ -2389,16 +2392,30 @@ if __name__ == "__main__":
 
                 #
                 for env_idx in range(num_envs):
+                    traj_ids = batch["collector", "traj_ids"][env_idx]
                     if with_preempt and env_idx % 2 == 1:
-                        # This is a slow env, should have been preempted after first step
-                        assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
-                        continue
-                    # This is a fast env, no preemption happened
-                    assert (batch["collector", "traj_ids"][env_idx] != -1).all()
+                        # This is a slow env: it must have been preempted before
+                        # completing its rollout. The stop flag is only raised
+                        # once the fastest workers have reported and is polled
+                        # by the worker once per step, so on a loaded machine
+                        # the slow env can log a couple of valid steps before
+                        # stopping; requiring exactly one step made this test
+                        # flaky (#3798).
+                        n_valid = (traj_ids != -1).sum().item()
+                        assert 1 <= n_valid < n_steps, traj_ids
+                        # the valid steps form a contiguous prefix, padding
+                        # closes the row
+                        assert (traj_ids[:n_valid] != -1).all(), traj_ids
+                        assert (traj_ids[n_valid:] == -1).all(), traj_ids
+                    else:
+                        # This is a fast env, no preemption happened
+                        assert (traj_ids != -1).all()
+                        n_valid = traj_ids.numel()
 
                     env_data = batch[env_idx]
-                    observations = env_data["observation"]
-                    # All observations from this environment should equal its env_id
+                    # All valid observations from this environment should equal
+                    # its env_id (padded rows are excluded for preempted envs)
+                    observations = env_data["observation"][:n_valid]
                     expected_id = float(env_idx)
                     actual_ids = observations.flatten().unique()
 
