@@ -250,9 +250,11 @@ to be able to create this other composition:
 | [`Transform`](generated/torchrl.envs.transforms.Transform.html#torchrl.envs.transforms.Transform)([in_keys, out_keys, in_keys_inv, ...]) | Base class for environment transforms, which modify or create new data in a tensordict. |
 | --- | --- |
 | [`TransformedEnv`](generated/torchrl.envs.transforms.TransformedEnv.html#torchrl.envs.transforms.TransformedEnv)(*args, **kwargs) | A transformed environment. |
+| [`ActionChunkTransform`](generated/torchrl.envs.transforms.ActionChunkTransform.html#torchrl.envs.transforms.ActionChunkTransform)(chunk_size, *[, ...]) | Build fixed-length action chunks from a trajectory window. |
 | [`ActionDiscretizer`](generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer)(num_intervals[, ...]) | A transform to discretize a continuous action space. |
 | [`ActionMask`](generated/torchrl.envs.transforms.ActionMask.html#torchrl.envs.transforms.ActionMask)([action_key, mask_key]) | An adaptive action masker. |
 | [`ActionScaling`](generated/torchrl.envs.transforms.ActionScaling.html#torchrl.envs.transforms.ActionScaling)([in_keys_inv, out_keys_inv, ...]) | Affine-scale a continuous action using the bounds of the action spec. |
+| [`ActionTokenizerTransform`](generated/torchrl.envs.transforms.ActionTokenizerTransform.html#torchrl.envs.transforms.ActionTokenizerTransform)(tokenizer, *[, ...]) | Encode and decode actions with an [`ActionTokenizerBase`](generated/torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase). |
 | [`AutoResetEnv`](generated/torchrl.envs.transforms.AutoResetEnv.html#torchrl.envs.transforms.AutoResetEnv)(*args, **kwargs) | A subclass for auto-resetting envs. |
 | [`AutoResetTransform`](generated/torchrl.envs.transforms.AutoResetTransform.html#torchrl.envs.transforms.AutoResetTransform)(*[, replace, fill_float, ...]) | A transform for auto-resetting environments. |
 | [`BatchSizeTransform`](generated/torchrl.envs.transforms.BatchSizeTransform.html#torchrl.envs.transforms.BatchSizeTransform)(*[, batch_size, ...]) | A transform to modify the batch-size of an environment. |

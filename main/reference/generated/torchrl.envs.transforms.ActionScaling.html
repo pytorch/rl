@@ -52,7 +52,7 @@
     <script src="../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="AutoResetEnv" href="torchrl.envs.transforms.AutoResetEnv.html" />
+    <link rel="next" title="ActionTokenizerTransform" href="torchrl.envs.transforms.ActionTokenizerTransform.html" />
     <link rel="prev" title="ActionMask" href="torchrl.envs.transforms.ActionMask.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1110,6 +1110,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../config.html">
                   TorchRL Configuration System
                 </a>
@@ -1431,11 +1437,13 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.AtariDQNExperienceReplay.html">AtariDQNExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.D4RLExperienceReplay.html">D4RLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.GenDGRLExperienceReplay.html">GenDGRLExperienceReplay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.LeRobotExperienceReplay.html">LeRobotExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.MinariExperienceReplay.html">MinariExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.OpenMLExperienceReplay.html">OpenMLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.OpenXExperienceReplay.html">OpenXExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.RobosetExperienceReplay.html">RobosetExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.VD4RLExperienceReplay.html">VD4RLExperienceReplay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.lerobot_columns_to_tensordict.html">lerobot_columns_to_tensordict</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../data_specs.html">TensorSpec System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -1501,9 +1509,11 @@ document.write(`
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../envs_transforms.html">Transforms</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.Transform.html">Transform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.TransformedEnv.html">TransformedEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionChunkTransform.html">ActionChunkTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionDiscretizer.html">ActionDiscretizer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionMask.html">ActionMask</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">ActionScaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionTokenizerTransform.html">ActionTokenizerTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.AutoResetEnv.html">AutoResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.AutoResetTransform.html">AutoResetTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.BatchSizeTransform.html">BatchSizeTransform</a></li>
@@ -1953,6 +1963,13 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.cuda_memory_profile.html">cuda_memory_profile</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../vla.html">Vision-Language-Action (VLA)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.RobotDatasetMetadata.html">RobotDatasetMetadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.validate_vla_tensordict.html">validate_vla_tensordict</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.ActionTokenizerBase.html">ActionTokenizerBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.UniformActionTokenizer.html">UniformActionTokenizer</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../config.html">TorchRL Configuration System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.common.ConfigBase.html">torchrl.trainers.algorithms.configs.common.ConfigBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.envs.EnvConfig.html">torchrl.trainers.algorithms.configs.envs.EnvConfig</a></li>
@@ -2295,13 +2312,18 @@ mapping is rescaled accordingly so that <code class="docutils literal notranslat
 <li><p><strong>in_keys_inv</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – keys read during the
 <code class="docutils literal notranslate"><span class="pre">inv</span></code> direction (policy -&gt; env). Defaults to <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;]</span></code>. A
 single key per <a class="reference internal" href="#torchrl.envs.transforms.ActionScaling" title="torchrl.envs.transforms.ActionScaling"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionScaling</span></code></a> instance is supported; compose
-several instances to scale several actions.</p></li>
+several instances to scale several actions. Pass an empty list for
+a forward-only transform (normalize raw dataset actions on the
+replay-buffer sample path while leaving <code class="docutils literal notranslate"><span class="pre">extend</span></code> and the env-side
+action interface untouched); this requires explicit <code class="docutils literal notranslate"><span class="pre">loc</span></code> and
+<code class="docutils literal notranslate"><span class="pre">scale</span></code>.</p></li>
 <li><p><strong>out_keys_inv</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – keys written during the
 <code class="docutils literal notranslate"><span class="pre">inv</span></code> direction. Defaults to <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code>.</p></li>
 <li><p><strong>in_keys</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – keys read during the forward
 direction (env action -&gt; normalized action, used by replay buffers
 and inside <a class="reference external" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module" title="(in PyTorch v2.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></a> chains). Defaults to
-<code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code>, or <code class="docutils literal notranslate"><span class="pre">[&quot;action&quot;]</span></code> when <code class="docutils literal notranslate"><span class="pre">in_keys_inv=[]</span></code>
+(forward-only mode).</p></li>
 <li><p><strong>out_keys</strong> (<em>sequence</em><em> of </em><em>NestedKey</em><em>, </em><em>optional</em>) – keys written during the
 forward direction. Defaults to <code class="docutils literal notranslate"><span class="pre">in_keys</span></code>.</p></li>
 </ul>
@@ -2322,10 +2344,29 @@ space is <code class="docutils literal notranslate"><span class="pre">[0,</span>
 </ul>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>RuntimeError</strong> – if the action spec is unbounded or partially unbounded
-    (any bound is non-finite).</p>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – if <code class="docutils literal notranslate"><span class="pre">loc</span></code> and <code class="docutils literal notranslate"><span class="pre">scale</span></code> are derived from the spec (no
+    explicit values passed) and the action spec is unbounded or
+    partially unbounded (any bound is non-finite). With explicit
+    <code class="docutils literal notranslate"><span class="pre">loc</span></code>/<code class="docutils literal notranslate"><span class="pre">scale</span></code>, a bounded spec is mapped through the affine
+    transform and an unbounded (or partially unbounded) spec is
+    advertised as <code class="docutils literal notranslate"><span class="pre">Unbounded</span></code> instead of raising.</p>
 </dd>
 </dl>
+<p>With explicit <code class="docutils literal notranslate"><span class="pre">loc</span></code> and <code class="docutils literal notranslate"><span class="pre">scale</span></code> the transform is fully spec-independent
+– the standard workflow when training on dataset action statistics, e.g.
+for VLA policies. Use <a class="reference internal" href="#torchrl.envs.transforms.ActionScaling.from_stats" title="torchrl.envs.transforms.ActionScaling.from_stats"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_stats()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">mean</span></code>/<code class="docutils literal notranslate"><span class="pre">std</span></code> or
+<code class="docutils literal notranslate"><span class="pre">low</span></code>/<code class="docutils literal notranslate"><span class="pre">high</span></code>) or <a class="reference internal" href="#torchrl.envs.transforms.ActionScaling.from_metadata" title="torchrl.envs.transforms.ActionScaling.from_metadata"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_metadata()</span></code></a> to build such an instance from
+dataset statistics. Attached to an environment, it denormalizes the
+policy’s actions on the inverse path: a bounded action spec is mapped
+through the affine transform (and an unbounded action spec stays
+unbounded), so the advertised normalized space reflects the actual
+statistics rather than being assumed <code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1]</span></code>. Appended to a replay
+buffer, it normalizes actions on the <code class="docutils literal notranslate"><span class="pre">sample</span></code> path; beware that
+<code class="docutils literal notranslate"><span class="pre">ReplayBuffer.extend</span></code> applies the <em>inverse</em> transform, so when raw
+(env-scale) data is written through <code class="docutils literal notranslate"><span class="pre">extend</span></code>, use a forward-only
+instance (<code class="docutils literal notranslate"><span class="pre">in_keys_inv=[]</span></code>) to leave the stored data untouched – the
+default bidirectional keys suit the env side and pre-populated dataset
+storages.</p>
 <p class="rubric">Examples</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span> <span class="nn">torch</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span>
@@ -2339,8 +2380,84 @@ space is <code class="docutils literal notranslate"><span class="pre">[0,</span>
 <span class="go">tensor([-1., -1., -1., -1., -1., -1., -1.])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">high</span>
 <span class="go">tensor([1., 1., 1., 1., 1., 1., 1.])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># dataset-statistics-driven normalization (no env required): the</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># forward pass maps raw actions to the normalized space</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDict</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">ActionScaling</span><span class="o">.</span><span class="n">from_stats</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">mean</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span> <span class="n">std</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">])</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">td</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">]])},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span><span class="p">(</span><span class="n">td</span><span class="p">)[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>
+<span class="go">tensor([[1., 1.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># on a replay buffer, a forward-only instance (in_keys_inv=[])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># normalizes on sample and leaves data written through extend</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># untouched (extend applies the inverse pass)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <span class="n">TensorDictReplayBuffer</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span> <span class="o">=</span> <span class="n">ActionScaling</span><span class="o">.</span><span class="n">from_stats</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">mean</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">std</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]),</span>
+<span class="gp">... </span>    <span class="n">in_keys_inv</span><span class="o">=</span><span class="p">[],</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span> <span class="o">=</span> <span class="n">TensorDictReplayBuffer</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="n">transform</span><span class="o">=</span><span class="n">t</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">2</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">raw</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">(</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">]])</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">2</span><span class="p">)},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span>
+<span class="gp">... </span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">rb</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>  <span class="c1"># stored as-is</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">rb</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>  <span class="c1"># normalized with the dataset statistics</span>
+<span class="go">tensor([[1., 1.],</span>
+<span class="go">        [1., 1.]])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># the same affine map is exposed on raw tensors for execution-time</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="c1"># use, e.g. mapping a policy&#39;s normalized prediction to the robot</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">t</span><span class="o">.</span><span class="n">denormalize</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]))</span>
+<span class="go">tensor([[3., 6.]])</span>
 </pre></div>
 </div>
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ActionScaling.denormalize">
+<span class="sig-name descname"><span class="pre">denormalize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_action.html#ActionScaling.denormalize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionScaling.denormalize" title="Link to this definition">#</a></dt>
+<dd><p>Map a normalized action back to the env scale (the inverse map).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ActionScaling.from_metadata">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata" title="torchrl.data.vla.RobotDatasetMetadata"><span class="pre">RobotDatasetMetadata</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.ActionScaling" title="torchrl.envs.transforms.ActionScaling"><span class="pre">ActionScaling</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_action.html#ActionScaling.from_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionScaling.from_metadata" title="Link to this definition">#</a></dt>
+<dd><p>Build from the action statistics of a <a class="reference internal" href="torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata" title="torchrl.data.vla.RobotDatasetMetadata"><code class="xref py py-class docutils literal notranslate"><span class="pre">RobotDatasetMetadata</span></code></a>.</p>
+<p>Uses <code class="docutils literal notranslate"><span class="pre">action_mean</span></code>/<code class="docutils literal notranslate"><span class="pre">action_std</span></code> when available, falling back to
+<code class="docutils literal notranslate"><span class="pre">action_low</span></code>/<code class="docutils literal notranslate"><span class="pre">action_high</span></code>. The action key defaults to the
+metadata’s <code class="docutils literal notranslate"><span class="pre">action_key</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ActionScaling.from_stats">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mean</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">std</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">low</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#torchrl.envs.transforms.ActionScaling" title="torchrl.envs.transforms._action.ActionScaling"><span class="pre">ActionScaling</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_action.html#ActionScaling.from_stats"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionScaling.from_stats" title="Link to this definition">#</a></dt>
+<dd><p>Build an <a class="reference internal" href="#torchrl.envs.transforms.ActionScaling" title="torchrl.envs.transforms.ActionScaling"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionScaling</span></code></a> from dataset action statistics.</p>
+<p>Provide exactly one complete pair: <code class="docutils literal notranslate"><span class="pre">mean</span></code> and <code class="docutils literal notranslate"><span class="pre">std</span></code> (zero-mean,
+unit-std normalized space) or <code class="docutils literal notranslate"><span class="pre">low</span></code> and <code class="docutils literal notranslate"><span class="pre">high</span></code> (maps the range to
+<code class="docutils literal notranslate"><span class="pre">[-1,</span> <span class="pre">1]</span></code>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Keyword Arguments<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mean</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – per-dimension action mean.</p></li>
+<li><p><strong>std</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – per-dimension action std.</p></li>
+<li><p><strong>low</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – per-dimension action minimum.</p></li>
+<li><p><strong>high</strong> (<a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><em>torch.Tensor</em></a><em>, </em><em>optional</em>) – per-dimension action maximum.</p></li>
+<li><p><strong>eps</strong> (<a class="reference internal" href="torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.float" title="torchrl.data.llm.TopKRewardSelector.float"><em>float</em></a><em>, </em><em>optional</em>) – floor applied to the scale to avoid division
+by zero on constant action dimensions. Defaults to <code class="docutils literal notranslate"><span class="pre">1e-6</span></code>.</p></li>
+<li><p><strong>**kwargs</strong> – forwarded to the constructor (e.g. <code class="docutils literal notranslate"><span class="pre">in_keys_inv</span></code>,
+<code class="docutils literal notranslate"><span class="pre">standard_normal</span></code>).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.envs.transforms.ActionScaling.normalize">
+<span class="sig-name descname"><span class="pre">normalize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="(in PyTorch v2.12)"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_action.html#ActionScaling.normalize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionScaling.normalize" title="Link to this definition">#</a></dt>
+<dd><p>Map an env-scale action to the normalized space (the forward map).</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.ActionScaling.transform_action_spec">
 <span class="sig-name descname"><span class="pre">transform_action_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_action.html#ActionScaling.transform_action_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.ActionScaling.transform_action_spec" title="Link to this definition">#</a></dt>
@@ -2411,11 +2528,11 @@ space is <code class="docutils literal notranslate"><span class="pre">[0,</span>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.envs.transforms.AutoResetEnv.html"
+       href="torchrl.envs.transforms.ActionTokenizerTransform.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">AutoResetEnv</p>
+        <p class="prev-next-title">ActionTokenizerTransform</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2450,11 +2567,11 @@ space is <code class="docutils literal notranslate"><span class="pre">[0,</span>
       </div>
     </a>
     <a class="right-next"
-       href="torchrl.envs.transforms.AutoResetEnv.html"
+       href="torchrl.envs.transforms.ActionTokenizerTransform.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">AutoResetEnv</p>
+        <p class="prev-next-title">ActionTokenizerTransform</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -2477,6 +2594,10 @@ space is <code class="docutils literal notranslate"><span class="pre">[0,</span>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.envs.transforms.ActionScaling"><code class="docutils literal notranslate"><span class="pre">ActionScaling</span></code></a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.envs.transforms.ActionScaling.denormalize"><code class="docutils literal notranslate"><span class="pre">ActionScaling.denormalize()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.envs.transforms.ActionScaling.from_metadata"><code class="docutils literal notranslate"><span class="pre">ActionScaling.from_metadata()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.envs.transforms.ActionScaling.from_stats"><code class="docutils literal notranslate"><span class="pre">ActionScaling.from_stats()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.envs.transforms.ActionScaling.normalize"><code class="docutils literal notranslate"><span class="pre">ActionScaling.normalize()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.envs.transforms.ActionScaling.transform_action_spec"><code class="docutils literal notranslate"><span class="pre">ActionScaling.transform_action_spec()</span></code></a></li>
 </ul>
 </li>
@@ -2732,7 +2853,7 @@ space is <code class="docutils literal notranslate"><span class="pre">[0,</span>
        "headline": "ActionScaling",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.envs.transforms.ActionScaling.html",
-       "articleBody": "ActionScaling# class torchrl.envs.transforms.ActionScaling(in_keys_inv: Sequence[NestedKey] | None = None, out_keys_inv: Sequence[NestedKey] | None = None, in_keys: Sequence[NestedKey] | None = None, out_keys: Sequence[NestedKey] | None = None, *, loc: Tensor | float | None = None, scale: Tensor | float | None = None, standard_normal: bool = True)[source]# Affine-scale a continuous action using the bounds of the action spec. Given a bounded action spec with bounds [low, high], this transform exposes a normalized action space to the policy and rescales actions back to the original env range before they are passed to the environment. The loc and scale are derived from the spec: \\[loc = \\frac{high + low}{2}, \\quad scale = \\frac{high - low}{2}.\\] When standard_normal=True (default) the normalized action space is [-1, 1] and the inverse mapping (policy action -\u003e env action) is \\[a_{env} = a_{norm} \\cdot scale + loc.\\] The forward mapping (env action -\u003e normalized action, used by replay buffer transforms) is the inverse: \\[a_{norm} = (a_{env} - loc) / scale.\\] When standard_normal=False the normalized space is [0, 1] and the mapping is rescaled accordingly so that 0 maps to low and 1 to high. Parameters: in_keys_inv (sequence of NestedKey, optional) \u2013 keys read during the inv direction (policy -\u003e env). Defaults to [\"action\"]. A single key per ActionScaling instance is supported; compose several instances to scale several actions. out_keys_inv (sequence of NestedKey, optional) \u2013 keys written during the inv direction. Defaults to in_keys_inv. in_keys (sequence of NestedKey, optional) \u2013 keys read during the forward direction (env action -\u003e normalized action, used by replay buffers and inside Module chains). Defaults to in_keys_inv. out_keys (sequence of NestedKey, optional) \u2013 keys written during the forward direction. Defaults to in_keys. Keyword Arguments: loc (torch.Tensor or float, optional) \u2013 explicit location of the affine transform. If both loc and scale are provided the values are used as-is and no derivation from the spec is performed (useful when no parent environment is available, e.g. inside a replay buffer). Defaults to None. scale (torch.Tensor or float, optional) \u2013 explicit scale of the affine transform. Must be provided together with loc. Defaults to None. standard_normal (bool, optional) \u2013 if True (default), the normalized action space is [-1, 1]. If False, the normalized action space is [0, 1]. Raises: RuntimeError \u2013 if the action spec is unbounded or partially unbounded (any bound is non-finite). Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data.tensor_specs import Bounded \u003e\u003e\u003e from torchrl.envs.transforms import ActionScaling, TransformedEnv \u003e\u003e\u003e from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv \u003e\u003e\u003e base_env = ContinuousActionVecMockEnv( ... action_spec=Bounded(low=-2.0, high=4.0, shape=(7,)) ... ) \u003e\u003e\u003e env = TransformedEnv(base_env, ActionScaling()) \u003e\u003e\u003e env.action_spec.space.low tensor([-1., -1., -1., -1., -1., -1., -1.]) \u003e\u003e\u003e env.action_spec.space.high tensor([1., 1., 1., 1., 1., 1., 1.]) transform_action_spec(action_spec: TensorSpec) \u2192 TensorSpec[source]# Transforms the action spec such that the resulting spec matches transform mapping. Parameters: action_spec (TensorSpec) \u2013 spec before the transform Returns: expected spec after the transform",
+       "articleBody": "ActionScaling# class torchrl.envs.transforms.ActionScaling(in_keys_inv: Sequence[NestedKey] | None = None, out_keys_inv: Sequence[NestedKey] | None = None, in_keys: Sequence[NestedKey] | None = None, out_keys: Sequence[NestedKey] | None = None, *, loc: Tensor | float | None = None, scale: Tensor | float | None = None, standard_normal: bool = True)[source]# Affine-scale a continuous action using the bounds of the action spec. Given a bounded action spec with bounds [low, high], this transform exposes a normalized action space to the policy and rescales actions back to the original env range before they are passed to the environment. The loc and scale are derived from the spec: \\[loc = \\frac{high + low}{2}, \\quad scale = \\frac{high - low}{2}.\\] When standard_normal=True (default) the normalized action space is [-1, 1] and the inverse mapping (policy action -\u003e env action) is \\[a_{env} = a_{norm} \\cdot scale + loc.\\] The forward mapping (env action -\u003e normalized action, used by replay buffer transforms) is the inverse: \\[a_{norm} = (a_{env} - loc) / scale.\\] When standard_normal=False the normalized space is [0, 1] and the mapping is rescaled accordingly so that 0 maps to low and 1 to high. Parameters: in_keys_inv (sequence of NestedKey, optional) \u2013 keys read during the inv direction (policy -\u003e env). Defaults to [\"action\"]. A single key per ActionScaling instance is supported; compose several instances to scale several actions. Pass an empty list for a forward-only transform (normalize raw dataset actions on the replay-buffer sample path while leaving extend and the env-side action interface untouched); this requires explicit loc and scale. out_keys_inv (sequence of NestedKey, optional) \u2013 keys written during the inv direction. Defaults to in_keys_inv. in_keys (sequence of NestedKey, optional) \u2013 keys read during the forward direction (env action -\u003e normalized action, used by replay buffers and inside Module chains). Defaults to in_keys_inv, or [\"action\"] when in_keys_inv=[] (forward-only mode). out_keys (sequence of NestedKey, optional) \u2013 keys written during the forward direction. Defaults to in_keys. Keyword Arguments: loc (torch.Tensor or float, optional) \u2013 explicit location of the affine transform. If both loc and scale are provided the values are used as-is and no derivation from the spec is performed (useful when no parent environment is available, e.g. inside a replay buffer). Defaults to None. scale (torch.Tensor or float, optional) \u2013 explicit scale of the affine transform. Must be provided together with loc. Defaults to None. standard_normal (bool, optional) \u2013 if True (default), the normalized action space is [-1, 1]. If False, the normalized action space is [0, 1]. Raises: RuntimeError \u2013 if loc and scale are derived from the spec (no explicit values passed) and the action spec is unbounded or partially unbounded (any bound is non-finite). With explicit loc/scale, a bounded spec is mapped through the affine transform and an unbounded (or partially unbounded) spec is advertised as Unbounded instead of raising. With explicit loc and scale the transform is fully spec-independent \u2013 the standard workflow when training on dataset action statistics, e.g. for VLA policies. Use from_stats() (mean/std or low/high) or from_metadata() to build such an instance from dataset statistics. Attached to an environment, it denormalizes the policy\u2019s actions on the inverse path: a bounded action spec is mapped through the affine transform (and an unbounded action spec stays unbounded), so the advertised normalized space reflects the actual statistics rather than being assumed [-1, 1]. Appended to a replay buffer, it normalizes actions on the sample path; beware that ReplayBuffer.extend applies the inverse transform, so when raw (env-scale) data is written through extend, use a forward-only instance (in_keys_inv=[]) to leave the stored data untouched \u2013 the default bidirectional keys suit the env side and pre-populated dataset storages. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from torchrl.data.tensor_specs import Bounded \u003e\u003e\u003e from torchrl.envs.transforms import ActionScaling, TransformedEnv \u003e\u003e\u003e from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv \u003e\u003e\u003e base_env = ContinuousActionVecMockEnv( ... action_spec=Bounded(low=-2.0, high=4.0, shape=(7,)) ... ) \u003e\u003e\u003e env = TransformedEnv(base_env, ActionScaling()) \u003e\u003e\u003e env.action_spec.space.low tensor([-1., -1., -1., -1., -1., -1., -1.]) \u003e\u003e\u003e env.action_spec.space.high tensor([1., 1., 1., 1., 1., 1., 1.]) \u003e\u003e\u003e # dataset-statistics-driven normalization (no env required): the \u003e\u003e\u003e # forward pass maps raw actions to the normalized space \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e t = ActionScaling.from_stats( ... mean=torch.tensor([1.0, 2.0]), std=torch.tensor([2.0, 4.0]) ... ) \u003e\u003e\u003e td = TensorDict({\"action\": torch.tensor([[3.0, 6.0]])}, batch_size=[1]) \u003e\u003e\u003e t(td)[\"action\"] tensor([[1., 1.]]) \u003e\u003e\u003e # on a replay buffer, a forward-only instance (in_keys_inv=[]) \u003e\u003e\u003e # normalizes on sample and leaves data written through extend \u003e\u003e\u003e # untouched (extend applies the inverse pass) \u003e\u003e\u003e from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer \u003e\u003e\u003e t = ActionScaling.from_stats( ... mean=torch.tensor([1.0, 2.0]), ... std=torch.tensor([2.0, 4.0]), ... in_keys_inv=[], ... ) \u003e\u003e\u003e rb = TensorDictReplayBuffer( ... storage=LazyTensorStorage(10), transform=t, batch_size=2 ... ) \u003e\u003e\u003e raw = TensorDict( ... {\"action\": torch.tensor([[3.0, 6.0]]).expand(10, 2)}, batch_size=[10] ... ) \u003e\u003e\u003e indices = rb.extend(raw) # stored as-is \u003e\u003e\u003e rb.sample()[\"action\"] # normalized with the dataset statistics tensor([[1., 1.], [1., 1.]]) \u003e\u003e\u003e # the same affine map is exposed on raw tensors for execution-time \u003e\u003e\u003e # use, e.g. mapping a policy\u0027s normalized prediction to the robot \u003e\u003e\u003e t.denormalize(torch.tensor([[1.0, 1.0]])) tensor([[3., 6.]]) denormalize(action: Tensor) \u2192 Tensor[source]# Map a normalized action back to the env scale (the inverse map). classmethod from_metadata(metadata: RobotDatasetMetadata, **kwargs) \u2192 ActionScaling[source]# Build from the action statistics of a RobotDatasetMetadata. Uses action_mean/action_std when available, falling back to action_low/action_high. The action key defaults to the metadata\u2019s action_key. classmethod from_stats(*, mean: Tensor | None = None, std: Tensor | None = None, low: Tensor | None = None, high: Tensor | None = None, eps: float = 1e-06, **kwargs) \u2192 ActionScaling[source]# Build an ActionScaling from dataset action statistics. Provide exactly one complete pair: mean and std (zero-mean, unit-std normalized space) or low and high (maps the range to [-1, 1]). Keyword Arguments: mean (torch.Tensor, optional) \u2013 per-dimension action mean. std (torch.Tensor, optional) \u2013 per-dimension action std. low (torch.Tensor, optional) \u2013 per-dimension action minimum. high (torch.Tensor, optional) \u2013 per-dimension action maximum. eps (float, optional) \u2013 floor applied to the scale to avoid division by zero on constant action dimensions. Defaults to 1e-6. **kwargs \u2013 forwarded to the constructor (e.g. in_keys_inv, standard_normal). normalize(action: Tensor) \u2192 Tensor[source]# Map an env-scale action to the normalized space (the forward map). transform_action_spec(action_spec: TensorSpec) \u2192 TensorSpec[source]# Transforms the action spec such that the resulting spec matches transform mapping. Parameters: action_spec (TensorSpec) \u2013 spec before the transform Returns: expected spec after the transform",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

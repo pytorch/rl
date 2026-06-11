@@ -156,6 +156,18 @@
 - [cuda_memory_stats](generated/torchrl.cuda_memory_stats.html)
 - [reset_cuda_peak_stats](generated/torchrl.reset_cuda_peak_stats.html)
 - [cuda_memory_profile](generated/torchrl.cuda_memory_profile.html)
+- [Vision-Language-Action (VLA)](vla.html)
+
+- [Canonical TensorDict schema](vla.html#canonical-tensordict-schema)
+- [Data and metadata](vla.html#data-and-metadata)
+
+- [RobotDatasetMetadata](generated/torchrl.data.vla.RobotDatasetMetadata.html)
+- [validate_vla_tensordict](generated/torchrl.data.vla.validate_vla_tensordict.html)
+- [Transforms](vla.html#transforms)
+- [Action representations](vla.html#action-representations)
+
+- [ActionTokenizerBase](generated/torchrl.data.vla.ActionTokenizerBase.html)
+- [UniformActionTokenizer](generated/torchrl.data.vla.UniformActionTokenizer.html)
 - [TorchRL Configuration System](config.html)
 
 - [Quick Start with a Simple Example](config.html#quick-start-with-a-simple-example)

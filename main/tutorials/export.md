@@ -649,7 +649,7 @@ print(compiled_module(pixels=pixels))
 ```
 
 ```
-pkg_path /tmp/tmpmn2m714x/model.pt2
+pkg_path /tmp/tmpjdwc2jk4/model.pt2
 tensor(1)
 ```
 
@@ -779,8 +779,8 @@ with TemporaryDirectory() as tmpdir:
 [torch.onnx] Translate the graph into ONNX... ✅
 [torch.onnx] Optimize the ONNX graph...
 [torch.onnx] Optimize the ONNX graph... ✅
-ONNX rollout took 620.5935 msec (total = 0.6206 sec since last reset).
-TorchRL version took 2034.3523 msec (total = 2.0344 sec since last reset).
+ONNX rollout took 624.9599 msec (total = 0.6250 sec since last reset).
+TorchRL version took 2043.3125 msec (total = 2.0433 sec since last reset).
 ```
 
 Note that ONNX also offers the possibility of optimizing models directly, but this is beyond the scope of this
@@ -808,7 +808,7 @@ information.
 - Experiment with deploying exported models on different devices.
 - Explore optimization techniques for ONNX models to improve performance.
 
-**Total running time of the script:** (0 minutes 23.345 seconds)
+**Total running time of the script:** (0 minutes 23.266 seconds)
 
 [`Download Jupyter notebook: export.ipynb`](../_downloads/4e8ac58ef63f1e596d49d1b7366ef9bc/export.ipynb)
 

@@ -52,7 +52,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="torchrl.trainers.algorithms.configs.common.ConfigBase" href="generated/torchrl.trainers.algorithms.configs.common.ConfigBase.html" />
-    <link rel="prev" title="cuda_memory_profile" href="generated/torchrl.cuda_memory_profile.html" />
+    <link rel="prev" title="UniformActionTokenizer" href="generated/torchrl.data.vla.UniformActionTokenizer.html" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -1109,6 +1109,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="#">
                   TorchRL Configuration System
                 </a>
@@ -1430,11 +1436,13 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.AtariDQNExperienceReplay.html">AtariDQNExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.D4RLExperienceReplay.html">D4RLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.GenDGRLExperienceReplay.html">GenDGRLExperienceReplay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.LeRobotExperienceReplay.html">LeRobotExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.MinariExperienceReplay.html">MinariExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.OpenMLExperienceReplay.html">OpenMLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.OpenXExperienceReplay.html">OpenXExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.RobosetExperienceReplay.html">RobosetExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.VD4RLExperienceReplay.html">VD4RLExperienceReplay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.data.datasets.lerobot_columns_to_tensordict.html">lerobot_columns_to_tensordict</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="data_specs.html">TensorSpec System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -1500,9 +1508,11 @@ document.write(`
 <li class="toctree-l2 has-children"><a class="reference internal" href="envs_transforms.html">Transforms</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.Transform.html">Transform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.TransformedEnv.html">TransformedEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ActionChunkTransform.html">ActionChunkTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ActionDiscretizer.html">ActionDiscretizer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ActionMask.html">ActionMask</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ActionScaling.html">ActionScaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.ActionTokenizerTransform.html">ActionTokenizerTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.AutoResetEnv.html">AutoResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.AutoResetTransform.html">AutoResetTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="generated/torchrl.envs.transforms.BatchSizeTransform.html">BatchSizeTransform</a></li>
@@ -1950,6 +1960,13 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.cuda_memory_stats.html">cuda_memory_stats</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.reset_cuda_peak_stats.html">reset_cuda_peak_stats</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generated/torchrl.cuda_memory_profile.html">cuda_memory_profile</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="vla.html">Vision-Language-Action (VLA)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.RobotDatasetMetadata.html">RobotDatasetMetadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.validate_vla_tensordict.html">validate_vla_tensordict</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.ActionTokenizerBase.html">ActionTokenizerBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generated/torchrl.data.vla.UniformActionTokenizer.html">UniformActionTokenizer</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="current reference internal" href="#">TorchRL Configuration System</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -3167,12 +3184,12 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
 
 <div class="prev-next-area">
     <a class="left-prev"
-       href="generated/torchrl.cuda_memory_profile.html"
+       href="generated/torchrl.data.vla.UniformActionTokenizer.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">cuda_memory_profile</p>
+        <p class="prev-next-title">UniformActionTokenizer</p>
       </div>
     </a>
     <a class="right-next"
@@ -3206,12 +3223,12 @@ python<span class="w"> </span>sota-implementations/ppo_trainer/train.py<span cla
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="generated/torchrl.cuda_memory_profile.html"
+       href="generated/torchrl.data.vla.UniformActionTokenizer.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">cuda_memory_profile</p>
+        <p class="prev-next-title">UniformActionTokenizer</p>
       </div>
     </a>
     <a class="right-next"

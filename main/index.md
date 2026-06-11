@@ -180,6 +180,12 @@ and navigate to the previous ones whenever you want to learn more!
 - [set_auto_unwrap_transformed_env](reference/generated/torchrl.set_auto_unwrap_transformed_env.html)
 - [auto_unwrap_transformed_env](reference/generated/torchrl.auto_unwrap_transformed_env.html)
 - [Memory profiling](reference/utils.html#memory-profiling)
+- [Vision-Language-Action (VLA)](reference/vla.html)
+
+- [Canonical TensorDict schema](reference/vla.html#canonical-tensordict-schema)
+- [Data and metadata](reference/vla.html#data-and-metadata)
+- [Transforms](reference/vla.html#transforms)
+- [Action representations](reference/vla.html#action-representations)
 - [TorchRL Configuration System](reference/config.html)
 
 - [Quick Start with a Simple Example](reference/config.html#quick-start-with-a-simple-example)

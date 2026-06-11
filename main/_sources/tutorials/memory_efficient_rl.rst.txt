@@ -90,7 +90,7 @@ Memory-Efficient RL Training
  .. code-block:: none
 
 
-    <torch._C.Generator object at 0x7fcc6f1f3e10>
+    <torch._C.Generator object at 0x7f47f257fbd0>
 
 
 
@@ -1077,7 +1077,7 @@ Useful next resources
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.352 seconds)
+   **Total running time of the script:** (0 minutes 0.350 seconds)
 
 
 .. _sphx_glr_download_tutorials_memory_efficient_rl.py:

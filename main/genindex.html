@@ -1104,6 +1104,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="reference/config.html">
                   TorchRL Configuration System
                 </a>
@@ -1469,6 +1475,8 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss">A2CLoss (class in torchrl.objectives)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer.action_dim">action_dim (torchrl.data.vla.UniformActionTokenizer property)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.AntEnv.html#torchrl.envs.AntEnv.action_key">action_key (torchrl.envs.AntEnv property)</a>
 
       <ul>
@@ -1707,6 +1715,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv.action_spec_unbatched">(torchrl.envs.Walker2dEnv property)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.ActionChunkTransform.html#torchrl.envs.transforms.ActionChunkTransform">ActionChunkTransform (class in torchrl.envs.transforms)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer">ActionDiscretizer (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.SamplingStrategy">ActionDiscretizer.SamplingStrategy (class in torchrl.envs.transforms)</a>
@@ -1718,6 +1728,10 @@ document.write(`
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig.html#torchrl.trainers.algorithms.configs.transforms.ActionMaskConfig">ActionMaskConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.ActionScaling.html#torchrl.envs.transforms.ActionScaling">ActionScaling (class in torchrl.envs.transforms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase">ActionTokenizerBase (class in torchrl.data.vla)</a>
+</li>
+      <li><a href="reference/generated/torchrl.envs.transforms.ActionTokenizerTransform.html#torchrl.envs.transforms.ActionTokenizerTransform">ActionTokenizerTransform (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.ACTLoss.html#torchrl.objectives.ACTLoss">ACTLoss (class in torchrl.objectives)</a>
 </li>
@@ -1751,6 +1765,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.add">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.add">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.add">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.add">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -2148,6 +2164,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.append_transform">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.append_transform">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.append_transform">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.append_transform">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -2397,6 +2415,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.as_remote">(torchrl.data.datasets.D4RLExperienceReplay class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.as_remote">(torchrl.data.datasets.GenDGRLExperienceReplay class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.as_remote">(torchrl.data.datasets.LeRobotExperienceReplay class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.as_remote">(torchrl.data.datasets.MinariExperienceReplay class method)</a>
 </li>
@@ -2727,6 +2747,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.batch_size">(torchrl.data.datasets.D4RLExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.batch_size">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.batch_size">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.batch_size">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
@@ -3245,6 +3267,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.cat">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.cat">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.cat">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.cat">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -4602,6 +4626,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.data_path">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.data_path">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.data_path">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.data_path">(torchrl.data.datasets.OpenMLExperienceReplay property)</a>
@@ -4619,6 +4645,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.data_path_root">(torchrl.data.datasets.D4RLExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.data_path_root">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.data_path_root">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.data_path_root">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
@@ -4660,6 +4688,10 @@ document.write(`
       <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.decode">decode() (torchrl.data.VideoClipRef method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase.decode">(torchrl.data.vla.ActionTokenizerBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer.decode">(torchrl.data.vla.UniformActionTokenizer method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.decode">(torchrl.modules.WorldModel method)</a>
 </li>
       </ul></li>
@@ -4760,6 +4792,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.delete">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.delete">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.delete">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.delete">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -4779,9 +4813,11 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id0">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.denorm">[1]</a>
 </li>
       </ul></li>
-      <li><a href="reference/generated/torchrl.modules.PopArtValueNorm.html#torchrl.modules.PopArtValueNorm.denormalize">denormalize() (torchrl.modules.PopArtValueNorm method)</a>
+      <li><a href="reference/generated/torchrl.envs.transforms.ActionScaling.html#torchrl.envs.transforms.ActionScaling.denormalize">denormalize() (torchrl.envs.transforms.ActionScaling method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.PopArtValueNorm.html#torchrl.modules.PopArtValueNorm.denormalize">(torchrl.modules.PopArtValueNorm method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.RunningValueNorm.html#torchrl.modules.RunningValueNorm.denormalize">(torchrl.modules.RunningValueNorm method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.ValueNorm.html#torchrl.modules.ValueNorm.denormalize">(torchrl.modules.ValueNorm method)</a>
@@ -4823,6 +4859,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete.device">(torchrl.data.UnboundedDiscrete property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.device">(torchrl.data.VideoClipRef property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.device">(torchrl.data.vla.RobotDatasetMetadata property)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.device">(torchrl.envs.llm.IFEvalScoreData property)</a>
 </li>
@@ -5049,6 +5087,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv.done_keys">(torchrl.envs.Walker2dEnv property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.AntEnv.html#torchrl.envs.AntEnv.done_keys_groups">done_keys_groups (torchrl.envs.AntEnv property)</a>
 
       <ul>
@@ -5107,8 +5147,6 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv.done_keys_groups">(torchrl.envs.Walker2dEnv property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.AntEnv.html#torchrl.envs.AntEnv.done_spec">done_spec (torchrl.envs.AntEnv property)</a>
 
       <ul>
@@ -5400,6 +5438,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.dump">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.dump">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.dump">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.dump">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -5449,6 +5489,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.dumps">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.dumps">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.dumps">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.dumps">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -5583,6 +5625,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.empty">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.empty">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.empty">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.empty">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -5729,6 +5773,10 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.UnboundedContinuous.html#torchrl.data.UnboundedContinuous.encode">(torchrl.data.UnboundedContinuous method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.UnboundedDiscrete.html#torchrl.data.UnboundedDiscrete.encode">(torchrl.data.UnboundedDiscrete method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase.encode">(torchrl.data.vla.ActionTokenizerBase method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer.encode">(torchrl.data.vla.UniformActionTokenizer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel.encode">(torchrl.modules.WorldModel method)</a>
 </li>
@@ -6018,6 +6066,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.extend">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.extend">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.extend">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.extend">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -6283,6 +6333,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.fields">(torchrl.data.llm.History class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.fields">(torchrl.data.VideoClipRef class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.fields">(torchrl.data.vla.RobotDatasetMetadata class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.fields">(torchrl.envs.llm.IFEvalScoreData class method)</a>
 </li>
@@ -6596,7 +6648,11 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.envs.TicTacToeEnv.html#torchrl.envs.TicTacToeEnv.forward">(torchrl.envs.TicTacToeEnv method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.envs.transforms.ActionChunkTransform.html#torchrl.envs.transforms.ActionChunkTransform.forward">(torchrl.envs.transforms.ActionChunkTransform method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.transforms.ActionMask.html#torchrl.envs.transforms.ActionMask.forward">(torchrl.envs.transforms.ActionMask method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.ActionTokenizerTransform.html#torchrl.envs.transforms.ActionTokenizerTransform.forward">(torchrl.envs.transforms.ActionTokenizerTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.AutoResetTransform.html#torchrl.envs.transforms.AutoResetTransform.forward">(torchrl.envs.transforms.AutoResetTransform method)</a>
 </li>
@@ -6870,6 +6926,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_any">(torchrl.data.VideoClipRef method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_any">(torchrl.data.vla.RobotDatasetMetadata method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_any">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction.from_any">(torchrl.envs.transforms.HumanoidMacroAction method)</a>
@@ -6905,12 +6963,16 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_chats">from_chats() (torchrl.data.llm.History class method)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.from_columns">from_columns() (torchrl.data.datasets.LeRobotExperienceReplay class method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.from_csv">from_csv() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_csv">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_csv">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_csv">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_csv">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -6951,6 +7013,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_dataclass">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_dataclass">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_dataclass">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_dataclass">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7014,6 +7078,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_h5">(torchrl.data.VideoClipRef method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_h5">(torchrl.data.vla.RobotDatasetMetadata method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_h5">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction.from_h5">(torchrl.envs.transforms.HumanoidMacroAction method)</a>
@@ -7054,6 +7120,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_json">(torchrl.data.VideoClipRef method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_json">(torchrl.data.vla.RobotDatasetMetadata class method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_json">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction.from_json">(torchrl.envs.transforms.HumanoidMacroAction method)</a>
@@ -7087,12 +7155,20 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.from_json">(torchrl.objectives.llm.SFTLossOutput method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer.from_metadata">from_metadata() (torchrl.data.vla.UniformActionTokenizer class method)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.envs.transforms.ActionScaling.html#torchrl.envs.transforms.ActionScaling.from_metadata">(torchrl.envs.transforms.ActionScaling class method)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.from_modules">from_modules() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_modules">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_modules">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_modules">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_modules">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7129,12 +7205,16 @@ document.write(`
       </ul></li>
       <li><a href="reference/generated/torchrl.collectors.distributed.RayEvalWorker.html#torchrl.collectors.distributed.RayEvalWorker.from_name">from_name() (torchrl.collectors.distributed.RayEvalWorker class method)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.from_namedtuple">from_namedtuple() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_namedtuple">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_namedtuple">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_namedtuple">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_namedtuple">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7169,14 +7249,14 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.llm.SFTLossOutput.html#torchrl.objectives.llm.SFTLossOutput.from_namedtuple">(torchrl.objectives.llm.SFTLossOutput method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.from_pandas">from_pandas() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_pandas">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_pandas">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_pandas">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_pandas">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7217,6 +7297,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_parquet">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_parquet">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_parquet">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_parquet">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7284,6 +7366,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_pytree">(torchrl.data.VideoClipRef method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_pytree">(torchrl.data.vla.RobotDatasetMetadata method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_pytree">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction.from_pytree">(torchrl.envs.transforms.HumanoidMacroAction method)</a>
@@ -7323,6 +7407,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_schema">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_schema">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_schema">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_schema">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7369,12 +7455,16 @@ document.write(`
         <li><a href="reference/generated/torchrl.objectives.LossModule.html#torchrl.objectives.LossModule.from_stateful_net">(torchrl.objectives.LossModule method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.envs.transforms.ActionScaling.html#torchrl.envs.transforms.ActionScaling.from_stats">from_stats() (torchrl.envs.transforms.ActionScaling class method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.llm.ContentBase.html#torchrl.data.llm.ContentBase.from_struct_array">from_struct_array() (torchrl.data.llm.ContentBase method)</a>
 
       <ul>
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_struct_array">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_struct_array">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_struct_array">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_struct_array">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -7415,6 +7505,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.from_tensordict">(torchrl.data.llm.History class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_tensordict">(torchrl.data.VideoClipRef class method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_tensordict">(torchrl.data.vla.RobotDatasetMetadata class method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_tensordict">(torchrl.envs.llm.IFEvalScoreData class method)</a>
 </li>
@@ -7460,6 +7552,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.from_tuple">(torchrl.data.VideoClipRef method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.from_tuple">(torchrl.data.vla.RobotDatasetMetadata method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.from_tuple">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction.from_tuple">(torchrl.envs.transforms.HumanoidMacroAction method)</a>
@@ -7499,6 +7593,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.fromkeys">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.fromkeys">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.fromkeys">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.fromkeys">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -9422,6 +9518,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.initialized">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.initialized">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.initialized">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.initialized">(torchrl.data.datasets.OpenMLExperienceReplay property)</a>
@@ -9585,6 +9683,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.insert_transform">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.insert_transform">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.insert_transform">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.insert_transform">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -10008,6 +10108,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.lazy_stack">(torchrl.data.VideoClipRef method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.lazy_stack">(torchrl.data.vla.RobotDatasetMetadata method)</a>
+</li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.lazy_stack">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.HumanoidMacroAction.html#torchrl.envs.transforms.HumanoidMacroAction.lazy_stack">(torchrl.envs.transforms.HumanoidMacroAction method)</a>
@@ -10055,6 +10157,10 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.utils.LBFGSConfig.html#torchrl.trainers.algorithms.configs.utils.LBFGSConfig">LBFGSConfig (class in torchrl.trainers.algorithms.configs.utils)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.datasets.lerobot_columns_to_tensordict.html#torchrl.data.datasets.lerobot_columns_to_tensordict">lerobot_columns_to_tensordict (class in torchrl.data.datasets)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay">LeRobotExperienceReplay (class in torchrl.data.datasets)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.LineariseRewards.html#torchrl.envs.transforms.LineariseRewards">LineariseRewards (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig.html#torchrl.trainers.algorithms.configs.transforms.LineariseRewardsConfig">LineariseRewardsConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
@@ -10093,6 +10199,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.load">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.load">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.load">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.load">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -10139,6 +10247,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.load">(torchrl.data.TensorDictReplayBuffer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.load">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.load">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.load">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -10225,6 +10335,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.load_memmap">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.load_memmap">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.load_memmap">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.load_memmap">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -10444,6 +10556,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.loads">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.loads">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.loads">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.loads">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -10548,6 +10662,8 @@ document.write(`
       <li><a href="reference/generated/torchrl.envs.transforms.MacroPrimitive.html#torchrl.envs.transforms.MacroPrimitive">MacroPrimitive (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.MacroPrimitiveTransform.html#torchrl.envs.transforms.MacroPrimitiveTransform">MacroPrimitiveTransform (class in torchrl.envs.transforms)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.make_action_spec">make_action_spec() (torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
       <li><a href="reference/generated/torchrl.modules.llm.make_async_vllm_engine.html#torchrl.modules.llm.make_async_vllm_engine">make_async_vllm_engine (class in torchrl.modules.llm)</a>
 </li>
@@ -10801,6 +10917,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.maybe_dense_stack">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.maybe_dense_stack">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.maybe_dense_stack">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.maybe_dense_stack">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -12016,6 +12134,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.next">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.next">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.next">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.next">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -12053,9 +12173,11 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig.html#torchrl.trainers.algorithms.configs.transforms.NoopResetEnvConfig">NoopResetEnvConfig (class in torchrl.trainers.algorithms.configs.transforms)</a>
 </li>
-      <li><a href="reference/generated/torchrl.modules.PopArtValueNorm.html#torchrl.modules.PopArtValueNorm.normalize">normalize() (torchrl.modules.PopArtValueNorm method)</a>
+      <li><a href="reference/generated/torchrl.envs.transforms.ActionScaling.html#torchrl.envs.transforms.ActionScaling.normalize">normalize() (torchrl.envs.transforms.ActionScaling method)</a>
 
       <ul>
+        <li><a href="reference/generated/torchrl.modules.PopArtValueNorm.html#torchrl.modules.PopArtValueNorm.normalize">(torchrl.modules.PopArtValueNorm method)</a>
+</li>
         <li><a href="reference/generated/torchrl.modules.RunningValueNorm.html#torchrl.modules.RunningValueNorm.normalize">(torchrl.modules.RunningValueNorm method)</a>
 </li>
         <li><a href="reference/generated/torchrl.modules.ValueNorm.html#torchrl.modules.ValueNorm.normalize">(torchrl.modules.ValueNorm method)</a>
@@ -12898,6 +13020,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.preprocess">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.preprocess">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.preprocess">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.preprocess">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -13281,6 +13405,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.read_all_in_order">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.read_all_in_order">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.read_all_in_order">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.read_all_in_order">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -14346,6 +14472,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.register_load_hook">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.register_load_hook">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.register_load_hook">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.register_load_hook">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -14917,6 +15045,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.register_save_hook">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.register_save_hook">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.register_save_hook">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.register_save_hook">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -15965,6 +16095,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv.robot_home_qpos">robot_home_qpos (torchrl.envs.CubeBowlEnv property)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata">RobotDatasetMetadata (class in torchrl.data.vla)</a>
+</li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction">RobotMacroAction (class in torchrl.envs.transforms)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.transforms.RobotMacroActionMode.html#torchrl.envs.transforms.RobotMacroActionMode">RobotMacroActionMode (class in torchrl.envs.transforms)</a>
@@ -16102,6 +16234,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.sample">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.sample">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.sample">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.sample">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -16162,6 +16296,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.sampler">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.sampler">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.sampler">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.sampler">(torchrl.data.datasets.OpenMLExperienceReplay property)</a>
@@ -16205,6 +16341,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.save">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.save">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.save">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.save">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -16472,6 +16610,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.set_">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.set_">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.set_">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.set_">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -16505,6 +16645,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.set_at_">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.set_at_">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.set_at_">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.set_at_">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -16764,6 +16906,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.set_sampler">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.set_sampler">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.set_sampler">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.set_sampler">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -16934,6 +17078,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.set_storage">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.set_storage">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.set_storage">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.set_storage">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -17090,6 +17236,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.set_writer">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.set_writer">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.set_writer">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.set_writer">(torchrl.data.datasets.OpenMLExperienceReplay method)</a>
@@ -17155,6 +17303,8 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.weight_update.llm.SGLangWeightSyncScheme.html#torchrl.weight_update.llm.SGLangWeightSyncScheme">SGLangWeightSyncScheme (class in torchrl.weight_update.llm)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.modules.llm.SGLangWrapper.html#torchrl.modules.llm.SGLangWrapper">SGLangWrapper (class in torchrl.modules.llm)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.AntEnv.html#torchrl.envs.AntEnv.shape">shape (torchrl.envs.AntEnv property)</a>
@@ -17215,8 +17365,6 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.Walker2dEnv.html#torchrl.envs.Walker2dEnv.shape">(torchrl.envs.Walker2dEnv property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.data.llm.TopKRewardSelector.html#torchrl.data.llm.TopKRewardSelector.share_memory">share_memory() (torchrl.data.llm.TopKRewardSelector method)</a>
 
       <ul>
@@ -17585,6 +17733,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.llm.History.html#torchrl.data.llm.History.stack">(torchrl.data.llm.History method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.VideoClipRef.html#torchrl.data.VideoClipRef.stack">(torchrl.data.VideoClipRef method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.stack">(torchrl.data.vla.RobotDatasetMetadata method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.llm.IFEvalScoreData.html#torchrl.envs.llm.IFEvalScoreData.stack">(torchrl.envs.llm.IFEvalScoreData method)</a>
 </li>
@@ -18168,6 +18318,8 @@ document.write(`
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.storage">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
 </li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.storage">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
+</li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.storage">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.OpenMLExperienceReplay.html#torchrl.data.datasets.OpenMLExperienceReplay.storage">(torchrl.data.datasets.OpenMLExperienceReplay property)</a>
@@ -18659,6 +18811,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.modules.llm.Tokens.html#torchrl.modules.llm.Tokens.to_history">(torchrl.modules.llm.Tokens method)</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata.to_json">to_json() (torchrl.data.vla.RobotDatasetMetadata method)</a>
+</li>
       <li><a href="reference/generated/torchrl.data.Binary.html#torchrl.data.Binary.to_numpy">to_numpy() (torchrl.data.Binary method)</a>
 
       <ul>
@@ -18937,6 +19091,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.transform">(torchrl.data.datasets.D4RLExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.transform">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.transform">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.transform">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
@@ -19299,6 +19455,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.llm.transforms.Tokenizer.html#torchrl.envs.llm.transforms.Tokenizer.transform_input_spec">(torchrl.envs.llm.transforms.Tokenizer method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.ActionDiscretizer.html#torchrl.envs.transforms.ActionDiscretizer.transform_input_spec">(torchrl.envs.transforms.ActionDiscretizer method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.envs.transforms.ActionTokenizerTransform.html#torchrl.envs.transforms.ActionTokenizerTransform.transform_input_spec">(torchrl.envs.transforms.ActionTokenizerTransform method)</a>
 </li>
         <li><a href="reference/generated/torchrl.envs.transforms.BatchSizeTransform.html#torchrl.envs.transforms.BatchSizeTransform.transform_input_spec">(torchrl.envs.transforms.BatchSizeTransform method)</a>
 </li>
@@ -19943,6 +20101,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#id11">(torchrl.envs.transforms.VecNormV2 method)</a>, <a href="reference/generated/torchrl.envs.transforms.VecNormV2.html#torchrl.envs.transforms.VecNormV2.unfreeze">[1]</a>
 </li>
       </ul></li>
+      <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer">UniformActionTokenizer (class in torchrl.data.vla)</a>
+</li>
       <li><a href="reference/generated/torchrl.weight_update.SharedMemTransport.html#torchrl.weight_update.SharedMemTransport.unique_weights">unique_weights (torchrl.weight_update.SharedMemTransport property)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.UnityMLAgentsEnv.html#torchrl.envs.UnityMLAgentsEnv">UnityMLAgentsEnv() (in module torchrl.envs)</a>
@@ -20007,6 +20167,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.update_">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.update_">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.update_">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.update_">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -20118,6 +20280,8 @@ document.write(`
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.envs.llm.CountdownRewardParser.html#torchrl.envs.llm.CountdownRewardParser.validate_expression">validate_expression() (torchrl.envs.llm.CountdownRewardParser static method)</a>
+</li>
+      <li><a href="reference/generated/torchrl.data.vla.validate_vla_tensordict.html#torchrl.data.vla.validate_vla_tensordict">validate_vla_tensordict (class in torchrl.data.vla)</a>
 </li>
       <li><a href="reference/generated/torchrl.objectives.value.GAE.html#torchrl.objectives.value.GAE.value_estimate">value_estimate() (torchrl.objectives.value.GAE method)</a>
 
@@ -20265,6 +20429,12 @@ document.write(`
 </li>
       <li><a href="reference/generated/torchrl.envs.VmasWrapper.html#torchrl.envs.VmasWrapper">VmasWrapper() (in module torchrl.envs)</a>
 </li>
+      <li><a href="reference/generated/torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase.vocab_size">vocab_size (torchrl.data.vla.ActionTokenizerBase property)</a>
+
+      <ul>
+        <li><a href="reference/generated/torchrl.data.vla.UniformActionTokenizer.html#torchrl.data.vla.UniformActionTokenizer.vocab_size">(torchrl.data.vla.UniformActionTokenizer property)</a>
+</li>
+      </ul></li>
       <li><a href="reference/generated/torchrl.objectives.value.VTrace.html#torchrl.objectives.value.VTrace">VTrace (class in torchrl.objectives.value)</a>
 </li>
   </ul></td>
@@ -20387,10 +20557,10 @@ document.write(`
         <li><a href="reference/generated/torchrl.weight_update.WeightSyncScheme.html#torchrl.weight_update.WeightSyncScheme.worker_idx">(torchrl.weight_update.WeightSyncScheme property)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.weight_update.llm.SGLangWeightSyncScheme.html#torchrl.weight_update.llm.SGLangWeightSyncScheme.world_size">world_size (torchrl.weight_update.llm.SGLangWeightSyncScheme property)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="reference/generated/torchrl.modules.WorldModel.html#torchrl.modules.WorldModel">WorldModel (class in torchrl.modules)</a>
 </li>
       <li><a href="reference/generated/torchrl.envs.model_based.world_model_env.WorldModelEnv.html#torchrl.envs.model_based.world_model_env.WorldModelEnv">WorldModelEnv() (in module torchrl.envs.model_based.world_model_env)</a>
@@ -20405,6 +20575,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.write_all">(torchrl.data.datasets.D4RLExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.write_all">(torchrl.data.datasets.GenDGRLExperienceReplay method)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.write_all">(torchrl.data.datasets.LeRobotExperienceReplay method)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.write_all">(torchrl.data.datasets.MinariExperienceReplay method)</a>
 </li>
@@ -20437,6 +20609,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.write_count">(torchrl.data.datasets.D4RLExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.write_count">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.write_count">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.write_count">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>
@@ -20471,6 +20645,8 @@ document.write(`
         <li><a href="reference/generated/torchrl.data.datasets.D4RLExperienceReplay.html#torchrl.data.datasets.D4RLExperienceReplay.writer">(torchrl.data.datasets.D4RLExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.GenDGRLExperienceReplay.html#torchrl.data.datasets.GenDGRLExperienceReplay.writer">(torchrl.data.datasets.GenDGRLExperienceReplay property)</a>
+</li>
+        <li><a href="reference/generated/torchrl.data.datasets.LeRobotExperienceReplay.html#torchrl.data.datasets.LeRobotExperienceReplay.writer">(torchrl.data.datasets.LeRobotExperienceReplay property)</a>
 </li>
         <li><a href="reference/generated/torchrl.data.datasets.MinariExperienceReplay.html#torchrl.data.datasets.MinariExperienceReplay.writer">(torchrl.data.datasets.MinariExperienceReplay property)</a>
 </li>

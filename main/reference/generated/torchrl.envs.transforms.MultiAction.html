@@ -1109,6 +1109,12 @@ document.write(`
               </li>
             
               <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
                 <a class="nav-link dropdown-item nav-internal" href="../config.html">
                   TorchRL Configuration System
                 </a>
@@ -1430,11 +1436,13 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.AtariDQNExperienceReplay.html">AtariDQNExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.D4RLExperienceReplay.html">D4RLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.GenDGRLExperienceReplay.html">GenDGRLExperienceReplay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.LeRobotExperienceReplay.html">LeRobotExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.MinariExperienceReplay.html">MinariExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.OpenMLExperienceReplay.html">OpenMLExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.OpenXExperienceReplay.html">OpenXExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.RobosetExperienceReplay.html">RobosetExperienceReplay</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.VD4RLExperienceReplay.html">VD4RLExperienceReplay</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.data.datasets.lerobot_columns_to_tensordict.html">lerobot_columns_to_tensordict</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../data_specs.html">TensorSpec System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -1500,9 +1508,11 @@ document.write(`
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../envs_transforms.html">Transforms</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.Transform.html">Transform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.TransformedEnv.html">TransformedEnv</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionChunkTransform.html">ActionChunkTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionDiscretizer.html">ActionDiscretizer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionMask.html">ActionMask</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionScaling.html">ActionScaling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ActionTokenizerTransform.html">ActionTokenizerTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.AutoResetEnv.html">AutoResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.AutoResetTransform.html">AutoResetTransform</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.BatchSizeTransform.html">BatchSizeTransform</a></li>
@@ -1952,6 +1962,13 @@ document.write(`
 <li class="toctree-l2"><a class="reference internal" href="torchrl.cuda_memory_profile.html">cuda_memory_profile</a></li>
 </ul>
 </details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../vla.html">Vision-Language-Action (VLA)</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.RobotDatasetMetadata.html">RobotDatasetMetadata</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.validate_vla_tensordict.html">validate_vla_tensordict</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.ActionTokenizerBase.html">ActionTokenizerBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="torchrl.data.vla.UniformActionTokenizer.html">UniformActionTokenizer</a></li>
+</ul>
+</details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../config.html">TorchRL Configuration System</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.common.ConfigBase.html">torchrl.trainers.algorithms.configs.common.ConfigBase</a></li>
 <li class="toctree-l2"><a class="reference internal" href="torchrl.trainers.algorithms.configs.envs.EnvConfig.html">torchrl.trainers.algorithms.configs.envs.EnvConfig</a></li>
@@ -2303,6 +2320,16 @@ stack dimension is the same as the action stack dimension. Defaults to <code cla
 </ul>
 </dd>
 </dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="torchrl.envs.transforms.ActionChunkTransform.html#torchrl.envs.transforms.ActionChunkTransform" title="torchrl.envs.transforms.ActionChunkTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionChunkTransform</span></code></a> – when
+the stacked actions are a chunk policy’s <em>prediction</em> (overlapping
+per-step training targets) rather than a macro action to replay
+verbatim. The chunk transform builds the training targets on the data
+path and, attached to an env, executes only the first action of each
+predicted chunk (re-planning at every step) instead of stepping the
+base env once per action.</p>
+</div>
 <dl class="py method">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.MultiAction.transform_input_spec">
 <span class="sig-name descname"><span class="pre">transform_input_spec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_spec</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="torchrl.data.TensorSpec.html#torchrl.data.TensorSpec" title="torchrl.data.tensor_specs.TensorSpec"><span class="pre">TensorSpec</span></a></span></span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_action.html#MultiAction.transform_input_spec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.MultiAction.transform_input_spec" title="Link to this definition">#</a></dt>
@@ -2710,7 +2737,7 @@ stack dimension is the same as the action stack dimension. Defaults to <code cla
        "headline": "MultiAction",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.envs.transforms.MultiAction.html",
-       "articleBody": "MultiAction# class torchrl.envs.transforms.MultiAction(*, dim: int = 1, stack_rewards: bool = True, stack_observations: bool = False)[source]# A transform to execute multiple actions in the parent environment. This transform unbinds the actions along a specific dimension and passes each action independently. The returned transform can be either a stack of the observations gathered during the steps or only the last observation (and similarly for the rewards, see args below). By default, the actions must be stacked along the first dimension after the root tensordict batch-dims, i.e. \u003e\u003e\u003e td = policy(td) \u003e\u003e\u003e actions = td.select(*env.action_keys) \u003e\u003e\u003e # Adapt the batch-size \u003e\u003e\u003e actions = actions.auto_batch_size_(td.ndim + 1) \u003e\u003e\u003e # Step-wise actions \u003e\u003e\u003e actions = actions.unbind(-1) If a \u201cdone\u201d entry is encountered, the next steps are skipped for the env that has reached that state. Note If a transform is appended before the MultiAction, it will be called multiple times. If it is appended after, it will be called once per macro-step. Keyword Arguments: dim (int, optional) \u2013 the stack dimension with respect to the tensordict ndim attribute. Must be greater than 0. Defaults to 1 (the first dimension after the batch-dims). stack_rewards (bool, optional) \u2013 if True, each step\u2019s reward will be stack in the output tensordict. If False, only the last reward will be returned. The reward spec is adapted accordingly. The stack dimension is the same as the action stack dimension. Defaults to True. stack_observations (bool, optional) \u2013 if True, each step\u2019s observation will be stack in the output tensordict. If False, only the last observation will be returned. The observation spec is adapted accordingly. The stack dimension is the same as the action stack dimension. Defaults to False. transform_input_spec(input_spec: TensorSpec) \u2192 TensorSpec[source]# Transforms the input spec such that the resulting spec matches transform mapping. Parameters: input_spec (TensorSpec) \u2013 spec before the transform Returns: expected spec after the transform transform_output_spec(output_spec: Composite) \u2192 Composite[source]# Transforms the output spec such that the resulting spec matches transform mapping. This method should generally be left untouched. Changes should be implemented using transform_observation_spec(), transform_reward_spec() and transform_full_done_spec(). :param output_spec: spec before the transform :type output_spec: TensorSpec Returns: expected spec after the transform",
+       "articleBody": "MultiAction# class torchrl.envs.transforms.MultiAction(*, dim: int = 1, stack_rewards: bool = True, stack_observations: bool = False)[source]# A transform to execute multiple actions in the parent environment. This transform unbinds the actions along a specific dimension and passes each action independently. The returned transform can be either a stack of the observations gathered during the steps or only the last observation (and similarly for the rewards, see args below). By default, the actions must be stacked along the first dimension after the root tensordict batch-dims, i.e. \u003e\u003e\u003e td = policy(td) \u003e\u003e\u003e actions = td.select(*env.action_keys) \u003e\u003e\u003e # Adapt the batch-size \u003e\u003e\u003e actions = actions.auto_batch_size_(td.ndim + 1) \u003e\u003e\u003e # Step-wise actions \u003e\u003e\u003e actions = actions.unbind(-1) If a \u201cdone\u201d entry is encountered, the next steps are skipped for the env that has reached that state. Note If a transform is appended before the MultiAction, it will be called multiple times. If it is appended after, it will be called once per macro-step. Keyword Arguments: dim (int, optional) \u2013 the stack dimension with respect to the tensordict ndim attribute. Must be greater than 0. Defaults to 1 (the first dimension after the batch-dims). stack_rewards (bool, optional) \u2013 if True, each step\u2019s reward will be stack in the output tensordict. If False, only the last reward will be returned. The reward spec is adapted accordingly. The stack dimension is the same as the action stack dimension. Defaults to True. stack_observations (bool, optional) \u2013 if True, each step\u2019s observation will be stack in the output tensordict. If False, only the last observation will be returned. The observation spec is adapted accordingly. The stack dimension is the same as the action stack dimension. Defaults to False. See also ActionChunkTransform \u2013 when the stacked actions are a chunk policy\u2019s prediction (overlapping per-step training targets) rather than a macro action to replay verbatim. The chunk transform builds the training targets on the data path and, attached to an env, executes only the first action of each predicted chunk (re-planning at every step) instead of stepping the base env once per action. transform_input_spec(input_spec: TensorSpec) \u2192 TensorSpec[source]# Transforms the input spec such that the resulting spec matches transform mapping. Parameters: input_spec (TensorSpec) \u2013 spec before the transform Returns: expected spec after the transform transform_output_spec(output_spec: Composite) \u2192 Composite[source]# Transforms the output spec such that the resulting spec matches transform mapping. This method should generally be left untouched. Changes should be implemented using transform_observation_spec(), transform_reward_spec() and transform_full_done_spec(). :param output_spec: spec before the transform :type output_spec: TensorSpec Returns: expected spec after the transform",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

@@ -37,6 +37,16 @@ stack dimension is the same as the action stack dimension. Defaults to `True`.
 If `False`, only the last observation will be returned. The observation spec is adapted accordingly. The
 stack dimension is the same as the action stack dimension. Defaults to `False`.
 
+See also
+
+[`ActionChunkTransform`](torchrl.envs.transforms.ActionChunkTransform.html#torchrl.envs.transforms.ActionChunkTransform) - when
+the stacked actions are a chunk policy's *prediction* (overlapping
+per-step training targets) rather than a macro action to replay
+verbatim. The chunk transform builds the training targets on the data
+path and, attached to an env, executes only the first action of each
+predicted chunk (re-planning at every step) instead of stepping the
+base env once per action.
+
 transform_input_spec(*input_spec: [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)*) → [TensorSpec](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)[[source]](../../_modules/torchrl/envs/transforms/_action.html#MultiAction.transform_input_spec)
 
 Transforms the input spec such that the resulting spec matches transform mapping.

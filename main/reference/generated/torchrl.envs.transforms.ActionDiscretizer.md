@@ -108,6 +108,17 @@ Example:
 ... return torch.logspace(-2, 0, nint, device=device) - 0.01
 ```
 
+See also
+
+[`ActionTokenizerTransform`](torchrl.envs.transforms.ActionTokenizerTransform.html#torchrl.envs.transforms.ActionTokenizerTransform) - a
+bidirectional action <-> token codec built around an explicit
+[`ActionTokenizerBase`](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase). Prefer
+`ActionDiscretizer` when the binning should be derived from the env's
+bounded `action_spec` (with configurable in-bin sampling); prefer
+`ActionTokenizerTransform` when the binning is owned by a tokenizer
+that must be shared between offline encoding (replay buffer) and online
+decoding (env), e.g. for an autoregressive token VLA policy.
+
 *class*SamplingStrategy(*value*, *names=None*, ***, *module=None*, *qualname=None*, *type=None*, *start=1*, *boundary=None*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionDiscretizer.SamplingStrategy)
 
 The sampling strategies for ActionDiscretizer.

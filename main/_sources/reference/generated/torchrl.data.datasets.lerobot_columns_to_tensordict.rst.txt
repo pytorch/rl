@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.datasets
+
+
+lerobot_columns_to_tensordict
+=============================
+
+.. autoclass:: lerobot_columns_to_tensordict
+    :members:
