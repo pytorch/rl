@@ -50,7 +50,6 @@ from torchrl.objectives.utils import (
     TargetNetUpdater,
     ValueEstimators,
 )
-from torchrl.objectives.vla import VLABCLoss, VLATokenGRPOLoss
 from torchrl.objectives.world_model_loss import WorldModelLoss
 
 __all__ = [
@@ -92,8 +91,6 @@ __all__ = [
     "TD3BCLoss",
     "TD3Loss",
     "TargetNetUpdater",
-    "VLABCLoss",
-    "VLATokenGRPOLoss",
     "ValueEstimators",
     "WorldModelLoss",
     "add_random_module",

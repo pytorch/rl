@@ -721,6 +721,138 @@ class TestBatchedActor:
             == (torch.arange(50) % 6).reshape_as(rollout[1]["observation"])
         ).all()
 
+    @pytest.mark.parametrize("replan_interval", [1, 2, None])
+    def test_replan_interval(self, replan_interval):
+        # the actor is re-queried every `replan_interval` actions (receding
+        # horizon) and skipped in between; None consumes the whole cache
+        n_steps = 4
+        calls = []
+
+        def make_chunk(x):
+            calls.append(1)
+            value = float(len(calls))
+            chunk = torch.full((x.shape[0], n_steps, 1), value)
+            chunk += torch.arange(n_steps).view(1, n_steps, 1) / 10
+            return chunk
+
+        actor_base = TensorDictModule(
+            make_chunk, in_keys=["observation"], out_keys=["action"]
+        )
+        actor = MultiStepActorWrapper(
+            actor_base, n_steps=n_steps, replan_interval=replan_interval
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 1),
+                "is_init": torch.ones(2, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        executed = []
+        for _ in range(6):
+            td = actor(td.exclude("action"))
+            executed.append(round(td["action"][0, 0].item(), 1))
+            td["is_init"] = torch.zeros(2, 1, dtype=torch.bool)
+        interval = replan_interval if replan_interval is not None else n_steps
+        expected = [
+            (step // interval + 1) + (step % interval) / 10 for step in range(6)
+        ]
+        assert executed == expected
+        assert len(calls) == -(-6 // interval)  # ceil division
+
+    def test_replan_interval_validation(self):
+        actor_base = TensorDictModule(
+            lambda x: x, in_keys=["observation"], out_keys=["action"]
+        )
+        with pytest.raises(ValueError, match="replan_interval"):
+            MultiStepActorWrapper(actor_base, n_steps=3, replan_interval=4)
+        with pytest.raises(ValueError, match="replan_interval"):
+            MultiStepActorWrapper(actor_base, n_steps=3, replan_interval=0)
+
+    def test_replan_interval_chunk_length_guard(self):
+        # with n_steps=None the constructor cannot bound replan_interval;
+        # a chunk shorter than the interval must raise instead of silently
+        # replaying stale actions when the rolled cache wraps around
+        def make_chunk(x):
+            return torch.zeros(x.shape[0], 2, 1)
+
+        actor = MultiStepActorWrapper(
+            TensorDictModule(make_chunk, in_keys=["observation"], out_keys=["action"]),
+            n_steps=None,
+            replan_interval=4,
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 1),
+                "is_init": torch.ones(2, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        with pytest.raises(RuntimeError, match="chunk length"):
+            actor(td)
+
+    def test_replan_interval_nested_init_key(self):
+        # the per-env counter lives next to the init key: a nested init_key
+        # must keep the replan cadence working (counter read/write key match)
+        n_steps, calls = 4, []
+
+        def make_chunk(x):
+            calls.append(1)
+            chunk = torch.full((x.shape[0], n_steps, 1), float(len(calls)))
+            chunk += torch.arange(n_steps).view(1, n_steps, 1) / 10
+            return chunk
+
+        actor = MultiStepActorWrapper(
+            TensorDictModule(make_chunk, in_keys=["observation"], out_keys=["action"]),
+            n_steps=n_steps,
+            init_key=("agent", "is_init"),
+            replan_interval=2,
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 1),
+                "agent": {"is_init": torch.ones(2, 1, dtype=torch.bool)},
+            },
+            batch_size=[2],
+        )
+        executed = []
+        for _ in range(6):
+            td = actor(td.exclude("action"))
+            executed.append(round(td["action"][0, 0].item(), 1))
+            td["agent", "is_init"] = torch.zeros(2, 1, dtype=torch.bool)
+        assert executed == [1.0, 1.1, 2.0, 2.1, 3.0, 3.1]
+        assert len(calls) == 3
+        assert ("agent", "counter") in td.keys(True)
+
+    def test_replan_interval_resets(self):
+        # an env reset re-plans regardless of the replan cadence
+        n_steps, calls = 3, []
+
+        def make_chunk(x):
+            calls.append(1)
+            chunk = torch.full((x.shape[0], n_steps, 1), float(len(calls)))
+            chunk += torch.arange(n_steps).view(1, n_steps, 1) / 10
+            return chunk
+
+        actor = MultiStepActorWrapper(
+            TensorDictModule(make_chunk, in_keys=["observation"], out_keys=["action"]),
+            n_steps=n_steps,
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 1),
+                "is_init": torch.ones(2, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        td = actor(td.exclude("action"))
+        assert td["action"][0, 0] == 1.0
+        # reset only env 0: it re-plans (fresh chunk), env 1 keeps its cache
+        td["is_init"] = torch.tensor([[True], [False]])
+        td = actor(td.exclude("action"))
+        assert td["action"][0, 0] == 2.0
+        assert round(td["action"][1, 0].item(), 1) == 1.1
+
 
 def _make_obs_td(batch=2, h=16, state_dim=5, with_state=True):
     obs = {"image": torch.zeros(batch, 3, h, h, dtype=torch.uint8)}
@@ -766,10 +898,13 @@ class TestTinyVLA:
         )
         out = policy(_make_obs_td())
         assert out["action_tokens"].shape == torch.Size([2, 4, 7])
-        assert out["log_probs"].shape == torch.Size([2, 4, 7])
+        # one sequence-level log-prob per sample (summed over the chunk): the
+        # contract PPO-style objectives expect from sample_log_prob
+        assert out["log_probs"].shape == torch.Size([2])
         assert (out["action_tokens"] >= 0).all() and (out["action_tokens"] < 64).all()
         dist = policy.get_dist(_make_obs_td())
-        assert dist.logits.shape == torch.Size([2, 4, 7, 64])
+        assert dist.base_dist.logits.shape == torch.Size([2, 4, 7, 64])
+        assert dist.log_prob(out["action_tokens"]).shape == torch.Size([2])
 
     def test_get_dist_continuous_raises(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)

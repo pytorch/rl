@@ -243,21 +243,34 @@ class TestToyVLAEnv:
         with pytest.raises(ValueError, match="state_dim"):
             ToyVLAEnv(action_dim=5, state_dim=3)
 
-    def test_with_chunk_executor(self):
+    def test_with_multi_step_actor(self):
+        from tensordict.nn import TensorDictModuleBase
         from torchrl.envs import TransformedEnv
-        from torchrl.envs.transforms import ActionChunkExecutor
+        from torchrl.envs.transforms import InitTracker
+        from torchrl.modules import MultiStepActorWrapper
 
-        env = TransformedEnv(
-            ToyVLAEnv(batch_size=[2]),
-            ActionChunkExecutor(chunk_size=3, replan_interval=2),
-        )
-        check_env_specs(env)
-        rollout = env.rollout(4)
-        # the state echo exposes the executed action: cached steps execute the
-        # committed chunk's successive actions
-        executed = rollout["next", "observation", "state"][..., :4]
-        torch.testing.assert_close(executed[:, 0], rollout["action_chunk"][:, 0, 0])
-        torch.testing.assert_close(executed[:, 1], rollout["action_chunk"][:, 0, 1])
+        calls = []
+
+        class ChunkActor(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action"]
+
+            def forward(self, td):
+                calls.append(1)
+                value = float(len(calls))
+                chunk = torch.full((*td.batch_size, 3, 4), value)
+                chunk[..., 1, :] += 0.1
+                chunk[..., 2, :] += 0.2
+                return td.set("action", chunk)
+
+        env = TransformedEnv(ToyVLAEnv(batch_size=[2]), InitTracker())
+        policy = MultiStepActorWrapper(ChunkActor(), n_steps=3, replan_interval=2)
+        rollout = env.rollout(4, policy)
+        # the state echo exposes the executed cadence: two actions per chunk,
+        # then a re-plan -- and the actor was only called on re-plan steps
+        executed = rollout["next", "observation", "state"][0, :, 0]
+        torch.testing.assert_close(executed, torch.tensor([1.0, 1.1, 2.0, 2.1]))
+        assert len(calls) == 2
 
 
 if __name__ == "__main__":
