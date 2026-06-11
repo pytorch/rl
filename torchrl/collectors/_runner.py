@@ -31,6 +31,52 @@ from torchrl.envs.utils import ExplorationType
 from torchrl.weight_update import WeightSyncScheme
 from torchrl.weight_update.utils import _resolve_model
 
+_MPS_SHARE_ERROR = (
+    "tensors on mps device cannot be put in shared memory. Make sure "
+    "the shared device (aka storing_device) is set to CPU."
+)
+
+
+def _share_tensordict_for_transport(td: TensorDictBase) -> None:
+    """Place a collected tensordict in shared memory for queue transport.
+
+    CPU and CUDA tensordicts are shared wholesale; device-less tensordicts are
+    shared per-tensor (non-CPU leaves are assumed shareable already). MPS
+    tensors cannot be shared and raise an error.
+    """
+    if td.device is not None:
+        # placeholder in case we need different behaviors
+        if td.device.type in ("cpu",):
+            td.share_memory_()
+        elif td.device.type in ("mps",):
+            raise RuntimeError(_MPS_SHARE_ERROR)
+        elif td.device.type == "cuda":
+            td.share_memory_()
+        else:
+            raise NotImplementedError(
+                f"Device {td.device} is not supported in multi-collectors yet."
+            )
+    else:
+        # make sure each cpu tensor is shared - assuming non-cpu devices are shared
+        def cast_tensor(x):
+            if x.device.type in ("cpu",):
+                x.share_memory_()
+            if x.device.type in ("mps",):
+                raise RuntimeError(_MPS_SHARE_ERROR)
+
+        td.apply(cast_tensor, filter_empty=True)
+
+
+def _td_has_cuda(td: TensorDictBase) -> bool:
+    """Whether any leaf tensor of ``td`` lives on a CUDA device."""
+    has_cuda = [False]
+
+    def look_for_cuda(tensor, has_cuda=has_cuda):
+        has_cuda[0] = has_cuda[0] or tensor.is_cuda
+
+    td.apply(look_for_cuda, filter_empty=True)
+    return has_cuda[0]
+
 
 def _main_async_collector(
     pipe_child: connection.Connection,
@@ -51,6 +97,7 @@ def _main_async_collector(
     interruptor=None,
     set_truncated: bool = False,
     use_buffers: bool | None = None,
+    buffer_depth: int = 1,
     replay_buffer: ReplayBuffer | None = None,
     extend_buffer: bool = True,
     traj_pool: _TrajectoryPool = None,
@@ -160,6 +207,11 @@ def _main_async_collector(
                     scheme.model = actual_model
 
         use_buffers = inner_collector._use_buffers
+        if buffer_depth > 1 and not use_buffers:
+            raise RuntimeError(
+                "buffer_depth > 1 requires buffer-based transport, but the inner "
+                "collector resolved use_buffers=False (e.g. because of dynamic specs)."
+            )
         if verbose:
             torchrl_logger.debug("Sync data collector created")
 
@@ -188,6 +240,15 @@ def _main_async_collector(
     has_timed_out = False
     counter = 0
     run_free = False
+    # Ring-buffer transport (buffer_depth > 1): rollouts are copied into
+    # rotating shared-memory slots so the main process can yield views without
+    # cloning, and so the worker can collect ahead without overwriting data
+    # the main process still holds.
+    ring_buffers = [None] * buffer_depth
+    # Whether the slot's buffer ref has reached the main process (a put can
+    # time out, in which case the ref must be re-sent on the next attempt).
+    ring_shipped = [False] * buffer_depth
+    ring_has_cuda = False
     while True:
         _timeout = _TIMEOUT if not has_timed_out else 1e-3
         if not run_free and pipe_child.poll(_timeout):
@@ -329,7 +390,28 @@ def _main_async_collector(
                     has_timed_out = True
                     continue
 
-            if j == 0 or not use_buffers:
+            if buffer_depth > 1:
+                if storing_device is not None and next_data.device != storing_device:
+                    raise RuntimeError(
+                        f"expected device to be {storing_device} but got {next_data.device}"
+                    )
+                slot = j % buffer_depth
+                buf = ring_buffers[slot]
+                if buf is None:
+                    # First use of this slot: copy the rollout into a fresh
+                    # shared-memory buffer and ship the buffer itself. Later
+                    # uses only send (idx, slot).
+                    buf = next_data.clone()
+                    _share_tensordict_for_transport(buf)
+                    ring_buffers[slot] = buf
+                    ring_has_cuda = ring_has_cuda or _td_has_cuda(buf)
+                else:
+                    buf.update_(next_data, non_blocking=True)
+                if ring_has_cuda and not no_cuda_sync:
+                    # Make the slot contents visible to the main process.
+                    torch.cuda.synchronize()
+                data = (buf, idx, slot) if not ring_shipped[slot] else (idx, slot)
+            elif j == 0 or not use_buffers:
                 collected_tensordict = next_data
                 if (
                     storing_device is not None
@@ -343,31 +425,7 @@ def _main_async_collector(
                     # if policy is on cuda and env on cuda, we are fine with this
                     # If policy is on cuda and env on cpu (or opposite) we put tensors that
                     # are on cpu in shared mem.
-                    MPS_ERROR = (
-                        "tensors on mps device cannot be put in shared memory. Make sure "
-                        "the shared device (aka storing_device) is set to CPU."
-                    )
-                    if collected_tensordict.device is not None:
-                        # placeholder in case we need different behaviors
-                        if collected_tensordict.device.type in ("cpu",):
-                            collected_tensordict.share_memory_()
-                        elif collected_tensordict.device.type in ("mps",):
-                            raise RuntimeError(MPS_ERROR)
-                        elif collected_tensordict.device.type == "cuda":
-                            collected_tensordict.share_memory_()
-                        else:
-                            raise NotImplementedError(
-                                f"Device {collected_tensordict.device} is not supported in multi-collectors yet."
-                            )
-                    else:
-                        # make sure each cpu tensor is shared - assuming non-cpu devices are shared
-                        def cast_tensor(x, MPS_ERROR=MPS_ERROR):
-                            if x.device.type in ("cpu",):
-                                x.share_memory_()
-                            if x.device.type in ("mps",):
-                                raise RuntimeError(MPS_ERROR)
-
-                        collected_tensordict.apply(cast_tensor, filter_empty=True)
+                    _share_tensordict_for_transport(collected_tensordict)
                 data = (collected_tensordict, idx)
             else:
                 if next_data is not collected_tensordict:
@@ -377,6 +435,8 @@ def _main_async_collector(
                 data = idx  # flag the worker that has sent its data
             try:
                 queue_out.put((data, j), timeout=_TIMEOUT)
+                if buffer_depth > 1:
+                    ring_shipped[slot] = True
                 if verbose:
                     torchrl_logger.debug(f"mp worker {idx} successfully sent data")
                 j += 1

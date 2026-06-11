@@ -7534,6 +7534,104 @@ class TestTrajsPerBatchReplayBuffer:
             assert ("collector", "traj_ids") in rb.sample(1).keys(True)
 
 
+class TestBufferDepth:
+    """Tests for the ring-buffer transport (buffer_depth > 1) of MultiAsyncCollector."""
+
+    def test_ring_rotation_and_validity_window(self):
+        # A single worker makes slot rotation deterministic: batch j lands in
+        # slot j % buffer_depth.
+        collector = MultiAsyncCollector(
+            [functools.partial(CountingEnv, max_steps=20)],
+            policy=None,
+            frames_per_batch=16,
+            total_frames=16 * 6,
+            buffer_depth=2,
+        )
+        try:
+            views = []
+            clones = []
+            for data in collector:
+                views.append(data)
+                clones.append(data.clone())
+        finally:
+            collector.shutdown()
+        assert len(views) == 6
+
+        # Batches 0, 2, 4 share storage (slot 0); 1, 3, 5 share storage (slot 1).
+        ptrs = [v["observation"].data_ptr() for v in views]
+        assert ptrs[0] == ptrs[2] == ptrs[4]
+        assert ptrs[1] == ptrs[3] == ptrs[5]
+        assert ptrs[0] != ptrs[1]
+
+        # Validity window: slot 0 was last rewritten by batch 4, so the view of
+        # batch 0 now holds batch 4's data; the most recent batch is intact.
+        assert (views[0]["observation"] == clones[4]["observation"]).all()
+        assert (views[-1]["observation"] == clones[-1]["observation"]).all()
+
+    @pytest.mark.parametrize("env_cls", [CountingEnv, NestedCountingEnv])
+    def test_buffer_depth_content_parity(self, env_cls):
+        # With a single worker and a deterministic policy the batch stream is
+        # deterministic, so depth-1 (cloned yields) and depth-2 (view yields)
+        # must coincide. NestedCountingEnv exercises nested action keys.
+        probe = env_cls(max_steps=20)
+        policy = CountingEnvCountPolicy(
+            probe.full_action_spec[probe.action_key], probe.action_key
+        )
+
+        def collect(buffer_depth):
+            collector = MultiAsyncCollector(
+                [functools.partial(env_cls, max_steps=20)],
+                policy=policy,
+                frames_per_batch=16,
+                total_frames=64,
+                buffer_depth=buffer_depth,
+            )
+            try:
+                return [d.clone() for d in collector]
+            finally:
+                collector.shutdown()
+
+        for d1, d2 in zip(collect(1), collect(2), strict=True):
+            assert_allclose_td(d1, d2)
+
+    def test_buffer_depth_validation(self):
+        env_fn = functools.partial(CountingEnv, max_steps=20)
+        with pytest.raises(ValueError, match="buffer_depth must be >= 1"):
+            MultiAsyncCollector(
+                [env_fn],
+                policy=None,
+                frames_per_batch=16,
+                total_frames=64,
+                buffer_depth=0,
+            )
+        with pytest.raises(ValueError, match="only supported by MultiAsyncCollector"):
+            MultiSyncCollector(
+                [env_fn],
+                policy=None,
+                frames_per_batch=16,
+                total_frames=64,
+                buffer_depth=2,
+            )
+        with pytest.raises(ValueError, match="replay_buffer"):
+            MultiAsyncCollector(
+                [env_fn],
+                policy=None,
+                frames_per_batch=16,
+                total_frames=64,
+                buffer_depth=2,
+                replay_buffer=ReplayBuffer(storage=LazyTensorStorage(100)),
+            )
+        with pytest.raises(ValueError, match="use_buffers=True"):
+            MultiAsyncCollector(
+                [env_fn],
+                policy=None,
+                frames_per_batch=16,
+                total_frames=64,
+                buffer_depth=2,
+                use_buffers=False,
+            )
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main(

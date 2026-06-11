@@ -97,6 +97,18 @@ def test_parallel(benchmark):
     benchmark(execute_env, c)
 
 
+@pytest.mark.parametrize("worker_wait", ["block", "adaptive", "spin"])
+def test_parallel_worker_wait(benchmark, worker_wait):
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = ParallelEnv(
+        3,
+        lambda: DMControlEnv("cheetah", "run", device=device),
+        worker_wait=worker_wait,
+    )
+    env.rollout(3)
+    benchmark(execute_env, env)
+
+
 @pytest.mark.parametrize("nested", [True, False])
 @pytest.mark.parametrize("keep_other", [True, False])
 @pytest.mark.parametrize("exclude_reward", [True, False])
