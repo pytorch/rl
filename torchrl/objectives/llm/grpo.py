@@ -732,10 +732,29 @@ class CISPOLoss(GRPOLoss):
 class MCAdvantage(Transform):
     """Monte-Carlo advantage computation engine.
 
-    When writing on a replay buffer, this transform keeps track of the existing trajectories with a similar
-    initial prompt and holds a queue for that particular prompt in memory.
-    When that queue hits a certain length, the advantage is computed by normalizing the rewards across all the
-    steps of all the trajectories.
+    When writing on a replay buffer, this transform keeps track of the existing trajectories sharing
+    a group identifier (e.g. the initial prompt, or an explicit group id stamped by the collector)
+    and holds a queue for that particular group in memory.
+    When that queue hits a certain length, the group-relative advantage is computed and the whole
+    group is written to the buffer.
+
+    Two normalization semantics are available, selected with ``trajectory_return``:
+
+    - ``trajectory_return=None`` (default): per-step rewards are normalized across all the steps
+      of all the group's trajectories. This is the original LLM GRPO behavior, suited to dense
+      per-step rewards.
+    - ``trajectory_return="sum"`` / ``"max"`` / ``"mean"``: each trajectory is first reduced to a
+      scalar return, the returns are normalized across the group's ``grpo_size`` trajectories
+      (``(R_i - mean) / std``), and each trajectory's advantage is broadcast to all of its steps.
+      This is the group-relative advantage used for RL fine-tuning over sparse trajectory-level
+      rewards (e.g. a binary success signal), as in SimpleVLA-RL
+      (`arXiv:2509.09674 <https://arxiv.org/abs/2509.09674>`_). It expects dense, same-shaped
+      per-step reward entries within each trajectory.
+
+    With trajectory-level returns, ``keep_return_bounds`` additionally enables DAPO-style dynamic
+    sampling: a group whose mean return falls outside the exclusive ``(low, high)`` bounds (e.g.
+    every rollout failed, or every rollout succeeded) carries no learning signal and is dropped
+    wholesale instead of being written to the buffer.
 
     This transform assumes that :meth:`~torchrl.data.ReplayBuffer.add` and :meth:`~torchrl.data.ReplayBuffer.extend`
     are executed with completed trajectories (i.e., trajectories that end up with a done state). If this is not the
@@ -746,11 +765,55 @@ class MCAdvantage(Transform):
 
     Args:
         grpo_size (int): Number of trajectories to keep in memory for the advantage computation.
-        prompt_key (NestedKey): Key to the prompt in the tensordict. Defaults to ("text", "prompt").
+        prompt_key (NestedKey): Key to the group identifier in the tensordict. May point to a
+            string (e.g. the prompt) or a tensor (e.g. an integer group id); tensor identifiers
+            are grouped by value. Defaults to ``"query"``.
         rewards_key (NestedKey): Key to the rewards in the tensordict. Defaults to ("next", "reward").
         advantage_key (NestedKey): Key to the advantage in the tensordict. Defaults to "advantage".
         done_key (NestedKey): Key to the done state in the tensordict. Defaults to ("next", "done").
         verbose (bool): Whether to print verbose information. Defaults to `False`.
+
+    Keyword Args:
+        trajectory_return (str, optional): if set, reduces each trajectory's rewards to a scalar
+            return (``"sum"``, ``"max"`` or ``"mean"``), normalizes the returns across the group
+            and broadcasts each trajectory's advantage to all of its steps. ``None`` (default)
+            keeps the per-step normalization.
+        keep_return_bounds (tuple of float, optional): exclusive ``(low, high)`` bounds on the
+            group's mean return outside of which the whole group is dropped (dynamic sampling).
+            Requires ``trajectory_return``. Defaults to ``None`` (no filtering).
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.objectives.llm import MCAdvantage
+        >>> def traj(group_id, rewards):
+        ...     T = len(rewards)
+        ...     return TensorDict(
+        ...         group_id=torch.full((T,), group_id),
+        ...         next=TensorDict(
+        ...             reward=torch.tensor(rewards).reshape(T, 1),
+        ...             done=torch.tensor([False] * (T - 1) + [True]).reshape(T, 1),
+        ...             batch_size=[T],
+        ...         ),
+        ...         batch_size=[T],
+        ...     )
+        >>> t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+        >>> t.inv(traj(7, [0.0, 0.0, 0.0])) is None  # waits for the full group
+        True
+        >>> out = t.inv(traj(7, [0.0, 0.0, 1.0]))  # group of 2 complete
+        >>> out["advantage"].squeeze(-1)
+        tensor([-0.7071, -0.7071, -0.7071,  0.7071,  0.7071,  0.7071])
+        >>> # dynamic sampling: an all-failed group is dropped wholesale
+        >>> t = MCAdvantage(
+        ...     grpo_size=2,
+        ...     prompt_key="group_id",
+        ...     trajectory_return="sum",
+        ...     keep_return_bounds=(0.1, 0.9),
+        ... )
+        >>> t.inv(traj(0, [0.0, 0.0])) is None
+        True
+        >>> t.inv(traj(0, [0.0, 0.0])) is None
+        True
 
     """
 
@@ -762,8 +825,40 @@ class MCAdvantage(Transform):
         advantage_key: NestedKey = "advantage",
         done_key: NestedKey = ("next", "done"),
         verbose: bool = False,
+        *,
+        trajectory_return: Literal["sum", "max", "mean"] | None = None,
+        keep_return_bounds: tuple[float, float] | None = None,
     ):
         super().__init__()
+        if trajectory_return not in (None, "sum", "max", "mean"):
+            raise ValueError(
+                "trajectory_return must be one of 'sum', 'max', 'mean' or None, "
+                f"got {trajectory_return!r}."
+            )
+        if trajectory_return is not None and grpo_size < 2:
+            raise ValueError(
+                "trajectory_return requires grpo_size >= 2: the group-relative "
+                "normalization (std over the group's returns) is undefined for "
+                f"a single trajectory, got grpo_size={grpo_size}."
+            )
+        if keep_return_bounds is not None:
+            if trajectory_return is None:
+                raise ValueError(
+                    "keep_return_bounds (dynamic sampling) filters on trajectory-level "
+                    "returns: set trajectory_return to 'sum', 'max' or 'mean'."
+                )
+            if (
+                len(keep_return_bounds) != 2
+                or not keep_return_bounds[0] < keep_return_bounds[1]
+            ):
+                raise ValueError(
+                    "keep_return_bounds must be an increasing (low, high) pair, "
+                    f"got {keep_return_bounds}."
+                )
+            keep_return_bounds = (
+                float(keep_return_bounds[0]),
+                float(keep_return_bounds[1]),
+            )
         self.in_keys = [prompt_key, rewards_key, done_key]
         self.out_keys = [advantage_key]
         self.prompt_key = prompt_key
@@ -773,6 +868,8 @@ class MCAdvantage(Transform):
         self.queues = defaultdict(lambda: deque(maxlen=grpo_size))
         self.grpo_size = grpo_size
         self.verbose = verbose
+        self.trajectory_return = trajectory_return
+        self.keep_return_bounds = keep_return_bounds
 
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         return tensordict
@@ -789,23 +886,37 @@ class MCAdvantage(Transform):
             if num_done > 1:
                 done_idx = tensordict[self.done_key].nonzero(as_tuple=True)[0] + 1
                 splits = torch.cat([done_idx.new_zeros((1,)), done_idx], dim=0).diff()
-                tensordicts = tensordict.split(splits)
+                # TensorDict.split accepts int or list of ints, not tensors
+                tensordicts = tensordict.split(splits.tolist())
                 tensordicts = [self._inv_call(td) for td in tensordicts]
                 tensordicts = [td for td in tensordicts if td is not None]
                 return torch.cat(tensordicts) if tensordicts else None
             # Then we have a single trajectory
             if not tensordict[-1][self.done_key].all():
                 raise RuntimeError("Expected the trajectory to be done.")
-            prompt = tensordict[0][self.prompt_key]
-            if not isinstance(prompt, str):
-                raise TypeError(f"Expected a string as prompt, got {type(prompt)=}")
-            self.queues[prompt].append(tensordict)
-            if len(self.queues[prompt]) == self.grpo_size:
+            group = tensordict[0][self.prompt_key]
+            if isinstance(group, torch.Tensor):
+                # tensor group identifiers (e.g. an integer group id stamped
+                # by the collector) are grouped by value
+                group = (
+                    group.item()
+                    if group.numel() == 1
+                    else tuple(group.reshape(-1).tolist())
+                )
+            elif not isinstance(group, str):
+                raise TypeError(
+                    f"Expected a string or tensor as group identifier, got {type(group)=}"
+                )
+            self.queues[group].append(tensordict)
+            if len(self.queues[group]) == self.grpo_size:
                 if self.verbose:
-                    torchrl_logger.info(f"Computing advantage for {prompt=}")
+                    torchrl_logger.info(f"Computing advantage for {group=}")
+                trajs = list(self.queues[group])
+                del self.queues[group]
+                if self.trajectory_return is not None:
+                    return self._trajectory_advantage(trajs)
                 # Cat is the most robust way to combine the trajs
-                tds = torch.cat(list(self.queues[prompt]), -1)
-                del self.queues[prompt]
+                tds = torch.cat(trajs, -1)
                 # Collect rewards
                 reward = tds.get(self.rewards_key, as_nested_tensor=True)
                 reward_mean = reward.values().mean()
@@ -830,3 +941,33 @@ class MCAdvantage(Transform):
         if result:
             return torch.cat(result, 0)
         return
+
+    def _trajectory_advantage(
+        self, trajs: list[TensorDictBase]
+    ) -> TensorDictBase | None:
+        # Reduce each trajectory to a scalar return, normalize across the
+        # group and broadcast each trajectory's advantage to all of its steps.
+        rewards = [traj.get(self.rewards_key) for traj in trajs]
+        if self.trajectory_return == "sum":
+            returns = torch.stack([reward.sum() for reward in rewards])
+        elif self.trajectory_return == "max":
+            returns = torch.stack([reward.max() for reward in rewards])
+        else:  # "mean"
+            returns = torch.stack([reward.mean() for reward in rewards])
+        if self.keep_return_bounds is not None:
+            low, high = self.keep_return_bounds
+            mean_return = float(returns.mean())
+            if not low < mean_return < high:
+                # dynamic sampling: a degenerate group (e.g. all failed or
+                # all succeeded) carries no learning signal
+                if self.verbose:
+                    torchrl_logger.info(
+                        f"Dropping group: mean return {mean_return} outside ({low}, {high})."
+                    )
+                return None
+        advantage = (returns - returns.mean()) / returns.std().clamp_min(1e-6)
+        if self.verbose:
+            torchrl_logger.info(f"Group returns: {returns=} {advantage=}")
+        for traj, reward, adv in zip(trajs, rewards, advantage.unbind(0)):
+            traj.set(self.advantage_key, adv.expand(reward.shape).clone())
+        return torch.cat(trajs, -1)
