@@ -124,6 +124,19 @@ policy for tests and tutorials.
     TinyVLA
     LeRobotPolicyWrapper
 
+At inference a chunk policy predicts ``H`` actions while the environment consumes
+one per step -- and chunking only pays off if the (expensive) policy is *not*
+queried at every step.
+:class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` provides
+this: it caches the predicted actions, emits one per step and skips the
+wrapped actor while the cache lasts -- open-loop by default, receding horizon
+with ``replan_interval``, re-planning on env resets via ``is_init``.
+:class:`~torchrl.envs.transforms.MultiAction` is the env-side alternative
+(one base step per chunk action, a single policy call per chunk, at the price
+of a re-timed MDP). :class:`~torchrl.envs.ToyVLAEnv` -- a tiny synthetic env
+speaking the canonical schema, whose state echoes the executed action -- lets
+you smoke-test this machinery without any simulator dependency.
+
 Objectives
 ----------
 
