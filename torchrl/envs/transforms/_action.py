@@ -39,7 +39,13 @@ if TYPE_CHECKING:
 else:
     Self = Any
 
-from torchrl.data.vla.schema import ACTION_CHUNK_KEY, ACTION_IS_PAD_KEY, ACTION_KEY
+from torchrl.data.vla.schema import (
+    ACTION_CHUNK_KEY,
+    ACTION_IS_PAD_KEY,
+    ACTION_KEY,
+    ACTION_TOKENS_KEY,
+)
+from torchrl.data.vla.tokenizers import ActionTokenizerBase
 from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
 
 __all__ = [
@@ -47,6 +53,7 @@ __all__ = [
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "DiscreteActionProjection",
     "FlattenAction",
     "MultiAction",
@@ -387,6 +394,14 @@ class ActionDiscretizer(Transform):
             ...         # Use logarithmic spacing instead of linear
             ...         return torch.logspace(-2, 0, nint, device=device) - 0.01
 
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionTokenizerTransform` -- a
+        bidirectional action <-> token codec built around an explicit
+        :class:`~torchrl.data.vla.ActionTokenizerBase`. Prefer
+        ``ActionDiscretizer`` when the binning should be derived from the env's
+        bounded ``action_spec`` (with configurable in-bin sampling); prefer
+        ``ActionTokenizerTransform`` when the binning is owned by a tokenizer
+        that must be shared between offline encoding (replay buffer) and online
+        decoding (env), e.g. for an autoregressive token VLA policy.
     """
 
     class SamplingStrategy(IntEnum):
@@ -1852,3 +1867,177 @@ class ActionChunkTransform(Transform):
         tensordict.set(self.chunk_key, chunk)
         tensordict.set(self.pad_key, is_pad)
         return tensordict
+
+
+class ActionTokenizerTransform(Transform):
+    """Encode and decode actions with an :class:`~torchrl.data.vla.ActionTokenizerBase`.
+
+    A bidirectional action <-> token codec wrapping an action tokenizer (the
+    bins live in the tokenizer; no environment is needed to construct it).
+    Like any TorchRL transform it plugs onto a replay buffer or an environment
+    interchangeably:
+
+    - **forward** (``encode``): maps the continuous action (or action chunk) at
+      ``in_key`` to discrete token ids at ``out_key`` -- e.g. building the token
+      training target for an autoregressive (RT-2 / OpenVLA-style) token VLA on
+      the replay-buffer sample path.
+    - **inverse** (``decode``): maps token ids at ``out_key`` back to a continuous
+      action at ``in_key`` -- e.g. decoding the tokens a token-head policy emits,
+      on the environment action-input path, before the base env consumes them.
+      On a replay buffer the inverse is a no-op when the token entry is
+      absent, so extending with raw (untokenized) data is safe; attached to an
+      environment, missing tokens on the step path raise instead.
+
+    When attached to an environment, the policy-facing action spec is rewritten
+    to a :class:`~torchrl.data.Categorical` over the tokenizer's vocabulary, so
+    the env advertises the token interface the policy is expected to produce
+    (the decoded continuous action is consumed by the base env internally).
+    Using the same tokenizer instance on the replay buffer (encode) and on the
+    env (decode) guarantees that training targets and execution share the exact
+    same binning.
+
+    Args:
+        tokenizer (ActionTokenizerBase): the tokenizer to apply.
+
+    Keyword Args:
+        in_key (NestedKey): the continuous action. Defaults to ``"action"``.
+        out_key (NestedKey): the discrete token ids. Defaults to
+            ``"action_tokens"``.
+
+    Examples:
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.data.vla import UniformActionTokenizer
+        >>> from torchrl.envs.transforms import ActionTokenizerTransform
+        >>> tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+        >>> t = ActionTokenizerTransform(tok)
+        >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
+        >>> td["action_tokens"]
+        tensor([[  0, 128, 255]])
+        >>> # the inverse decodes tokens back to a continuous action
+        >>> back = t.inv(TensorDict({"action_tokens": td["action_tokens"]}, batch_size=[1]))
+        >>> back["action"].shape
+        torch.Size([1, 3])
+        >>> # on a replay buffer: raw actions written through extend are stored
+        >>> # as-is and tokenized on the sample path
+        >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+        >>> rb = TensorDictReplayBuffer(
+        ...     storage=LazyTensorStorage(8),
+        ...     transform=ActionTokenizerTransform(tok),
+        ...     batch_size=2,
+        ... )
+        >>> indices = rb.extend(
+        ...     TensorDict({"action": torch.rand(8, 3) * 2 - 1}, batch_size=[8])
+        ... )
+        >>> rb.sample()["action_tokens"].shape
+        torch.Size([2, 3])
+        >>> # on an environment: the policy-facing action spec becomes the token
+        >>> # interface, and emitted tokens are decoded before the base env
+        >>> # consumes them
+        >>> from torchrl.envs import GymEnv, TransformedEnv
+        >>> tok_env = UniformActionTokenizer(256, low=-2.0, high=2.0)  # Pendulum bounds
+        >>> env = TransformedEnv(GymEnv("Pendulum-v1"), ActionTokenizerTransform(tok_env))
+        >>> env.full_action_spec["action_tokens"].shape
+        torch.Size([1])
+        >>> env.rollout(2)["action_tokens"].dtype
+        torch.int64
+
+    .. seealso:: :class:`~torchrl.envs.transforms.ActionDiscretizer` -- the
+        env-only discretizer that derives its bins from the environment's
+        bounded ``action_spec`` (with configurable in-bin sampling strategies)
+        so a discrete-action policy can act on a continuous env. Use
+        ``ActionDiscretizer`` when the binning should follow the env spec; use
+        ``ActionTokenizerTransform`` when the binning is owned by a tokenizer
+        (dataset statistics, FAST/DCT-style codecs) that must be shared between
+        offline encoding and online decoding.
+    """
+
+    def __init__(
+        self,
+        tokenizer: ActionTokenizerBase,
+        *,
+        in_key: NestedKey = ACTION_KEY,
+        out_key: NestedKey = ACTION_TOKENS_KEY,
+    ) -> None:
+        if not isinstance(tokenizer, ActionTokenizerBase):
+            raise TypeError(
+                f"tokenizer must be an ActionTokenizerBase, got {type(tokenizer)}."
+            )
+        # ``forward`` is fully overridden (encode in_key -> out_key on the data
+        # path), so no forward keys are declared: the token entry only exists
+        # on the data path, never in the env's output specs. The inverse
+        # direction reads ``out_keys_inv`` (the tokens) and writes
+        # ``in_keys_inv`` (the action passed to the base env).
+        super().__init__(
+            in_keys=[],
+            out_keys=[],
+            in_keys_inv=[in_key],
+            out_keys_inv=[out_key],
+        )
+        self.tokenizer = tokenizer
+
+    @property
+    def in_key(self) -> NestedKey:
+        return self.in_keys_inv[0]
+
+    @property
+    def out_key(self) -> NestedKey:
+        return self.out_keys_inv[0]
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = tensordict.get(self.in_key, default=None)
+        if action is None:
+            if self.missing_tolerance:
+                return tensordict
+            raise KeyError(
+                f"{type(self).__name__}: '{self.in_key}' not found in tensordict "
+                f"{tensordict}."
+            )
+        tensordict.set(self.out_key, self.tokenizer.encode(action))
+        return tensordict
+
+    def _inv_apply_transform(self, tokens: torch.Tensor) -> torch.Tensor:
+        return self.tokenizer.decode(tokens)
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        # Without a parent env (replay-buffer ``extend``), raw (untokenized)
+        # data passes through untouched. Attached to an env, missing tokens on
+        # the step path are an error (the rewritten action spec advertises
+        # them; a policy writing the raw action key by mistake should not
+        # silently bypass the decode), while the reset preprocess runs with
+        # missing tolerance and skips.
+        if self.parent is None and tensordict.get(self.out_key, default=None) is None:
+            return tensordict
+        return super()._inv_call(tensordict)
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        # Expose the token interface to the policy: replace the base env's
+        # continuous action spec with a Categorical over the tokenizer
+        # vocabulary. The continuous spec is removed rather than moved to the
+        # state spec: the decoded action is written on the inverse path's
+        # working copy and consumed by the base env, so it never surfaces in
+        # the outer tensordict (which keeps single and batched envs
+        # consistent).
+        action_key = unravel_key(self.in_key)
+        token_key = unravel_key(self.out_key)
+        try:
+            leaf_spec = self.parent.full_action_spec_unbatched[action_key]
+        except KeyError:
+            raise RuntimeError(
+                f"{type(self).__name__} could not find key {action_key!r} in "
+                f"the parent environment's action spec. Available keys: "
+                f"{list(self.parent.full_action_spec.keys(True, True))}."
+            )
+        token_spec = Categorical(
+            n=self.tokenizer.vocab_size,
+            shape=leaf_spec.shape,
+            device=leaf_spec.device,
+            dtype=torch.long,
+        )
+        batch_size = self.parent.batch_size
+        if batch_size:
+            token_spec = token_spec.expand(batch_size + token_spec.shape)
+        input_spec["full_action_spec", token_key] = token_spec
+        if token_key != action_key:
+            del input_spec["full_action_spec", action_key]
+        return input_spec
