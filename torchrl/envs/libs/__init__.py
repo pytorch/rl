@@ -20,6 +20,7 @@ from .habitat import HabitatEnv
 from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
+from .libero import LiberoEnv, LiberoWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
 from .openml import OpenMLEnv
 from .openspiel import OpenSpielEnv, OpenSpielWrapper
@@ -46,6 +47,8 @@ __all__ = [
     "IsaacLabWrapper",
     "JumanjiEnv",
     "JumanjiWrapper",
+    "LiberoEnv",
+    "LiberoWrapper",
     "MOGymEnv",
     "MOGymWrapper",
     "MeltingpotEnv",
