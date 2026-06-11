@@ -15,6 +15,16 @@ assert (
 ), "Composite LP must be set to False. Run this test with COMPOSITE_LP_AGGREGATE=0"
 
 commands = {
+    "vla_grpo": """python sota-implementations/vla_grpo/vla-grpo.py \
+  collector.groups_per_iter=2 \
+  collector.group_size=2 \
+  collector.total_iters=3 \
+  loss.mini_batch_size=8 \
+  logger.backend= \
+  logger.eval_iter=2 \
+  logger.eval_episodes=4 \
+  checkpoint.save_iter=2
+""",
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
   replay_buffer.dataset= \

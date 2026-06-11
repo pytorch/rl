@@ -339,6 +339,57 @@ class TestToyVLAEnv:
         assert not td["success"][0]
         assert td["success"][1]
 
+    @pytest.mark.parametrize("batch_size", [(), (1,)])
+    def test_tracking_grouped_inits(self, batch_size):
+        # grouped-rollout mode: the same target is replayed group_repeats
+        # times and the group id identifies the group (the init-state control
+        # GRPO-style group advantages require)
+        check_env_specs(
+            ToyVLAEnv(
+                action_dim=2,
+                state_dim=4,
+                success_steps=2,
+                group_repeats=3,
+                batch_size=batch_size,
+            )
+        )
+        env = ToyVLAEnv(
+            action_dim=2,
+            state_dim=4,
+            success_steps=2,
+            group_repeats=3,
+            batch_size=batch_size,
+            seed=0,
+        )
+        group_ids, targets = [], []
+        for _ in range(6):
+            td = env.reset()
+            group_ids.append(td["group_id"].reshape(()).item())
+            targets.append(td["observation", "state"][..., 2:4].clone())
+        assert group_ids == [0, 0, 0, 1, 1, 1]
+        torch.testing.assert_close(targets[1], targets[0])
+        torch.testing.assert_close(targets[2], targets[0])
+        torch.testing.assert_close(targets[4], targets[3])
+        torch.testing.assert_close(targets[5], targets[3])
+        assert not torch.allclose(targets[3], targets[0])
+        # the group id rides every step of the episode
+        td["action"] = td["observation", "state"][..., 2:4]
+        assert env.step(td)["next", "group_id"].reshape(()).item() == 1
+
+    def test_tracking_group_repeats_validation(self):
+        with pytest.raises(ValueError, match="success_steps"):
+            ToyVLAEnv(action_dim=2, state_dim=4, group_repeats=2)
+        with pytest.raises(ValueError, match="group_repeats must be >= 1"):
+            ToyVLAEnv(action_dim=2, state_dim=4, success_steps=2, group_repeats=0)
+        with pytest.raises(ValueError, match="single environment"):
+            ToyVLAEnv(
+                action_dim=2,
+                state_dim=4,
+                success_steps=2,
+                group_repeats=2,
+                batch_size=[2],
+            )
+
     def test_tracking_state_buffers(self):
         # the episode state must be registered (non-persistent) buffers so
         # env.to(device) moves it along with the specs

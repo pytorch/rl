@@ -1,0 +1,50 @@
+# Toy-scale VLA GRPO: TinyVLA on the ToyVLAEnv tracking task.
+# Single process, single device, no simulator dependencies.
+
+env:
+  action_dim: 2
+  state_dim: 4
+  image_shape: [3, 16, 16]
+  chunk_size: 4 # H: base env steps per policy call (one outer step = one chunk)
+  success_steps: 2 # consecutive in-tolerance base steps for success
+  success_tol: 0.35 # sized so a random policy succeeds sometimes (cold-start signal)
+  max_outer_steps: 6 # episode truncation, in chunk decisions
+  seed: 0
+
+tokenizer:
+  vocab_size: 64
+
+policy:
+  hidden_dim: 128
+  device: null # null = auto (cuda if available)
+
+collector:
+  group_size: 4 # n: rollouts per initial state (GRPO group)
+  groups_per_iter: 8 # initial states per iteration
+  total_iters: 200
+
+advantage:
+  trajectory_return: sum # binary success return per trajectory
+  keep_return_bounds: [0.05, 0.95] # dynamic sampling; null disables
+
+loss:
+  clip_epsilon: [0.2, 0.28] # asymmetric DAPO clip; a float gives symmetric clipping
+  ppo_epochs: 1
+  mini_batch_size: 64 # decisions per optimization batch
+
+optim:
+  lr: 1e-3
+  max_grad_norm: 1.0
+
+logger:
+  backend: wandb
+  project_name: torchrl-sota-vla-grpo
+  group_name: null
+  exp_name: vla_grpo_toy
+  mode: online
+  eval_iter: 10 # evaluate every N iterations
+  eval_episodes: 50 # greedy episodes per evaluation
+
+checkpoint:
+  save_iter: 25 # save every N iterations (0 disables)
+  resume: null # path to a checkpoint_latest.pt to resume from

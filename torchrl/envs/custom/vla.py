@@ -74,6 +74,14 @@ class ToyVLAEnv(EnvBase):
             target action. Defaults to ``0.25``. Targets are sampled
             uniformly in ``[-0.5, 0.5]`` so the tolerance ball always fits
             inside the action bounds.
+        group_repeats (int, optional): grouped-rollout mode (tracking mode
+            only, single environment only): the same target is replayed for
+            ``group_repeats`` consecutive episodes before a new one is
+            sampled, and an integer ``group_id`` observation entry identifies
+            the group. This is the init-state control GRPO-style group
+            advantages require (n rollouts per initial state, e.g. grouped by
+            :class:`~torchrl.objectives.llm.MCAdvantage`). Defaults to
+            ``None`` (a fresh target every episode, no ``group_id`` entry).
         batch_size (torch.Size, optional): number of vectorized copies.
             Defaults to ``torch.Size([])`` (a single environment).
         device (torch.device, optional): device of the specs.
@@ -126,6 +134,7 @@ class ToyVLAEnv(EnvBase):
         *,
         success_steps: int | None = None,
         success_tol: float = 0.25,
+        group_repeats: int | None = None,
         batch_size: torch.Size | None = None,
         device: torch.device | None = None,
         seed: int | None = None,
@@ -149,6 +158,13 @@ class ToyVLAEnv(EnvBase):
                     "success_tol must be in (0, 0.5] so the tolerance ball "
                     f"around a target in [-0.5, 0.5] stays reachable, got {success_tol}."
                 )
+        if group_repeats is not None:
+            if success_steps is None:
+                raise ValueError(
+                    "group_repeats requires the tracking mode: set success_steps."
+                )
+            if group_repeats < 1:
+                raise ValueError(f"group_repeats must be >= 1, got {group_repeats}.")
         super().__init__(
             batch_size=torch.Size(batch_size) if batch_size is not None else None,
             device=device,
@@ -159,6 +175,13 @@ class ToyVLAEnv(EnvBase):
         self.instruction = str(instruction)
         self.success_steps = int(success_steps) if success_steps is not None else None
         self.success_tol = float(success_tol)
+        self.group_repeats = int(group_repeats) if group_repeats is not None else None
+        if self.group_repeats is not None and self.batch_size.numel() > 1:
+            raise ValueError(
+                "group_repeats only supports a single environment "
+                f"(batch_size () or (1,)), got batch_size={tuple(self.batch_size)}. "
+                "General init-state control belongs to the environment adapters."
+            )
         batch = self.batch_size
         observation = Composite(
             image=Unbounded(
@@ -180,6 +203,10 @@ class ToyVLAEnv(EnvBase):
             self.observation_spec["success"] = Categorical(
                 2, dtype=torch.bool, shape=(*batch, 1), device=self.device
             )
+        if self.group_repeats is not None:
+            self.observation_spec["group_id"] = Unbounded(
+                shape=(*batch, 1), dtype=torch.int64, device=self.device
+            )
         self.action_spec = Bounded(
             -1.0, 1.0, shape=(*batch, self.action_dim), device=self.device
         )
@@ -199,6 +226,12 @@ class ToyVLAEnv(EnvBase):
             torch.zeros(*batch, 1, dtype=torch.int64, device=self.device),
             persistent=False,
         )
+        self.register_buffer(
+            "_group_id",
+            torch.zeros(*batch, 1, dtype=torch.int64, device=self.device),
+            persistent=False,
+        )
+        self._episode_count = 0
         self._rng = torch.Generator()
         self._set_seed(seed)
 
@@ -253,7 +286,17 @@ class ToyVLAEnv(EnvBase):
                 reset = torch.ones(
                     *self.batch_size, 1, dtype=torch.bool, device=self.device
                 )
-            self._target = torch.where(reset, self._sample_target(), self._target)
+            if self.group_repeats is not None:
+                # grouped rollouts (single env): replay the same target for
+                # group_repeats consecutive episodes and stamp the group id
+                if self._episode_count % self.group_repeats == 0:
+                    self._target = self._sample_target()
+                self._group_id = torch.full_like(
+                    self._group_id, self._episode_count // self.group_repeats
+                )
+                self._episode_count += 1
+            else:
+                self._target = torch.where(reset, self._sample_target(), self._target)
             self._streak = torch.where(
                 reset, torch.zeros_like(self._streak), self._streak
             )
@@ -262,6 +305,8 @@ class ToyVLAEnv(EnvBase):
             out["success"] = torch.zeros(
                 *self.batch_size, 1, dtype=torch.bool, device=self.device
             )
+        if self.group_repeats is not None:
+            out["group_id"] = self._group_id.clone()
         out.update(self.full_done_spec.zero())
         return out
 
@@ -289,6 +334,8 @@ class ToyVLAEnv(EnvBase):
         success = self._streak >= self.success_steps
         out["reward"] = reward
         out["success"] = success
+        if self.group_repeats is not None:
+            out["group_id"] = self._group_id.clone()
         out["terminated"] = success
         out["done"] = success
         return out
