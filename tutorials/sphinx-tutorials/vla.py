@@ -103,17 +103,18 @@ warnings.filterwarnings("ignore")
 #
 # - *Evaluate a released VLA*: a checkpoint
 #   (:class:`~torchrl.modules.vla.LeRobotPolicyWrapper`) and a task --
-#   :class:`~torchrl.envs.transforms.ActionChunkExecutor` runs it closed-loop and
+#   :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` executes
+#   it chunk by chunk (one inference per chunk, re-planning on resets) and
 #   :class:`~torchrl.envs.transforms.SuccessReward` scores it.
 # - *Fine-tune on your task* (stage 3, the common case): a checkpoint, your
 #   demos (:class:`~torchrl.data.datasets.LeRobotExperienceReplay`), chunk
 #   targets (:class:`~torchrl.envs.transforms.ActionChunkTransform`),
 #   normalization from the dataset statistics
 #   (:meth:`ActionScaling.from_metadata <torchrl.envs.transforms.ActionScaling.from_metadata>`)
-#   and :class:`~torchrl.objectives.vla.VLABCLoss`.
+#   and :class:`~torchrl.objectives.BCLoss` with its ``pad_mask`` key.
 # - *RL fine-tune* (stage 4): all of the above, a rollout-able task with a
-#   success signal, and :class:`~torchrl.objectives.vla.VLATokenGRPOLoss` for
-#   token policies.
+#   success signal, and :class:`~torchrl.objectives.ClipPPOLoss` over the
+#   action tokens for token policies.
 # - *Study the mechanics or research from scratch*: no checkpoint, no robot --
 #   a tiny reference policy (:class:`~torchrl.modules.vla.TinyVLA`) and
 #   synthetic data, which is exactly what this tutorial does. Every component
@@ -173,22 +174,22 @@ obs = make_observation()
 # Chunks mean different things on the two sides of the pipeline, and keeping
 # the two pictures apart avoids a classic confusion::
 #
-#     Training (behavior cloning)        |  Inference (closed loop)
+#     Training (behavior cloning)        |  Inference (chunked execution)
 #     -----------------------------------+----------------------------------
 #     dataset actions: a0 a1 a2 a3 ...   |  o_t --> VLA --> chunk [b0 b1 b2]
 #          |                             |          (one chunk per query)
 #          | sample a trajectory slice   |               |
 #          v                             |               v
-#     ActionChunkTransform               |     ActionChunkExecutor
-#          |                             |     (env transform, 1 action per
-#          v                             |     base step, re-plans on resets)
-#     [[a0, a1, a2],  <- target at t=0   |     or MultiAction (re-timed env:
-#      [a1, a2, a3],  <- target at t=1   |     one base step per chunk action)
+#     ActionChunkTransform               |   MultiStepActorWrapper (policy
+#          |                             |   wrapper: 1 policy call per chunk,
+#          v                             |   pops 1 action per env step)
+#     [[a0, a1, a2],  <- target at t=0   |   or MultiAction (re-timed env:
+#      [a1, a2, a3],  <- target at t=1   |   one base step per chunk action)
 #      [a2, a3, a3],  <- target at t=2   |               |
 #      ...] + action_is_pad mask         |               v
 #          |                             |  step: b0 -> b1 -> b2 -> re-query
 #          v                             |        --> [c0 c1 c2] -> c0 -> ...
-#     VLABCLoss(policy(o_t), row t)      |
+#     BCLoss(policy(o_t), row t)         |
 #                                        |  executed trace (open loop):
 #     overlapping rows, one per dataset  |    b0 b1 b2 | c0 c1 c2 | ...
 #     step: the policy may be queried    |  non-overlapping tiles of time
@@ -198,9 +199,9 @@ obs = make_observation()
 # example per dataset step, because at deployment the policy can be queried at
 # any phase. The *executed trace* (right) tiles time without overlap when run
 # open-loop: each committed chunk is consumed before the next one. Both
-# :class:`~torchrl.envs.transforms.ActionChunkExecutor` (with
-# ``replan_interval=H``; used later in this tutorial, since the same object
-# also covers receding-horizon re-planning and reset handling) and
+# :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` (used
+# later in this tutorial; one policy call per chunk, with receding-horizon
+# re-planning via ``replan_interval`` and reset handling via ``is_init``) and
 # :class:`~torchrl.envs.transforms.MultiAction` (which re-times the env
 # instead, stepping it once per chunk action) realize that open-loop trace.
 
@@ -245,11 +246,13 @@ policy(make_observation())["action_chunk"].shape  # [batch, H, action_dim]
 # Behavior cloning
 # ----------------
 #
-# :class:`~torchrl.objectives.vla.VLABCLoss` regresses the policy's predicted
-# chunk onto an expert chunk (L1 by default), masking padded steps. Here we
-# overfit a tiny synthetic dataset to confirm the policy learns.
+# Chunked behavior cloning is plain :class:`~torchrl.objectives.BCLoss`: the
+# action chunk is the ``action`` (an elementwise loss does not care about the
+# extra horizon dim) and the ``pad_mask`` key excludes padded chunk steps from
+# the loss. Here we overfit a tiny synthetic dataset to confirm the policy
+# learns.
 
-from torchrl.objectives.vla import VLABCLoss
+from torchrl.objectives import BCLoss
 
 data = make_observation()
 # a synthetic "expert": a fixed linear map from the state to an action chunk
@@ -258,34 +261,35 @@ expert = (
 ).reshape(batch, H, action_dim)
 data["action_chunk"] = expert
 
-bc_loss = VLABCLoss(policy)
-initial = bc_loss(data)[
-    "loss_vla_bc"
-].item()  # first call also materializes lazy params
+bc_loss = BCLoss(policy, loss_function="l1")
+bc_loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+initial = bc_loss(data)["loss_bc"].item()
 optimizer = torch.optim.Adam(bc_loss.parameters(), lr=1e-2)
 for _ in range(100):
     optimizer.zero_grad()
-    bc_loss(data)["loss_vla_bc"].backward()
+    bc_loss(data)["loss_bc"].backward()
     optimizer.step()
 
 ##############################################################################
 # The behavior-cloning loss drops sharply as the policy fits the expert chunks:
 
-(initial, bc_loss(data)["loss_vla_bc"].item())
+(initial, bc_loss(data)["loss_bc"].item())
 
 ##############################################################################
 # Chunked inference
 # -----------------
 #
 # At inference, a chunk policy predicts ``H`` actions but the environment
-# consumes one action per step.
-# :class:`~torchrl.envs.transforms.ActionChunkExecutor` (a general
-# chunk-execution transform, not VLA-specific) bridges the two without
-# wrapping anything: appended to the environment, it rewrites the
-# policy-facing action spec to the chunked shape and, at every step, either
-# serves the next action of the cached chunk or commits the policy's fresh
-# prediction (every ``replan_interval`` steps -- receding horizon -- and
-# automatically whenever an environment resets).
+# consumes one action per step -- and a VLA forward pass is expensive, so the
+# whole point of chunking is to *not* run the policy at every step.
+# :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` does
+# exactly that: it caches the predicted actions and emits one per step,
+# skipping the wrapped actor entirely while the cache lasts; with
+# ``replan_interval`` it re-queries before the cache runs out (receding
+# horizon), and an env reset (tracked through ``is_init``) re-plans the
+# affected envs. (:class:`~torchrl.envs.transforms.MultiAction` is the
+# env-side alternative: it steps the base env once per chunk action, also
+# with a single policy call per chunk, at the price of re-timing the MDP.)
 #
 # To see it in action we need an environment. Real evaluations would use a
 # simulator (e.g. ``gym-pusht``) or a robot; TorchRL ships
@@ -297,7 +301,6 @@ for _ in range(100):
 # proprioceptive state under ``observation``, the instruction at the root.
 
 from torchrl.envs import ToyVLAEnv
-from torchrl.envs.transforms import ActionChunkExecutor, TransformedEnv
 
 base_env = ToyVLAEnv(
     action_dim=action_dim,
@@ -308,62 +311,75 @@ base_env = ToyVLAEnv(
 base_env.observation_spec
 
 ##############################################################################
-# The native action interface is a single continuous action per step:
+# The action interface is a single continuous action per step (the wrapper
+# lives on the policy side, so the env specs are untouched):
 
 base_env.action_spec
 
 ##############################################################################
-# Appending the executor rewrites the policy-facing action spec to the
-# chunked shape -- compare with ``base_env.action_spec`` above: the
-# environment now asks the policy for ``action_chunk`` instead of ``action``.
+# The wrapper expects its actor to write the *env action key* with a leading
+# time dimension, so we append a one-line rename of the policy's
+# ``action_chunk``; ``InitTracker`` provides the ``is_init`` flag the wrapper
+# uses to re-plan on resets. We also count the policy calls to see the
+# receding horizon at work.
 
-env = TransformedEnv(base_env, ActionChunkExecutor(chunk_size=H, replan_interval=2))
-env.full_action_spec["action_chunk"]
+from tensordict.nn import TensorDictModule, TensorDictSequential, WrapModule
+from torchrl.envs.transforms import InitTracker, TransformedEnv
+from torchrl.modules import MultiStepActorWrapper
+
+policy_calls = []
+
+
+def counted_policy(td):
+    policy_calls.append(1)
+    return policy(td)
+
+
+chunk_as_action = TensorDictModule(
+    lambda chunk: chunk, in_keys=["action_chunk"], out_keys=["action"]
+)
+actor = MultiStepActorWrapper(
+    TensorDictSequential(WrapModule(counted_policy), chunk_as_action),
+    n_steps=H,
+    replan_interval=2,
+)
+env = TransformedEnv(base_env, InitTracker())
 
 ##############################################################################
-# Now a plain :meth:`~torchrl.envs.EnvBase.rollout` with the policy we just
-# trained runs the whole closed loop: the policy predicts a chunk at every
-# step, and the executor decides which action actually reaches the env.
+# A plain :meth:`~torchrl.envs.EnvBase.rollout` runs the interaction loop. The
+# executed per-step actions are recorded under ``action``; the policy itself
+# only ran on the re-plan steps (0, 2 and 4 -- three calls for six steps,
+# instead of six).
 
-eval_rollout = env.rollout(6, policy)
-eval_rollout["action_chunk"].shape  # [2, 6, H, action_dim]: a fresh prediction per step
+eval_rollout = env.rollout(6, actor)
+eval_rollout["action"].shape  # [2, 6, action_dim]: the executed actions
 
 ##############################################################################
-# The env's state echoes the executed action, so we can verify the receding
-# horizon: at step 0 the fresh chunk is committed and its first action
-# executed; at step 1 the executor serves the *cached* chunk's second action
-# and the step-1 prediction is discarded.
+# The call count proves the skipping, and the env's state echo confirms the
+# executed cadence matches what the wrapper served from its cache:
 
+len(policy_calls)  # 3: the wrapped policy ran every replan_interval=2 steps
+
+##############################################################################
 executed = eval_rollout["next", "observation", "state"][..., :action_dim]
-torch.allclose(executed[:, 0], eval_rollout["action_chunk"][:, 0, 0])  # True: re-plan
-torch.allclose(executed[:, 1], eval_rollout["action_chunk"][:, 0, 1])  # True: cached
-torch.allclose(
-    executed[:, 1], eval_rollout["action_chunk"][:, 1, 0]
-)  # False: discarded
-
-##############################################################################
-# The same instance can instead be appended to the policy
-# (``TensorDictSequential(policy, executor)``) when you cannot touch the env;
-# call :meth:`~torchrl.envs.transforms.ActionChunkExecutor.reset_state`
-# between rollouts in that mode. When policy inference is expensive and the
-# call must actually be *skipped* between re-plans, wrap the policy in
-# :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` instead.
+torch.allclose(executed, eval_rollout["action"])  # True: echo of what env got
 
 ##############################################################################
 # RL fine-tuning
 # --------------
 #
-# VLAs are increasingly post-trained with RL. A *token* VLA (action tokens
-# emitted through a language-model head) can be fine-tuned with
-# :class:`~torchrl.objectives.vla.VLATokenGRPOLoss`, a GRPO / PPO-clip objective
-# over the action tokens with group-relative (or any precomputed) advantages and
-# an optional KL penalty to a reference policy.
+# VLAs are increasingly post-trained with RL. GRPO-style fine-tuning of a
+# *token* VLA (action tokens emitted through a language-model head) is plain
+# :class:`~torchrl.objectives.ClipPPOLoss`: group-relative advantages are
+# precomputed (so no critic, ``critic_network=None``), and the token head's
+# sequence-level ``log_probs`` match the loss's ``sample_log_prob`` contract
+# out of the box -- only the keys need remapping.
 #
 # We first roll out the token policy to obtain action tokens and their
 # behavior-policy log-probabilities, attach a (here synthetic) advantage, then
 # take one optimization step.
 
-from torchrl.objectives.vla import VLATokenGRPOLoss
+from torchrl.objectives import ClipPPOLoss
 
 token_policy = TinyVLA(
     action_dim=action_dim,
@@ -373,10 +389,17 @@ token_policy = TinyVLA(
     mode="sample",
 )
 rollout = token_policy(make_observation())  # writes action_tokens + log_probs
-rollout["advantage"] = torch.randn(batch)
+# one advantage per sample, with the trailing singleton value-dim the PPO
+# losses expect (a flat [batch] advantage would silently broadcast wrong)
+rollout["advantage"] = torch.randn(batch, 1)
 rollout["log_probs"] = rollout["log_probs"].detach()  # behavior log-probs are fixed
 
-grpo_loss = VLATokenGRPOLoss(token_policy, clip_epsilon=0.2)
+grpo_loss = ClipPPOLoss(
+    token_policy, critic_network=None, entropy_bonus=False, clip_epsilon=0.2
+)
+grpo_loss.set_keys(
+    action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+)
 grpo_optimizer = torch.optim.Adam(grpo_loss.parameters(), lr=1e-3)
 grpo_optimizer.zero_grad()
 grpo_loss(rollout)["loss_objective"].backward()
@@ -387,9 +410,13 @@ grpo_optimizer.step()
 # ----------
 #
 # We loaded VLA-shaped data into the canonical schema, built action chunks and
-# normalized actions, trained a reference policy by chunked behavior cloning,
-# executed it with a receding-horizon chunk executor, and ran one step of token
-# GRPO fine-tuning -- all with the standard TorchRL primitives. To scale up,
+# normalized actions, trained a reference policy by chunked behavior cloning
+# (:class:`~torchrl.objectives.BCLoss` with a pad mask), executed it with a
+# receding-horizon actor wrapper that skips the policy between re-plans, and
+# ran one step of token GRPO fine-tuning
+# (:class:`~torchrl.objectives.ClipPPOLoss`, no critic) -- all with the
+# standard TorchRL primitives; the only VLA-specific pieces are the data
+# schema, the policies and the transforms. To scale up,
 # swap :class:`~torchrl.modules.vla.TinyVLA` for a wrapped open checkpoint
 # (:class:`~torchrl.modules.vla.LeRobotPolicyWrapper`) and stream real data with
 # :class:`~torchrl.data.datasets.LeRobotExperienceReplay` or
