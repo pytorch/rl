@@ -16,7 +16,6 @@ from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce
 
 
 class BCLoss(LossModule):
@@ -233,7 +232,13 @@ class BCLoss(LossModule):
                 log_prob = dist.log_prob(action_expert)
                 loss = -log_prob
 
-        loss = _reduce(loss, reduction=self.reduction)
+        # Route through ``_reduce_loss`` so that, when the input tensordict
+        # carries the ``("collector", "mask")`` key written by SliceSampler
+        # (PR #3695, ``pad_output=True``), padded positions are excluded from
+        # the time-averaging. Behavior is byte-identical to the old
+        # ``_reduce(loss, reduction=self.reduction)`` path when no mask key
+        # is present.
+        loss = self._reduce_loss(loss, tensordict=tensordict)
 
         td_out = TensorDict({"loss_bc": loss})
         self._clear_weakrefs(
