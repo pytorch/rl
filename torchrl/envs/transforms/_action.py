@@ -679,6 +679,26 @@ class MultiAction(Transform):
     .. note:: If a transform is appended before the MultiAction, it will be called multiple times. If it is appended
         after, it will be called once per macro-step.
 
+    .. note:: Extra entries written by the policy alongside the actions (e.g. the action tokens and
+        log-probabilities of a token-head policy) are left untouched on the root tensordict and therefore
+        ride along on the outer (macro-step) transition: each outer step of a rollout carries the policy
+        outputs of the chunk decided at that step.
+
+    .. note:: When a done state fires inside the chunk (with ``stack_rewards=True``), the reward stack of
+        that outer step holds the executed steps' rewards followed by a single zero-filled slot for the
+        skipped remainder of the chunk. Its length therefore differs from a full chunk's, and stacking
+        such outer steps in a rollout yields a lazy stack with ragged reward entries. If the per-chunk
+        reward is computed from the outer transition anyway (e.g. with
+        :class:`~torchrl.envs.transforms.SuccessReward` appended after this transform), pass
+        ``stack_rewards=False`` to keep the outer transition dense and uniform.
+
+    .. note:: Skipping the remaining steps after a done state relies on the ``"_step"`` partial-step
+        entry. Single (unbatched) environments and batched environments
+        (:class:`~torchrl.envs.SerialEnv` / :class:`~torchrl.envs.ParallelEnv`) handle it natively; for a
+        batch-locked vectorized environment, the base environment's ``_step`` is trusted to honor the
+        mask itself (see :meth:`~torchrl.envs.EnvBase.step`) and environments that ignore it will keep
+        stepping every sub-environment until the end of the chunk.
+
     Keyword Args:
         dim (int, optional): the stack dimension with respect to the tensordict ``ndim`` attribute.
             Must be greater than 0. Defaults to ``1`` (the first dimension after the batch-dims).
@@ -801,6 +821,17 @@ class MultiAction(Transform):
                     if global_idx is None:
                         global_idx = idx.clone()
                         td_out = td
+                        # td_out's root reward/observation tensors alias the
+                        # entries just appended to the stacks: de-alias them so
+                        # the masked writes into td_out below do not corrupt
+                        # the stacked history
+                        keys = []
+                        if self.stack_rewards:
+                            keys += list(self.parent.reward_keys)
+                        if self.stack_observations:
+                            keys += list(self.parent.observation_keys)
+                        for key in keys:
+                            td_out.set(key, td_out.get(key).clone())
                     else:
                         td_out[global_idx] = td
                         global_idx = torch.masked_scatter(global_idx, global_idx, idx)
@@ -812,9 +843,25 @@ class MultiAction(Transform):
             if (self.stack_rewards or self.stack_observations) and not td_out.get(
                 "_step", torch.ones((), dtype=torch.bool)
             ).any():
+                if self.stack_rewards:
+                    # the final outer step is skipped for every env (done fired
+                    # inside the chunk): its slot in the reward stack would
+                    # otherwise carry the stale reward of the last executed
+                    # step - zero it, matching the zero-fill of the other
+                    # skipped slots
+                    for key in self.parent.reward_keys:
+                        td_out.set(key, torch.zeros_like(td_out.get(key)))
                 td_out = self._step(None, td_out)
         else:
             td_out[global_idx] = td.replace(actions[-1][global_idx])
+            if self.stack_rewards:
+                # zero the trailing reward slot of the envs that finished
+                # early: their final outer step is skipped, so it would
+                # otherwise carry the stale reward of their last executed step
+                for key in self.parent.reward_keys:
+                    reward = td_out.get(key).clone()
+                    reward[~global_idx] = 0
+                    td_out.set(key, reward)
             if self.stack_rewards or self.stack_observations:
                 td_out = self._step(None, td_out)
                 if self.stack_rewards:
@@ -2021,22 +2068,27 @@ class ActionTokenizerTransform(Transform):
         action_key = unravel_key(self.in_key)
         token_key = unravel_key(self.out_key)
         try:
-            leaf_spec = self.parent.full_action_spec_unbatched[action_key]
+            leaf_spec = input_spec["full_action_spec", action_key]
         except KeyError:
             raise RuntimeError(
                 f"{type(self).__name__} could not find key {action_key!r} in "
                 f"the parent environment's action spec. Available keys: "
-                f"{list(self.parent.full_action_spec.keys(True, True))}."
+                f"{list(input_spec['full_action_spec'].keys(True, True))}."
             )
+        # the incoming spec is batched and may carry dynamic (-1) dims (e.g.
+        # MultiAction's chunk dim, which full_action_spec_unbatched would
+        # mangle); dynamic dims cannot be passed to the constructor, so build
+        # with placeholder dims and expand
+        shape = leaf_spec.shape
+        concrete = torch.Size([1 if dim < 0 else dim for dim in shape])
         token_spec = Categorical(
             n=self.tokenizer.vocab_size,
-            shape=leaf_spec.shape,
+            shape=concrete,
             device=leaf_spec.device,
             dtype=torch.long,
         )
-        batch_size = self.parent.batch_size
-        if batch_size:
-            token_spec = token_spec.expand(batch_size + token_spec.shape)
+        if concrete != shape:
+            token_spec = token_spec.expand(shape)
         input_spec["full_action_spec", token_key] = token_spec
         if token_key != action_key:
             del input_spec["full_action_spec", action_key]
