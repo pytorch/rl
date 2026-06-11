@@ -2004,8 +2004,8 @@ class ActionTokenizerTransform(Transform):
         # data passes through untouched. Attached to an env, missing tokens on
         # the step path are an error (the rewritten action spec advertises
         # them; a policy writing the raw action key by mistake should not
-        # silently bypass the decode), while the reset preprocess runs with
-        # missing tolerance and skips.
+        # silently bypass the decode). The env reset path never reaches the
+        # inverse: ``enable_inv_on_reset`` defaults to False.
         if self.parent is None and tensordict.get(self.out_key, default=None) is None:
             return tensordict
         return super()._inv_call(tensordict)
