@@ -75,6 +75,11 @@ explicit = true
 tensordict = { git = "https://github.com/pytorch/tensordict" }
 torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
 
+[[tool.uv.dependency-metadata]]
+name = "lerobot"
+version = "0.5.1"
+requires-dist = ["datasets", "huggingface-hub", "av", "jsonlines", "packaging"]
+
 [project.optional-dependencies]
 atari = ["gymnasium[atari]"]
 dm_control = ["dm_control"]
@@ -82,6 +87,9 @@ replay_buffer = ["torch>=2.7.0"]
 gym_continuous = ["gymnasium<1.0", "mujoco"]
 video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
+# lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
+# recent torch), so the extra is empty on older interpreters
+vla = ["lerobot>=0.5.0; python_version >= '3.12'"]
 rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
