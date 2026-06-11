@@ -18,6 +18,7 @@ from .custom import (
     PendulumEnv,
     SatelliteEnv,
     TicTacToeEnv,
+    ToyVLAEnv,
     Walker2dEnv,
 )
 from .custom.mujoco._humanoid_primitives import HumanoidMacroAction
@@ -305,6 +306,7 @@ __all__ = [
     "TensorDictPrimer",
     "TerminateTransform",
     "TicTacToeEnv",
+    "ToyVLAEnv",
     "TimeMaxPool",
     "Timer",
     "ToTensorImage",
