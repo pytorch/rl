@@ -31,28 +31,53 @@ class ToyVLAEnv(EnvBase):
     the previous step, which makes execution machinery directly observable:
     the cadence of a chunk-executing policy (e.g.
     :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`) can be
-    read off ``("next", "observation", "state")``. The reward
-    is the negative action norm (an effort penalty) and episodes never
-    terminate on their own.
+    read off ``("next", "observation", "state")``.
 
-    This is a smoke-test environment for VLA plumbing -- tutorials, tests,
-    pipeline checks without simulator dependencies -- not a learnable task.
+    Two modes are available:
+
+    - **Echo mode** (default, ``success_steps=None``): the reward is the
+      negative action norm (an effort penalty) and episodes never terminate
+      on their own. This is a smoke-test mode for VLA plumbing -- tutorials,
+      tests, pipeline checks without simulator dependencies -- not a
+      learnable task.
+    - **Tracking mode** (``success_steps=k``): a per-episode target action is
+      sampled at reset and exposed in the state at
+      ``state[..., action_dim:2 * action_dim]`` (requires
+      ``state_dim >= 2 * action_dim``). A boolean ``success`` entry turns
+      ``True`` -- and the episode terminates -- once the executed action stays
+      within ``success_tol`` (infinity-norm) of the target for ``k``
+      consecutive steps. The reward is the negative tracking error
+      ``-||action - target||``. An oracle that reads the target back from the
+      state succeeds with certainty, while a uniform random policy almost
+      never does (per-step hit probability ``success_tol ** action_dim``),
+      which makes "success rate climbs" a meaningful learning signal for
+      sparse-reward RL recipes (pair with
+      :class:`~torchrl.envs.transforms.SuccessReward` for a binary
+      success-only reward).
 
     Args:
         action_dim (int, optional): size of the continuous action, bounded in
             ``[-1, 1]``. Defaults to ``4``.
         state_dim (int, optional): size of the proprioceptive state; must be
-            at least ``action_dim``. Defaults to ``6``.
+            at least ``action_dim`` (``2 * action_dim`` in tracking mode).
+            Defaults to ``6``.
         image_shape (tuple of int, optional): ``(C, H, W)`` shape of the
             ``uint8`` camera image. Defaults to ``(3, 16, 16)``.
         instruction (str, optional): the constant language instruction.
             Defaults to ``"push the T-shaped block onto the target"``.
 
     Keyword Args:
+        success_steps (int, optional): number of consecutive in-tolerance
+            steps required for success. ``None`` (default) selects the echo
+            mode (no ``success`` entry, never done).
+        success_tol (float, optional): per-dimension tolerance around the
+            target action. Defaults to ``0.25``. Targets are sampled
+            uniformly in ``[-0.5, 0.5]`` so the tolerance ball always fits
+            inside the action bounds.
         batch_size (torch.Size, optional): number of vectorized copies.
             Defaults to ``torch.Size([])`` (a single environment).
         device (torch.device, optional): device of the specs.
-        seed (int, optional): seed for the random images.
+        seed (int, optional): seed for the random images and targets.
 
     Examples:
         >>> import torch
@@ -82,6 +107,14 @@ class ToyVLAEnv(EnvBase):
         >>> env = TransformedEnv(ToyVLAEnv(batch_size=[2]), InitTracker())
         >>> env.rollout(4, policy)["action"].shape
         torch.Size([2, 4, 4])
+        >>> # tracking mode: an oracle reading the target off the state succeeds
+        >>> env = ToyVLAEnv(action_dim=2, state_dim=4, success_steps=2, seed=0)
+        >>> td = env.reset()
+        >>> for _ in range(2):
+        ...     td["action"] = td["observation", "state"][..., 2:4]
+        ...     td = env.step(td)["next"]
+        >>> bool(td["success"]), bool(td["terminated"])
+        (True, True)
     """
 
     def __init__(
@@ -91,15 +124,31 @@ class ToyVLAEnv(EnvBase):
         image_shape: tuple[int, int, int] = (3, 16, 16),
         instruction: str = _DEFAULT_INSTRUCTION,
         *,
+        success_steps: int | None = None,
+        success_tol: float = 0.25,
         batch_size: torch.Size | None = None,
         device: torch.device | None = None,
         seed: int | None = None,
     ) -> None:
-        if state_dim < action_dim:
+        if success_steps is None and state_dim < action_dim:
             raise ValueError(
                 f"state_dim ({state_dim}) must be at least action_dim "
                 f"({action_dim}): the state echoes the executed action."
             )
+        if success_steps is not None:
+            if success_steps < 1:
+                raise ValueError(f"success_steps must be >= 1, got {success_steps}.")
+            if state_dim < 2 * action_dim:
+                raise ValueError(
+                    f"state_dim ({state_dim}) must be at least 2 * action_dim "
+                    f"({2 * action_dim}) in tracking mode: the state holds the "
+                    "executed action followed by the target action."
+                )
+            if not 0.0 < success_tol <= 0.5:
+                raise ValueError(
+                    "success_tol must be in (0, 0.5] so the tolerance ball "
+                    f"around a target in [-0.5, 0.5] stays reachable, got {success_tol}."
+                )
         super().__init__(
             batch_size=torch.Size(batch_size) if batch_size is not None else None,
             device=device,
@@ -108,28 +157,47 @@ class ToyVLAEnv(EnvBase):
         self.state_dim = int(state_dim)
         self.image_shape = tuple(int(dim) for dim in image_shape)
         self.instruction = str(instruction)
+        self.success_steps = int(success_steps) if success_steps is not None else None
+        self.success_tol = float(success_tol)
         batch = self.batch_size
-        self.observation_spec = Composite(
-            observation=Composite(
-                image=Unbounded(
-                    shape=(*batch, *self.image_shape),
-                    dtype=torch.uint8,
-                    device=self.device,
-                ),
-                state=Unbounded(shape=(*batch, self.state_dim), device=self.device),
-                shape=batch,
+        observation = Composite(
+            image=Unbounded(
+                shape=(*batch, *self.image_shape),
+                dtype=torch.uint8,
+                device=self.device,
             ),
+            state=Unbounded(shape=(*batch, self.state_dim), device=self.device),
+            shape=batch,
+        )
+        self.observation_spec = Composite(
+            observation=observation,
             language_instruction=NonTensor(
                 shape=batch, example_data=self.instruction, device=self.device
             ),
             shape=batch,
         )
+        if self.success_steps is not None:
+            self.observation_spec["success"] = Categorical(
+                2, dtype=torch.bool, shape=(*batch, 1), device=self.device
+            )
         self.action_spec = Bounded(
             -1.0, 1.0, shape=(*batch, self.action_dim), device=self.device
         )
         self.reward_spec = Unbounded(shape=(*batch, 1), device=self.device)
         self.done_spec = Categorical(
             2, dtype=torch.bool, shape=(*batch, 1), device=self.device
+        )
+        # Tracking-mode episode state: per-env target and in-tolerance streak.
+        # Registered as (non-persistent) buffers so env.to(device) moves them.
+        self.register_buffer(
+            "_target",
+            torch.zeros(*batch, self.action_dim, device=self.device),
+            persistent=False,
+        )
+        self.register_buffer(
+            "_streak",
+            torch.zeros(*batch, 1, dtype=torch.int64, device=self.device),
+            persistent=False,
         )
         self._rng = torch.Generator()
         self._set_seed(seed)
@@ -139,6 +207,17 @@ class ToyVLAEnv(EnvBase):
             return self.instruction
         stack = [self.instruction] * self.batch_size.numel()
         return NonTensorStack(*stack).reshape(self.batch_size)
+
+    def _sample_target(self) -> torch.Tensor:
+        target = (
+            torch.rand(
+                *self.batch_size,
+                self.action_dim,
+                generator=self._rng,
+            )
+            - 0.5
+        )
+        return target.to(self.device)
 
     def _obs(self, state: torch.Tensor) -> TensorDict:
         image = torch.randint(
@@ -157,19 +236,61 @@ class ToyVLAEnv(EnvBase):
             device=self.device,
         )
 
-    def _reset(self, tensordict: TensorDictBase | None = None, **kwargs) -> TensorDict:
+    def _make_state(self, action: torch.Tensor | None) -> torch.Tensor:
         state = torch.zeros(*self.batch_size, self.state_dim, device=self.device)
-        out = self._obs(state)
+        if action is not None:
+            state[..., : self.action_dim] = action
+        if self.success_steps is not None:
+            state[..., self.action_dim : 2 * self.action_dim] = self._target
+        return state
+
+    def _reset(self, tensordict: TensorDictBase | None = None, **kwargs) -> TensorDict:
+        if self.success_steps is not None:
+            reset = None
+            if tensordict is not None:
+                reset = tensordict.get("_reset")
+            if reset is None:
+                reset = torch.ones(
+                    *self.batch_size, 1, dtype=torch.bool, device=self.device
+                )
+            self._target = torch.where(reset, self._sample_target(), self._target)
+            self._streak = torch.where(
+                reset, torch.zeros_like(self._streak), self._streak
+            )
+        out = self._obs(self._make_state(None))
+        if self.success_steps is not None:
+            out["success"] = torch.zeros(
+                *self.batch_size, 1, dtype=torch.bool, device=self.device
+            )
         out.update(self.full_done_spec.zero())
         return out
 
     def _step(self, tensordict: TensorDictBase) -> TensorDict:
         action = tensordict.get("action")
-        state = torch.zeros(*self.batch_size, self.state_dim, device=self.device)
-        state[..., : self.action_dim] = action
-        out = self._obs(state)
-        out["reward"] = -action.norm(dim=-1, keepdim=True)
-        out.update(self.full_done_spec.zero())
+        out = self._obs(self._make_state(action))
+        if self.success_steps is None:
+            out["reward"] = -action.norm(dim=-1, keepdim=True)
+            out.update(self.full_done_spec.zero())
+            return out
+        error = action - self._target
+        reward = -error.norm(dim=-1, keepdim=True)
+        in_tol = (error.abs() <= self.success_tol).all(-1, keepdim=True)
+        streak = torch.where(in_tol, self._streak + 1, 0)
+        step_mask = tensordict.get("_step", None)
+        if step_mask is not None:
+            # partial-step contract (see EnvBase.step): batch-locked envs are
+            # trusted to handle the "_step" mask themselves. Masked-out envs
+            # (e.g. done inside a MultiAction chunk) keep their streak frozen
+            # - so success/done persist - and emit a zero reward.
+            step_mask = step_mask.view(self._streak.shape)
+            streak = torch.where(step_mask, streak, self._streak)
+            reward = torch.where(step_mask, reward, torch.zeros_like(reward))
+        self._streak = streak
+        success = self._streak >= self.success_steps
+        out["reward"] = reward
+        out["success"] = success
+        out["terminated"] = success
+        out["done"] = success
         return out
 
     def _set_seed(self, seed: int | None) -> None:
