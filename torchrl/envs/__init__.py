@@ -81,7 +81,6 @@ from .model_based import (
     WorldModelEnv,
 )
 from .transforms import (
-    ActionChunkExecutor,
     ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
@@ -178,7 +177,6 @@ from .utils import (
 )
 
 __all__ = [
-    "ActionChunkExecutor",
     "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",

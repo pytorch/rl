@@ -2,9 +2,8 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-"""Tests for the ``torchrl.objectives.vla`` losses: chunked behavior cloning
-(:class:`~torchrl.objectives.vla.VLABCLoss`) and token GRPO fine-tuning
-(:class:`~torchrl.objectives.vla.VLATokenGRPOLoss`)."""
+"""Integration tests for chunked (VLA-style) behavior cloning via
+:class:`~torchrl.objectives.BCLoss` and its ``pad_mask`` key."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +13,7 @@ import torch
 from tensordict import NonTensorStack, TensorDict
 
 from torchrl.modules.vla import TinyVLA
-from torchrl.objectives.vla import VLABCLoss
+from torchrl.objectives import BCLoss
 
 
 def _make_bc_td(batch=4, chunk=4, action_dim=3, pad=False):
@@ -36,42 +35,52 @@ def _make_bc_td(batch=4, chunk=4, action_dim=3, pad=False):
     )
 
 
-class TestVLABCLoss:
+def _make_chunked_bc_loss(policy, **kwargs):
+    # chunked (VLA-style) behavior cloning is plain BCLoss with the chunk as
+    # the action and the padding mask excluded from the loss
+    kwargs.setdefault("loss_function", "l1")
+    loss = BCLoss(policy, **kwargs)
+    loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+    return loss
+
+
+class TestChunkedBC:
+    @staticmethod
+    def _policy(action_dim=3, chunk_size=4, **kwargs):
+        policy = TinyVLA(action_dim=action_dim, chunk_size=chunk_size, **kwargs)
+        # materialize the lazy parameters before BCLoss functionalizes them
+        policy(_make_bc_td(action_dim=action_dim, chunk=chunk_size).clone())
+        return policy
+
     def test_loss_key_and_shape(self):
-        policy = TinyVLA(action_dim=3, chunk_size=4)
-        loss = VLABCLoss(policy)
+        loss = _make_chunked_bc_loss(self._policy())
         out = loss(_make_bc_td())
-        assert list(out.keys()) == ["loss_vla_bc"]
-        assert out["loss_vla_bc"].shape == torch.Size([])
+        assert list(out.keys()) == ["loss_bc"]
+        assert out["loss_bc"].shape == torch.Size([])
+        assert "action_is_pad" in loss.in_keys
 
     @pytest.mark.parametrize("loss_function", ["l1", "l2", "smooth_l1"])
     def test_loss_functions(self, loss_function):
-        policy = TinyVLA(action_dim=3, chunk_size=4)
-        loss = VLABCLoss(policy, loss_function=loss_function)
-        assert torch.isfinite(loss(_make_bc_td())["loss_vla_bc"])
+        loss = _make_chunked_bc_loss(self._policy(), loss_function=loss_function)
+        assert torch.isfinite(loss(_make_bc_td())["loss_bc"])
 
     def test_reduction_none(self):
-        policy = TinyVLA(action_dim=3, chunk_size=4)
-        # without a pad mask, "none" preserves the per-element shape
-        td = _make_bc_td()
-        td = td.exclude("action_is_pad")
-        out = VLABCLoss(policy, reduction="none")(td)["loss_vla_bc"]
+        td = _make_bc_td().exclude("action_is_pad")
+        loss = _make_chunked_bc_loss(self._policy(), reduction="none")
+        out = loss(td)["loss_bc"]
         assert out.shape == torch.Size([4, 4, 3])
 
     def test_masking_excludes_padded_steps(self):
-        policy = TinyVLA(action_dim=3, chunk_size=4)
-        loss = VLABCLoss(policy)
+        loss = _make_chunked_bc_loss(self._policy())
         td = _make_bc_td(pad=True)
         td["action_chunk"][:, -1, :] = 1e6  # huge target on the padded step
-        masked = loss(td)["loss_vla_bc"]
-        unmasked = loss(td.exclude("action_is_pad"))["loss_vla_bc"]
+        masked = loss(td)["loss_bc"]
+        unmasked = loss(td.exclude("action_is_pad"))["loss_bc"]
         assert masked < unmasked  # the padded (huge) step is ignored when masked
 
     def test_nested_action_chunk_key(self):
         policy = TinyVLA(action_dim=2, chunk_size=3)
         policy.set_keys(action_chunk=("targets", "chunk"))
-        loss = VLABCLoss(policy)
-        loss.set_keys(action_chunk=("targets", "chunk"))
         td = TensorDict(
             {
                 "observation": {
@@ -83,35 +92,23 @@ class TestVLABCLoss:
             },
             batch_size=[4],
         )
-        assert torch.isfinite(loss(td)["loss_vla_bc"])
-
-    def test_rejects_token_head_policy(self):
-        policy = TinyVLA(
-            action_dim=3, chunk_size=4, action_head="tokens", vocab_size=16
-        )
-        with pytest.raises(ValueError, match="continuous-head"):
-            VLABCLoss(policy)
-
-    def test_set_keys_invalidates_in_keys(self):
-        policy = TinyVLA(action_dim=2, chunk_size=3)
-        loss = VLABCLoss(policy)
-        _ = loss.in_keys  # populate the cache
-        loss.set_keys(action_chunk=("targets", "chunk"))
+        policy(td.clone())
+        loss = BCLoss(policy, loss_function="l1")
+        loss.set_keys(action=("targets", "chunk"))
+        assert torch.isfinite(loss(td)["loss_bc"])
         assert ("targets", "chunk") in loss.in_keys
-        assert "action_chunk" not in loss.in_keys
 
     def test_overfit(self):
         torch.manual_seed(0)
-        policy = TinyVLA(action_dim=3, chunk_size=4, hidden_dim=64)
-        loss = VLABCLoss(policy)
+        loss = _make_chunked_bc_loss(self._policy(hidden_dim=64))
         td = _make_bc_td()
-        l0 = loss(td)["loss_vla_bc"].item()  # first forward materializes lazy params
+        l0 = loss(td)["loss_bc"].item()
         opt = torch.optim.Adam(loss.parameters(), lr=1e-2)
         for _ in range(80):
             opt.zero_grad()
-            loss(td)["loss_vla_bc"].backward()
+            loss(td)["loss_bc"].backward()
             opt.step()
-        assert loss(td)["loss_vla_bc"].item() < 0.5 * l0
+        assert loss(td)["loss_bc"].item() < 0.5 * l0
 
 
 if __name__ == "__main__":
