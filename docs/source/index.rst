@@ -122,6 +122,7 @@ Intermediate
    tutorials/rb_tutorial
    tutorials/memory_efficient_rl
    tutorials/export
+   tutorials/vla
 
 Advanced
 --------
