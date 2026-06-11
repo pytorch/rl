@@ -136,6 +136,9 @@ re-planning every ``replan_interval`` steps (receding horizon) and whenever an
 environment is reset. :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`
 remains the policy-wrapper alternative that additionally skips the upstream
 policy call while its cache lasts (open-loop execution of expensive policies).
+:class:`~torchrl.envs.ToyVLAEnv` -- a tiny synthetic env speaking the canonical
+schema, whose state echoes the executed action -- lets you smoke-test this
+machinery without any simulator dependency.
 
 Objectives
 ----------
