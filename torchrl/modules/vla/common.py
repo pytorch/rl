@@ -44,7 +44,8 @@ class VLAWrapperBase(TensorDictModuleBase):
       shape ``[*B, chunk_size, action_dim]`` under ``action_chunk``;
     - ``"tokens"``: :meth:`forward` writes discrete action tokens
       ``[*B, chunk_size, action_dim]`` under ``action_tokens`` and their
-      per-token log-probabilities under ``log_probs``; :meth:`get_dist` returns
+      per-sample (sequence-level, summed over the chunk) log-probabilities
+      under ``log_probs``; :meth:`get_dist` returns
       the token distribution for log-prob/entropy-based RL fine-tuning.
 
     Keys are configurable through :meth:`set_keys`. The wrapper is a
@@ -164,21 +165,34 @@ class VLAWrapperBase(TensorDictModuleBase):
             )
             tensordict.set(self._tensor_keys.action_chunk, chunk)
         else:
-            dist = torch_dist.Categorical(logits=self._action_logits(tensordict))
-            tokens = dist.sample() if self.mode == "sample" else dist.logits.argmax(-1)
+            dist = self.get_dist(tensordict)
+            tokens = (
+                dist.sample()
+                if self.mode == "sample"
+                else dist.base_dist.logits.argmax(-1)
+            )
             tensordict.set(self._tensor_keys.action_tokens, tokens)
             tensordict.set(self._tensor_keys.log_probs, dist.log_prob(tokens))
         return tensordict
 
-    def get_dist(self, tensordict: TensorDictBase) -> torch_dist.Categorical:
-        """Return the action-token :class:`~torch.distributions.Categorical`.
+    def get_dist(self, tensordict: TensorDictBase) -> torch_dist.Independent:
+        """Return the action-token distribution.
 
-        Only defined for the ``"tokens"`` action head; used by token-policy RL
-        objectives (e.g. GRPO/PPO) to score action tokens.
+        Only defined for the ``"tokens"`` action head: a
+        :class:`~torch.distributions.Categorical` over the vocabulary,
+        wrapped in :class:`~torch.distributions.Independent` over the
+        ``(chunk_size, action_dim)`` token dims, so ``log_prob`` returns one
+        *sequence-level* log-probability per sample. This is the contract
+        PPO-style objectives expect: token RL fine-tuning works directly with
+        :class:`~torchrl.objectives.ClipPPOLoss` (pass
+        ``critic_network=None``, ``entropy_bonus=False`` and remap the keys
+        via ``set_keys``).
         """
         if self.action_head != "tokens":
             raise RuntimeError(
                 "get_dist is only defined for the 'tokens' action head; the "
                 "'continuous' head is a deterministic regressor."
             )
-        return torch_dist.Categorical(logits=self._action_logits(tensordict))
+        return torch_dist.Independent(
+            torch_dist.Categorical(logits=self._action_logits(tensordict)), 2
+        )
