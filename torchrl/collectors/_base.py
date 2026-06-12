@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 import torch
 from tensordict import TensorDict, TensorDictBase
@@ -218,14 +218,17 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
 
     Keyword Args:
         trajs_per_batch (int, optional): When set, the collector yields batches
-            of exactly this many complete, zero-padded trajectories instead of
-            fixed-frame batches. Each yielded :class:`~tensordict.TensorDict`
-            has shape ``(trajs_per_batch, max_traj_len)`` and includes a
-            ``("collector", "mask")`` boolean field marking valid time steps.
-            Trajectories that span multiple internal collection steps are
-            reassembled automatically. ``frames_per_batch`` still controls
-            how often the environment is polled internally, but the output
-            batch size is determined by ``trajs_per_batch``.
+            of exactly this many complete trajectories instead of fixed-frame
+            batches. By default each yielded :class:`~tensordict.TensorDict`
+            has shape ``(trajs_per_batch, max_traj_len)``, zero-padded along
+            time, and includes a ``("collector", "mask")`` boolean field
+            marking valid time steps; with ``traj_format="cat"`` the
+            trajectories are instead concatenated along time into a flat,
+            unpadded batch. Trajectories that span multiple internal
+            collection steps are reassembled automatically.
+            ``frames_per_batch`` still controls how often the environment is
+            polled internally, but the output batch size is determined by
+            ``trajs_per_batch``.
             (:class:`~torchrl.collectors.AsyncBatchedCollector` exposes the
             same capability through its ``yield_completed_trajectories``
             flag.)
@@ -299,6 +302,23 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             ``trajs_per_write=2`` makes 5 writes, while
             ``trajs_per_write=10`` or larger makes 1 write. Defaults to
             ``None`` (write all currently queued completed trajectories).
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set. ``"padded"`` stacks the
+            trajectories into a ``(trajs_per_batch, max_traj_len)`` batch,
+            zero-padded along time, with a ``("collector", "mask")`` entry
+            marking the valid steps. ``"cat"`` concatenates them along time
+            into a flat, unpadded ``[sum_i T_i]`` batch — no mask, no wasted
+            memory on padding; trajectories are contiguous, delimited by
+            ``("next", "done")`` (``True`` at the last step of each, by the
+            completeness guarantee) and ``("collector", "traj_ids")``.
+            ``"cat"`` matches the layout the replay-buffer write path uses
+            and the one :class:`~torchrl.data.SliceSampler` expects. Has no
+            effect on replay-buffer writes (always flat); raises if set
+            without ``trajs_per_batch``. Defaults to ``None``, which
+            currently resolves to ``"padded"`` and emits a
+            :class:`FutureWarning` when ``trajs_per_batch`` batches are
+            yielded without an explicit choice: the default will change to
+            ``"cat"`` in torchrl v0.16.
     """
 
     _task = None
@@ -316,6 +336,7 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
     _profile_config: ProfileConfig | None = None
     trajs_per_batch: int | None = None
     trajs_per_write: int | None = None
+    traj_format: Literal["padded", "cat"] = "padded"
     _pre_collect_hook: Callable[[], None] | None = None
     _post_collect_hook: Callable[[TensorDictBase], None] | None = None
 
@@ -1291,6 +1312,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         accumulates complete trajectories and yields zero-padded batches of
         shape ``(trajs_per_batch, max_traj_len)`` with a
         ``("collector", "mask")`` boolean field marking valid timesteps.
+        With ``traj_format="cat"``, the trajectories are instead concatenated
+        along time into flat, unpadded batches (trajectories delimited by
+        ``("next", "done")``).
 
         **With a replay buffer**: each complete trajectory is written to the
         buffer immediately as a **flat 1-D sequence** of valid timesteps — no
@@ -1356,7 +1380,11 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:
-                        traj_batch = _traj_emit(complete_trajs, self.trajs_per_batch)
+                        traj_batch = _traj_emit(
+                            complete_trajs,
+                            self.trajs_per_batch,
+                            traj_format=getattr(self, "traj_format", "padded"),
+                        )
                         yield traj_batch
         finally:
             if has_rb:

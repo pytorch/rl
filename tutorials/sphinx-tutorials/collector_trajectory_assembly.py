@@ -168,6 +168,7 @@ collector_trajs = Collector(
     frames_per_batch=200,
     total_frames=-1,
     trajs_per_batch=5,
+    traj_format="padded",
 )
 
 for traj_data in collector_trajs:
@@ -181,6 +182,30 @@ print(f"Shape: {traj_data.shape}  →  (trajs_per_batch, max_episode_length)")
 # truncated) end:
 
 print(traj_data["collector", "mask"])
+
+######################################################################
+# ``traj_format`` controls the batch layout. ``"padded"`` (the current
+# default — it will change to ``"cat"`` in torchrl v0.16) stacks the
+# episodes with zero padding as above. ``"cat"`` concatenates them along
+# time instead: the batch is flat and unpadded, episodes are contiguous
+# and delimited by ``("next", "done")`` and ``("collector", "traj_ids")``.
+# Prefer it when episode lengths vary widely or frames are large (e.g.
+# images), since no memory is spent on padding:
+
+collector_trajs.shutdown()
+collector_cat = Collector(
+    env,
+    policy,
+    frames_per_batch=200,
+    total_frames=-1,
+    trajs_per_batch=5,
+    traj_format="cat",
+)
+
+for traj_data_cat in collector_cat:
+    break
+print(f"Shape: {traj_data_cat.shape}  →  (sum of the 5 episode lengths,)")
+print(traj_data_cat["next", "done"].squeeze(-1))
 
 ######################################################################
 # Storing transitions and sampling trajectory slices
@@ -345,5 +370,5 @@ collector_async.async_shutdown()
 
 # sphinx_gallery_start_ignore
 collector.shutdown()
-collector_trajs.shutdown()
+collector_cat.shutdown()
 # sphinx_gallery_end_ignore

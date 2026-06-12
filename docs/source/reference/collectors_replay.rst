@@ -127,10 +127,39 @@ group-relative advantages):
         frames_per_batch=200,    # internal polling granularity only
         total_frames=-1,
         trajs_per_batch=16,      # one yield = 16 whole episodes
+        traj_format="padded",    # default until v0.16, then "cat"
     )
     for batch in collector:      # batch: [16, max_traj_len]
         mask = batch["collector", "mask"]
         returns = (batch["next", "reward"].squeeze(-1) * mask).sum(-1)
+        # ...
+
+The padded layout is convenient for per-trajectory reductions but
+materializes ``16 * max_traj_len`` frames even when most episodes are short.
+With ``traj_format="cat"`` the same batches come out **flat and unpadded**
+instead: trajectories are concatenated along time (shape ``[sum_i T_i]``),
+contiguous and in completion order, with ``("next", "done")`` ``True`` at the
+last step of each and ``("collector", "traj_ids")`` telling them apart — the
+same layout the replay-buffer write path produces.  Prefer it when episode
+lengths vary a lot or frames are large (images, token sequences):
+
+.. code-block:: python
+
+    collector = Collector(
+        env,
+        policy,
+        frames_per_batch=200,
+        total_frames=-1,
+        trajs_per_batch=16,
+        traj_format="cat",
+    )
+    for batch in collector:      # batch: [sum of the 16 episode lengths]
+        done = batch["next", "done"].squeeze(-1)
+        episode_idx = done.long().cumsum(0) - done.long()
+        # per-episode return without any padding
+        returns = torch.zeros(16).index_add_(
+            0, episode_idx, batch["next", "reward"].squeeze(-1)
+        )
         # ...
 
 
@@ -228,7 +257,8 @@ replay-buffer semantics:
       from the buffer.
     - :ref:`The trajectory batching section <collectors_single>` in the
       single-node collector docs for the non-replay-buffer usage
-      (padded ``(trajs, max_len)`` batches).
+      (padded ``(trajs, max_len)`` batches, or flat unpadded batches with
+      ``traj_format="cat"``).
 
 Helper functions
 ----------------

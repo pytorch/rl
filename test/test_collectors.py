@@ -29,6 +29,7 @@ from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
 )
@@ -6519,8 +6520,6 @@ class TestTrajsPerBatch:
         included. Padded slots repeat the last element; the mask marks
         validity.
         """
-        from tensordict import NonTensorStack
-        from torchrl.collectors.utils import _traj_emit
 
         def make_traj(length, instruction):
             return TensorDict(
@@ -6541,6 +6540,112 @@ class TestTrajsPerBatch:
             [True, True, True, True],
             [True, True, False, False],
         ]
+
+    def test_emit_cat_format(self):
+        """traj_format="cat" concatenates trajectories: flat, unpadded, no mask.
+
+        NonTensor entries survive untouched (no padding is involved), and the
+        trajectories stay contiguous in completion order with done flags at
+        their last steps.
+        """
+
+        def make_traj(length, instruction, done_last=True):
+            return TensorDict(
+                {
+                    "obs": torch.arange(length, dtype=torch.float).unsqueeze(-1),
+                    "instr": NonTensorStack(*[instruction] * length),
+                    ("next", "done"): torch.tensor(
+                        [False] * (length - 1) + [done_last]
+                    ),
+                },
+                batch_size=[length],
+            )
+
+        out = _traj_emit(
+            [make_traj(4, "pick"), make_traj(2, "place")], 2, traj_format="cat"
+        )
+        assert out.batch_size == torch.Size([6])
+        assert ("collector", "mask") not in out.keys(True)
+        assert out["next", "done"].tolist() == [
+            False,
+            False,
+            False,
+            True,
+            False,
+            True,
+        ]
+        assert [item.data for item in out.get("instr")] == ["pick"] * 4 + ["place"] * 2
+        assert out["obs"].squeeze(-1).tolist() == [0.0, 1.0, 2.0, 3.0, 0.0, 1.0]
+
+    def test_traj_format_default_future_warning(self):
+        """Omitting traj_format under trajs_per_batch warns about the v0.16 flip.
+
+        The default currently resolves to "padded". The warning only fires
+        when the layout choice matters: explicit formats, fixed-frame
+        collection and replay-buffer writes stay silent.
+        """
+        env = CountingEnv(max_steps=4)
+        policy = RandomPolicy(env.action_spec)
+        try:
+            with pytest.warns(
+                FutureWarning, match="will change to 'cat' in torchrl v0.16"
+            ):
+                collector = Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    trajs_per_batch=2,
+                )
+            assert collector.traj_format == "padded"
+            collector.shutdown(close_env=False)
+            for kwargs in (
+                {"trajs_per_batch": 2, "traj_format": "cat"},
+                {"trajs_per_batch": 2, "traj_format": "padded"},
+                {},
+                {
+                    "trajs_per_batch": 2,
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(100)),
+                },
+            ):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    collector = Collector(
+                        env,
+                        policy,
+                        frames_per_batch=8,
+                        total_frames=16,
+                        **kwargs,
+                    )
+                collector.shutdown(close_env=False)
+                assert not any("traj_format" in str(w.message) for w in caught), kwargs
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_traj_format_validation(self):
+        """traj_format is validated eagerly: bad value or missing trajs_per_batch."""
+        env = CountingEnv(max_steps=4)
+        try:
+            policy = RandomPolicy(env.action_spec)
+            with pytest.raises(ValueError, match="must be 'padded' or 'cat'"):
+                Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    trajs_per_batch=2,
+                    traj_format="flat",
+                )
+            with pytest.raises(ValueError, match="trajs_per_batch"):
+                Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    traj_format="cat",
+                )
+        finally:
+            env.close(raise_if_closed=False)
 
     def test_ingest_single_batch_complete(self):
         """_traj_ingest routes completed trajectories into complete_trajs."""
@@ -6662,6 +6767,7 @@ class TestTrajsPerBatch:
                 frames_per_batch=max_steps * 4,
                 total_frames=max_steps * 16,
                 trajs_per_batch=2,
+                traj_format="padded",
             )
         else:
             env = env_fn()
@@ -6671,6 +6777,7 @@ class TestTrajsPerBatch:
                 frames_per_batch=max_steps * 3,
                 total_frames=max_steps * 9,
                 trajs_per_batch=2,
+                traj_format="padded",
             )
 
         try:
@@ -6687,6 +6794,78 @@ class TestTrajsPerBatch:
                     last_valid = mask[i].sum().item() - 1
                     done = b[i, last_valid][("next", "done")]
                     assert done.any(), f"traj {i} last valid step is not done"
+        finally:
+            collector.shutdown()
+            if not multi:
+                env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize(
+        "collector_cls,multi",
+        [
+            (Collector, False),
+            (functools.partial(MultiSyncCollector, cat_results="stack"), True),
+            (MultiAsyncCollector, True),
+        ],
+    )
+    def test_traj_format_cat_integration(self, collector_cls, multi):
+        """traj_format="cat" yields flat batches of whole trajectories.
+
+        Each batch is 1-D, holds exactly trajs_per_batch done flags, carries
+        no ("collector", "mask"), and its trajectories are contiguous: within
+        a traj_ids segment the step counter increases by one and the segment
+        ends with done=True.
+        """
+        max_steps = 4
+        trajs_per_batch = 2
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe_env = env_fn()
+        try:
+            policy = RandomPolicy(probe_env.action_spec)
+        finally:
+            probe_env.close(raise_if_closed=False)
+
+        if multi:
+            collector = collector_cls(
+                [env_fn, env_fn],
+                policy,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=trajs_per_batch,
+                traj_format="cat",
+            )
+        else:
+            env = env_fn()
+            collector = collector_cls(
+                env,
+                policy,
+                frames_per_batch=max_steps * 3,
+                total_frames=max_steps * 9,
+                trajs_per_batch=trajs_per_batch,
+                traj_format="cat",
+            )
+
+        try:
+            batches = list(collector)
+            assert len(batches) > 0
+            for b in batches:
+                assert b.ndim == 1
+                assert ("collector", "mask") not in b.keys(True)
+                done = b["next", "done"].reshape(-1)
+                assert done.sum().item() == trajs_per_batch
+                # trajectories are contiguous segments delimited by traj_ids
+                traj_ids = b["collector", "traj_ids"]
+                segment_ends = done.nonzero().reshape(-1).tolist()
+                start = 0
+                for end in segment_ends:
+                    segment = b[start : end + 1]
+                    assert (traj_ids[start : end + 1] == traj_ids[start]).all()
+                    steps = segment["step_count"].reshape(-1)
+                    assert (steps[1:] - steps[:-1] == 1).all()
+                    start = end + 1
+                # the batch holds nothing past the last trajectory
+                assert start == b.shape[0]
         finally:
             collector.shutdown()
             if not multi:

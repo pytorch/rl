@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 import contextlib
+import warnings
 from collections.abc import Callable, Sequence
+from typing import Literal
 
 import torch
 from pyvers import implement_for
@@ -503,10 +505,27 @@ def _traj_ingest(
             complete_trajs.append(complete)
 
 
-def _traj_emit(complete_trajs: list, num_trajectories: int) -> TensorDictBase:
-    """Dequeue *num_trajectories* complete trajectories as a zero-padded batch."""
+def _traj_emit(
+    complete_trajs: list,
+    num_trajectories: int,
+    traj_format: Literal["padded", "cat"] = "padded",
+) -> TensorDictBase:
+    """Dequeue *num_trajectories* complete trajectories as a single batch.
+
+    With ``traj_format="padded"`` (default), trajectories are zero-padded
+    along time and stacked into a ``(num_trajectories, max_traj_len)`` batch
+    with a ``("collector", "mask")`` entry marking the valid steps.
+
+    With ``traj_format="cat"``, trajectories are concatenated along time into
+    a flat ``[sum_i T_i]`` batch (no padding, no mask): trajectories are
+    contiguous, in completion order, with ``("next", "done")`` ``True`` at the
+    last step of each and ``("collector", "traj_ids")`` constant within each.
+    """
     trajs = complete_trajs[:num_trajectories]
     del complete_trajs[:num_trajectories]
+
+    if traj_format == "cat":
+        return torch.cat(trajs, 0) if len(trajs) > 1 else trajs[0]
 
     max_len = max(t.shape[0] for t in trajs)
     padded = []
@@ -539,6 +558,43 @@ def _traj_emit(complete_trajs: list, num_trajectories: int) -> TensorDictBase:
         padded.append(padded_traj)
 
     return torch.stack(padded, 0)
+
+
+def _validate_traj_format(
+    traj_format: Literal["padded", "cat"] | None,
+    trajs_per_batch: int | None,
+    *,
+    has_replay_buffer: bool = False,
+) -> Literal["padded", "cat"]:
+    """Validate and resolve the ``traj_format`` / ``trajs_per_batch`` keyword pair.
+
+    ``None`` resolves to the current default (``"padded"``) and emits a
+    :class:`FutureWarning` announcing the upcoming default change whenever the
+    choice matters, i.e. when ``trajs_per_batch`` batches are yielded rather
+    than written to a replay buffer (replay-buffer writes are always flat).
+    """
+    if traj_format is None:
+        if trajs_per_batch is not None and not has_replay_buffer:
+            warnings.warn(
+                "trajs_per_batch is set but traj_format is not. The current "
+                "default trajectory layout is 'padded', but it will change "
+                "to 'cat' in torchrl v0.16. Pass traj_format='padded' to "
+                "keep the current behavior, or traj_format='cat' "
+                "(recommended) to opt in to the new flat, unpadded layout.",
+                FutureWarning,
+                stacklevel=3,
+            )
+        return "padded"
+    if traj_format not in ("padded", "cat"):
+        raise ValueError(f"traj_format must be 'padded' or 'cat', got {traj_format!r}.")
+    if traj_format != "padded" and trajs_per_batch is None:
+        raise ValueError(
+            "traj_format has no effect unless trajs_per_batch is set: the "
+            "collector only assembles whole trajectories when asked to yield "
+            "them. Set trajs_per_batch to the number of complete "
+            "trajectories per batch."
+        )
+    return traj_format
 
 
 def _make_policy_factory(

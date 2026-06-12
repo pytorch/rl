@@ -7,7 +7,7 @@ import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from textwrap import indent
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -31,7 +31,11 @@ from torchrl.collectors._constants import (
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
 )
-from torchrl.collectors.utils import _TrajectoryPool, split_trajectories
+from torchrl.collectors.utils import (
+    _TrajectoryPool,
+    _validate_traj_format,
+    split_trajectories,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
@@ -176,7 +180,8 @@ class Collector(BaseCollector):
             of exactly this many *complete* trajectories instead of
             fixed-frame batches: each yield has shape
             ``(trajs_per_batch, max_traj_len)``, zero-padded along time, with
-            a ``("collector", "mask")`` entry marking the valid steps.
+            a ``("collector", "mask")`` entry marking the valid steps (see
+            ``traj_format`` for an unpadded alternative).
             Episodes spanning internal collection steps are reassembled and
             in-flight episodes are held back, so every row is a whole,
             done-terminated trajectory (``frames_per_batch`` then only sets
@@ -193,6 +198,21 @@ class Collector(BaseCollector):
             and ``replay_buffer``, the number of complete trajectories
             written to the buffer per extend call. Defaults to ``None``
             (write every trajectory as soon as it completes).
+        traj_format (str, optional): layout of the batches yielded under
+            ``trajs_per_batch``. ``"padded"`` stacks trajectories
+            into ``(trajs_per_batch, max_traj_len)`` with zero padding and a
+            ``("collector", "mask")`` entry; ``"cat"`` concatenates them
+            along time into a flat, unpadded ``[sum_i T_i]`` batch in which
+            trajectories are contiguous and delimited by ``("next", "done")``
+            and ``("collector", "traj_ids")`` -- the same layout the
+            replay-buffer write path produces. Prefer ``"cat"`` when
+            trajectory lengths vary a lot or frames are large (e.g. images):
+            it avoids materializing the padding. Raises if set without
+            ``trajs_per_batch``; has no effect on replay-buffer writes
+            (always flat). Defaults to ``None``, which currently resolves to
+            ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
         track_traj_ids (bool, optional): if ``False``, the collector will not
             write ``("collector", "traj_ids")`` in the rollout nor update
             trajectory identifiers at every environment step. This is useful
@@ -438,6 +458,7 @@ class Collector(BaseCollector):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
@@ -448,6 +469,9 @@ class Collector(BaseCollector):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
