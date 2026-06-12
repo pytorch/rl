@@ -226,6 +226,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             reassembled automatically. ``frames_per_batch`` still controls
             how often the environment is polled internally, but the output
             batch size is determined by ``trajs_per_batch``.
+            (:class:`~torchrl.collectors.AsyncBatchedCollector` exposes the
+            same capability through its ``yield_completed_trajectories``
+            flag.)
 
             **Replay buffer integration**
 

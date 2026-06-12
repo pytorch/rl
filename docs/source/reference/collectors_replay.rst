@@ -106,6 +106,34 @@ sequences — no padding, no artificial boundaries.  Every trajectory in the
 buffer is guaranteed to be a genuine episode segment, making it directly
 compatible with :class:`~torchrl.data.replay_buffers.SliceSampler`.
 
+``trajs_per_batch`` is not tied to replay buffers or multi-process
+collection: on any collector — including the single-process
+:class:`~torchrl.collectors.Collector` — setting it (without a
+``replay_buffer``) switches the iterator from fixed-frame batches to batches
+of exactly that many **complete trajectories**, zero-padded along time with
+a ``("collector", "mask")`` entry marking the valid steps.  Episodes
+spanning internal collection steps are reassembled, and in-flight episodes
+are held back for the next batch.  This is the natural fit for on-policy
+algorithms whose training unit is the episode (e.g. GRPO-style
+group-relative advantages):
+
+.. code-block:: python
+
+    from torchrl.collectors import Collector
+
+    collector = Collector(
+        env,
+        policy,
+        frames_per_batch=200,    # internal polling granularity only
+        total_frames=-1,
+        trajs_per_batch=16,      # one yield = 16 whole episodes
+    )
+    for batch in collector:      # batch: [16, max_traj_len]
+        mask = batch["collector", "mask"]
+        returns = (batch["next", "reward"].squeeze(-1) * mask).sum(-1)
+        # ...
+
+
 **Synchronous iteration (for-loop)**
 
 .. code-block:: python

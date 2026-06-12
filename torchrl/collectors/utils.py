@@ -132,6 +132,12 @@ def split_trajectories(
         and the tensordict shape is also added. It indicated the valid elements of the tensordict,
         as well as a ``"traj_ids"`` entry if ``trajectory_key`` could not be found.
 
+    .. note:: This function splits whatever the input contains: trajectories
+        spanning several collector batches stay split across the corresponding
+        calls. To collect batches made of complete trajectories only, pass
+        ``trajs_per_batch`` to the collector instead (see
+        :ref:`collectors_replay_trajs`).
+
     Examples:
         >>> from tensordict import TensorDict
         >>> import torch

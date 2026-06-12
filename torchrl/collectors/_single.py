@@ -167,8 +167,32 @@ class Collector(BaseCollector):
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
-            information.
+            information. Note that this splits and pads each fixed-frame
+            batch independently: trajectories spanning two batches remain
+            split across them. To receive only complete trajectories, see
+            ``trajs_per_batch``.
             Defaults to ``False``.
+        trajs_per_batch (int, optional): if set, the collector yields batches
+            of exactly this many *complete* trajectories instead of
+            fixed-frame batches: each yield has shape
+            ``(trajs_per_batch, max_traj_len)``, zero-padded along time, with
+            a ``("collector", "mask")`` entry marking the valid steps.
+            Episodes spanning internal collection steps are reassembled and
+            in-flight episodes are held back, so every row is a whole,
+            done-terminated trajectory (``frames_per_batch`` then only sets
+            the internal polling granularity). When combined with
+            ``replay_buffer``, complete trajectories are instead written to
+            the buffer as flat, unpadded 1-D sequences (and the collector
+            yields ``None``) -- the layout
+            :class:`~torchrl.data.replay_buffers.SliceSampler` expects.
+            See :ref:`collectors_replay_trajs`. The equivalent on
+            :class:`~torchrl.collectors.AsyncBatchedCollector` is the
+            ``yield_completed_trajectories`` flag.
+            Defaults to ``None`` (fixed-frame batches).
+        trajs_per_write (int, optional): together with ``trajs_per_batch``
+            and ``replay_buffer``, the number of complete trajectories
+            written to the buffer per extend call. Defaults to ``None``
+            (write every trajectory as soon as it completes).
         track_traj_ids (bool, optional): if ``False``, the collector will not
             write ``("collector", "traj_ids")`` in the rollout nor update
             trajectory identifiers at every environment step. This is useful
