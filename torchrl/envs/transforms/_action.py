@@ -15,7 +15,7 @@ from typing import Any, TYPE_CHECKING
 
 import torch
 
-from tensordict import TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from tensordict.utils import NestedKey, unravel_key
 from torch import nn
 
@@ -46,7 +46,8 @@ from torchrl.data.vla.schema import (
     ACTION_TOKENS_KEY,
 )
 from torchrl.data.vla.tokenizers import ActionTokenizerBase
-from torchrl.envs.transforms._base import FORWARD_NOT_IMPLEMENTED, Transform
+from torchrl.envs.transforms._base import Compose, FORWARD_NOT_IMPLEMENTED, Transform
+from torchrl.envs.transforms._observation import CatFrames, UnsqueezeTransform
 
 __all__ = [
     "ActionChunkTransform",
@@ -1697,7 +1698,7 @@ class FlattenAction(Transform):
         )
 
 
-class ActionChunkTransform(Transform):
+class ActionChunkTransform(Compose):
     """Build fixed-length action chunks from a trajectory window.
 
     Action *chunking* is the defining trait of modern VLA policies (ACT,
@@ -1709,6 +1710,19 @@ class ActionChunkTransform(Transform):
     actions ``a[t], a[t+1], ..., a[t+H-1]`` -- together with a boolean
     ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
     end of the window (and were filled by repeating the last available action).
+
+    Internally this is a recipe over the generic transforms (the same pattern
+    as :class:`~torchrl.envs.transforms.R3MTransform`): an
+    :class:`~torchrl.envs.transforms.UnsqueezeTransform` opens the chunk dim
+    and a forward-looking :class:`~torchrl.envs.transforms.CatFrames`
+    (``future=True, padding="same", mask_key=...``) does the windowing, so
+    chunking shares one sliding-window implementation with frame stacking.
+
+    .. versionchanged:: 0.14
+        ``ActionChunkTransform`` is now a :class:`~torchrl.envs.transforms.Compose`
+        recipe over :class:`~torchrl.envs.transforms.CatFrames`. The output is
+        unchanged, and additionally chunks become *boundary-aware* when the
+        sampled data carries its done state (see ``done_key``).
 
     .. note:: **How to read "many actions in one tensor".** The ``H`` actions
         of a chunk are *predictions* -- overlapping, stride-1 training targets
@@ -1735,7 +1749,11 @@ class ActionChunkTransform(Transform):
     ``time_dim`` must be a single contiguous trajectory window. Chunks are
     built independently per row and never cross a row boundary; the downstream
     chunked behavior-cloning loss masks the padded steps out using
-    ``action_is_pad``.
+    ``action_is_pad``. When the input additionally carries its done state at
+    ``("next", done_key)``, chunks are also cut at the trajectory boundaries
+    *inside* a row: the steps past a done are padded (repeating the last
+    in-trajectory action) and flagged in ``action_is_pad``, exactly like the
+    end of the window.
 
     .. note::
         A :class:`~torchrl.data.SliceSampler` returns a *flat* ``[B * T, ...]``
@@ -1760,6 +1778,16 @@ class ActionChunkTransform(Transform):
             Defaults to ``"action_is_pad"``.
         time_dim (int): the time dimension of the action tensor (the action
             dimension must come right after it). Defaults to ``-2``.
+        done_key (NestedKey or None): the leaf done key: when the input
+            tensordict has a ``("next", done_key)`` entry (shaped like the
+            action without its trailing ``action_dim``, with or without a
+            trailing singleton), chunks do not cross the trajectory boundaries
+            it marks. When the entry is absent, each row is treated as a
+            single contiguous trajectory (the pre-0.14 behavior). Pass
+            ``None`` to ignore the done state altogether.
+            Defaults to ``"done"``.
+
+            .. versionadded:: 0.14
 
     Examples:
         >>> import torch
@@ -1782,6 +1810,22 @@ class ActionChunkTransform(Transform):
                 [False, False, False],
                 [False, False,  True],
                 [False,  True,  True]])
+        >>> # when the window carries its done state, chunks are also cut at
+        >>> # the trajectory boundary inside the window (here after step 1)
+        >>> td = TensorDict(
+        ...     {
+        ...         "action": torch.arange(4).view(1, 4, 1).float(),
+        ...         ("next", "done"): torch.tensor(
+        ...             [False, True, False, False]
+        ...         ).view(1, 4, 1),
+        ...     },
+        ...     batch_size=[1, 4],
+        ... )
+        >>> t(td)["action_chunk"][0, :, :, 0]
+        tensor([[0., 1., 1.],
+                [1., 1., 1.],
+                [2., 3., 3.],
+                [3., 3., 3.]])
         >>> # on a replay buffer: extend with raw [T, action_dim] trajectory
         >>> # windows (stored as-is), the chunks are built on the sample path
         >>> from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
@@ -1806,19 +1850,33 @@ class ActionChunkTransform(Transform):
         chunk_key: NestedKey = ACTION_CHUNK_KEY,
         pad_key: NestedKey = ACTION_IS_PAD_KEY,
         time_dim: int = -2,
+        done_key: NestedKey | None = "done",
     ) -> None:
         if chunk_size < 1:
             raise ValueError(f"chunk_size must be >= 1, got {chunk_size}.")
+        # The recipe: open a singleton chunk dim on a copy of the action, then
+        # concatenate the N upcoming actions along it. ``padding="same"``
+        # repeats the last in-trajectory action past the boundaries and
+        # ``mask_key`` flags those fabricated slots.
+        super().__init__(
+            UnsqueezeTransform(dim=-2, in_keys=[action_key], out_keys=[chunk_key]),
+            CatFrames(
+                N=int(chunk_size),
+                dim=-2,
+                in_keys=[chunk_key],
+                out_keys=[chunk_key],
+                padding="same",
+                future=True,
+                mask_key=pad_key,
+                done_key=done_key,
+            ),
+        )
         self.chunk_size = int(chunk_size)
         self.time_dim = int(time_dim)
-        # ``forward`` is fully overridden (it writes the chunk and the pad mask
-        # from the action), so no transform keys are declared: this is a pure
-        # data-path transform and the chunk/pad entries never appear in env
-        # specs.
-        super().__init__(in_keys=[], out_keys=[])
         self._action_key = action_key
         self._chunk_key = chunk_key
         self._pad_key = pad_key
+        self._done_key = done_key
 
     @property
     def action_key(self) -> NestedKey:
@@ -1832,27 +1890,30 @@ class ActionChunkTransform(Transform):
     def pad_key(self) -> NestedKey:
         return self._pad_key
 
-    def _build_chunk(self, action: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        H = self.chunk_size
-        dim = self.time_dim if self.time_dim >= 0 else action.dim() + self.time_dim
-        if dim != action.dim() - 2:
+    @property
+    def done_key(self) -> NestedKey | None:
+        return self._done_key
+
+    def _maybe_get_done(
+        self, tensordict: TensorDictBase, action: torch.Tensor, dim: int
+    ) -> torch.Tensor | None:
+        if self._done_key is None:
+            return None
+        done = tensordict.get(("next", self._done_key), default=None)
+        if done is None:
+            return None
+        lead = action.shape[: dim + 1]
+        if done.shape == lead:
+            done = done.unsqueeze(-1)
+        elif done.shape != torch.Size((*lead, 1)):
             raise ValueError(
-                f"{type(self).__name__} expects the action dimension to immediately "
-                f"follow the time dimension (action shaped [..., T, action_dim]); got "
-                f"action.shape={tuple(action.shape)} with time_dim={self.time_dim}."
+                f"{type(self).__name__}: the ('next', {self._done_key!r}) entry "
+                f"of shape {tuple(done.shape)} does not line up with the action "
+                f"of shape {tuple(action.shape)}: expected {(*lead, 1)} or "
+                f"{tuple(lead)}. Pass done_key=None to chunk without "
+                "trajectory-boundary information."
             )
-        T = action.shape[dim]
-        device = action.device
-        # idx[t, h] = t + h, clamped to the last valid step; is_pad marks h that
-        # ran past the end of the window.
-        idx = torch.arange(T, device=device).unsqueeze(-1) + torch.arange(
-            H, device=device
-        ).unsqueeze(0)
-        is_pad = idx >= T
-        idx = idx.clamp_max(T - 1).reshape(-1)
-        chunk = action.index_select(dim, idx).unflatten(dim, (T, H))
-        is_pad = is_pad.expand(chunk.shape[:-1]).contiguous()
-        return chunk, is_pad
+        return done
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get(self.action_key, default=None)
@@ -1863,10 +1924,71 @@ class ActionChunkTransform(Transform):
                 f"{type(self).__name__}: '{self.action_key}' not found in tensordict "
                 f"{tensordict}."
             )
-        chunk, is_pad = self._build_chunk(action)
-        tensordict.set(self.chunk_key, chunk)
-        tensordict.set(self.pad_key, is_pad)
+        dim = self.time_dim if self.time_dim >= 0 else action.dim() + self.time_dim
+        if dim != action.dim() - 2 or dim < 0:
+            raise ValueError(
+                f"{type(self).__name__} expects the action dimension to immediately "
+                f"follow the time dimension (action shaped [..., T, action_dim]); got "
+                f"action.shape={tuple(action.shape)} with time_dim={self.time_dim}."
+            )
+        # CatFrames' offline path keys the windowing on the *tensordict* batch
+        # dims (time last), while the chunk convention is keyed on the action's
+        # shape ([*B, T, action_dim]) -- the sampled tensordict may well be
+        # flat. Bridge the two by windowing a minimal time-structured view of
+        # the action (and of the done state, when available).
+        inner = TensorDict(batch_size=action.shape[: dim + 1])
+        inner.set(self.action_key, action)
+        done = self._maybe_get_done(tensordict, action, dim)
+        if done is not None:
+            inner.set(("next", self._done_key), done)
+        inner = inner.refine_names(*[None] * dim, "time")
+        inner = super().forward(inner)
+        tensordict.set(self.chunk_key, inner.get(self.chunk_key))
+        tensordict.set(self.pad_key, inner.get(self.pad_key))
         return tensordict
+
+    def clone(self) -> Self:
+        # Compose.clone returns a plain Compose, which would drop the
+        # env-path overrides below; rebuild the recipe instead.
+        return type(self)(
+            self.chunk_size,
+            action_key=self._action_key,
+            chunk_key=self._chunk_key,
+            pad_key=self._pad_key,
+            time_dim=self.time_dim,
+            done_key=self._done_key,
+        )
+
+    # Attached to an environment, the transform is a documented no-op: chunk
+    # execution belongs to MultiStepActorWrapper / MultiAction, and the inner
+    # CatFrames is offline-only (future=True). The Compose machinery is
+    # bypassed on every env-facing path.
+    def _call(self, next_tensordict: TensorDictBase) -> TensorDictBase:
+        return next_tensordict
+
+    def _step(
+        self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
+    ) -> TensorDictBase:
+        return next_tensordict
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return tensordict_reset
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+    def transform_input_spec(self, input_spec: Composite) -> Composite:
+        return input_spec
+
+    def transform_output_spec(self, output_spec: Composite) -> Composite:
+        return output_spec
 
 
 class ActionTokenizerTransform(Transform):

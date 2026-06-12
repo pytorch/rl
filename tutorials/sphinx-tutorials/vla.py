@@ -168,8 +168,10 @@ obs = make_observation()
 # :class:`~torchrl.envs.transforms.ActionChunkTransform` turns a per-step action
 # tensor ``[*B, T, action_dim]`` into the chunked training target
 # ``action_chunk`` ``[*B, T, H, action_dim]`` (plus an ``action_is_pad`` mask):
-# for every step ``t`` it gathers the next ``H`` actions. This is the training
-# target of modern chunked VLA policies (ACT, OpenVLA-OFT, pi0).
+# for every step ``t`` it gathers the next ``H`` actions, stopping (padding and
+# masking) at the trajectory boundaries when the sampled window carries its
+# done state. This is the training target of modern chunked VLA policies (ACT,
+# OpenVLA-OFT, pi0).
 #
 # Chunks mean different things on the two sides of the pipeline, and keeping
 # the two pictures apart avoids a classic confusion::
