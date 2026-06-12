@@ -18,9 +18,11 @@ from .r3m import R3MTransform
 from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform, NextStateReconstructor
 from .transforms import (
+    ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
     ActionScaling,
+    ActionTokenizerTransform,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -71,6 +73,7 @@ from .transforms import (
     SqueezeTransform,
     Stack,
     StepCounter,
+    SuccessReward,
     TargetReturn,
     TensorDictPrimer,
     TerminateTransform,
@@ -124,9 +127,11 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
@@ -192,6 +197,7 @@ __all__ = [
     "SqueezeTransform",
     "Stack",
     "StepCounter",
+    "SuccessReward",
     "TargetReturn",
     "TensorDictPrimer",
     "TerminateTransform",

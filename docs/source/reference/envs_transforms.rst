@@ -245,9 +245,11 @@ Available Transforms
 
     Transform
     TransformedEnv
+    ActionChunkTransform
     ActionDiscretizer
     ActionMask
     ActionScaling
+    ActionTokenizerTransform
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
@@ -312,6 +314,7 @@ Available Transforms
     SqueezeTransform
     Stack
     StepCounter
+    SuccessReward
     TargetReturn
     TensorDictPrimer
     TerminateTransform

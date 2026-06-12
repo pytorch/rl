@@ -18,6 +18,7 @@ from .custom import (
     PendulumEnv,
     SatelliteEnv,
     TicTacToeEnv,
+    ToyVLAEnv,
     Walker2dEnv,
 )
 from .custom.mujoco._humanoid_primitives import HumanoidMacroAction
@@ -80,9 +81,11 @@ from .model_based import (
     WorldModelEnv,
 )
 from .transforms import (
+    ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
     ActionScaling,
+    ActionTokenizerTransform,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -140,6 +143,7 @@ from .transforms import (
     SqueezeTransform,
     Stack,
     StepCounter,
+    SuccessReward,
     TargetMacroAction,
     TargetReturn,
     TensorDictPrimer,
@@ -174,9 +178,11 @@ from .utils import (
 )
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "AntEnv",
     "CubeBowlEnv",
     "VecNormV2",
@@ -295,10 +301,12 @@ __all__ = [
     "SqueezeTransform",
     "Stack",
     "StepCounter",
+    "SuccessReward",
     "TargetReturn",
     "TensorDictPrimer",
     "TerminateTransform",
     "TicTacToeEnv",
+    "ToyVLAEnv",
     "TimeMaxPool",
     "Timer",
     "ToTensorImage",

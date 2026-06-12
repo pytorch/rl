@@ -17,6 +17,7 @@ from .mujoco import (
 from .pendulum import PendulumEnv
 from .tictactoeenv import TicTacToeEnv
 from .trading import FinancialRegimeEnv
+from .vla import ToyVLAEnv
 
 __all__ = [
     "AntEnv",
@@ -30,5 +31,6 @@ __all__ = [
     "PendulumEnv",
     "SatelliteEnv",
     "TicTacToeEnv",
+    "ToyVLAEnv",
     "Walker2dEnv",
 ]

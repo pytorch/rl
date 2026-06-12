@@ -12,9 +12,11 @@ The implementations have been split into per-category modules
 from __future__ import annotations
 
 from torchrl.envs.transforms._action import (
+    ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
     ActionScaling,
+    ActionTokenizerTransform,
     DiscreteActionProjection,
     FlattenAction,
     MultiAction,
@@ -96,6 +98,7 @@ from torchrl.envs.transforms._reward import (
     RewardClipping,
     RewardSum,
     SignTransform,
+    SuccessReward,
     TargetReturn,
 )
 from torchrl.envs.transforms._tensor import (
@@ -109,9 +112,11 @@ from torchrl.envs.transforms._timer import Timer
 from torchrl.envs.transforms._video import DecodeVideoTransform
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "AutoResetEnv",
     "AutoResetTransform",
     "BatchSizeTransform",
@@ -164,6 +169,7 @@ __all__ = [
     "SqueezeTransform",
     "Stack",
     "StepCounter",
+    "SuccessReward",
     "TargetReturn",
     "TensorDictPrimer",
     "TerminateTransform",
