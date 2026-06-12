@@ -279,7 +279,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if reduction is None:
             reduction = self.reduction
         if mask is None and tensordict is not None:
-            mask = tensordict.get("shifted_valid", default=None)
+            # Prefer the modern sequence-aware mask written by SliceSampler
+            # (``pad_output=True`` since PR #3695). Fall back to the legacy
+            # ``shifted_valid`` key used by recurrent value estimators
+            # so reinforce / a2c / ppo callers retain their behavior.
+            mask = tensordict.get(("collector", "mask"), default=None)
+            if mask is None:
+                mask = tensordict.get("shifted_valid", default=None)
         if mask is not None:
             mask = self._expand_loss_mask(mask, loss)
             if weights is not None and weights.shape != loss.shape:

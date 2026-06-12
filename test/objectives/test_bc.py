@@ -239,6 +239,132 @@ class TestBCLoss:
             final_loss < initial_loss
         ), f"Loss did not decrease: {initial_loss:.4f} -> {final_loss:.4f}"
 
+
+class TestBCLossMaskAware:
+    """Tests for mask-aware time-averaging in :class:`BCLoss`.
+
+    Padded positions written by ``SliceSampler(pad_output=True)`` are
+    flagged via the ``("collector", "mask")`` key (False for padding,
+    True for real steps). When that key is present, ``BCLoss`` should
+    exclude the padded positions from its time-averaging so duplicated
+    last-step values do not contribute to the gradient.
+
+    Back-compat: when the key is absent the loss must reduce to exactly
+    the same value (and gradient) as before this feature.
+    """
+
+    @staticmethod
+    def _make_actor(action_dim: int = 2, obs_dim: int = 4) -> Actor:
+        spec = Bounded(-torch.ones(action_dim), torch.ones(action_dim), (action_dim,))
+        module = torch.nn.Linear(obs_dim, action_dim)
+        return Actor(module=module, spec=spec)
+
+    @staticmethod
+    def _make_batch(
+        batch_size: int = 8, action_dim: int = 2, obs_dim: int = 4
+    ) -> TensorDict:
+        return TensorDict(
+            {
+                "observation": torch.randn(batch_size, obs_dim),
+                "action": torch.randn(batch_size, action_dim),
+            },
+            batch_size=[batch_size],
+        )
+
+    def test_no_mask_key_is_backward_compatible(self):
+        """Without the mask key, output is identical to the prior path."""
+        torch.manual_seed(0)
+        actor = self._make_actor()
+        loss_fn = BCLoss(actor, loss_function="l2")
+        batch = self._make_batch(batch_size=8)
+
+        baseline = loss_fn(batch.clone())["loss_bc"]
+        assert ("collector", "mask") not in batch.keys(include_nested=True)
+        repeat = loss_fn(batch.clone())["loss_bc"]
+        torch.testing.assert_close(baseline, repeat)
+
+    def test_all_true_mask_equals_unmasked(self):
+        """A mask of all True is a no-op for the masked-mean reduction."""
+        torch.manual_seed(0)
+        actor = self._make_actor()
+        loss_fn = BCLoss(actor, loss_function="l2")
+        batch = self._make_batch(batch_size=8)
+
+        unmasked = loss_fn(batch.clone())["loss_bc"]
+
+        masked_batch = batch.clone()
+        masked_batch[("collector", "mask")] = torch.ones(8, dtype=torch.bool)
+        masked = loss_fn(masked_batch)["loss_bc"]
+
+        torch.testing.assert_close(unmasked, masked)
+
+    def test_partial_mask_matches_manual_subset_loss(self):
+        """A partially-False mask must drop padded positions from the average."""
+        torch.manual_seed(0)
+        actor = self._make_actor()
+        loss_fn = BCLoss(actor, loss_function="l2")
+
+        batch = self._make_batch(batch_size=8)
+        mask = torch.tensor([True, True, True, True, False, False, False, False])
+
+        masked_batch = batch.clone()
+        masked_batch[("collector", "mask")] = mask
+        with_mask = loss_fn(masked_batch)["loss_bc"]
+
+        # Compute the loss on only the real (mask=True) positions and compare.
+        # Padded positions must never contribute to the reported loss.
+        real_only = batch[mask]
+        manual = loss_fn(real_only.clone())["loss_bc"]
+
+        torch.testing.assert_close(with_mask, manual, rtol=1e-5, atol=1e-6)
+
+    def test_partial_mask_gradient_matches_manual_subset(self):
+        """Backward through the masked loss matches backward through the subset."""
+        torch.manual_seed(0)
+        actor_a = self._make_actor()
+        actor_b = self._make_actor()
+        actor_b.load_state_dict(actor_a.state_dict())
+
+        loss_a = BCLoss(actor_a, loss_function="l2")
+        loss_b = BCLoss(actor_b, loss_function="l2")
+
+        batch = self._make_batch(batch_size=8)
+        mask = torch.tensor([True, True, True, True, False, False, False, False])
+
+        masked_batch = batch.clone()
+        masked_batch[("collector", "mask")] = mask
+        loss_a(masked_batch)["loss_bc"].backward()
+
+        real_only = batch[mask]
+        loss_b(real_only.clone())["loss_bc"].backward()
+
+        for p_a, p_b in zip(actor_a.parameters(), actor_b.parameters()):
+            assert p_a.grad is not None and p_b.grad is not None
+            torch.testing.assert_close(p_a.grad, p_b.grad, rtol=1e-5, atol=1e-6)
+
+    def test_all_false_mask_produces_zero_loss(self):
+        """A fully-padded batch (no real positions) reduces to a zero loss.
+
+        ``_reduce_loss`` clamps the denominator at 1, so the reduction stays
+        well-defined (no NaN); the numerator is zero because every element
+        is masked out, giving a loss of zero.
+        """
+        torch.manual_seed(0)
+        actor = self._make_actor()
+        loss_fn = BCLoss(actor, loss_function="l2")
+        batch = self._make_batch(batch_size=4)
+        batch[("collector", "mask")] = torch.zeros(4, dtype=torch.bool)
+
+        out = loss_fn(batch)["loss_bc"]
+        torch.testing.assert_close(out, torch.zeros_like(out))
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    sys.exit(pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown))
     def test_custom_action_key(self):
         # set_keys(action=...) must drive BOTH the expert read and the
         # prediction read (the latter used to be hardcoded to "action")
