@@ -6489,6 +6489,20 @@ class TestCollectorProfiling:
         assert (tmp_path / "trace_1.json").exists()
 
 
+class _VersionStampModule(nn.Module):
+    """Emits a constant unit action and stamps the module's current version."""
+
+    def __init__(self, action_spec):
+        super().__init__()
+        self.action_spec = action_spec
+        self.version = 0
+
+    def forward(self, obs):
+        action = torch.ones_like(self.action_spec.zero())
+        version = torch.full_like(obs, self.version)
+        return action, version
+
+
 class TestTrajsPerBatch:
     """Tests for the ``trajs_per_batch`` kwarg on collectors."""
 
@@ -6620,6 +6634,49 @@ class TestTrajsPerBatch:
                 collector.shutdown(close_env=False)
                 assert not any("traj_format" in str(w.message) for w in caught), kwargs
         finally:
+            env.close(raise_if_closed=False)
+
+    def test_reset_flushes_assembly_state(self):
+        """collector.reset() drops in-flight and queued-but-unyielded episodes.
+
+        Regression: the assembly queues survived reset(), so post-reset
+        batches led with pre-reset episodes (stale data straddling a policy
+        update), partial chunks of killed episodes leaked, and a stale
+        partial could merge with a later episode reusing a rebased traj id.
+        """
+        env = CountingEnv(max_steps=2)
+        inner = _VersionStampModule(env.full_action_spec[env.action_key].clone())
+        policy = TensorDictModule(
+            inner,
+            in_keys=["observation"],
+            out_keys=["action", "policy_version"],
+        )
+        # 3-step episodes, 10-frame polls: the first poll completes 3
+        # episodes (one yielded batch of 2, one queued surplus) and leaves a
+        # fourth in flight
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=-1,
+            trajs_per_batch=2,
+            traj_format="padded",
+        )
+        try:
+            it = iter(collector)
+            b1 = next(it)
+            assert (b1["policy_version"] == 0).all()
+            partial, complete = collector._traj_assembly
+            # the fixture genuinely exercises both queues
+            assert len(complete) == 1
+            assert len(partial) == 1
+            inner.version = 1
+            collector.reset()
+            assert not partial and not complete
+            b2 = next(it)
+            assert (b2["policy_version"] == 1).all()
+        finally:
+            collector.shutdown()
             env.close(raise_if_closed=False)
 
     def test_traj_format_validation(self):

@@ -1962,6 +1962,9 @@ also that the state dict is synchronised across processes if needed."""
 
         """
         _check_for_faulty_process(self.procs)
+        # drop parent-level trajectory-assembly state (trajs_per_batch
+        # without a replay buffer assembles trajectories on this process)
+        self._flush_trajectory_assembly()
 
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]

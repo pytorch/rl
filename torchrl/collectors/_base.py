@@ -1344,6 +1344,9 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
         """
         partial_trajs: dict[int, list] = {}
         complete_trajs: list = []
+        # register the assembly containers on the instance so that reset()
+        # can flush them (the generator keeps references to the same objects)
+        self._traj_assembly = (partial_trajs, complete_trajs)
         rb = getattr(self, "replay_buffer", None)
         # _ignore_rb is a single-collector concept; multi-collectors don't have it.
         # Default True so that missing attr → has_rb=False (safe for multi-collectors).
@@ -1401,6 +1404,19 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
             return out
         except StopIteration:
             return None
+
+    def _flush_trajectory_assembly(self) -> None:
+        """Drop partially-assembled and queued-but-not-yet-yielded trajectories.
+
+        Called by ``reset()`` when ``trajs_per_batch`` is in use: after an
+        environment reset, steps queued under the pre-reset policy must not
+        leak into post-reset batches, and stale partial chunks must not be
+        merged with later episodes that reuse a rebased trajectory id.
+        """
+        assembly = getattr(self, "_traj_assembly", None)
+        if assembly is not None:
+            assembly[0].clear()
+            assembly[1].clear()
 
     @abc.abstractmethod
     def shutdown(

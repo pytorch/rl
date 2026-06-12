@@ -170,10 +170,11 @@ def main(cfg):  # noqa: F821
             )
             replay_buffer.extend(batch.exclude("collector"))
         # synchronous iteration semantics, as in the paper: episodes in
-        # flight and incomplete groups do not straddle the policy update (a
-        # group baseline must estimate a single policy's returns). The
-        # dropped work is bounded by one episode per worker plus their
-        # incomplete groups.
+        # flight, episodes queued beyond the requested batch, and incomplete
+        # groups do not straddle the policy update (a group baseline must
+        # estimate a single policy's returns). The dropped work is bounded by
+        # one in-flight episode per worker plus the surplus episodes of the
+        # last poll and their incomplete groups.
         collector.reset()
         advantage_transform.queues.clear()
         total_episodes += episode_successes.numel()

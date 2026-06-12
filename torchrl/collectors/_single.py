@@ -2017,7 +2017,13 @@ class Collector(BaseCollector):
 
     @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
-        """Resets the environments to a new initial state."""
+        """Resets the environments to a new initial state.
+
+        When ``trajs_per_batch`` is in use, also drops in-flight episodes and
+        completed-but-not-yet-yielded trajectories, so post-reset batches
+        contain only post-reset data.
+        """
+        self._flush_trajectory_assembly()
         if self.track_traj_ids:
             collector_metadata = self._carrier.get("collector").clone()
         if index is not None:
