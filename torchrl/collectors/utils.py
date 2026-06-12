@@ -10,7 +10,16 @@ from collections.abc import Callable, Sequence
 import torch
 from pyvers import implement_for
 
-from tensordict import NestedKey, pad, set_lazy_legacy, TensorDict, TensorDictBase
+from tensordict import (
+    NestedKey,
+    NonTensorData,
+    NonTensorStack,
+    pad,
+    set_lazy_legacy,
+    TensorDict,
+    TensorDictBase,
+)
+from tensordict.base import _is_leaf_nontensor
 from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
@@ -501,7 +510,27 @@ def _traj_emit(complete_trajs: list, num_trajectories: int) -> TensorDictBase:
             ("collector", "mask"),
             torch.ones(traj.shape[0], dtype=torch.bool, device=traj.device),
         )
-        padded.append(pad(traj, [0, max_len - traj.shape[0]]))
+        pad_len = max_len - traj.shape[0]
+        if not pad_len:
+            padded.append(traj)
+            continue
+        # tensordict.pad drops NonTensor entries (e.g. language
+        # instructions), valid steps included: pad those separately by
+        # repeating the last element (the mask marks validity anyway)
+        non_tensor_keys = [
+            key
+            for key in traj.keys(True, True, is_leaf=_is_leaf_nontensor)
+            if isinstance(traj.get(key), (NonTensorData, NonTensorStack))
+        ]
+        if non_tensor_keys:
+            non_tensor = {key: traj.get(key) for key in non_tensor_keys}
+            padded_traj = pad(traj.exclude(*non_tensor_keys), [0, pad_len])
+            for key, value in non_tensor.items():
+                filler = torch.cat([value[-1:]] * pad_len, 0)
+                padded_traj.set(key, torch.cat([value, filler], 0))
+        else:
+            padded_traj = pad(traj, [0, pad_len])
+        padded.append(padded_traj)
 
     return torch.stack(padded, 0)
 

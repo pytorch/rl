@@ -6511,6 +6511,37 @@ class TestTrajsPerBatch:
     # Unit tests for the private helpers
     # ------------------------------------------------------------------
 
+    def test_emit_preserves_non_tensor_entries(self):
+        """_traj_emit pads NonTensor leaves by hand (tensordict.pad drops them).
+
+        Regression: language-instruction-style NonTensorStack entries came
+        out of the padded trajectory batch as empty TensorDicts, valid steps
+        included. Padded slots repeat the last element; the mask marks
+        validity.
+        """
+        from tensordict import NonTensorStack
+        from torchrl.collectors.utils import _traj_emit
+
+        def make_traj(length, instruction):
+            return TensorDict(
+                {
+                    "obs": torch.zeros(length, 1),
+                    "instr": NonTensorStack(*[instruction] * length),
+                },
+                batch_size=[length],
+            )
+
+        out = _traj_emit([make_traj(4, "pick"), make_traj(2, "place")], 2)
+        assert out.batch_size == torch.Size([2, 4])
+        instr = out.get("instr")
+        assert isinstance(instr, NonTensorStack)
+        assert [item.data for item in instr[0]] == ["pick"] * 4
+        assert [item.data for item in instr[1]] == ["place"] * 4
+        assert out["collector", "mask"].tolist() == [
+            [True, True, True, True],
+            [True, True, False, False],
+        ]
+
     def test_ingest_single_batch_complete(self):
         """_traj_ingest routes completed trajectories into complete_trajs."""
         batch = self._make_batch(
