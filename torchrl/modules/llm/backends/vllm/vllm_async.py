@@ -1928,7 +1928,7 @@ def make_async_vllm_engine(
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
         enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             This can help with numerical stability for certain models. Requires model-specific support in
-            torchrl.modules.llm.backends._models.
+            torchrl.modules.llm.backends.vllm._models.
         tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
         data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
         pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
