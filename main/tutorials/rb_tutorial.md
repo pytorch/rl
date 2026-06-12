@@ -137,7 +137,7 @@ print(buffer_list.sample(3))
 ```
 
 ```
-['b', 0, 'a']
+[0, 'a', 'a']
 ```
 
 Because it is the one with the lowest amount of assumption, the
@@ -204,13 +204,13 @@ print("samples", sample["a"], sample["b", "c"])
 ```
 
 ```
-samples tensor([[ 0, 1, 2, 3],
- [ 4, 5, 6, 7],
+samples tensor([[ 4, 5, 6, 7],
  [ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
- [ 0, 1, 2, 3]]) tensor([[ 0, 1, 2, 3, 4],
- [ 5, 6, 7, 8, 9],
+ [ 0, 1, 2, 3],
+ [ 0, 1, 2, 3]]) tensor([[ 5, 6, 7, 8, 9],
  [10, 11, 12, 13, 14],
+ [ 0, 1, 2, 3, 4],
  [ 0, 1, 2, 3, 4],
  [ 0, 1, 2, 3, 4]])
 ```
@@ -239,18 +239,18 @@ with tempfile.TemporaryDirectory() as tempdir:
 
 ```
 The buffer has 3 elements
-the 'a' tensor is stored in /tmp/tmpml7750t_/a.memmap
-the ('b', 'c') tensor is stored in /tmp/tmpml7750t_/b/c.memmap
-samples: a= tensor([[ 0, 1, 2, 3],
- [ 8, 9, 10, 11],
+the 'a' tensor is stored in /tmp/tmpkf65yi7y/a.memmap
+the ('b', 'c') tensor is stored in /tmp/tmpkf65yi7y/b/c.memmap
+samples: a= tensor([[ 8, 9, 10, 11],
  [ 0, 1, 2, 3],
  [ 8, 9, 10, 11],
- [ 4, 5, 6, 7]])
-('b', 'c'): tensor([[ 0, 1, 2, 3, 4],
- [10, 11, 12, 13, 14],
+ [ 4, 5, 6, 7],
+ [ 0, 1, 2, 3]])
+('b', 'c'): tensor([[10, 11, 12, 13, 14],
  [ 0, 1, 2, 3, 4],
  [10, 11, 12, 13, 14],
- [ 5, 6, 7, 8, 9]])
+ [ 5, 6, 7, 8, 9],
+ [ 0, 1, 2, 3, 4]])
 ```
 
 ## Integration with TensorDict
@@ -309,7 +309,7 @@ print(sample["index"])
 ```
 
 ```
-tensor([0, 1, 0, 0, 2, 0, 2, 2, 1, 1, 0, 1])
+tensor([1, 0, 0, 2, 0, 2, 2, 1, 1, 0, 1, 0])
 ```
 
 ### Integration with tensorclass
@@ -1132,8 +1132,8 @@ gc.collect()
 ```
 
 ```
-episode are grouped tensor([3, 3, 4, 4, 1, 1, 1, 1], dtype=torch.int32)
-steps are successive tensor([0, 1, 1, 2, 1, 2, 0, 1])
+episode are grouped tensor([4, 4, 1, 1, 1, 1, 4, 4], dtype=torch.int32)
+steps are successive tensor([1, 2, 1, 2, 0, 1, 1, 2])
 
 1229
 ```
@@ -1211,7 +1211,7 @@ which are based on our Replay Buffer API;
 such as [`TensorDictMaxValueWriter`](../reference/generated/torchrl.data.replay_buffers.TensorDictMaxValueWriter.html#torchrl.data.replay_buffers.TensorDictMaxValueWriter).
 - Check how to checkpoint ReplayBuffers in [the doc](../reference/data_storage.html#checkpoint-rb).
 
-**Total running time of the script:** (0 minutes 0.815 seconds)
+**Total running time of the script:** (0 minutes 0.910 seconds)
 
 [`Download Jupyter notebook: rb_tutorial.ipynb`](../_downloads/c64b1e484ba3e0219549719cc3c37479/rb_tutorial.ipynb)
 
