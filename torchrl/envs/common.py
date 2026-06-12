@@ -2340,7 +2340,7 @@ class EnvBase(nn.Module, metaclass=_EnvPostInit):
                     tensordict = tensordict[partial_steps]
             else:
                 if not partial_steps.any():
-                    next_tensordict = self._skip_tensordic(tensordict)
+                    next_tensordict = self._skip_tensordict(tensordict)
                 else:
                     # trust that the _step can handle this!
                     tensordict.set("_step", partial_steps)
