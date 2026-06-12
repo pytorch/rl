@@ -29,6 +29,7 @@ from torchrl.data.llm.history import (
     _CUSTOM_MODEL_FAMILY_KEYWORDS,
     add_chat_template,
     ContentBase,
+    history_default_spec,
 )
 from torchrl.data.llm.topk import TopKRewardSelector
 from torchrl.modules.llm.policies.common import _extract_responses_from_full_histories
@@ -300,6 +301,11 @@ class TestHistory:
         assert isinstance(r, History)
         assert spec.is_in(r)
         assert spec.is_in(history)
+        # The free function is the canonical API now that History lives in
+        # tensordict; the classmethod above is kept for backward compatibility.
+        spec_fn = history_default_spec()
+        assert spec_fn.is_in(history)
+        assert spec_fn.is_in(r)
 
     def test_content_base(self):
         from transformers import AutoProcessor
