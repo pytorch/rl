@@ -9,7 +9,7 @@ from .dataset import (
     TensorDictTokenizer,
     TokenizedDatasetLoader,
 )
-from .history import add_chat_template, ContentBase, History
+from .history import add_chat_template, ContentBase, History, history_default_spec
 from .prompt import PromptData, PromptTensorDictTokenizer
 from .reward import PairwiseDataset, RewardData
 from .topk import TopKRewardSelector
@@ -30,5 +30,6 @@ __all__ = [
     "TokenizedDatasetLoader",
     "create_infinite_iterator",
     "get_dataloader",
+    "history_default_spec",
     "TopKRewardSelector",
 ]

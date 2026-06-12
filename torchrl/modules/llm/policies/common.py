@@ -21,7 +21,7 @@ from tensordict.utils import _zip_strict
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
-from torchrl.data.llm import History
+from torchrl.data.llm import History, history_default_spec
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.distributions.discrete import LLMMaskedCategorical
 
@@ -276,7 +276,7 @@ class ChatHistory(TensorClass["nocast"]):
         if keys is None:
             keys = ["prompt", "response", "full"]
         return Composite(
-            {k: History.default_spec(shape=shape + (-1,)) for k in keys},
+            {k: history_default_spec(shape + (-1,)) for k in keys},
             shape=shape[:-1],
             data_cls=cls,
             step_mdp_static=True,
