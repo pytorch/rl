@@ -256,13 +256,14 @@ def make_collector(cfg, env: EnvBase, policy: VLAWrapperBase, device) -> Collect
     """Endless synchronous collector yielding whole-trajectory batches.
 
     Each yielded batch holds exactly one iteration's worth of complete,
-    done-terminated trajectories, zero-padded along time with a
-    ``("collector", "mask")`` marking the valid steps
-    (``trajs_per_batch``; episodes spanning internal collection steps are
-    reassembled by the collector, in-flight episodes are held back). The
-    policy is held by reference (in-place optimizer updates and ``mode``
-    flips apply immediately) and observations/actions are cast between the
-    env's and the policy's devices by the collector.
+    done-terminated trajectories, concatenated along time
+    (``trajs_per_batch`` with ``traj_format="cat"``: flat and unpadded,
+    episodes delimited by the done flags -- no padding frames for the
+    image-heavy VLA observations; episodes spanning internal collection
+    steps are reassembled by the collector, in-flight episodes are held
+    back). The policy is held by reference (in-place optimizer updates and
+    ``mode`` flips apply immediately) and observations/actions are cast
+    between the env's and the policy's devices by the collector.
     """
     num_envs = env.batch_size[0] if env.batch_size else 1
     return Collector(
@@ -271,6 +272,7 @@ def make_collector(cfg, env: EnvBase, policy: VLAWrapperBase, device) -> Collect
         frames_per_batch=num_envs * cfg.env.max_outer_steps,
         total_frames=-1,
         trajs_per_batch=cfg.collector.groups_per_iter * cfg.collector.group_size,
+        traj_format="cat",
         policy_device=device,
         reset_at_each_iter=False,
     )

@@ -149,23 +149,26 @@ def main(cfg):  # noqa: F821
 
     for iteration in range(start_iter, cfg.collector.total_iters):
         # Collect one iteration of grouped rollouts: one collector batch =
-        # episodes_per_iter complete trajectories, zero-padded along time
-        # with a validity mask. Each trajectory is written whole (unpadded)
-        # to the replay buffer, whose write path groups them by group_id,
-        # computes the group-relative advantage and applies the dynamic
-        # sampling filter.
+        # episodes_per_iter complete trajectories, concatenated along time
+        # (traj_format="cat": flat and unpadded, episodes delimited by the
+        # done flags). The whole batch is written to the replay buffer in one
+        # extend; its write path splits it back into trajectories, groups
+        # them by group_id, computes the group-relative advantage and applies
+        # the dynamic sampling filter.
         policy.mode = "sample"
         with timeit("collect"):
-            trajectories = next(collector_iter)
-            mask = trajectories["collector", "mask"]
-            episode_successes = (
-                (trajectories["next", "success"].squeeze(-1) & mask).any(-1).float()
+            batch = next(collector_iter)
+            done = batch["next", "done"].squeeze(-1)
+            episode_idx = done.long().cumsum(0) - done.long()
+            episode_lengths = torch.bincount(episode_idx, minlength=episodes_per_iter)
+            episode_successes = torch.zeros(episodes_per_iter, device=done.device)
+            episode_successes.scatter_reduce_(
+                0,
+                episode_idx,
+                batch["next", "success"].squeeze(-1).float(),
+                reduce="amax",
             )
-            episode_lengths = mask.sum(-1)
-            for row, length in zip(trajectories.unbind(0), episode_lengths.tolist()):
-                # the padding is a suffix: slice rather than bool-mask (plain
-                # slices keep NonTensor entries intact)
-                replay_buffer.extend(row[:length].exclude("collector"))
+            replay_buffer.extend(batch.exclude("collector"))
         # synchronous iteration semantics, as in the paper: episodes in
         # flight and incomplete groups do not straddle the policy update (a
         # group baseline must estimate a single policy's returns). The
