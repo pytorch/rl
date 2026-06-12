@@ -402,7 +402,7 @@ def make_vllm_worker(
         enforce_eager (bool, optional): Whether to enforce eager execution. Defaults to `False`.
         enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             This can help with numerical stability for certain models. Requires model-specific support in
-            torchrl.modules.llm.backends._models.
+            torchrl.modules.llm.backends.vllm._models.
         **kwargs: Additional arguments passed to vLLM.LLM.__init__.
 
     Returns:
