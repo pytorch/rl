@@ -18,6 +18,7 @@ from torchrl.data.utils import _find_action_space
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
+    _make_writable,
     _pseudo_vmap,
     _reduce,
     _vmap_func,
@@ -450,10 +451,12 @@ class IQLLoss(LossModule):
         ):
             dist = self.actor_network.get_dist(tensordict)
 
-        log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
+        log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         # Min Q value
-        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        td_q = _make_writable(
+            tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        )
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
 
@@ -463,8 +466,8 @@ class IQLLoss(LossModule):
             )
         # state value
         with torch.no_grad():
-            td_copy = tensordict.select(
-                *self.value_network.in_keys, strict=False
+            td_copy = _make_writable(
+                tensordict.select(*self.value_network.in_keys, strict=False)
             ).detach()
             with self.value_network_params.to_module(
                 self.value_network, preserve_module_state=False
@@ -494,11 +497,15 @@ class IQLLoss(LossModule):
 
     def value_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         # Min Q value
-        td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        td_q = _make_writable(
+            tensordict.select(*self.qvalue_network.in_keys, strict=False)
+        )
         td_q = self._vmap_qvalue_networkN0(td_q, self.target_qvalue_network_params)
         min_q = td_q.get(self.tensor_keys.state_action_value).min(0)[0].squeeze(-1)
         # state value
-        td_copy = tensordict.select(*self.value_network.in_keys, strict=False)
+        td_copy = _make_writable(
+            tensordict.select(*self.value_network.in_keys, strict=False)
+        )
         with self.value_network_params.to_module(
             self.value_network, preserve_module_state=False
         ):
@@ -519,8 +526,8 @@ class IQLLoss(LossModule):
 
     def qvalue_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         obs_keys = self.actor_network.in_keys
-        tensordict = tensordict.select(
-            "next", *obs_keys, self.tensor_keys.action, strict=False
+        tensordict = _make_writable(
+            tensordict.select("next", *obs_keys, self.tensor_keys.action, strict=False)
         )
 
         target_value = self.value_estimator.value_estimate(
@@ -858,7 +865,7 @@ class DiscreteIQLLoss(IQLLoss):
         ):
             dist = self.actor_network.get_dist(tensordict)
 
-        log_prob = dist.log_prob(tensordict[self.tensor_keys.action])
+        log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         # Min Q value
         td_q = tensordict.select(*self.qvalue_network.in_keys, strict=False)
