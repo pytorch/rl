@@ -26,6 +26,7 @@ making it efficient for sequence-based sampling and training.
     datasets.OpenMLExperienceReplay
     datasets.OpenXExperienceReplay
     datasets.RobosetExperienceReplay
+    datasets.TDMPC2ExperienceReplay
     datasets.VD4RLExperienceReplay
 
 .. autosummary::
