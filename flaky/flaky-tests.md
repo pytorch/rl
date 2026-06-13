@@ -1,11 +1,11 @@
-# Flaky Test Report - 2026-06-12
+# Flaky Test Report - 2026-06-13
 
 ## Summary
 
 - **Flaky tests**: 2
 - **Newly flaky** (last 7 days): 2
 - **Resolved**: 0
-- **Total tests analyzed**: 29083
+- **Total tests analyzed**: 29088
 - **CI runs analyzed**: 15
 
 ---
@@ -14,8 +14,8 @@
 
 | Test | Failure Rate | Failures | Flaky Score | Last Failed |
 |------|--------------|----------|-------------|-------------|
-| `...::test_multi_sync_data_collector_ordering[stack-True-8-5]` 🆕 | 12.2% (18/147) | 18 | 0.24 | 2026-06-11 |
-| `..._configs.py::TestDataConfigs::test_writer_ensemble_config` 🆕 | 5.4% (8/147) | 8 | 0.11 | 2026-06-11 |
+| `...::test_multi_sync_data_collector_ordering[stack-True-8-5]` 🆕 | 13.5% (20/148) | 20 | 0.27 | 2026-06-12 |
+| `..._configs.py::TestDataConfigs::test_writer_ensemble_config` 🆕 | 6.8% (10/148) | 10 | 0.14 | 2026-06-12 |
 
 
 ### Newly Flaky Tests
@@ -34,4 +34,4 @@
 
 ---
 
-*Generated at 2026-06-12T07:47:26.830693+00:00*
+*Generated at 2026-06-13T07:26:01.529402+00:00*
