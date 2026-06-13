@@ -276,6 +276,24 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
+        buffer_depth (int, optional): number of rotating shared-memory buffers
+            per worker. Currently only supported by
+            :class:`~torchrl.collectors.MultiAsyncCollector`, and incompatible
+            with ``replay_buffer`` (which bypasses buffer transport entirely)
+            and ``use_buffers=False``.
+
+            With the default (``None``, i.e. ``1``), each yielded batch is cloned
+            on the main process so the single per-worker buffer can be reused.
+            With ``buffer_depth=K > 1``, workers write each rollout into one of
+            ``K`` rotating shared-memory slots and the main process yields
+            zero-copy views instead: a yielded batch remains valid until the
+            same worker has collected ``K - 1`` further batches. In the steady
+            state a worker collects at most one batch ahead, so ``K=2`` is safe
+            for the standard ``for data in collector: ...`` pattern; calling
+            :meth:`reset` while iterating grants workers one extra rollout of
+            lookahead, so use ``K=3`` if you reset mid-collection. Clone the
+            yielded tensordict to keep it indefinitely, and treat it as
+            read-only.
         replay_buffer (ReplayBuffer, optional): if provided, the collector will not yield tensordicts
             but populate the buffer instead. Defaults to ``None``.
         extend_buffer (bool, optional): if `True`, the replay buffer is extended with entire rollouts and not
@@ -393,6 +411,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
 
     """
 
+    # Whether this collector supports buffer_depth > 1 (ring-buffer transport).
+    _supports_buffer_depth = False
+
     def __init__(
         self,
         create_env_fn: Sequence[Callable[[], EnvBase]],
@@ -425,6 +446,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         cat_results: str | int | None = None,
         set_truncated: bool = False,
         use_buffers: bool | None = None,
+        buffer_depth: int | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
         trust_policy: bool | None = None,
@@ -504,6 +526,28 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
+
+        # Set up ring-buffer transport depth
+        buffer_depth = 1 if buffer_depth is None else int(buffer_depth)
+        if buffer_depth < 1:
+            raise ValueError(f"buffer_depth must be >= 1, got {buffer_depth}.")
+        if buffer_depth > 1:
+            if not self._supports_buffer_depth:
+                raise ValueError(
+                    f"buffer_depth > 1 is currently only supported by MultiAsyncCollector, "
+                    f"not {type(self).__name__}."
+                )
+            if replay_buffer is not None:
+                raise ValueError(
+                    "buffer_depth > 1 has no effect when a replay_buffer is provided: "
+                    "workers write directly into the buffer. Remove one of the two options."
+                )
+            if use_buffers is False:
+                raise ValueError(
+                    "buffer_depth > 1 requires buffer-based transport (use_buffers=True)."
+                )
+            self._use_buffers = True
+        self.buffer_depth = buffer_depth
 
         # Set up policy and weights
         if trust_policy is None:
@@ -1345,6 +1389,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "interruptor": self.interruptor,
                     "set_truncated": self.set_truncated,
                     "use_buffers": self._use_buffers,
+                    "buffer_depth": self.buffer_depth,
                     "replay_buffer": self.replay_buffer,
                     "extend_buffer": self.extend_buffer,
                     "traj_pool": self._traj_pool,

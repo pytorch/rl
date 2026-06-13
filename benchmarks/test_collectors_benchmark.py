@@ -255,6 +255,29 @@ def test_async(benchmark):
     benchmark(execute_collector, c)
 
 
+@pytest.mark.parametrize("buffer_depth", [None, 2])
+def test_async_buffer_depth(benchmark, buffer_depth):
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = EnvCreator(
+        lambda: TransformedEnv(
+            DMControlEnv("cheetah", "run", device=device), StepCounter(50)
+        )
+    )
+    c = MultiAsyncCollector(
+        [env, env],
+        RandomPolicy(env().action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        buffer_depth=buffer_depth,
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    benchmark(execute_collector, c)
+
+
 @pytest.mark.skipif(not torch.cuda.device_count(), reason="no rendering without cuda")
 def test_single_pixels(benchmark):
     (c,), _ = single_collector_setup_pixels()

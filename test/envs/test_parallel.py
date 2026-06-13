@@ -48,6 +48,7 @@ from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingEnv,
     CountingEnvCountPolicy,
+    CountingEnvWithString,
     DiscreteActionConvMockEnv,
     DiscreteActionVecMockEnv,
     MockBatchedLockedEnv,
@@ -1334,3 +1335,89 @@ def test_stackable():
     assert not _stackable(*stack)
     stack = [TensorDict({"a": "a string"}, []), TensorDict({"a": "another string"}, [])]
     assert _stackable(*stack)
+
+
+class TestWorkerWait:
+    """Tests for the shared-memory command signaling of ParallelEnv (worker_wait)."""
+
+    @staticmethod
+    def _rollout(env_cls, parallel_env_cls, n_steps=20, **kwargs):
+        env = parallel_env_cls(2, lambda: env_cls(max_steps=10), **kwargs)
+        try:
+            env.set_seed(0)
+            torch.manual_seed(0)
+            return env.rollout(n_steps, break_when_any_done=False)
+        finally:
+            env.close()
+            del env
+
+    @pytest.mark.parametrize(
+        "worker_wait,spin_for",
+        [
+            ("adaptive", 1e-3),
+            # tiny spin window: forces the sleep/wake fallback path
+            ("adaptive", 1e-6),
+            ("spin", 1e-3),
+        ],
+    )
+    @pytest.mark.parametrize("env_cls", [CountingEnv, NestedCountingEnv])
+    def test_worker_wait_rollout_parity(
+        self, worker_wait, spin_for, env_cls, maybe_fork_ParallelEnv
+    ):
+        r_block = self._rollout(env_cls, maybe_fork_ParallelEnv)
+        r_fast = self._rollout(
+            env_cls,
+            maybe_fork_ParallelEnv,
+            worker_wait=worker_wait,
+            spin_for=spin_for,
+        )
+        assert_allclose_td(r_block, r_fast)
+
+    def test_worker_wait_payload_fallback(self, maybe_fork_ParallelEnv):
+        # Non-tensor keys put a payload on every step command, which must
+        # transparently fall back to the pipe path.
+        env = maybe_fork_ParallelEnv(2, CountingEnvWithString, worker_wait="adaptive")
+        try:
+            r = env.rollout(10, break_when_any_done=False)
+            assert r["string"] is not None
+            assert r["observation"].shape == (2, 10, 1)
+        finally:
+            env.close()
+            del env
+
+    def test_worker_wait_no_buffers_fallback(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(
+            2,
+            lambda: CountingEnv(max_steps=10),
+            use_buffers=False,
+            worker_wait="adaptive",
+        )
+        try:
+            with pytest.warns(UserWarning, match="requires use_buffers=True"):
+                r = env.rollout(10, break_when_any_done=False)
+            assert r["observation"].shape == (2, 10, 1)
+        finally:
+            env.close()
+            del env
+
+    def test_worker_wait_validation(self):
+        with pytest.raises(ValueError, match="worker_wait must be one of"):
+            ParallelEnv(2, lambda: CountingEnv(), worker_wait="bogus")
+        with pytest.raises(ValueError, match="spin_for must be a positive float"):
+            ParallelEnv(2, lambda: CountingEnv(), spin_for=0.0)
+        with pytest.raises(TypeError, match="Cannot use worker_wait"):
+            SerialEnv(2, lambda: CountingEnv(), worker_wait="spin")
+
+    def test_worker_wait_configure_parallel(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, lambda: CountingEnv(max_steps=10))
+        env.configure_parallel(worker_wait="adaptive", spin_for=1e-4)
+        assert env.worker_wait == "adaptive"
+        assert env.spin_for == 1e-4
+        try:
+            env.set_seed(0)
+            torch.manual_seed(0)
+            r = env.rollout(10, break_when_any_done=False)
+            assert r["observation"].shape == (2, 10, 1)
+        finally:
+            env.close()
+            del env

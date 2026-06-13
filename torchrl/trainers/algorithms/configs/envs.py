@@ -34,6 +34,10 @@ class BatchedEnvConfig(EnvConfig):
     create_env_kwargs: dict = field(default_factory=dict)
     batched_env_type: str = "parallel"
     device: str | None = None
+    # How ParallelEnv workers wait for commands ("block", "adaptive" or "spin");
+    # only forwarded when set. See torchrl.envs.ParallelEnv.
+    worker_wait: str | None = None
+    spin_for: float | None = None
     # batched_env_type: Literal["parallel", "serial", "async"] = "parallel"
     _target_: str = "torchrl.trainers.algorithms.configs.envs.make_batched_env"
 
@@ -93,6 +97,12 @@ def make_batched_env(
     # Add device to kwargs if provided
     if device is not None:
         kwargs["device"] = device
+
+    # worker_wait / spin_for are ParallelEnv-only; drop the unset defaults so
+    # SerialEnv / AsyncEnvPool don't receive unexpected kwargs.
+    for key in ("worker_wait", "spin_for"):
+        if kwargs.get(key, None) is None:
+            kwargs.pop(key, None)
 
     if batched_env_type == "parallel":
         return ParallelEnv(num_workers, env_fn, **kwargs)
