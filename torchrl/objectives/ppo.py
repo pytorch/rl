@@ -73,6 +73,40 @@ def _check_advantage_broadcast(
         )
 
 
+def _broadcast_advantage_to_log_weight(
+    advantage: torch.Tensor, log_weight: torch.Tensor
+) -> torch.Tensor:
+    # Per-token objectives (e.g. token-level DAPO / GRPO on a chunked VLA head)
+    # carry one log-weight per action token: log_weight is [*B, *token_dims, 1]
+    # while the advantage is one value per decision, [*B, 1]. Broadcast the
+    # decision advantage across the token dims so the surrogate stays
+    # elementwise -- the alternative is forcing the caller to pre-expand the
+    # advantage by hand. No-op when the shapes already match (the standard
+    # one-ratio-per-sample case), so the outer-product guard still fires on a
+    # genuinely missing value dimension.
+    if not isinstance(advantage, torch.Tensor) or not isinstance(
+        log_weight, torch.Tensor
+    ):
+        return advantage
+    if (
+        advantage.shape == log_weight.shape
+        or advantage.ndim < 2
+        or advantage.shape[-1] != 1
+        or log_weight.shape[-1] != 1
+        or log_weight.ndim <= advantage.ndim
+    ):
+        return advantage
+    batch = advantage.shape[:-1]
+    # the advantage batch must be a strict prefix of the log-weight's leading
+    # dims; the extra middle dims are the per-token axes to broadcast over
+    if log_weight.shape[: len(batch)] != batch:
+        return advantage
+    token_dims = log_weight.shape[len(batch) : -1]
+    return advantage.reshape(*batch, *(1,) * len(token_dims), 1).expand(
+        *batch, *token_dims, 1
+    )
+
+
 class PPOLoss(LossModule):
     """A parent PPO loss class.
 
@@ -953,6 +987,7 @@ class PPOLoss(LossModule):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
         _check_advantage_broadcast(advantage, log_weight)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss})
@@ -1381,6 +1416,7 @@ class ClipPPOLoss(PPOLoss):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
         _check_advantage_broadcast(advantage, log_weight)
         # ESS for logging
         with torch.no_grad():
@@ -1720,6 +1756,7 @@ class KLPENPPOLoss(PPOLoss):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
         _check_advantage_broadcast(advantage, log_weight)
         neg_loss = log_weight.exp() * advantage
 

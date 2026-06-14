@@ -1391,6 +1391,29 @@ class TestPPO(LossModuleTestBase):
         td["advantage"] = td["advantage"].unsqueeze(-1)
         loss_fn(td)
 
+    def test_broadcast_advantage_to_log_weight(self):
+        # per-token objectives carry a [*B, *token_dims, 1] log-weight; a
+        # decision-level [*B, 1] advantage is broadcast over the token dims so
+        # the surrogate stays elementwise (no caller-side expand).
+        from torchrl.objectives.ppo import _broadcast_advantage_to_log_weight
+
+        adv = torch.randn(4, 1)
+        lw = torch.randn(4, 3, 7, 1)  # [B, chunk, dims, 1]
+        out = _broadcast_advantage_to_log_weight(adv, lw)
+        assert out.shape == lw.shape
+        # every token shares its decision's advantage
+        torch.testing.assert_close(out, adv.reshape(4, 1, 1, 1).expand(4, 3, 7, 1))
+        # no-op when shapes already match (the standard one-ratio-per-sample case)
+        match = torch.randn(4, 1)
+        assert _broadcast_advantage_to_log_weight(match, torch.randn(4, 1)) is match
+        # a flat [B] advantage (no trailing value dim) is left untouched, so the
+        # outer-product guard still fires on it
+        flat = torch.randn(4)
+        assert _broadcast_advantage_to_log_weight(flat, torch.randn(4, 1)) is flat
+        # a non-prefix batch is left untouched (guard catches genuine mismatches)
+        bad = torch.randn(5, 1)
+        assert _broadcast_advantage_to_log_weight(bad, torch.randn(4, 3, 1)) is bad
+
     def test_ppo_composite_dists(self):
         d = torch.distributions
 
