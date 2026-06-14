@@ -67,6 +67,19 @@ class ToyVLAEnv(EnvBase):
             Defaults to ``"push the T-shaped block onto the target"``.
 
     Keyword Args:
+        from_pixels (bool, optional): if ``True``, add a root ``pixels`` entry
+            (a ``(render_size, render_size, 3)`` ``uint8`` HWC frame) rendering
+            the scene: the executed action is drawn as a red marker and, in
+            tracking mode, the target as a green one, both mapped from the
+            ``[-1, 1]`` action plane. This is the canonical torchrl
+            pixels-rendering hook (matching :class:`~torchrl.envs.GymEnv` and
+            others) and feeds :class:`~torchrl.record.VideoRecorder` directly.
+            Unlike the always-present ``("observation", "image")`` (random
+            noise, a stand-in for a camera feed), ``pixels`` visualizes the
+            task, so an eval video shows the policy learning to track. Defaults
+            to ``False``.
+        render_size (int, optional): side length of the square ``pixels``
+            frame. Only used when ``from_pixels=True``. Defaults to ``64``.
         success_steps (int, optional): number of consecutive in-tolerance
             steps required for success. ``None`` (default) selects the echo
             mode (no ``success`` entry, never done).
@@ -132,6 +145,8 @@ class ToyVLAEnv(EnvBase):
         image_shape: tuple[int, int, int] = (3, 16, 16),
         instruction: str = _DEFAULT_INSTRUCTION,
         *,
+        from_pixels: bool = False,
+        render_size: int = 64,
         success_steps: int | None = None,
         success_tol: float = 0.25,
         group_repeats: int | None = None,
@@ -169,10 +184,14 @@ class ToyVLAEnv(EnvBase):
             batch_size=torch.Size(batch_size) if batch_size is not None else None,
             device=device,
         )
+        if render_size < 1:
+            raise ValueError(f"render_size must be >= 1, got {render_size}.")
         self.action_dim = int(action_dim)
         self.state_dim = int(state_dim)
         self.image_shape = tuple(int(dim) for dim in image_shape)
         self.instruction = str(instruction)
+        self.from_pixels = bool(from_pixels)
+        self.render_size = int(render_size)
         self.success_steps = int(success_steps) if success_steps is not None else None
         self.success_tol = float(success_tol)
         self.group_repeats = int(group_repeats) if group_repeats is not None else None
@@ -206,6 +225,12 @@ class ToyVLAEnv(EnvBase):
         if self.group_repeats is not None:
             self.observation_spec["group_id"] = Unbounded(
                 shape=(*batch, 1), dtype=torch.int64, device=self.device
+            )
+        if self.from_pixels:
+            self.observation_spec["pixels"] = Unbounded(
+                shape=(*batch, self.render_size, self.render_size, 3),
+                dtype=torch.uint8,
+                device=self.device,
             )
         self.action_spec = Bounded(
             -1.0, 1.0, shape=(*batch, self.action_dim), device=self.device
@@ -260,7 +285,7 @@ class ToyVLAEnv(EnvBase):
             dtype=torch.uint8,
             generator=self._rng,
         ).to(self.device)
-        return TensorDict(
+        out = TensorDict(
             {
                 "observation": {"image": image, "state": state},
                 "language_instruction": self._instruction_stack(),
@@ -268,6 +293,57 @@ class ToyVLAEnv(EnvBase):
             batch_size=self.batch_size,
             device=self.device,
         )
+        if self.from_pixels:
+            out["pixels"] = self._render(state)
+        return out
+
+    def _render(self, state: torch.Tensor) -> torch.Tensor:
+        """Render the scene to a ``(*batch, S, S, 3)`` uint8 HWC frame.
+
+        The executed action (``state[..., :action_dim]``) is a red marker and,
+        in tracking mode, the target (``state[..., action_dim:2*action_dim]``)
+        a green one, both mapped from the ``[-1, 1]`` plane onto the canvas.
+        Off the hot path: only reached when ``from_pixels=True`` (recording).
+        """
+        size = self.render_size
+        canvas = torch.full(
+            (*self.batch_size, size, size, 3),
+            30,
+            dtype=torch.uint8,
+            device=self.device,
+        )
+
+        def to_px(coord: torch.Tensor) -> torch.Tensor:
+            return (((coord.clamp(-1.0, 1.0) + 1.0) * 0.5) * (size - 1)).round().long()
+
+        action = state[..., : self.action_dim]
+        ax = to_px(action[..., 0])
+        ay = to_px(action[..., 1]) if self.action_dim > 1 else torch.zeros_like(ax)
+        self._draw_marker(canvas, ay, ax, (220, 60, 60))
+        if self.success_steps is not None:
+            target = state[..., self.action_dim : 2 * self.action_dim]
+            tx = to_px(target[..., 0])
+            ty = to_px(target[..., 1]) if self.action_dim > 1 else torch.zeros_like(tx)
+            self._draw_marker(canvas, ty, tx, (60, 200, 60))
+        return canvas
+
+    def _draw_marker(self, canvas, y, x, color, radius: int = 2) -> None:
+        # square marker; loops over the (tiny, recording-only) batch so the
+        # per-env top-left corner can index a contiguous block
+        size = canvas.shape[-2]
+        flat = canvas.reshape(-1, size, size, 3)
+        ys = y.reshape(-1)
+        xs = x.reshape(-1)
+        col = torch.tensor(color, dtype=torch.uint8, device=canvas.device)
+        for i in range(flat.shape[0]):
+            yi = int(ys[i])
+            xi = int(xs[i])
+            flat[
+                i,
+                max(0, yi - radius) : yi + radius + 1,
+                max(0, xi - radius) : xi + radius + 1,
+                :,
+            ] = col
 
     def _make_state(self, action: torch.Tensor | None) -> torch.Tensor:
         state = torch.zeros(*self.batch_size, self.state_dim, device=self.device)

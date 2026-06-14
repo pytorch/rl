@@ -10,6 +10,7 @@ env:
   success_steps: 2 # consecutive in-tolerance base steps for success
   success_tol: 0.35 # sized so a random policy succeeds sometimes (cold-start signal)
   max_outer_steps: 6 # episode truncation, in chunk decisions
+  render_size: 64 # side length of the from_pixels eval-video frame
   seed: 0
 
 tokenizer:
@@ -53,6 +54,9 @@ logger:
   mode: online
   eval_iter: 10 # evaluate every N iterations
   eval_episodes: 50 # greedy episodes per evaluation
+  record_video: true # render eval rollouts via VideoRecorder (needs a logger)
+  video_episodes: 2 # greedy episodes per recorded video
+  video_fps: 4 # frames per second of the logged video (one frame per decision)
 
 checkpoint:
   save_iter: 25 # save every N iterations (0 disables)

@@ -137,6 +137,13 @@ class LiberoWrapper(_EnvWrapper):
         wrist_camera (str, optional): if provided (e.g.
             ``"robot0_eye_in_hand"``), this camera is exposed under
             ``("observation", "wrist_image")``. Defaults to ``None``.
+        from_pixels (bool, optional): if ``True``, expose the rendered
+            ``camera`` frame as a root ``pixels`` entry too (HWC ``uint8``),
+            in addition to the CHW ``("observation", "image")`` the policy
+            consumes. This is the torchrl pixels-rendering convention and
+            feeds :class:`~torchrl.record.VideoRecorder` (default
+            ``in_keys=["pixels"]``) with no extra render cost. Defaults to
+            ``False``.
         flip_image (bool, optional): rotate the rendered images by 180
             degrees. LIBERO renders upside down relative to the standard
             human-view orientation used by the OpenVLA / SimpleVLA-RL
@@ -203,6 +210,7 @@ class LiberoWrapper(_EnvWrapper):
         group_id_offset: int = 0,
         camera: str = "agentview",
         wrist_camera: str | None = None,
+        from_pixels: bool = False,
         flip_image: bool = True,
         proprio_keys: tuple[str, ...] = (
             "robot0_eef_pos",
@@ -230,6 +238,7 @@ class LiberoWrapper(_EnvWrapper):
         self.group_id_offset = int(group_id_offset)
         self.camera = camera
         self.wrist_camera = wrist_camera
+        self.from_pixels = bool(from_pixels)
         self.flip_image = bool(flip_image)
         self.proprio_keys = tuple(proprio_keys)
         self.max_episode_steps = max_episode_steps
@@ -282,6 +291,15 @@ class LiberoWrapper(_EnvWrapper):
         if self.group_repeats is not None:
             self.observation_spec["group_id"] = Unbounded(
                 shape=(1,), dtype=torch.int64, device=self.device
+            )
+        if self.from_pixels:
+            # the camera is always rendered for the policy image; expose it as
+            # a root HWC ``pixels`` entry too (the torchrl from_pixels / video
+            # convention). image is CHW (C, H, W) -> pixels is (H, W, C).
+            self.observation_spec["pixels"] = Unbounded(
+                shape=(image.shape[1], image.shape[2], image.shape[0]),
+                dtype=torch.uint8,
+                device=self.device,
             )
         self.action_spec = Bounded(
             low=torch.as_tensor(low, dtype=torch.float32),
@@ -343,10 +361,11 @@ class LiberoWrapper(_EnvWrapper):
         return torch.from_numpy(np.concatenate(parts)).to(torch.float32)
 
     def _read_obs(self, obs: dict, *, success: bool) -> TensorDict:
+        image = self._read_image(obs[f"{self.camera}_image"])
         out = TensorDict(
             {
                 "observation": {
-                    "image": self._read_image(obs[f"{self.camera}_image"]),
+                    "image": image,
                     "state": self._read_state(obs),
                 },
                 "language_instruction": self.instruction,
@@ -355,6 +374,9 @@ class LiberoWrapper(_EnvWrapper):
             batch_size=[],
             device=self.device,
         )
+        if self.from_pixels:
+            # HWC view of the same rendered frame (no extra render)
+            out["pixels"] = image.permute(1, 2, 0).contiguous()
         if self.wrist_camera is not None:
             out["observation", "wrist_image"] = self._read_image(
                 obs[f"{self.wrist_camera}_image"]

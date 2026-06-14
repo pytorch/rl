@@ -53,6 +53,24 @@ Checkpointing: `checkpoint_latest.pt` is written to the hydra run directory
 every `checkpoint.save_iter` iterations; resume with
 `checkpoint.resume=/path/to/checkpoint_latest.pt`.
 
+## Logging: metrics and eval videos
+
+With a logger configured (`logger.backend=wandb`, the default), each iteration
+logs the reward curves `train/reward_mean` and `train/reward_max` (per-episode
+return, averaged and best-of-batch), the success rate, and throughput split
+into inference (`throughput/inference_env_steps_per_s`,
+`throughput/inference_decisions_per_s`, measured over collection) and training
+(`throughput/train_decisions_per_s`, `throughput/optim_steps_per_s`, measured
+over the PPO update).
+
+Eval rollouts are also rendered to video (`logger.record_video=true`, on by
+default; a no-op without a logger). A dedicated single-environment recorder is
+built with `from_pixels=True` -- `ToyVLAEnv` renders the tracking scene (the
+executed action and the target as markers), `LiberoEnv` exposes its camera --
+and a `torchrl.record.VideoRecorder` writes `logger.video_episodes` greedy
+episodes to `eval/video` on every eval. wandb video encoding needs `moviepy`
+(in the `dev` dependency group). Disable with `logger.record_video=false`.
+
 ## The OpenVLA-OFT (token) policy
 
 `openvla.py` wraps the SimpleVLA-RL token variant of OpenVLA-OFT (parallel

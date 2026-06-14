@@ -148,6 +148,21 @@ class TestLibero:
         finally:
             env.close(raise_if_closed=False)
 
+    def test_from_pixels(self):
+        env = LiberoEnv("libero_spatial", task_id=0, from_pixels=True, **_FAST)
+        try:
+            check_env_specs(env)
+            td = env.reset()
+            # root HWC pixels mirror the CHW policy image (same frame)
+            assert td["pixels"].dtype == torch.uint8
+            assert td["pixels"].shape == (64, 64, 3)
+            assert td["observation", "image"].shape == (3, 64, 64)
+            torch.testing.assert_close(
+                td["pixels"], td["observation", "image"].permute(1, 2, 0).contiguous()
+            )
+        finally:
+            env.close(raise_if_closed=False)
+
     def test_validation(self):
         with pytest.raises(ValueError, match="init_state_mode"):
             LiberoEnv("libero_spatial", task_id=0, init_state_mode="bad", **_FAST)

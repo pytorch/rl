@@ -45,6 +45,7 @@ from torchrl.envs import (
 from torchrl.modules.vla import TinyVLA, VLAWrapperBase
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.llm import MCAdvantage
+from torchrl.record import VideoRecorder
 
 # group ids must be unique across parallel workers: each worker gets a
 # disjoint offset block
@@ -120,7 +121,9 @@ def _chunk_transform(cfg, tokenizer: ActionTokenizerBase) -> Compose:
     )
 
 
-def _make_libero_worker(cfg, worker_idx: int, *, group_repeats=None, eval_mode=False):
+def _make_libero_worker(
+    cfg, worker_idx: int, *, group_repeats=None, eval_mode=False, from_pixels=False
+):
     task_ids = list(cfg.env.task_ids)
     task_id = task_ids[worker_idx % len(task_ids)]
     return LiberoEnv(
@@ -129,6 +132,7 @@ def _make_libero_worker(cfg, worker_idx: int, *, group_repeats=None, eval_mode=F
         camera_height=cfg.env.camera_height,
         camera_width=cfg.env.camera_width,
         wrist_camera="robot0_eye_in_hand" if cfg.policy.use_wrist_image else None,
+        from_pixels=from_pixels,
         max_episode_steps=cfg.env.max_env_steps,
         init_state_mode="cycle" if eval_mode else "random",
         group_repeats=group_repeats,
@@ -144,12 +148,16 @@ def make_env(
     seed: int | None = None,
     device: torch.device | None = None,
     eval_mode: bool = False,
+    from_pixels: bool = False,
+    num_envs: int | None = None,
 ) -> TransformedEnv:
     if cfg.env.backend == "toy":
         base = ToyVLAEnv(
             action_dim=cfg.env.action_dim,
             state_dim=cfg.env.state_dim,
             image_shape=tuple(cfg.env.image_shape),
+            from_pixels=from_pixels,
+            render_size=cfg.env.get("render_size", 64),
             success_steps=cfg.env.success_steps,
             success_tol=cfg.env.success_tol,
             group_repeats=group_repeats,
@@ -158,17 +166,22 @@ def make_env(
             device=device,
         )
     elif cfg.env.backend == "libero":
-        num_envs = cfg.env.eval_num_envs if eval_mode else cfg.env.num_envs
+        # an explicit num_envs (e.g. a 1-env video recorder) intentionally
+        # samples a subset of tasks, so the task-coverage guard only applies
+        # to the train/eval envs sized from the config
+        override = num_envs is not None
+        if num_envs is None:
+            num_envs = cfg.env.eval_num_envs if eval_mode else cfg.env.num_envs
         task_ids = list(cfg.env.task_ids)
         # each worker hosts ONE MuJoCo task for its whole lifetime: fewer
         # workers than tasks would silently drop tasks from the run
-        if num_envs < len(task_ids):
+        if not override and num_envs < len(task_ids):
             raise ValueError(
                 f"{'eval_num_envs' if eval_mode else 'num_envs'} ({num_envs}) "
                 f"must cover task_ids ({len(task_ids)} tasks): each worker is "
                 "bound to one task; fewer workers would silently drop tasks."
             )
-        if num_envs % len(task_ids):
+        if not override and num_envs % len(task_ids):
             warnings.warn(
                 f"num_envs ({num_envs}) is not a multiple of the number of "
                 f"tasks ({len(task_ids)}): tasks will be sampled unevenly."
@@ -182,6 +195,7 @@ def make_env(
                     worker_idx,
                     group_repeats=group_repeats,
                     eval_mode=eval_mode,
+                    from_pixels=from_pixels,
                 )
                 for worker_idx in range(num_envs)
             ],
@@ -310,6 +324,65 @@ def evaluate(env: TransformedEnv, policy: VLAWrapperBase, cfg) -> float:
             episodes += int(row_success.numel())
     policy.mode = mode
     return successes / max(episodes, 1)
+
+
+def make_record_env(cfg, tokenizer: ActionTokenizerBase, logger, device):
+    """Single-environment eval recorder feeding a torchrl ``VideoRecorder``.
+
+    Built with ``from_pixels=True`` so the base env emits a root ``pixels``
+    frame (``ToyVLAEnv`` renders the tracking scene; ``LiberoEnv`` exposes the
+    camera). A :class:`~torchrl.record.VideoRecorder` transform appended last
+    collects those frames; :func:`record_eval_video` rolls out greedily and
+    flushes them to ``logger``. One environment keeps the video a single clean
+    stream (rather than a tiled grid of workers).
+    """
+    env = make_env(
+        cfg,
+        tokenizer,
+        seed=cfg.env.seed + 2,
+        device=device if cfg.env.backend == "toy" else None,
+        eval_mode=True,
+        from_pixels=True,
+        num_envs=1,
+    )
+    recorder = VideoRecorder(
+        logger,
+        tag="eval/video",
+        in_keys=["pixels"],
+        skip=1,
+        # single env -> a single video stream, no torchvision grid needed
+        make_grid=False,
+        fps=cfg.logger.video_fps,
+    )
+    env.append_transform(recorder)
+    return env, recorder
+
+
+def record_eval_video(env, recorder, policy: VLAWrapperBase, cfg, step: int) -> None:
+    """Roll out ``cfg.logger.video_episodes`` greedy episodes and log one video.
+
+    Each reset consumes one cycled initial state and ``break_when_all_done``
+    stops at the episode's natural end -- the same protocol as :func:`evaluate`,
+    so the recorded episodes mirror the measured ones. ``recorder.dump`` stacks
+    every frame seen since the last dump into a single clip and writes it to the
+    logger at ``step``.
+    """
+    mode = policy.mode
+    policy.mode = "greedy"
+    with torch.no_grad():
+        for _ in range(max(int(cfg.logger.video_episodes), 1)):
+            reset_td = env.reset()
+            env.rollout(
+                cfg.env.max_outer_steps,
+                policy,
+                break_when_any_done=False,
+                break_when_all_done=True,
+                auto_reset=False,
+                tensordict=reset_td,
+                auto_cast_to_device=True,
+            )
+    recorder.dump(step=step)
+    policy.mode = mode
 
 
 def log_metrics(logger, metrics: dict, step: int) -> None:

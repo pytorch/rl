@@ -49,7 +49,9 @@ from utils import (
     make_loss_module,
     make_optimizer,
     make_policy,
+    make_record_env,
     make_replay_buffer,
+    record_eval_video,
 )
 
 warnings.filterwarnings("ignore", category=UserWarning, module="tensordict")
@@ -128,6 +130,13 @@ def main(cfg):  # noqa: F821
     with torch.no_grad():
         policy(eval_env.fake_tensordict().to(device))
 
+    # optional eval-video recorder: a separate single-env rollout rendered to
+    # pixels and written through a torchrl VideoRecorder (logged to wandb /
+    # tensorboard / csv). Off by default and only built when a logger exists.
+    record_env = recorder = None
+    if cfg.logger.record_video and logger is not None:
+        record_env, recorder = make_record_env(cfg, tokenizer, logger, device)
+
     buffer_device = torch.device(cfg.buffer.device) if cfg.buffer.device else device
     replay_buffer, advantage_transform = make_replay_buffer(cfg, buffer_device)
     loss_module = make_loss_module(cfg, policy)
@@ -168,6 +177,12 @@ def main(cfg):  # noqa: F821
                 batch["next", "success"].squeeze(-1).float(),
                 reduce="amax",
             )
+            # per-episode return (sum of step rewards) for the reward curves;
+            # computed before the collected batch name is reused in training
+            episode_returns = torch.zeros(episodes_per_iter, device=done.device)
+            episode_returns.scatter_add_(
+                0, episode_idx, batch["next", "reward"].squeeze(-1)
+            )
             replay_buffer.extend(batch.exclude("collector"))
         # synchronous iteration semantics, as in the paper: episodes in
         # flight, episodes queued beyond the requested batch, and incomplete
@@ -186,8 +201,11 @@ def main(cfg):  # noqa: F821
         clip_fractions = []
         ess = []
         grad_norms = []
+        optim_steps = 0
+        train_decisions = 0
 
         def optimizer_step():
+            nonlocal optim_steps
             grad_norms.append(
                 torch.nn.utils.clip_grad_norm_(
                     loss_module.parameters(), cfg.optim.max_grad_norm
@@ -196,6 +214,7 @@ def main(cfg):  # noqa: F821
             optim.step()
             optim.zero_grad(set_to_none=True)
             scheduler.step()
+            optim_steps += 1
 
         micro_batches = 0
         with timeit("train"):
@@ -204,6 +223,7 @@ def main(cfg):  # noqa: F821
                     break
                 for batch in replay_buffer:
                     batch = batch.to(device)
+                    train_decisions += batch.shape[0]
                     if cfg.loss.ratio_level == "token":
                         # one importance ratio per action token: broadcast
                         # the decision's advantage over the token dims
@@ -230,10 +250,13 @@ def main(cfg):  # noqa: F821
         if iteration % cfg.logger.eval_iter == 0:
             with timeit("eval"):
                 eval_success = evaluate(eval_env, policy, cfg)
+            if recorder is not None:
+                record_eval_video(record_env, recorder, policy, cfg, iteration)
 
         timings = timeit.todict(prefix="time")
         timeit.erase()
         collect_time = max(timings.get("time/collect", 0.0), 1e-9)
+        train_time = max(timings.get("time/train", 0.0), 1e-9)
         num_decisions_collected = int(episode_lengths.sum())
         env_steps = num_decisions_collected * cfg.env.chunk_size
         metrics = {
@@ -241,10 +264,21 @@ def main(cfg):  # noqa: F821
             "train/episode_decisions": episode_lengths.float().mean().item(),
             "train/episodes_total": total_episodes,
             "train/lr": scheduler.get_last_lr()[0],
+            # reward curves: per-episode return (binary-success reward summed
+            # over the episode), averaged and best-of-batch
+            "train/reward_mean": episode_returns.mean().item(),
+            "train/reward_max": episode_returns.max().item(),
             "buffer/decisions": num_decisions,
             "buffer/kept_fraction": num_decisions / max(1, num_decisions_collected),
-            "throughput/env_steps_per_s": env_steps / collect_time,
-            "throughput/decisions_per_s": num_decisions_collected / collect_time,
+            # inference throughput: env steps / decisions generated per second
+            # during collection (policy rollout)
+            "throughput/inference_env_steps_per_s": env_steps / collect_time,
+            "throughput/inference_decisions_per_s": num_decisions_collected
+            / collect_time,
+            # training throughput: decisions consumed / optimizer steps taken
+            # per second during the PPO update
+            "throughput/train_decisions_per_s": train_decisions / train_time,
+            "throughput/optim_steps_per_s": optim_steps / train_time,
         }
         metrics.update(timings)
         if eval_success is not None:
@@ -288,9 +322,15 @@ def main(cfg):  # noqa: F821
             logger, {"eval/success_rate": final_success}, cfg.collector.total_iters
         )
         torchrl_logger.info(f"Final greedy success rate: {final_success:.3f}")
+        if recorder is not None:
+            record_eval_video(
+                record_env, recorder, policy, cfg, cfg.collector.total_iters
+            )
     collector.shutdown()
     train_env.close(raise_if_closed=False)
     eval_env.close(raise_if_closed=False)
+    if record_env is not None:
+        record_env.close(raise_if_closed=False)
 
 
 if __name__ == "__main__":

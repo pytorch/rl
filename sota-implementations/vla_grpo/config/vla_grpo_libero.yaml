@@ -69,6 +69,9 @@ logger:
   mode: online
   eval_iter: 4 # evaluate every N iterations (the paper's cadence)
   eval_episodes: 50 # greedy episodes per evaluation (cycled init states)
+  record_video: true # render eval rollouts via VideoRecorder (needs a logger)
+  video_episodes: 2 # greedy episodes per recorded video (one camera stream)
+  video_fps: 8 # frames per second of the logged video (one frame per decision)
 
 checkpoint:
   save_iter: 25

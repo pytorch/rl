@@ -54,6 +54,7 @@ dev = [
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
     "imageio",
+    "moviepy",
     "mujoco",
     "mujoco-torch",
     "pre-commit",

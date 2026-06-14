@@ -278,6 +278,45 @@ class TestToyVLAEnv:
         with pytest.raises(ValueError, match="success_tol"):
             ToyVLAEnv(action_dim=2, state_dim=4, success_steps=2, success_tol=0.6)
 
+    @pytest.mark.parametrize("batch_size", [(), (2,)])
+    def test_from_pixels_specs(self, batch_size):
+        env = ToyVLAEnv(
+            action_dim=2,
+            state_dim=4,
+            success_steps=2,
+            from_pixels=True,
+            render_size=24,
+            batch_size=batch_size,
+        )
+        check_env_specs(env)
+        td = env.reset()
+        assert td["pixels"].dtype == torch.uint8
+        assert td["pixels"].shape == torch.Size([*batch_size, 24, 24, 3])
+
+    def test_from_pixels_renders_markers(self):
+        # the executed action is a red marker, the target a green one; moving
+        # the action moves the red marker (the frame tracks the scene)
+        env = ToyVLAEnv(
+            action_dim=2, state_dim=4, success_steps=2, from_pixels=True, seed=0
+        )
+        td = env.reset()
+        td["action"] = torch.tensor([-0.9, -0.9])
+        low = env.step(td)["next", "pixels"]
+        td["action"] = torch.tensor([0.9, 0.9])
+        high = env.step(td)["next", "pixels"]
+        # red (action) and green (target) markers are both present
+        assert (low[..., 0] > 200).any() and (low[..., 1] > 150).any()
+        # the red marker is in opposite corners for opposite actions
+        assert not torch.equal(low, high)
+        assert bool((high[:6, :6, 0] > 200).any()) != bool((low[:6, :6, 0] > 200).any())
+
+    def test_from_pixels_off_by_default(self):
+        assert "pixels" not in ToyVLAEnv(batch_size=[1]).reset().keys()
+
+    def test_render_size_validation(self):
+        with pytest.raises(ValueError, match="render_size"):
+            ToyVLAEnv(from_pixels=True, render_size=0)
+
     def test_tracking_oracle_succeeds(self):
         # the acceptance gate for the tracking task: an oracle that reads the
         # target back from the state succeeds in exactly success_steps steps
