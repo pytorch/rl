@@ -27,6 +27,7 @@ import numpy as np
 import pytest
 import torch
 from tensordict import NonTensorStack, TensorDict
+from tensordict.nn import InteractionType
 from torch import nn
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -177,7 +178,10 @@ def _make_obs(batch=2, image_hw=32):
 def policy():
     torch.manual_seed(0)
     return OpenVLAOFTWrapper(
-        _TinyOFT(), _FakeProcessor(), temperature=1.6, mode="sample"
+        _TinyOFT(),
+        _FakeProcessor(),
+        temperature=1.6,
+        default_interaction_type=InteractionType.RANDOM,
     )
 
 
@@ -215,7 +219,11 @@ class TestOpenVLAOFTWrapper:
 
     def test_greedy_deterministic(self):
         torch.manual_seed(0)
-        policy = OpenVLAOFTWrapper(_TinyOFT(), _FakeProcessor(), mode="greedy")
+        policy = OpenVLAOFTWrapper(
+            _TinyOFT(),
+            _FakeProcessor(),
+            default_interaction_type=InteractionType.DETERMINISTIC,
+        )
         obs = _make_obs()
         with torch.no_grad():
             first = policy(obs.clone())["action_tokens"]
@@ -283,7 +291,7 @@ class TestOpenVLAOFTWrapper:
             _TinyOFT(),
             _FakeProcessor(),
             temperature=1.6,
-            mode="sample",
+            default_interaction_type=InteractionType.RANDOM,
             log_probs_mode=ratio_level,
         )
         obs = _make_obs()

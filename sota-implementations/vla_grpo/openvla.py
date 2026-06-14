@@ -24,11 +24,13 @@ import importlib.util
 import numpy as np
 import torch
 from tensordict import TensorDictBase
+from tensordict.nn import InteractionType
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.data.vla import VocabTailActionTokenizer
 from torchrl.modules.vla import VLAWrapperBase
-from torchrl.modules.vla.common import LogProbsMode, SamplingMode
+
+from torchrl.modules.vla.common import LogProbsMode
 
 _has_transformers = importlib.util.find_spec("transformers") is not None
 _has_timm = importlib.util.find_spec("timm") is not None
@@ -86,8 +88,12 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         temperature (float, optional): sampling temperature, applied
             identically when sampling rollout actions and when recomputing
             log-probabilities at loss time. Defaults to ``1.0``.
-        mode (str, optional): ``"sample"`` or ``"greedy"``. Defaults to
-            ``"sample"``.
+        default_interaction_type (InteractionType, optional): token readout
+            when no exploration context is active (``RANDOM`` samples, else
+            argmax); the forward otherwise follows the ambient
+            :func:`~torchrl.envs.utils.exploration_type`. Defaults to
+            ``InteractionType.DETERMINISTIC``. See
+            :class:`~torchrl.modules.vla.VLAWrapperBase`.
         log_probs_mode (str, optional): ``"sequence"`` or ``"token"``. See
             :class:`~torchrl.modules.vla.VLAWrapperBase`. Defaults to
             ``"sequence"``.
@@ -107,7 +113,7 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         *,
         unnorm_key: str | None = None,
         temperature: float = 1.0,
-        mode: SamplingMode = "sample",
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         log_probs_mode: LogProbsMode = "sequence",
         use_wrist_image: bool = False,
         center_crop: bool = False,
@@ -123,7 +129,7 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
             action_head="tokens",
             vocab_size=num_bins,
             use_state=False,
-            mode=mode,
+            default_interaction_type=default_interaction_type,
             log_probs_mode=log_probs_mode,
         )
         self.model = model

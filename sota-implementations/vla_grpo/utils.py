@@ -42,6 +42,7 @@ from torchrl.envs import (
     ToyVLAEnv,
     TransformedEnv,
 )
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.vla import TinyVLA, VLAWrapperBase
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.llm import MCAdvantage
@@ -64,7 +65,6 @@ def make_policy(cfg, device: torch.device) -> VLAWrapperBase:
             action_head="tokens",
             vocab_size=cfg.tokenizer.vocab_size,
             hidden_dim=cfg.policy.hidden_dim,
-            mode="sample",
             log_probs_mode=log_probs_mode,
             device=device,
         )
@@ -275,9 +275,12 @@ def make_collector(cfg, env: EnvBase, policy: VLAWrapperBase, device) -> Collect
     episodes delimited by the done flags -- no padding frames for the
     image-heavy VLA observations; episodes spanning internal collection
     steps are reassembled by the collector, in-flight episodes are held
-    back). The policy is held by reference (in-place optimizer updates and
-    ``mode`` flips apply immediately) and observations/actions are cast
-    between the env's and the policy's devices by the collector.
+    back). The policy is held by reference (in-place optimizer updates apply
+    immediately) and observations/actions are cast between the env's and the
+    policy's devices by the collector. ``exploration_type=RANDOM`` makes the
+    collector roll out under a sampling context, which the token policy reads
+    via :func:`~torchrl.envs.utils.exploration_type` -- no policy mutation, so
+    this works with any collector (including multi-process workers).
     """
     num_envs = env.batch_size[0] if env.batch_size else 1
     return Collector(
@@ -287,6 +290,7 @@ def make_collector(cfg, env: EnvBase, policy: VLAWrapperBase, device) -> Collect
         total_frames=-1,
         trajs_per_batch=cfg.collector.groups_per_iter * cfg.collector.group_size,
         traj_format="cat",
+        exploration_type=ExplorationType.RANDOM,
         policy_device=device,
         reset_at_each_iter=False,
     )
@@ -299,13 +303,12 @@ def evaluate(env: TransformedEnv, policy: VLAWrapperBase, cfg) -> float:
     no auto-resets in between (``break_when_all_done`` freezes finished rows
     and stops once every row is done). Each LIBERO reset therefore consumes
     exactly one cycled initial state, keeping the fixed-trials evaluation
-    protocol exact, and no collected episode is discarded.
+    protocol exact, and no collected episode is discarded. Greedy decoding is
+    requested through the exploration context, not by mutating the policy.
     """
-    mode = policy.mode
-    policy.mode = "greedy"
     successes = 0.0
     episodes = 0
-    with torch.no_grad():
+    with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
         while episodes < cfg.logger.eval_episodes:
             reset_td = env.reset()
             rollout = env.rollout(
@@ -322,7 +325,6 @@ def evaluate(env: TransformedEnv, policy: VLAWrapperBase, cfg) -> float:
             row_success = rollout["next", "success"].any(-2)
             successes += float(row_success.sum())
             episodes += int(row_success.numel())
-    policy.mode = mode
     return successes / max(episodes, 1)
 
 
@@ -365,11 +367,10 @@ def record_eval_video(env, recorder, policy: VLAWrapperBase, cfg, step: int) -> 
     stops at the episode's natural end -- the same protocol as :func:`evaluate`,
     so the recorded episodes mirror the measured ones. ``recorder.dump`` stacks
     every frame seen since the last dump into a single clip and writes it to the
-    logger at ``step``.
+    logger at ``step``. Greedy decoding is requested through the exploration
+    context, matching :func:`evaluate`.
     """
-    mode = policy.mode
-    policy.mode = "greedy"
-    with torch.no_grad():
+    with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
         for _ in range(max(int(cfg.logger.video_episodes), 1)):
             reset_td = env.reset()
             env.rollout(
@@ -382,7 +383,6 @@ def record_eval_video(env, recorder, policy: VLAWrapperBase, cfg, step: int) -> 
                 auto_cast_to_device=True,
             )
     recorder.dump(step=step)
-    policy.mode = mode
 
 
 def log_metrics(logger, metrics: dict, step: int) -> None:

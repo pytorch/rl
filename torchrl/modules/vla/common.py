@@ -10,7 +10,8 @@ from typing import Literal
 
 import torch
 from tensordict import TensorDictBase
-from tensordict.nn import TensorDictModuleBase
+from tensordict.nn import InteractionType, TensorDictModuleBase
+from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 from torch import distributions as torch_dist
 
@@ -25,7 +26,6 @@ from torchrl.data.vla.schema import (
 __all__ = ["VLAWrapperBase"]
 
 ActionHead = Literal["continuous", "tokens"]
-SamplingMode = Literal["greedy", "sample"]
 LogProbsMode = Literal["sequence", "token"]
 
 
@@ -65,8 +65,20 @@ class VLAWrapperBase(TensorDictModuleBase):
             (required for the ``"tokens"`` head).
         use_state (bool): whether to read the proprioceptive state.
             Defaults to ``True``.
-        mode (str): ``"greedy"`` (default, argmax) or ``"sample"`` token
-            sampling for the ``"tokens"`` head (ignored by the continuous head).
+        default_interaction_type (InteractionType): how the ``"tokens"`` head
+            turns logits into action tokens when no exploration context is
+            active. The forward consults the ambient
+            :func:`~torchrl.envs.utils.exploration_type` (set by collectors
+            and :func:`~torchrl.envs.utils.set_exploration_type`):
+            ``InteractionType.RANDOM`` samples, every other type (and this
+            default) takes the argmax. This mirrors
+            :class:`~torchrl.modules.tensordict_module.ProbabilisticActor`, so
+            the same code drives rollouts (the collector's ``exploration_type``
+            defaults to ``RANDOM``) and greedy evaluation
+            (``with set_exploration_type(ExplorationType.DETERMINISTIC):``)
+            without mutating the policy. Defaults to
+            ``InteractionType.DETERMINISTIC`` (argmax). Ignored by the
+            continuous head.
         log_probs_mode (str): ``"sequence"`` (default; one summed
             log-probability per sample) or ``"token"`` (per-token
             log-probabilities, ``[*B, chunk_size, action_dim]``) for the
@@ -100,7 +112,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         action_head: ActionHead = "continuous",
         vocab_size: int | None = None,
         use_state: bool = True,
-        mode: SamplingMode = "greedy",
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         log_probs_mode: LogProbsMode = "sequence",
     ) -> None:
         super().__init__()
@@ -110,8 +122,11 @@ class VLAWrapperBase(TensorDictModuleBase):
             )
         if action_head == "tokens" and not vocab_size:
             raise ValueError("vocab_size must be set for the 'tokens' action head.")
-        if mode not in ("greedy", "sample"):
-            raise ValueError(f"mode must be 'greedy' or 'sample', got {mode!r}.")
+        if not isinstance(default_interaction_type, InteractionType):
+            raise ValueError(
+                "default_interaction_type must be an InteractionType, got "
+                f"{default_interaction_type!r}."
+            )
         if log_probs_mode not in ("sequence", "token"):
             raise ValueError(
                 f"log_probs_mode must be 'sequence' or 'token', got {log_probs_mode!r}."
@@ -121,7 +136,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         self.action_head = action_head
         self.vocab_size = vocab_size
         self.use_state = bool(use_state)
-        self.mode = mode
+        self.default_interaction_type = default_interaction_type
         self.log_probs_mode = log_probs_mode
         self._tensor_keys = self._AcceptedKeys()
         self._update_keys()
@@ -186,7 +201,17 @@ class VLAWrapperBase(TensorDictModuleBase):
                 if isinstance(dist, torch_dist.Independent)
                 else dist.logits
             )
-            tokens = dist.sample() if self.mode == "sample" else logits.argmax(-1)
+            # consult the ambient exploration context (set by the collector
+            # during rollout, or by set_exploration_type at eval); fall back
+            # to the policy's default when no context is active
+            interaction = interaction_type()
+            if interaction is None:
+                interaction = self.default_interaction_type
+            tokens = (
+                dist.sample()
+                if interaction == InteractionType.RANDOM
+                else logits.argmax(-1)
+            )
             tensordict.set(self._tensor_keys.action_tokens, tokens)
             tensordict.set(self._tensor_keys.log_probs, dist.log_prob(tokens))
         return tensordict

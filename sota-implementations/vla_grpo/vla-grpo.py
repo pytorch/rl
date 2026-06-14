@@ -163,8 +163,10 @@ def main(cfg):  # noqa: F821
         # done flags). The whole batch is written to the replay buffer in one
         # extend; its write path splits it back into trajectories, groups
         # them by group_id, computes the group-relative advantage and applies
-        # the dynamic sampling filter.
-        policy.mode = "sample"
+        # the dynamic sampling filter. Rollouts sample (rather than argmax)
+        # because the collector runs under exploration_type=RANDOM (set in
+        # make_collector); the policy reads that context, so the script never
+        # mutates it.
         with timeit("collect"):
             batch = next(collector_iter)
             done = batch["next", "done"].squeeze(-1)
@@ -224,15 +226,9 @@ def main(cfg):  # noqa: F821
                 for batch in replay_buffer:
                     batch = batch.to(device)
                     train_decisions += batch.shape[0]
-                    if cfg.loss.ratio_level == "token":
-                        # one importance ratio per action token: broadcast
-                        # the decision's advantage over the token dims
-                        tokens = batch["action_tokens"]
-                        batch["advantage"] = (
-                            batch["advantage"]
-                            .view(-1, 1, 1, 1)
-                            .expand(*tokens.shape, 1)
-                        )
+                    # ratio_level="token" gives per-token importance ratios;
+                    # ClipPPOLoss broadcasts the per-decision advantage over the
+                    # token dims itself, so the script passes it through as-is.
                     loss_vals = loss_module(batch)
                     loss = loss_vals["loss_objective"] / accumulate
                     loss.backward()
