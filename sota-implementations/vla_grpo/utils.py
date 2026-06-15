@@ -82,6 +82,8 @@ def make_policy(cfg, device: torch.device) -> VLAWrapperBase:
             log_probs_mode=log_probs_mode,
             use_wrist_image=cfg.policy.use_wrist_image,
             center_crop=cfg.policy.center_crop,
+            gripper_binarize=cfg.policy.get("gripper_binarize", False),
+            gripper_invert=cfg.policy.get("gripper_invert", False),
         )
         if cfg.policy.lora_rank:
             # de-risk fallback to full fine-tuning (RL4VLA shows LoRA r=32

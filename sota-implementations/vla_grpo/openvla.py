@@ -140,6 +140,14 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         center_crop (bool, optional): center-crop the images to 90% area
             before the processor resize, as in SimpleVLA-RL evaluation with
             augmented training. Defaults to ``False``.
+        gripper_binarize (bool, optional): binarize the decoded gripper action
+            to +/-1 by sign. The model emits a continuous gripper value but
+            robots (LIBERO/robosuite) need a firm open/close, so without this
+            the gripper half-actuates and never secures a grasp. Defaults to
+            ``False``.
+        gripper_invert (bool, optional): flip the gripper open/close sign after
+            (optional) binarization, for checkpoints whose convention is
+            opposite the environment's. Defaults to ``False``.
     """
 
     def __init__(
@@ -153,6 +161,8 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         log_probs_mode: LogProbsMode = "sequence",
         use_wrist_image: bool = False,
         center_crop: bool = False,
+        gripper_binarize: bool = False,
+        gripper_invert: bool = False,
     ) -> None:
         from openvla_oft.constants import ACTION_DIM, NUM_ACTIONS_CHUNK
 
@@ -173,6 +183,8 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         self.temperature = float(temperature)
         self.use_wrist_image = bool(use_wrist_image)
         self.center_crop = bool(center_crop)
+        self.gripper_binarize = bool(gripper_binarize)
+        self.gripper_invert = bool(gripper_invert)
         self.num_bins = num_bins
         if unnorm_key is None and model.norm_stats is not None:
             if len(model.norm_stats) != 1:
@@ -249,7 +261,11 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
     def action_tokenizer(self) -> VocabTailActionTokenizer:
         """The matching window-id tokenizer (decode tokens -> env actions)."""
         return VocabTailActionTokenizer.from_norm_stats(
-            self.model.norm_stats, self.unnorm_key, num_bins=self.num_bins
+            self.model.norm_stats,
+            self.unnorm_key,
+            num_bins=self.num_bins,
+            gripper_binarize=self.gripper_binarize,
+            gripper_invert=self.gripper_invert,
         )
 
     # -- preprocessing (shared by rollout and loss-time recompute) ---------

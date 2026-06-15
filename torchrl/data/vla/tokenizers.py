@@ -224,8 +224,12 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         norm_low: torch.Tensor | None = None,
         norm_high: torch.Tensor | None = None,
         norm_mask: torch.Tensor | None = None,
+        gripper_binarize: bool = False,
+        gripper_invert: bool = False,
     ) -> None:
         super().__init__()
+        self.gripper_binarize = bool(gripper_binarize)
+        self.gripper_invert = bool(gripper_invert)
         if num_bins < 2:
             raise ValueError(f"num_bins must be >= 2, got {num_bins}.")
         if full_vocab_size is not None and full_vocab_size < num_bins:
@@ -299,6 +303,17 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
             norm_mask = self.norm_mask.to(tokens.device)
             unnormalized = 0.5 * (actions + 1.0) * (norm_high - norm_low) + norm_low
             actions = torch.where(norm_mask, unnormalized, actions)
+        if (self.gripper_binarize or self.gripper_invert) and self.norm_mask is not None:
+            # the gripper dims are the *unmasked* ones (not min-max normalized).
+            # Robots expect a firm open/close, not the continuous bin value the
+            # model emits: binarize to +/-1 by sign (optionally invert the
+            # open/close convention).
+            gripper = ~self.norm_mask.to(tokens.device)
+            if self.gripper_binarize:
+                binval = (actions > 0).to(actions.dtype) * 2.0 - 1.0
+                actions = torch.where(gripper, binval, actions)
+            if self.gripper_invert:
+                actions = torch.where(gripper, -actions, actions)
         return actions
 
     @classmethod
@@ -309,6 +324,8 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         *,
         num_bins: int = 256,
         full_vocab_size: int | None = None,
+        gripper_binarize: bool = False,
+        gripper_invert: bool = False,
     ) -> VocabTailActionTokenizer:
         """Build from the ``norm_stats`` dictionary of an OpenVLA checkpoint.
 
@@ -338,4 +355,6 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
             norm_mask=torch.as_tensor(mask, dtype=torch.bool)
             if mask is not None
             else None,
+            gripper_binarize=gripper_binarize,
+            gripper_invert=gripper_invert,
         )
