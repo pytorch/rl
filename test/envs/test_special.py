@@ -616,6 +616,26 @@ class TestPartialSteps:
             assert_allclose_td(td[2].get("next"), td[2], intersection=True)
             assert (td[3].get("next") != 0).any()
 
+    def test_batch_locked_partial_steps_all_false(self, device, env_device):
+        # Regression test: EnvBase.step on a batch-locked env receiving an
+        # all-False "_step" mask must skip _step entirely and return the skip
+        # tensordict instead of raising.
+        with torch.device(device) if device is not None else contextlib.nullcontext():
+            env = CountingEnv(
+                max_steps=10, start_val=2, batch_size=(4,), device=env_device
+            )
+            assert env.batch_locked
+            td = env.reset()
+            td.set("_step", torch.zeros(4, dtype=torch.bool, device=td.device))
+            td.set("action", env.full_action_spec[env.action_key].one())
+            td = env.step(td)
+            # every step was skipped: observations carry over, reward is zeroed
+            # and the counter never advanced
+            assert_allclose_td(td.get("next"), td, intersection=True)
+            assert (td["next", "observation"] == 2).all()
+            assert (td["next", "reward"] == 0).all()
+            assert (env.count == 2).all()
+
 
 class TestEnvWithHistory:
     @pytest.fixture(autouse=True, scope="class")

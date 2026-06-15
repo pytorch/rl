@@ -240,6 +240,10 @@ ignore-words-list = "multicat,nd,splitted,te,uncompressible,dout"
 first_party_detection = false
 
 [project.entry-points."vllm.general_plugins"]
-# Ensure FP32 overrides are registered in all vLLM processes (main, workers, and
-# the registry subprocess) before resolving model classes.
-fp32_overrides = "torchrl.modules.llm.backends.vllm.vllm_plugin:register_fp32_overrides"
+# Auto-loaded by vLLM in every process (main, workers, and the registry
+# subprocess), but a NO-OP unless that process opted in via
+# TORCHRL_VLLM_FP32_OVERRIDES (set by torchrl's vLLM backend when
+# enable_fp32_output=True). The unique name avoids colliding with other projects'
+# vllm.general_plugins entries: vLLM keys discovered plugins by name, so a shared
+# name would silently drop one of them.
+torchrl_fp32_overrides = "torchrl.modules.llm.backends.vllm.vllm_plugin:register_fp32_overrides"
