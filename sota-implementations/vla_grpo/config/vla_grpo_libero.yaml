@@ -28,6 +28,10 @@ policy:
   # action statistics unnorm_key resolves into)
   checkpoint: Haozhan72/Openvla-oft-SFT-libero-spatial-traj1
   unnorm_key: libero_spatial_no_noops
+  # the SimpleVLA-RL checkpoints omit their LIBERO fine-tuning stats; pull the
+  # matching official OFT release's dataset_statistics.json (same LIBERO data).
+  # Must match unnorm_key's suite (libero-object/goal/10 for the other suites).
+  dataset_statistics: moojink/openvla-7b-oft-finetuned-libero-spatial
   dtype: bfloat16
   temperature: 1.6 # rollout sampling temperature (greedy eval)
   use_wrist_image: false

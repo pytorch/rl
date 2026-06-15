@@ -42,6 +42,25 @@ _EMPTY_TOKEN_ID = 29871
 PROMPT_TEMPLATE = "In: What action should the robot take to {instruction}?\nOut:"
 
 
+def _load_dataset_statistics(spec: str) -> dict:
+    """Load an OpenVLA ``dataset_statistics.json`` from a local path or HF repo.
+
+    ``spec`` is either a filesystem path to the json or a HuggingFace repo id
+    that ships a ``dataset_statistics.json`` at its root.
+    """
+    import json
+    import os
+
+    if os.path.isfile(spec):
+        path = spec
+    else:
+        from huggingface_hub import hf_hub_download
+
+        path = hf_hub_download(spec, "dataset_statistics.json")
+    with open(path) as f:
+        return json.load(f)
+
+
 def register_openvla_oft() -> None:
     """Register the vendored token-OFT classes with the transformers Auto* APIs."""
     from openvla_oft.configuration_prismatic import OpenVLAConfig
@@ -174,9 +193,21 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         *,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: torch.device | str | None = None,
+        dataset_statistics: str | None = None,
         **kwargs,
     ) -> OpenVLAOFTWrapper:
-        """Load a SimpleVLA-RL token-OFT checkpoint (e.g. ``Haozhan72/...``)."""
+        """Load a SimpleVLA-RL token-OFT checkpoint (e.g. ``Haozhan72/...``).
+
+        Args:
+            dataset_statistics (str, optional): a path to an OpenVLA
+                ``dataset_statistics.json`` or a HF repo id shipping one, whose
+                action-normalization stats are merged into ``model.norm_stats``.
+                The SimpleVLA-RL LIBERO checkpoints omit their fine-tuning
+                dataset's stats (only the base pretraining datasets remain), so
+                point this at the matching official OFT release (e.g.
+                ``moojink/openvla-7b-oft-finetuned-libero-spatial``) -- it is the
+                same LIBERO data, hence the same normalization.
+        """
         from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
         from openvla_oft.processing_prismatic import PrismaticProcessor
 
@@ -202,6 +233,11 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
             # the vendored model implements only eager attention
             attn_implementation="eager",
         )
+        if dataset_statistics is not None:
+            extra = _load_dataset_statistics(dataset_statistics)
+            if getattr(model, "norm_stats", None) is None:
+                model.norm_stats = {}
+            model.norm_stats.update(extra)
         if device is not None:
             model = model.to(device)
         model.eval()

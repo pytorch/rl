@@ -77,6 +77,7 @@ def make_policy(cfg, device: torch.device) -> VLAWrapperBase:
             torch_dtype=getattr(torch, cfg.policy.dtype),
             device=device,
             unnorm_key=cfg.policy.unnorm_key,
+            dataset_statistics=cfg.policy.get("dataset_statistics", None),
             temperature=cfg.policy.temperature,
             log_probs_mode=log_probs_mode,
             use_wrist_image=cfg.policy.use_wrist_image,
