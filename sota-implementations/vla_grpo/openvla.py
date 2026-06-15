@@ -180,9 +180,22 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
         from openvla_oft.processing_prismatic import PrismaticProcessor
 
+        from transformers import AutoConfig
+
         register_openvla_oft()
+        # The SimpleVLA-RL token-OFT checkpoints ship a base-Prismatic
+        # config.json that omits the OFT architecture flags the modeling code
+        # reads. ``use_proprio`` is the only one read unconditionally; this
+        # single-image token variant has no proprio projector, so default it
+        # to False (which skips the projector and the dependent proprio_dim).
+        config = AutoConfig.from_pretrained(
+            pretrained_model_name_or_path, trust_remote_code=False
+        )
+        if not hasattr(config, "use_proprio"):
+            config.use_proprio = False
         model = OpenVLAForActionPrediction.from_pretrained(
             pretrained_model_name_or_path,
+            config=config,
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=True,
             trust_remote_code=False,
