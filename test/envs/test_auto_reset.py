@@ -671,6 +671,34 @@ class TestNonTensorEnv:
             time.sleep(0.1)
             gc.collect()
 
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_parallel_partial_reset(self, use_buffers, maybe_fork_ParallelEnv):
+        """Regression: a *partial* reset (subset of workers) with NonTensor data.
+
+        ``out`` carries no NonTensor leaf (NonTensor is not shared-memory
+        backed), so a partial fancy-index assignment used to raise
+        ``IndexError: list index out of range``. The reset workers must get the
+        fresh value while the untouched worker keeps its current value.
+        """
+        env = maybe_fork_ParallelEnv(3, EnvWithMetadata, use_buffers=use_buffers)
+        try:
+            env.set_seed(0)
+            td = env.reset()
+            for _ in range(4):
+                td.set("action", torch.zeros(3, 1))
+                td = env.step_mdp(env.step(td))
+            assert td.get("non_tensor").tolist() == [4, 4, 4]
+            # partial reset: workers 0 and 2 only; worker 1 keeps its state
+            reset = td.select("non_tensor")
+            reset.set("_reset", torch.tensor([True, False, True]).reshape(3, 1))
+            out = env.reset(reset)
+            assert out.get("non_tensor").tolist() == [0, 4, 0]
+        finally:
+            env.close(raise_if_closed=False)
+            del env
+            time.sleep(0.1)
+            gc.collect()
+
     @pytest.mark.skipif(
         platform == "win32", reason="signal-based timeout not supported."
     )

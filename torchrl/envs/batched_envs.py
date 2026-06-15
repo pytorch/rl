@@ -2613,9 +2613,29 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         )
         if self._non_tensor_keys:
             workers, nontensor = zip(*workers_nontensor)
-            out[torch.tensor(workers)] = LazyStackedTensorDict(*nontensor).select(
+            reset_stack = LazyStackedTensorDict(*nontensor).select(
                 *self._non_tensor_keys
             )
+            if len(workers) == self.num_workers:
+                # full reset: every worker has a freshly reset value, so the
+                # fancy-index assignment creates the (absent) NonTensor keys.
+                out[torch.tensor(workers)] = reset_stack
+            else:
+                # partial reset: ``out`` has no NonTensor leaves (NonTensor is
+                # not shared-memory backed, so ``named_apply`` over the shared
+                # parent skips it), and a NonTensor key cannot be created by a
+                # *partial* fancy-index assignment. Build the full-width
+                # NonTensor explicitly -- reset workers take the fresh values,
+                # the others keep their current value from the input tensordict
+                # (correct, since they are not being reset).
+                worker_to_offset = {w: o for o, w in enumerate(workers)}
+                rows = []
+                for i in range(self.num_workers):
+                    if i in worker_to_offset:
+                        rows.append(reset_stack[worker_to_offset[i]])
+                    else:
+                        rows.append(tensordict[i].select(*self._non_tensor_keys))
+                out.update(LazyStackedTensorDict(*rows))
         self._sync_w2m()
         return out
 
