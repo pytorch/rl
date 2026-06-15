@@ -552,9 +552,9 @@ class TestRewardSum(TransformBase):
             except RuntimeError:
                 pass
 
-    @pytest.mark.parametrize("has_in_keys,", [True, False])
+    @pytest.mark.parametrize("has_in_keys", [True, False])
     @pytest.mark.parametrize(
-        "reset_keys,", [[("some", "nested", "reset")], ["_reset"] * 3, None]
+        "reset_keys", [[("some", "nested", "reset")], ["_reset"] * 3, None]
     )
     def test_trans_multi_key(
         self, has_in_keys, reset_keys, n_workers=2, batch_size=(3, 2), max_steps=5
