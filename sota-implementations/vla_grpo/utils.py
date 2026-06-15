@@ -201,6 +201,10 @@ def make_env(
                 for worker_idx in range(num_envs)
             ],
             mp_start_method="spawn",
+            # MuJoCo runs on CPU; pin the env device so the collector/rollout
+            # cast the GPU policy's action back to CPU before stepping (else a
+            # cuda action reaches the CPU transforms -> mixed-device error)
+            device="cpu",
         )
         if seed is not None:
             base.set_seed(seed)
