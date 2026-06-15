@@ -265,30 +265,40 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         # exact torch port of np.digitize(clip(a, -1, 1), bins): index of the
         # first bin edge strictly greater than the value, i.e. in [1, num_bins]
         actions = actions.clamp(-1.0, 1.0)
-        return torch.bucketize(actions, self.bins, right=True)
+        # run on the input's device: the tokenizer lives in a (CPU) env
+        # transform but its inputs can come from a policy on another device
+        return torch.bucketize(actions, self.bins.to(actions.device), right=True)
 
     def encode(self, actions: torch.Tensor) -> torch.Tensor:
         if self.norm_low is not None:
-            scale = (self.norm_high - self.norm_low).clamp_min(1e-8)
-            normalized = 2.0 * (actions - self.norm_low) / scale - 1.0
-            actions = torch.where(self.norm_mask, normalized, actions)
+            norm_low = self.norm_low.to(actions.device)
+            norm_high = self.norm_high.to(actions.device)
+            norm_mask = self.norm_mask.to(actions.device)
+            scale = (norm_high - norm_low).clamp_min(1e-8)
+            normalized = 2.0 * (actions - norm_low) / scale - 1.0
+            actions = torch.where(norm_mask, normalized, actions)
         digitized = self._digitize(actions)
         if self.full_vocab_size is not None:
             return self.full_vocab_size - digitized
         return self.num_bins - digitized
 
     def decode(self, tokens: torch.Tensor) -> torch.Tensor:
+        # operate on the tokens' device (policy and env may differ): move the
+        # small lookup/normalization buffers there so the output rides the
+        # input device
+        bin_centers = self.bin_centers.to(tokens.device)
         if self.full_vocab_size is not None:
             digitized = self.full_vocab_size - tokens
         else:
             digitized = self.num_bins - tokens
-        index = (digitized - 1).clamp(0, self.bin_centers.shape[0] - 1)
-        actions = self.bin_centers[index]
+        index = (digitized - 1).clamp(0, bin_centers.shape[0] - 1)
+        actions = bin_centers[index]
         if self.norm_low is not None:
-            unnormalized = (
-                0.5 * (actions + 1.0) * (self.norm_high - self.norm_low) + self.norm_low
-            )
-            actions = torch.where(self.norm_mask, unnormalized, actions)
+            norm_low = self.norm_low.to(tokens.device)
+            norm_high = self.norm_high.to(tokens.device)
+            norm_mask = self.norm_mask.to(tokens.device)
+            unnormalized = 0.5 * (actions + 1.0) * (norm_high - norm_low) + norm_low
+            actions = torch.where(norm_mask, unnormalized, actions)
         return actions
 
     @classmethod
