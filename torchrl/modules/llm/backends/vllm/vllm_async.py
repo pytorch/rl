@@ -28,6 +28,7 @@ from torchrl._utils import implement_for, logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
+from .vllm_plugin import FP32_OVERRIDES_ENV_VAR
 
 
 _has_vllm = True
@@ -1966,6 +1967,9 @@ def make_async_vllm_engine(
     # Set FP32 output environment variable if requested
     if enable_fp32_output:
         os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        # Opt the engine + its child vLLM processes into torchrl's FP32 model
+        # overrides (the general-plugin no-ops without this).
+        os.environ[FP32_OVERRIDES_ENV_VAR] = "1"
         torchrl_logger.info(
             "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
             "This will use FP32 for the final output layer if the model supports it."

@@ -19,6 +19,7 @@ from torchrl._utils import logger as torchrl_logger
 from torchrl.modules.llm.utils import _cuda_visible_devices
 
 from .base import RLvLLMEngine
+from .vllm_plugin import FP32_OVERRIDES_ENV_VAR
 
 try:
     from vllm import LLM
@@ -424,6 +425,9 @@ def make_vllm_worker(
     # Set FP32 output environment variable if requested
     if enable_fp32_output:
         os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        # Opt the engine + its child vLLM processes into torchrl's FP32 model
+        # overrides (the general-plugin no-ops without this).
+        os.environ[FP32_OVERRIDES_ENV_VAR] = "1"
         torchrl_logger.info(
             "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
             "This will use FP32 for the final output layer if the model supports it."
