@@ -10,8 +10,8 @@ import pytest
 
 from torchrl.modules.llm.backends.vllm.vllm_plugin import (
     FP32_MODEL_OVERRIDES,
-    FP32_OVERRIDES_ENV_VAR,
     fp32_overrides_enabled,
+    FP32_OVERRIDES_ENV_VAR,
     register_fp32_overrides,
 )
 
