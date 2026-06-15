@@ -41,6 +41,14 @@ _EMPTY_TOKEN_ID = 29871
 
 PROMPT_TEMPLATE = "In: What action should the robot take to {instruction}?\nOut:"
 
+# OpenVLA-OFT center-crop: ``crop_scale`` is an AREA fraction (the eval-time
+# augmentation match, ``experiments/robot/openvla_utils.py``). The linear crop
+# is its square root, so a 0.9 area crop keeps ~94.87% of each side -- NOT 90%.
+# Cropping at a linear 0.9 (0.81 area) zooms ~5% harder than training and
+# miscalibrates the policy's learned pixel->action mapping.
+_CROP_AREA_SCALE = 0.9
+_CROP_LINEAR_SCALE = _CROP_AREA_SCALE**0.5
+
 
 def _load_dataset_statistics(spec: str) -> dict:
     """Load an OpenVLA ``dataset_statistics.json`` from a local path or HF repo.
@@ -276,11 +284,13 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         pil = Image.fromarray(array).convert("RGB")
         if self.center_crop:
             width, height = pil.size
-            crop_w, crop_h = int(width * 0.9), int(height * 0.9)
+            crop_w = int(round(width * _CROP_LINEAR_SCALE))
+            crop_h = int(round(height * _CROP_LINEAR_SCALE))
             left = (width - crop_w) // 2
             top = (height - crop_h) // 2
+            # LANCZOS to mirror the reference tf.image.resize(method="lanczos3")
             pil = pil.crop((left, top, left + crop_w, top + crop_h)).resize(
-                (width, height)
+                (width, height), Image.LANCZOS
             )
         return pil
 
