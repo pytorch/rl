@@ -20,6 +20,7 @@ contract a T != 1 rollout requires.
 from __future__ import annotations
 
 import importlib.util
+import io
 
 import numpy as np
 import torch
@@ -48,6 +49,15 @@ PROMPT_TEMPLATE = "In: What action should the robot take to {instruction}?\nOut:
 # miscalibrates the policy's learned pixel->action mapping.
 _CROP_AREA_SCALE = 0.9
 _CROP_LINEAR_SCALE = _CROP_AREA_SCALE**0.5
+
+# OpenVLA-OFT eval feeds the policy a 224x224 image, resized from the rendered
+# frame with a high-quality (lanczos3) filter and JPEG-round-tripped so the
+# pixels carry the same compression artifacts as the JPEG-encoded RLDS training
+# data (experiments/robot/openvla_utils.py:resize_image_for_policy). Skipping
+# either step hands the model out-of-distribution (too-clean / wrong-scaled)
+# pixels, costing closed-loop precision.
+_OPENVLA_IMAGE_SIZE = 224
+_JPEG_QUALITY = 95
 
 
 def _load_dataset_statistics(spec: str) -> dict:
@@ -282,6 +292,16 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
 
         array = image.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         pil = Image.fromarray(array).convert("RGB")
+        # Match OpenVLA-OFT's eval chain: resize to 224 (lanczos), JPEG
+        # round-trip to mirror the RLDS training compression, THEN the
+        # area-0.9 center crop -- in that order.
+        size = _OPENVLA_IMAGE_SIZE
+        if pil.size != (size, size):
+            pil = pil.resize((size, size), Image.LANCZOS)
+        buffer = io.BytesIO()
+        pil.save(buffer, format="JPEG", quality=_JPEG_QUALITY)
+        buffer.seek(0)
+        pil = Image.open(buffer).convert("RGB")
         if self.center_crop:
             width, height = pil.size
             crop_w = int(round(width * _CROP_LINEAR_SCALE))
