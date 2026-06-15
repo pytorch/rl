@@ -87,6 +87,7 @@ if multiprocessing.get_start_method(allow_none=True) is None:
 # sphinx_gallery_end_ignore
 
 import torch
+from tensordict import TensorDict
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torch import nn
 
@@ -259,38 +260,42 @@ print(
 # module runs in *recurrent* mode: it batches the time dimension into a
 # single ``nn.LSTM`` call.
 #
-# The key invariant: if any ``is_init`` is True in the time positions
-# ``1..T-1`` (i.e. mid-batch), the module's recurrent path *splits the
-# batch along those boundaries*, runs the LSTM independently on each
-# resulting chunk, and stitches the outputs back together. Hidden state
-# from one trajectory never bleeds into the next.
-
-# Reshape the sampled ragged batch into rectangular [num_slices, slice_len].
-# When ``strict_length=False`` and there is no padding, slices are exactly
-# ``slice_len`` long, so this reshape is safe. (With ``pad_output=True``,
-# the same reshape works and a mask key is provided alongside.)
-sample_seq = sample.reshape(NUM_SLICES, SLICE_LEN)
+# We feed the sample in **exactly the ragged, concatenated shape the sampler
+# returned** — no reshape to a rectangular ``[B, T]`` tensor, no padding.
+# This is the canonical TorchRL pattern: the recurrent path reads the
+# ``is_init`` markers and, whenever one fires in the interior of the batch (a
+# trajectory boundary that fell inside the sampled window), it *splits the
+# batch along that boundary*, runs the LSTM independently on each resulting
+# chunk, and stitches the outputs back together. Hidden state from one
+# trajectory never bleeds into the next.
+#
+# Reshaping to ``[num_slices, slice_len]`` would be both unnecessary and
+# unsafe: with ``strict_length=False`` the sampler is explicitly allowed to
+# return slices *shorter* than ``slice_len`` (and an effective batch smaller
+# than requested), so the flat batch is not guaranteed to be rectangular.
+# Feeding it ragged sidesteps the issue entirely and is what every loss and
+# advantage module in the library already expects.
 
 with set_recurrent_mode(True):
-    out = policy(sample_seq.clone())
+    out = policy(sample.clone())
 
-print("Sequence-mode output shape:", out["features"].shape)
+print("Recurrent-mode output shape:", out["features"].shape, "(total_steps, hidden)")
 print(
-    "Sequence-mode logits shape:",
+    "Recurrent-mode logits shape:",
     out["logits"].shape,
-    "(num_slices, slice_len, n_actions)",
+    "(total_steps, n_actions)",
 )
 
 ######################################################################
 # Why the boundary handling matters: a controlled check
 # -----------------------------------------------------
 #
-# To prove that the recurrent path does not leak hidden state across
-# trajectory boundaries inside a single batch, we build a small
-# two-trajectory packed batch by hand, seed the *first* trajectory with
-# non-zero noise in its incoming hidden, and check that the second
-# trajectory's outputs match a standalone forward over just that second
-# trajectory.
+# The forward above already ran the interior-split path on real sampled
+# data. To make the no-leakage guarantee *provable* rather than merely
+# exercised, we now build a small two-trajectory packed batch by hand, seed
+# the *first* trajectory with non-zero noise in its incoming hidden, and
+# check that the second trajectory's outputs match a standalone forward over
+# just that second trajectory.
 #
 # If hidden state leaked across the boundary, the noisy first half would
 # pollute the second half's outputs and the comparison would fail.
@@ -308,8 +313,6 @@ obs = torch.randn(1, T, OBS_DIM)
 # *override* this at every is_init=True position.
 noisy_h = torch.randn(1, T, 1, HIDDEN)
 noisy_c = torch.randn(1, T, 1, HIDDEN)
-
-from tensordict import TensorDict
 
 packed = TensorDict(
     {
@@ -365,9 +368,8 @@ target_logits[0] = 1.0  # arbitrary supervised target
 losses = []
 for _step in range(4):
     sample = rb.sample()
-    sample_seq = sample.reshape(NUM_SLICES, SLICE_LEN)
     with set_recurrent_mode(True):
-        out = trainable_policy(sample_seq.clone())
+        out = trainable_policy(sample.clone())
     loss = (out["logits"] - target_logits.expand_as(out["logits"])).pow(2).mean()
     optimizer.zero_grad()
     loss.backward()
@@ -404,6 +406,11 @@ print("Training loss trajectory:", [round(v, 4) for v in losses])
 #
 # - :ref:`Recurrent DQN <RNN_tuto>` — the single-step / collection-time
 #   complement to this tutorial.
+# - ``examples/replay-buffers/recurrent_slice_sampler_pipeline.py`` — a
+#   minimal, runnable end-to-end version of this pipeline (GRU policy, the
+#   collector writing directly into the buffer in a background thread, and
+#   :class:`~torchrl.data.replay_buffers.SliceSampler` auto-detecting the
+#   trajectory key).
 # - :ref:`ref_recurrent_state_lifecycle` — full reference on how hidden
 #   state flows from collection through replay to the loss, and what
 #   ``is_init`` controls along the way.
