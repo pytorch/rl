@@ -57,6 +57,23 @@ def register_openvla_oft() -> None:
         AutoProcessor,
     )
 
+    # The vendored modeling code predates the attention-implementation
+    # dispatch added in recent transformers (>=4.5x), which probes
+    # ``_supports_sdpa`` / ``_supports_flash_attn_*`` class attributes during
+    # ``PreTrainedModel.__init__``. Declaring no support routes the model to
+    # eager attention -- exactly the path OpenVLA was trained and evaluated
+    # with -- so the numerics (and the SFT success rate) are preserved while
+    # the vendored code stays verbatim.
+    for attr in (
+        "_supports_sdpa",
+        "_supports_flash_attn_2",
+        "_supports_flash_attn_3",
+        "_supports_flex_attn",
+        "_supports_attention_backend",
+    ):
+        if not hasattr(OpenVLAForActionPrediction, attr):
+            setattr(OpenVLAForActionPrediction, attr, False)
+
     try:
         AutoConfig.register("openvla", OpenVLAConfig)
         AutoImageProcessor.register(OpenVLAConfig, PrismaticImageProcessor)
@@ -169,6 +186,8 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=True,
             trust_remote_code=False,
+            # the vendored model implements only eager attention
+            attn_implementation="eager",
         )
         if device is not None:
             model = model.to(device)
