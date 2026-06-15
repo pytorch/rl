@@ -37,10 +37,12 @@ policy:
   use_wrist_image: false
   center_crop: true # the SimpleVLA-RL checkpoints are trained with augmentations
   # the model emits a continuous gripper; LIBERO/robosuite needs a firm +/-1
-  # open/close (demo gripper is binary, -1 open / +1 close). binarize by sign;
-  # this checkpoint's positive already means close, so no invert.
+  # open/close (demo gripper is binary, -1 open / +1 close). binarize by sign,
+  # then invert: a predict-at-demo-state check showed the model's gripper is
+  # anti-correlated (~-0.65) with the demo, i.e. its open/close convention is
+  # flipped relative to robosuite.
   gripper_binarize: true
-  gripper_invert: false
+  gripper_invert: true
   lora_rank: 32 # de-risk fallback; set to 0/null for full fine-tuning (needs FSDP)
   lora_target_modules: [q_proj, k_proj, v_proj, o_proj]
   device: null # null = auto (cuda if available)
