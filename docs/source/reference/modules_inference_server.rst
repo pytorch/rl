@@ -17,6 +17,7 @@ Core API
     :template: rl_template_noinherit.rst
 
     InferenceServer
+    ProcessInferenceServer
     InferenceClient
     InferenceTransport
 
