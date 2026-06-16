@@ -30,8 +30,7 @@ from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import InitTracker, RewardSum, StepCounter, TransformedEnv, VecNormV2
-from torchrl.envs.libs import gym as gym_lib
-from torchrl.envs.libs import isaac_lab as isaac_lab_lib
+from torchrl.envs.libs import gym as gym_lib, isaac_lab as isaac_lab_lib
 from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import LSTMModule, MLP
