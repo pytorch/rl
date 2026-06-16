@@ -1,7 +1,7 @@
 #!/bin/bash
 
-export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.13.1}"
-# PyPI rejects local versions such as 0.13.1+cpu.  CPU wheels are the
+export TORCHRL_BUILD_VERSION="${BUILD_VERSION:-0.13.2}"
+# PyPI rejects local versions such as 0.13.2+cpu.  CPU wheels are the
 # default PyPI artifacts, so strip only the CPU build suffix while keeping
 # CUDA/ROCm suffixes for the extra-index wheels.
 if [[ "${TORCHRL_BUILD_VERSION}" == *+cpu ]]; then

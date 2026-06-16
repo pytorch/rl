@@ -1,10 +1,10 @@
 @echo off
 if "%BUILD_VERSION%" == "" (
-    set TORCHRL_BUILD_VERSION=0.13.1
+    set TORCHRL_BUILD_VERSION=0.13.2
 ) else (
     set TORCHRL_BUILD_VERSION=%BUILD_VERSION%
 )
-rem PyPI rejects local versions such as 0.13.1+cpu. CPU wheels are the
+rem PyPI rejects local versions such as 0.13.2+cpu. CPU wheels are the
 rem default PyPI artifacts, so strip only the CPU build suffix while keeping
 rem CUDA suffixes for the extra-index wheels.
 if "%TORCHRL_BUILD_VERSION:~-4%" == "+cpu" (

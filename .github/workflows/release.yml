@@ -614,7 +614,7 @@ jobs:
 
       - name: Filter PyPI-incompatible local-version wheels
         run: |
-          # PyPI rejects local versions such as 0.13.1+cpu or 0.13.1+cu128.
+          # PyPI rejects local versions such as X.Y.Z+cpu or X.Y.Z+cu128.
           # Keep the default CPU wheels (built without +cpu above) and macOS
           # wheels, but do not send CUDA/local-version artifacts to PyPI.
           find dist -name "*+*.whl" -type f -print -delete
