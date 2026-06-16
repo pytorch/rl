@@ -35,6 +35,11 @@ on:
         required: false
         type: string
         default: 'main'
+      test-infra-repository:
+        description: 'PyTorch test-infra repository to use'
+        required: false
+        type: string
+        default: 'pytorch/test-infra'
       tensordict-source:
         description: 'TensorDict source: stable (PyPI), git, or auto (branch-based detection)'
         required: false
@@ -77,7 +82,7 @@ jobs:
     with:
       package-type: wheel
       os: linux
-      test-infra-repository: pytorch/test-infra
+      test-infra-repository: ${{ inputs.test-infra-repository || 'pytorch/test-infra' }}
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
@@ -103,7 +108,7 @@ jobs:
     with:
       repository: ${{ matrix.repository }}
       ref: ""
-      test-infra-repository: pytorch/test-infra
+      test-infra-repository: ${{ inputs.test-infra-repository || 'pytorch/test-infra' }}
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       build-matrix: ${{ needs.generate-matrix.outputs.matrix }}
       package-name: ${{ matrix.package-name }}

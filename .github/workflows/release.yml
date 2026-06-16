@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: 'main'
+      test_infra_repository:
+        description: 'PyTorch test-infra repository to use for wheel matrix/build helpers'
+        required: false
+        type: string
+        default: 'pytorch/test-infra'
       skip_sanity_checks:
         description: 'Skip sanity checks'
         required: false
@@ -264,6 +269,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-repository: ${{ inputs.test_infra_repository || 'pytorch/test-infra' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -279,6 +285,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-windows.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-repository: ${{ inputs.test_infra_repository || 'pytorch/test-infra' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -293,6 +300,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-m1.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-repository: ${{ inputs.test_infra_repository || 'pytorch/test-infra' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
@@ -306,6 +314,7 @@ jobs:
     uses: ./.github/workflows/build-wheels-aarch64-linux.yml
     with:
       test-infra-ref: ${{ inputs.pytorch_release || 'main' }}
+      test-infra-repository: ${{ inputs.test_infra_repository || 'pytorch/test-infra' }}
       tensordict-source: ${{ inputs.tensordict_source || 'auto' }}
       channel: release
       with-cpu: ${{ inputs.build_cpu && 'enable' || 'disable' }}
