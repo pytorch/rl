@@ -94,7 +94,7 @@ class _QueueInferenceClient:
         """Submit a request and return a :class:`_QueueFuture`."""
         req_id = self._next_req_id
         self._next_req_id += 1
-        self._request_queue.put((self._actor_id, req_id, td))
+        self._request_queue.put((self._actor_id, req_id, time.monotonic(), td))
         return _QueueFuture(self, req_id)
 
     # -- internal -------------------------------------------------------------
@@ -147,6 +147,15 @@ class QueueBasedTransport(InferenceTransport):
         self._next_actor_id = 0
         self._peeked = None
 
+    def __getstate__(self) -> dict:
+        state = self.__dict__.copy()
+        state["_lock"] = None
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
+
     # -- to be implemented by subclasses --------------------------------------
 
     def _make_response_queue(self):
@@ -181,22 +190,41 @@ class QueueBasedTransport(InferenceTransport):
         self, max_items: int
     ) -> tuple[list[TensorDictBase], list[tuple[int, int]]]:
         """Dequeue up to *max_items* pending requests (non-blocking)."""
+        items, callbacks, _submitted_at = self.drain_with_timing(max_items)
+        return items, callbacks
+
+    def drain_with_timing(
+        self, max_items: int
+    ) -> tuple[list[TensorDictBase], list[tuple[int, int]], list[float | None]]:
+        """Dequeue requests and include actor-side submission timestamps."""
         items: list[TensorDictBase] = []
         callbacks: list[tuple[int, int]] = []
+        submitted_at: list[float | None] = []
         peeked = self._peeked
         if peeked is not None:
             self._peeked = None
-            actor_id, req_id, td = peeked
+            if len(peeked) == 4:
+                actor_id, req_id, item_submitted_at, td = peeked
+            else:
+                actor_id, req_id, td = peeked
+                item_submitted_at = None
             items.append(td)
             callbacks.append((actor_id, req_id))
+            submitted_at.append(item_submitted_at)
         for _ in range(max_items - len(items)):
             try:
-                actor_id, req_id, td = self._request_queue.get(block=False)
+                item = self._request_queue.get(block=False)
             except Exception:
                 break
+            if len(item) == 4:
+                actor_id, req_id, item_submitted_at, td = item
+            else:
+                actor_id, req_id, td = item
+                item_submitted_at = None
             items.append(td)
             callbacks.append((actor_id, req_id))
-        return items, callbacks
+            submitted_at.append(item_submitted_at)
+        return items, callbacks, submitted_at
 
     def wait_for_work(self, timeout: float) -> None:
         """Block until at least one request is available or *timeout* elapses."""
