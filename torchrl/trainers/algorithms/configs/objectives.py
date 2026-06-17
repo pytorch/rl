@@ -138,7 +138,9 @@ class PPOLossConfig(LossConfig):
     critic: Any = None
     reduction: str | None = None
     clip_value: float | None = None
-    clip_epsilon: float = 0.2
+    # float for symmetric clipping or a (low, high) pair for DAPO-style
+    # asymmetric clipping (ClipPPOLoss only)
+    clip_epsilon: Any = 0.2
     dtarg: float = 0.01
     beta: float = 1.0
     increment: float = 2.0
@@ -171,6 +173,11 @@ def _make_ppo_loss(*args, **kwargs) -> PPOLoss:
     if loss_type == "clip":
         for k in kl_only | ppo_only:
             kwargs.pop(k, None)
+        # a (low, high) clip_epsilon pair arrives as an omegaconf ListConfig,
+        # which the loss does not recognize as a tuple
+        clip_epsilon = kwargs.get("clip_epsilon")
+        if clip_epsilon is not None and not isinstance(clip_epsilon, (int, float)):
+            kwargs["clip_epsilon"] = tuple(clip_epsilon)
         loss = ClipPPOLoss(*args, **kwargs)
     elif loss_type == "kl":
         for k in clip_only | ppo_only:

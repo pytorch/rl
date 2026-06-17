@@ -10,6 +10,7 @@ import torch
 from tensordict import TensorDict
 from torchrl.envs import ParallelEnv, SerialEnv, step_mdp, StepCounter, TransformedEnv
 from torchrl.envs.libs.dm_control import DMControlEnv
+from torchrl.envs.libs.libero import _has_libero, LiberoEnv
 from torchrl.envs.transforms.functional import cat_frames
 
 
@@ -37,6 +38,19 @@ def make_serial_env():
 def make_parallel_env():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = ParallelEnv(3, lambda: DMControlEnv("cheetah", "run", device=device))
+    env.rollout(3)
+    return ((env,), {})
+
+
+def make_libero_env():
+    env = LiberoEnv(
+        "libero_spatial",
+        task_id=0,
+        camera_height=256,
+        camera_width=256,
+        settle_steps=0,
+        max_episode_steps=None,
+    )
     env.rollout(3)
     return ((env,), {})
 
@@ -95,6 +109,13 @@ def test_serial(benchmark):
 def test_parallel(benchmark):
     (c,), _ = make_parallel_env()
     benchmark(execute_env, c)
+
+
+@pytest.mark.skipif(not _has_libero, reason="libero not found")
+def test_libero(benchmark):
+    # raw simulation + render throughput of the LIBERO adapter (steps/s)
+    (c,), _ = make_libero_env()
+    benchmark(lambda: c.rollout(100, break_when_any_done=False))
 
 
 @pytest.mark.parametrize("nested", [True, False])
