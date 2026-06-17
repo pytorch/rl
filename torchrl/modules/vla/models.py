@@ -15,7 +15,12 @@ from torch import nn
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.models import ConvNet, MLP
 
-from torchrl.modules.vla.common import ActionHead, LogProbsMode, VLAWrapperBase
+from torchrl.modules.vla.common import (
+    ActionHead,
+    LogProbsMode,
+    SamplingMode,
+    VLAWrapperBase,
+)
 
 __all__ = ["TinyVLA"]
 
@@ -57,6 +62,8 @@ class TinyVLA(VLAWrapperBase):
             :func:`~torchrl.envs.utils.exploration_type`. Defaults to
             ``InteractionType.DETERMINISTIC``. See
             :class:`~torchrl.modules.vla.VLAWrapperBase`.
+        mode (str, optional): backward-compatible alias for
+            ``default_interaction_type``. Defaults to ``None``.
         device (DEVICE_TYPING, optional): device to move the parameters to.
 
     Examples:
@@ -91,6 +98,7 @@ class TinyVLA(VLAWrapperBase):
         text_dim: int = 32,
         default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         log_probs_mode: LogProbsMode = "sequence",
+        mode: SamplingMode | None = None,
         device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__(
@@ -101,6 +109,7 @@ class TinyVLA(VLAWrapperBase):
             use_state=use_state,
             default_interaction_type=default_interaction_type,
             log_probs_mode=log_probs_mode,
+            mode=mode,
         )
         self.hidden_dim = int(hidden_dim)
         self.text_vocab = int(text_vocab)
