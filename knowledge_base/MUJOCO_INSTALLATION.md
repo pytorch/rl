@@ -23,11 +23,25 @@ To do so, MuJoCo will use one of the following backends: glfw, osmesa or egl.
 Of these, glfw will not work in headless environments. On the other hand, osmesa 
 will not run on GPU. Therefore, our advice is to use the egl backend.
 
-If you have a sudo access on your machine, you can install the following dependencies
-to enable fast rendering:
+If you have sudo access on your machine, install the generic OpenGL/EGL
+dependencies needed by MuJoCo:
 ```shell
-$ sudo apt-get install libglfw3 libglew2.0 libgl1-mesa-glx libosmesa6
+$ sudo apt-get install libglfw3 libglew2.0 libgl1-mesa-glx libosmesa6 \
+    libegl-dev libglvnd0 libglx0 libgles2
 ```
+For NVIDIA EGL rendering, the NVIDIA graphics userspace libraries must also
+be visible and compatible with the host driver. In minimal CUDA containers,
+`nvidia-smi` can work even when the graphics stack is missing. Check for:
+
+```shell
+$ ldconfig -p | grep -E 'libEGL_nvidia|libnvidia-eglcore|libGLX_nvidia'
+$ ls /usr/share/glvnd/egl_vendor.d/10_nvidia.json
+```
+
+If these are absent, install a `libnvidia-gl-<driver-version>` package matching
+the host driver, or provide a matching NVIDIA userspace bundle and add its
+library directory to `LD_LIBRARY_PATH` / `ldconfig`. The GLVND vendor file
+should point EGL at `libEGL_nvidia.so.0`.
 If you don't, these libraries can be installed via conda but be aware of the fact
 that this is not the intended workflow and things may not work as expected:
 ```shell
@@ -39,7 +53,8 @@ $ conda install -c menpo glfw3
 ```
 
 In both cases, when running your code, you will want to tell mujoco which backend to use.
-This can be done by setting the appropriate environment variables.
+This can be done by setting the appropriate environment variables. The
+variables must be set before MuJoCo / dm_control / robosuite is imported.
 ```shell
 $ conda env config vars set MUJOCO_GL=egl PYOPENGL_PLATFORM=egl
 $ conda deactivate && conda activate mujoco_env
@@ -227,6 +242,10 @@ RuntimeError: Failed to initialize OpenGL
     _Solution_: Make sure you have installed mujoco and all its dependencies (see instructions above).
     Make sure you have set the `MUJOCO_GL=egl`.
     Make sure you have a GPU accessible on your machine.
+    In containers, also verify the NVIDIA EGL/GLVND userspace libraries:
+    `libEGL_nvidia`, `libnvidia-eglcore`, `libGLX_nvidia`, and
+    `/usr/share/glvnd/egl_vendor.d/10_nvidia.json`. A CUDA-capable container
+    without these files can still run `nvidia-smi` but fail headless EGL.
 
 12. `cannot find -lGL: No such file or directory`
 
@@ -236,9 +255,9 @@ RuntimeError: Failed to initialize OpenGL
     RuntimeError: Failed to initialize OpenGL
     ```
 
-    _Solution_: Install libEGL:
+    _Solution_: Install libEGL and the GLVND runtime:
 
-    - Ubuntu: `sudo apt install libegl-dev libegl`
+    - Ubuntu: `sudo apt install libegl-dev libegl1 libglvnd0 libglx0 libgles2`
     - CentOS: `sudo yum install mesa-libEGL mesa-libEGL-devel`
     - Conda: `conda install -c anaconda mesa-libegl-cos6-x86_64`
 
