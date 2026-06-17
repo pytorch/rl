@@ -35,6 +35,9 @@ python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/smoke_te
 
 coverage run -m pytest .github/unittest/linux_sota/scripts/test_sota.py ${json_report_args} --instafail --durations 200 -vvv --capture no
 
+# unit tests living next to the recipes they cover (tiny models, no downloads)
+python .github/unittest/helpers/coverage_run_parallel.py -m pytest sota-implementations/vla_grpo/test_openvla.py -v --durations 20
+
 coverage combine -q
 coverage xml -i
 

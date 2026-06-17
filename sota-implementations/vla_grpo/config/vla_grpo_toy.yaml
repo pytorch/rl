@@ -1,0 +1,80 @@
+# Toy-scale VLA GRPO: TinyVLA on the ToyVLAEnv tracking task.
+# Single process, single device, no simulator dependencies.
+
+env:
+  backend: toy
+  action_dim: 2
+  state_dim: 4
+  image_shape: [3, 16, 16]
+  chunk_size: 4 # H: base env steps per policy call (one outer step = one chunk)
+  success_steps: 2 # consecutive in-tolerance base steps for success
+  success_tol: 0.35 # sized so a random policy succeeds sometimes (cold-start signal)
+  max_outer_steps: 6 # episode truncation, in chunk decisions
+  render_size: 64 # side length of the from_pixels eval-video frame
+  seed: 0
+
+tokenizer:
+  vocab_size: 64
+
+policy:
+  backend: tiny
+  hidden_dim: 128
+  device: null # null = auto (cuda if available)
+
+collector:
+  group_size: 4 # n: rollouts per initial state (GRPO group)
+  candidate_group_size: null # null = group_size; larger values oversample then select group_size
+  groups_per_iter: 8 # initial states per iteration
+  # Safety cap in target group waves. The collector writes complete
+  # trajectories directly to the replay buffer every one-outer-step internal
+  # poll; one wave is approximately max_outer_steps *
+  # ceil(groups_per_iter * group_size / num_envs) polls.
+  max_collect_batches_per_iter: 1
+  # Retry a capped wave once under the same policy if too few useful replay
+  # decisions have reached the replay buffer.
+  max_same_policy_collect_attempts: 2
+  min_replay_decisions: null # null/0 = collect one target group wave
+  total_iters: 200
+
+advantage:
+  trajectory_return: sum # binary success return per trajectory
+  keep_return_bounds: [0.05, 0.95] # dynamic sampling; null disables
+  candidate_selection: balanced # first | uniform | balanced
+  candidate_selection_min_size: null # null = try selection as soon as group_size candidates are queued
+  candidate_selection_max_combinations: 100000
+
+buffer:
+  device: null # null = training device
+
+loss:
+  clip_epsilon: [0.2, 0.28] # asymmetric DAPO clip; a float gives symmetric clipping
+  ratio_level: sequence # sequence: one ratio per decision; token: one per action token
+  ppo_epochs: 1
+  mini_batch_size: 64 # decisions per micro-batch
+  accumulate_batches: 1 # optimizer step every N micro-batches
+
+optim:
+  lr: 1e-3
+  weight_decay: 0.0
+  warmup_updates: 1 # linear LR warmup, in optimizer steps (1 = no warmup)
+  max_grad_norm: 1.0
+
+logger:
+  backend: wandb
+  project_name: torchrl-sota-vla-grpo
+  group_name: null
+  exp_name: vla_grpo_toy
+  mode: online
+  eval_iter: 10 # evaluate every N iterations
+  eval_episodes: 50 # greedy episodes per evaluation
+  eval_process: false # true = run eval in a dedicated process
+  eval_async: false # with eval_process, submit eval and log result later
+  eval_device: null # null = policy.device/auto; set e.g. cuda:7 with eval_process
+  eval_state_dir: null # null = tempfile dir for trainable-weight snapshots
+  record_video: true # render eval rollouts via VideoRecorder (needs a logger)
+  video_episodes: 2 # greedy episodes per recorded video
+  video_fps: 4 # frames per second of the logged video (one frame per decision)
+
+checkpoint:
+  save_iter: 25 # save every N iterations (0 disables)
+  resume: null # path to a checkpoint_latest.pt to resume from
