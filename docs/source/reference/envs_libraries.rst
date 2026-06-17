@@ -98,6 +98,10 @@ Available wrappers
     MeltingpotWrapper
     MOGymEnv
     MOGymWrapper
+    MujocoPlaygroundEnv
+    MujocoPlaygroundWrapper
+    MujocoPlaygroundAgentMapping
+    MujocoPlaygroundAgentSpec
     MultiThreadedEnv
     MultiThreadedEnvWrapper
     OpenMLEnv

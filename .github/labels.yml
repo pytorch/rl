@@ -132,6 +132,10 @@
   description: "Triggers brax environment tests only"
   color: "0E8A16"
 
+- name: Environments/mujoco_playground
+  description: "Triggers mujoco_playground environment tests only"
+  color: "0E8A16"
+
 - name: Environments/chess
   description: "Triggers chess environment tests only"
   color: "0E8A16"
