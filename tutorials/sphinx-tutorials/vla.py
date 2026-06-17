@@ -379,6 +379,7 @@ torch.allclose(executed, eval_rollout["action"])  # True: echo of what env got
 # behavior-policy log-probabilities, attach a (here synthetic) advantage, then
 # take one optimization step.
 
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives import ClipPPOLoss
 
 token_policy = TinyVLA(
@@ -386,9 +387,13 @@ token_policy = TinyVLA(
     chunk_size=H,
     action_head="tokens",
     vocab_size=64,
-    mode="sample",
 )
-rollout = token_policy(make_observation())  # writes action_tokens + log_probs
+# The token head follows the ambient exploration context: collectors roll out
+# under ``ExplorationType.RANDOM`` (so actions are sampled), while greedy
+# evaluation uses ``set_exploration_type(ExplorationType.DETERMINISTIC)``. We
+# sample here to mimic a behavior-policy rollout -- no policy mutation needed.
+with set_exploration_type(ExplorationType.RANDOM):
+    rollout = token_policy(make_observation())  # writes action_tokens + log_probs
 # one advantage per sample, with the trailing singleton value-dim the PPO
 # losses expect (a flat [batch] advantage would silently broadcast wrong)
 rollout["advantage"] = torch.randn(batch, 1)

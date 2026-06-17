@@ -25,7 +25,7 @@ from _transforms_common import (
 )
 from packaging import version
 from tensordict import NonTensorData, TensorDict, TensorDictBase
-from tensordict.nn import WrapModule
+from tensordict.nn import TensorDictModuleBase, WrapModule
 from torch import nn
 
 from torchrl.data import (
@@ -62,6 +62,7 @@ from torchrl.envs import (
     SerialEnv,
     StepCounter,
     TargetMacroAction,
+    ToyVLAEnv,
     TransformedEnv,
     URScriptPrimitive,
     URScriptPrimitiveTransform,
@@ -1629,6 +1630,167 @@ class TestMultiAction(TransformBase):
 
     def test_transform_inverse(self):
         return
+
+    def test_extra_policy_outputs_ride_outer_step(self):
+        # the chunk-decision data path of VLA RL recipes: extra policy
+        # outputs (action tokens, behavior log-probs) written next to the
+        # action chunk must survive on the outer (macro-step) transition
+        h, a = 3, 2
+
+        class ChunkPolicy(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action", "action_tokens", "log_probs"]
+
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def forward(self, td):
+                self.calls += 1
+                td.set("action", torch.zeros(*td.batch_size, h, a))
+                td.set("action_tokens", torch.full((*td.batch_size, h, a), self.calls))
+                td.set("log_probs", torch.full((*td.batch_size,), float(self.calls)))
+                return td
+
+        env = TransformedEnv(ToyVLAEnv(action_dim=a, state_dim=2 * a), MultiAction())
+        check_env_specs(env)
+        rollout = env.rollout(4, ChunkPolicy())
+        assert rollout["action"].shape == (4, h, a)
+        assert rollout["action_tokens"].shape == (4, h, a)
+        assert rollout["log_probs"].shape == (4,)
+        # each outer step carries the policy outputs of the chunk decided at
+        # that step
+        torch.testing.assert_close(rollout["log_probs"], torch.arange(1.0, 5.0))
+        assert (rollout["action_tokens"][:, 0, 0] == torch.arange(1, 5)).all()
+        # one reward slot per executed base step
+        assert rollout["next", "reward"].shape == (4, h, 1)
+
+    @pytest.mark.parametrize("batch_size", [(), (1,)])
+    def test_token_policy_pipeline(self, batch_size):
+        # token-head policy: emits only action tokens + log-probs; the
+        # tokenizer transform decodes the tokens into the continuous chunk on
+        # the inverse path before MultiAction unbinds and executes it. The
+        # batched variant guards the spec path: the tokenizer must preserve
+        # MultiAction's dynamic chunk dim on a batched env.
+        h, a = 3, 2
+        tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
+
+        class TokenPolicy(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action_tokens", "log_probs"]
+
+            def forward(self, td):
+                target = td.get(("observation", "state"))[..., a : 2 * a]
+                chunk = target.unsqueeze(-2).expand(*td.batch_size, h, a)
+                td.set("action_tokens", tok.encode(chunk))
+                td.set("log_probs", torch.full((*td.batch_size,), 0.5))
+                return td
+
+        env = TransformedEnv(
+            ToyVLAEnv(
+                action_dim=a,
+                state_dim=2 * a,
+                success_steps=2 * h,
+                batch_size=batch_size,
+                seed=0,
+            ),
+            Compose(MultiAction(), ActionTokenizerTransform(tok)),
+        )
+        # the policy-facing action spec is the token interface with the
+        # dynamic chunk dim
+        token_spec = env.full_action_spec["action_tokens"]
+        assert token_spec.shape == torch.Size([*batch_size, -1, a])
+        assert token_spec.dtype == torch.long
+        check_env_specs(env)
+        rollout = env.rollout(2, TokenPolicy())
+        assert rollout.batch_size == (*batch_size, 2)
+        assert rollout["action_tokens"].shape == (*batch_size, 2, h, a)
+        assert rollout["log_probs"].shape == (*batch_size, 2)
+        # the tracking task succeeds through the decode path: 2 * h
+        # in-tolerance base steps reached exactly at the 2nd chunk boundary
+        assert rollout["next", "success"][..., -1, :].all()
+        assert rollout["next", "done"][..., -1, :].all()
+        assert not rollout["next", "done"][..., 0, :].any()
+
+    def test_done_inside_chunk_truncates(self):
+        # done fires at the 2nd of 4 base steps: the remaining steps are
+        # skipped, and the reward stack holds the executed steps' rewards
+        # plus a single zero-filled slot for the skipped remainder
+        h, a = 4, 2
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=a, state_dim=2 * a, success_steps=2, seed=0),
+            MultiAction(),
+        )
+
+        class OffsetOracle(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action"]
+
+            def forward(self, td):
+                target = td.get(("observation", "state"))[..., a : 2 * a]
+                offsets = torch.tensor([0.2, 0.1, 0.05, 0.0]).reshape(h, 1)
+                chunk = (target.unsqueeze(-2) + offsets).clamp(-1.0, 1.0)
+                td.set("action", chunk.expand(*td.batch_size, h, a))
+                return td
+
+        rollout = env.rollout(3, OffsetOracle())
+        assert rollout.batch_size == (1,)
+        assert rollout["next", "done"].all()
+        assert rollout["next", "success"].all()
+        reward = rollout["next", "reward"].squeeze(-1)
+        assert reward.shape == (1, 3)
+        # two executed in-tolerance steps, then the zero-filled skipped slot
+        expected = -torch.tensor([[0.2, 0.1, 0.0]]) * (a**0.5)
+        torch.testing.assert_close(reward, expected)
+
+    def test_done_inside_chunk_reward_slots_batch_unlocked(self):
+        # batch-unlocked env where done fires for a subset of envs mid-chunk:
+        # the done env's trailing slot must be zero-filled (not a stale copy
+        # of its last executed reward), and the in-place bookkeeping must not
+        # corrupt the alive env's stacked history
+        class RewardingCounter(StateLessCountingEnv):
+            def _step(self, tensordict):
+                out = super()._step(tensordict)
+                out.set("reward", out.get("count").to(torch.float))
+                return out
+
+        env = TransformedEnv(RewardingCounter(), MultiAction())
+        td = env.reset().expand(2).clone()
+        td["max_count"] = torch.tensor([[2], [10]], dtype=torch.int32)
+        td["action"] = torch.ones(2, 4, 1, dtype=torch.int32)
+        out = env.step(td)["next"]
+        reward = out["reward"].squeeze(-1)
+        expected = torch.tensor([[1.0, 2.0, 0.0, 0.0], [1.0, 2.0, 3.0, 4.0]])
+        torch.testing.assert_close(reward, expected)
+        assert out["done"].squeeze(-1).tolist() == [True, False]
+
+    def test_stack_rewards_false_uniform_outer_steps(self):
+        # mixing full and truncated chunks makes stacked rewards ragged; with
+        # stack_rewards=False the outer transition stays dense and uniform -
+        # the configuration to use when the per-chunk reward is derived from
+        # the outer transition (e.g. SuccessReward appended after MultiAction)
+        h, a = 4, 2
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=a, state_dim=2 * a, success_steps=h + 1, seed=0),
+            MultiAction(stack_rewards=False),
+        )
+
+        class Oracle(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action"]
+
+            def forward(self, td):
+                target = td.get(("observation", "state"))[..., a : 2 * a]
+                td.set("action", target.unsqueeze(-2).expand(*td.batch_size, h, a))
+                return td
+
+        rollout = env.rollout(3, Oracle())
+        # first chunk executes fully (streak h), the second truncates at its
+        # first base step; the outer transitions remain dense
+        assert rollout.batch_size == (2,)
+        assert rollout["next", "reward"].shape == (2, 1)
+        assert rollout["next", "done"].squeeze(-1).tolist() == [False, True]
+        assert rollout["next", "success"].squeeze(-1).tolist() == [False, True]
 
 
 @pytest.mark.skipif(IS_WIN, reason="Test is flaky on Windows")
