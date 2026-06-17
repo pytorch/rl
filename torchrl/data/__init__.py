@@ -105,6 +105,7 @@ from .vla import (
     RobotDatasetMetadata,
     UniformActionTokenizer,
     validate_vla_tensordict,
+    VocabTailActionTokenizer,
 )
 
 __all__ = [
@@ -195,6 +196,7 @@ __all__ = [
     "UnboundedContinuous",
     "UnboundedDiscrete",
     "UniformActionTokenizer",
+    "VocabTailActionTokenizer",
     "VideoClipRef",
     "Writer",
     "WriterEnsemble",
