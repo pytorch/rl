@@ -1361,7 +1361,7 @@ class TestFrameSkipTransform(TransformBase):
             assert isinstance(serial, SerialEnv)
             assert not isinstance(serial, TransformedEnv)
         finally:
-            serial.close()
+            serial.close(raise_if_closed=False)
         # ParallelEnv: constructs lazily, stays closed, no spurious worker start
         parallel = ParallelEnv(2, lambda: CountingEnv(max_steps=10))
         try:
@@ -1369,7 +1369,7 @@ class TestFrameSkipTransform(TransformBase):
             assert not isinstance(parallel, TransformedEnv)
             assert parallel.is_closed
         finally:
-            parallel.close()
+            parallel.close(raise_if_closed=False)
 
     def test_transform_inverse(self):
         raise pytest.skip("No inverse for FrameSkipTransform")
