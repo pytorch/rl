@@ -2677,6 +2677,7 @@ class TestActionChunkTransform(TransformBase):
         with pytest.raises(ValueError, match="immediately follow"):
             t(TensorDict({"action": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
 
+    @pytest.mark.skipif(IS_WIN, reason="torch.compile requires a C++ compiler")
     def test_compile_build_chunk(self):
         t = ActionChunkTransform(chunk_size=3)
         action = torch.randn(2, 5, 2)
