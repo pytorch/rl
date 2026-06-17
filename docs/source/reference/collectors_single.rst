@@ -47,6 +47,7 @@ internally; it does **not** determine the output batch size when
         frames_per_batch=200,  # controls internal polling frequency
         total_frames=10000,
         trajs_per_batch=4,
+        traj_format="padded",
     )
 
     for batch in collector:
@@ -54,6 +55,20 @@ internally; it does **not** determine the output batch size when
         valid = batch[("collector", "mask")]  # (4, max_traj_len) bool
         loss = compute_loss(batch, valid)
         collector.update_policy_weights_()
+
+**Unpadded batches**: with ``traj_format="cat"`` the *N* trajectories are
+concatenated along time instead of stacked and padded.  Each yield is then a
+flat ``[sum_i T_i]`` batch with no mask: trajectories are contiguous, in
+completion order, with ``("next", "done")`` ``True`` at the last step of each
+and ``("collector", "traj_ids")`` identifying them.  Prefer it when episode
+lengths vary widely or frames are large — the padded layout materializes
+``N * max_traj_len`` frames, the flat one only the steps actually collected.
+
+.. note::
+    The current default layout is ``"padded"``, but it will change to
+    ``"cat"`` in torchrl v0.16.  Omitting ``traj_format`` while yielding
+    ``trajs_per_batch`` batches emits a :class:`FutureWarning`; pass the
+    layout explicitly.
 
 **Replay buffer integration**: when a ``replay_buffer`` is also provided,
 complete trajectories are written to the buffer as **flat 1-D sequences** (no
