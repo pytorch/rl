@@ -108,6 +108,7 @@ a language-model head.
 
     ActionTokenizerBase
     UniformActionTokenizer
+    VocabTailActionTokenizer
 
 Policies
 --------

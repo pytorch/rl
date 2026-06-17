@@ -11,13 +11,14 @@ import pytest
 import torch
 from _modules_common import _has_transformers
 from tensordict import NonTensorData, NonTensorStack, TensorDict
-from tensordict.nn import CompositeDistribution, TensorDictModule
+from tensordict.nn import CompositeDistribution, InteractionType, TensorDictModule
 from tensordict.nn.distributions import NormalParamExtractor
 
 from torch import distributions as dist, nn
 
 from torchrl.data import Bounded, Composite
 from torchrl.envs import CatFrames, Compose, InitTracker, SerialEnv, TransformedEnv
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
     DiffusionActor,
     MultiStepActorWrapper,
@@ -874,14 +875,24 @@ class TestVLAWrapperBase:
         with pytest.raises(ValueError, match="action_head"):
             VLAWrapperBase(action_dim=2, chunk_size=2, action_head="diffusion")
 
-    def test_invalid_mode(self):
-        with pytest.raises(ValueError, match="mode"):
-            VLAWrapperBase(action_dim=2, chunk_size=2, mode="beam")
+    def test_invalid_interaction_type(self):
+        with pytest.raises(ValueError, match="default_interaction_type"):
+            VLAWrapperBase(action_dim=2, chunk_size=2, default_interaction_type="beam")
 
     def test_hook_not_implemented(self):
         base = VLAWrapperBase(action_dim=2, chunk_size=2)
         with pytest.raises(NotImplementedError):
             base._predict(TensorDict({}, batch_size=[]))
+
+    def test_invalid_log_probs_mode(self):
+        with pytest.raises(ValueError, match="log_probs_mode"):
+            VLAWrapperBase(
+                action_dim=2,
+                chunk_size=2,
+                action_head="tokens",
+                vocab_size=8,
+                log_probs_mode="word",
+            )
 
 
 class TestTinyVLA:
@@ -905,6 +916,32 @@ class TestTinyVLA:
         dist = policy.get_dist(_make_obs_td())
         assert dist.base_dist.logits.shape == torch.Size([2, 4, 7, 64])
         assert dist.log_prob(out["action_tokens"]).shape == torch.Size([2])
+
+    def test_tokens_per_token_log_probs(self):
+        # log_probs_mode="token": per-token log-probabilities, the groundwork
+        # for token-level (DAPO-style) importance ratios
+        policy = TinyVLA(
+            action_dim=7,
+            chunk_size=4,
+            action_head="tokens",
+            vocab_size=64,
+            log_probs_mode="token",
+        )
+        obs = _make_obs_td()
+        out = policy(obs.clone())
+        assert out["action_tokens"].shape == torch.Size([2, 4, 7])
+        assert out["log_probs"].shape == torch.Size([2, 4, 7])
+        dist = policy.get_dist(obs.clone())
+        per_token = dist.log_prob(out["action_tokens"])
+        assert per_token.shape == torch.Size([2, 4, 7])
+        # per-token log-probs sum to the sequence-level ones for the same
+        # weights, observations and tokens
+        policy_seq = TinyVLA(
+            action_dim=7, chunk_size=4, action_head="tokens", vocab_size=64
+        )
+        policy_seq.load_state_dict(policy.state_dict())
+        seq = policy_seq.get_dist(obs.clone()).log_prob(out["action_tokens"])
+        torch.testing.assert_close(per_token.sum((-2, -1)), seq)
 
     def test_get_dist_continuous_raises(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)
@@ -942,6 +979,31 @@ class TestTinyVLA:
         torch.testing.assert_close(
             policy(td.clone())["action_tokens"], policy(td.clone())["action_tokens"]
         )
+
+    def test_exploration_type_dispatch(self):
+        # the token head follows the ambient exploration context (set by
+        # collectors / set_exploration_type), not a mutable policy attribute:
+        # RANDOM samples (stochastic), DETERMINISTIC and the default argmax.
+        torch.manual_seed(0)
+        policy = TinyVLA(
+            action_dim=4, chunk_size=3, action_head="tokens", vocab_size=32
+        )
+        td = _make_obs_td()
+        with set_exploration_type(ExplorationType.RANDOM):
+            a, b = (
+                policy(td.clone())["action_tokens"],
+                policy(td.clone())["action_tokens"],
+            )
+        assert not torch.equal(a, b)  # sampled -> differs across calls
+        with set_exploration_type(ExplorationType.DETERMINISTIC):
+            c, d = (
+                policy(td.clone())["action_tokens"],
+                policy(td.clone())["action_tokens"],
+            )
+        assert torch.equal(c, d)  # argmax -> deterministic
+        # no active context -> the default (DETERMINISTIC) argmax
+        assert policy.default_interaction_type == InteractionType.DETERMINISTIC
+        torch.testing.assert_close(policy(td.clone())["action_tokens"], c)
 
     def test_gradient_flow(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)

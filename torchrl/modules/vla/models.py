@@ -9,11 +9,13 @@ import hashlib
 
 import torch
 from tensordict import TensorDictBase
+from tensordict.nn import InteractionType
 from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
 from torchrl.modules.models.models import ConvNet, MLP
-from torchrl.modules.vla.common import ActionHead, SamplingMode, VLAWrapperBase
+
+from torchrl.modules.vla.common import ActionHead, LogProbsMode, VLAWrapperBase
 
 __all__ = ["TinyVLA"]
 
@@ -49,8 +51,12 @@ class TinyVLA(VLAWrapperBase):
         text_vocab (int): size of the hashed instruction embedding table.
             Defaults to ``256``.
         text_dim (int): instruction-embedding dimension. Defaults to ``32``.
-        mode (str): ``"greedy"`` or ``"sample"`` (token head). Defaults to
-            ``"greedy"``.
+        default_interaction_type (InteractionType): token-head readout when no
+            exploration context is active (``RANDOM`` samples, else argmax);
+            the forward otherwise follows the ambient
+            :func:`~torchrl.envs.utils.exploration_type`. Defaults to
+            ``InteractionType.DETERMINISTIC``. See
+            :class:`~torchrl.modules.vla.VLAWrapperBase`.
         device (DEVICE_TYPING, optional): device to move the parameters to.
 
     Examples:
@@ -83,7 +89,8 @@ class TinyVLA(VLAWrapperBase):
         hidden_dim: int = 128,
         text_vocab: int = 256,
         text_dim: int = 32,
-        mode: SamplingMode = "greedy",
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
+        log_probs_mode: LogProbsMode = "sequence",
         device: DEVICE_TYPING | None = None,
     ) -> None:
         super().__init__(
@@ -92,7 +99,8 @@ class TinyVLA(VLAWrapperBase):
             action_head=action_head,
             vocab_size=vocab_size,
             use_state=use_state,
-            mode=mode,
+            default_interaction_type=default_interaction_type,
+            log_probs_mode=log_probs_mode,
         )
         self.hidden_dim = int(hidden_dim)
         self.text_vocab = int(text_vocab)

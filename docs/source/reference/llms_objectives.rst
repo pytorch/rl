@@ -17,6 +17,7 @@ GRPO
     GRPOLoss
     GRPOLossOutput
     MCAdvantage
+    MCAdvantageSelector
 
 SFT
 ---
