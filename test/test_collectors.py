@@ -2242,17 +2242,24 @@ if __name__ == "__main__":
             env_id: int,
             max_steps: int = 10,
             sleep_odd_only: bool = False,
+            step_sleep: float = 0.0,
             **kwargs,
         ):
             """
             Args:
                 env_id: The ID to return as observation. This will be returned as a tensor.
                 max_steps: Maximum number of steps before the environment terminates.
+                sleep_odd_only: If ``True``, only odd ``env_id`` workers sleep (used
+                    to test preemption).
+                step_sleep: If ``> 0``, every worker sleeps this many seconds on each
+                    step regardless of ``env_id`` (used to make a rollout slower than
+                    ``_TIMEOUT``).
             """
             super().__init__(device="cpu", batch_size=torch.Size([]))
             self.env_id = env_id
             self.max_steps = max_steps
             self.sleep_odd_only = sleep_odd_only
+            self.step_sleep = step_sleep
             self._step_count = 0
 
             # Define specs
@@ -2279,7 +2286,10 @@ if __name__ == "__main__":
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
             elif self.env_id % 2 == 1:
-                time.sleep(0.1)
+                # Long enough that the preemption stop flag lands well before
+                # the slow envs can complete a full rollout, even on loaded CI
+                # runners (#3798)
+                time.sleep(0.3)
 
             self._step_count = 0
             return TensorDict(
@@ -2300,7 +2310,9 @@ if __name__ == "__main__":
             done = self._step_count >= self.max_steps
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
-                time.sleep(0.1)
+                time.sleep(0.3)
+            if self.step_sleep:
+                time.sleep(self.step_sleep)
 
             return TensorDict(
                 {
@@ -2333,11 +2345,6 @@ if __name__ == "__main__":
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
         """
-        if with_preempt and IS_OSX:
-            pytest.skip(
-                "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
-            )
-
         # Create environment factories using partial - one for each env_id
         # This pattern mirrors CrossPlayEvaluator._rollout usage
         env_factories = [
@@ -2385,16 +2392,30 @@ if __name__ == "__main__":
 
                 #
                 for env_idx in range(num_envs):
+                    traj_ids = batch["collector", "traj_ids"][env_idx]
                     if with_preempt and env_idx % 2 == 1:
-                        # This is a slow env, should have been preempted after first step
-                        assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
-                        continue
-                    # This is a fast env, no preemption happened
-                    assert (batch["collector", "traj_ids"][env_idx] != -1).all()
+                        # This is a slow env: it must have been preempted before
+                        # completing its rollout. The stop flag is only raised
+                        # once the fastest workers have reported and is polled
+                        # by the worker once per step, so on a loaded machine
+                        # the slow env can log a couple of valid steps before
+                        # stopping; requiring exactly one step made this test
+                        # flaky (#3798).
+                        n_valid = (traj_ids != -1).sum().item()
+                        assert 1 <= n_valid < n_steps, traj_ids
+                        # the valid steps form a contiguous prefix, padding
+                        # closes the row
+                        assert (traj_ids[:n_valid] != -1).all(), traj_ids
+                        assert (traj_ids[n_valid:] == -1).all(), traj_ids
+                    else:
+                        # This is a fast env, no preemption happened
+                        assert (traj_ids != -1).all()
+                        n_valid = traj_ids.numel()
 
                     env_data = batch[env_idx]
-                    observations = env_data["observation"]
-                    # All observations from this environment should equal its env_id
+                    # All valid observations from this environment should equal
+                    # its env_id (padded rows are excluded for preempted envs)
+                    observations = env_data["observation"][:n_valid]
                     expected_id = float(env_idx)
                     actual_ids = observations.flatten().unique()
 
@@ -2407,6 +2428,60 @@ if __name__ == "__main__":
                     ), f"Environment {env_idx} should produce observation {expected_id}, but got {actual_ids[0].item()}"
         finally:
             collector.shutdown()
+
+    def test_multi_sync_no_idle_after_all_outputs(self, monkeypatch):
+        """Regression test for https://github.com/pytorch/rl/issues/3840.
+
+        Without preemption, the worker-output gathering loop used to run a
+        fixed-length inner ``for _ in range(self.num_workers)`` that kept calling
+        ``queue_out.get(timeout=_TIMEOUT)`` even after every worker had already
+        reported. When an earlier ``get`` timed out (i.e. the first rollout takes
+        longer than ``_TIMEOUT``), ``len(recv)`` reached ``num_workers`` partway
+        through a later inner loop, leaving its remaining iterations to each waste
+        a full ``_TIMEOUT`` -- a total idle penalty of ``num_workers * _TIMEOUT``.
+
+        We shrink ``_TIMEOUT`` and make each worker's single step sleep longer than
+        it (so the first ``get`` is guaranteed to time out, which is the trigger),
+        then assert the batch is gathered well within ``num_workers * _TIMEOUT``.
+        """
+        timeout = 0.3
+        # The gather loop in the main process reads ``_TIMEOUT`` as a module global.
+        monkeypatch.setattr("torchrl.collectors._multi_sync._TIMEOUT", timeout)
+
+        num_workers = 8
+        # Each worker collects a single frame whose step sleeps > timeout, so the
+        # first ``queue_out.get(timeout=timeout)`` necessarily times out before any
+        # worker reports -- the precondition that used to shift the inner loop.
+        step_sleep = timeout * 1.5
+        env_factories = [
+            functools.partial(
+                self.FixedIDEnv, env_id=i, max_steps=10, step_sleep=step_sleep
+            )
+            for i in range(num_workers)
+        ]
+        collector = MultiSyncCollector(
+            create_env_fn=env_factories,
+            frames_per_batch=num_workers,
+            total_frames=num_workers,
+            device="cpu",
+            init_random_frames=num_workers,  # random actions, no policy needed
+            use_buffers=True,
+        )
+        try:
+            t0 = time.time()
+            next(iter(collector))
+            elapsed = time.time() - t0
+        finally:
+            collector.shutdown()
+
+        # Buggy path: ~num_workers * timeout (1 initial + num_workers - 1 trailing
+        # timeouts). Fixed path: ~step_sleep plus a little worker overhead. Half of
+        # the buggy budget is a comfortable separator that tolerates scheduling jitter.
+        max_elapsed = num_workers * timeout / 2
+        assert elapsed < max_elapsed, (
+            f"gathering took {elapsed:.3f}s, expected well under {max_elapsed:.3f}s; "
+            f"redundant get(timeout=_TIMEOUT) calls likely regressed (issue #3840)"
+        )
 
     def test_collector_next_method(self):
         """Non-regression test: next() should work correctly after __iter__.
@@ -3446,8 +3521,62 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-@pytest.mark.skipif(IS_OSX, reason="Queue.qsize does not work on osx.")
+def _stop_interruptor(interruptor):
+    interruptor.stop_collection()
+
+
 class TestPreemptiveThreshold:
+    def test_interruptor_shared_memory(self):
+        """_Interruptor is a shared-memory flag: no manager process, no proxies.
+
+        The flag must hold its start/stop semantics in-process and be visible
+        from a child process when inherited at process-creation time.
+        """
+        interruptor = _Interruptor()
+        assert not interruptor.collection_stopped()
+        interruptor.stop_collection()
+        assert interruptor.collection_stopped()
+        interruptor.start_collection()
+        assert not interruptor.collection_stopped()
+
+        ctx = torch.multiprocessing.get_context("spawn")
+        proc = ctx.Process(target=_stop_interruptor, args=(interruptor,))
+        proc.start()
+        proc.join(timeout=100)
+        assert proc.exitcode == 0
+        assert interruptor.collection_stopped()
+
+    def test_preemptive_threshold_validation(self):
+        """Out-of-range thresholds raise; 1.0 disables the interruptor machinery."""
+        env_fn = make_make_env("vec")
+        for bad_threshold in (-0.1, 1.5):
+            with pytest.raises(ValueError, match="preemptive_threshold"):
+                MultiSyncCollector(
+                    create_env_fn=[env_fn] * 2,
+                    policy=make_policy("vec"),
+                    frames_per_batch=20,
+                    total_frames=20,
+                    preemptive_threshold=bad_threshold,
+                )
+
+        collector = MultiSyncCollector(
+            create_env_fn=[env_fn] * 2,
+            policy=make_policy("vec"),
+            frames_per_batch=20,
+            total_frames=20,
+            preemptive_threshold=1.0,
+            cat_results="stack",
+        )
+        try:
+            # Preemption can never fire at 1.0: no interruptor should be built
+            # and every collected frame should be valid.
+            assert collector.interruptor is None
+            assert collector.preemptive_threshold == 1.0
+            for batch in collector:
+                assert (batch["collector", "traj_ids"] != -1).all()
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
         def env_fn(seed):

@@ -873,6 +873,9 @@ class _GymAsyncMeta(_EnvPostInit):
         missing_obs_value = kwargs.pop("missing_obs_value", None)
         native_autoreset = kwargs.pop("native_autoreset", False)
         num_workers = kwargs.pop("num_workers", 1)
+        native_autoreset = kwargs.setdefault(
+            "_torchrl_native_autoreset_requested", native_autoreset
+        )
 
         if cls.__name__ == "GymEnv" and num_workers > 1:
             from torchrl.envs import EnvCreator, ParallelEnv
@@ -903,7 +906,9 @@ class _GymAsyncMeta(_EnvPostInit):
                 kwargs = {}
                 if missing_obs_value is not None:
                     kwargs["missing_obs_value"] = missing_obs_value
-                if IsaacLabWrapper._supports_native_autoreset(instance._env.unwrapped):
+                if IsaacLabWrapper._supports_native_autoreset(
+                    instance._env.unwrapped, native_autoreset=native_autoreset
+                ):
                     env = TransformedEnv(
                         instance,
                         VecGymEnvTransform(**kwargs, native_autoreset=native_autoreset),
@@ -1131,6 +1136,9 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
         )
 
     def __init__(self, env=None, categorical_action_encoding=False, **kwargs):
+        self._torchrl_native_autoreset_requested = kwargs.pop(
+            "_torchrl_native_autoreset_requested", False
+        )
         self._seed_calls_reset = None
         self._categorical_action_encoding = categorical_action_encoding
         if env is not None:
@@ -1204,7 +1212,10 @@ class GymWrapper(GymLikeEnv, metaclass=_GymAsyncMeta):
             from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 
             tuple_of_classes = (
-                tuple_of_classes + IsaacLabWrapper._supported_isaac_env_classes()
+                tuple_of_classes
+                + IsaacLabWrapper._supported_isaac_env_classes(
+                    include_direct=self._torchrl_native_autoreset_requested
+                )
             )
         return isinstance(
             self._env.unwrapped, tuple_of_classes + (gym_backend("vector").VectorEnv,)

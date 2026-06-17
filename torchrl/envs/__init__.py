@@ -18,6 +18,7 @@ from .custom import (
     PendulumEnv,
     SatelliteEnv,
     TicTacToeEnv,
+    ToyVLAEnv,
     Walker2dEnv,
 )
 from .custom.mujoco._humanoid_primitives import HumanoidMacroAction
@@ -76,11 +77,19 @@ from .libs import (
     VmasEnv,
     VmasWrapper,
 )
-from .model_based import DreamerDecoder, DreamerEnv, ImaginedEnv, ModelBasedEnvBase
+from .model_based import (
+    DreamerDecoder,
+    DreamerEnv,
+    ImaginedEnv,
+    ModelBasedEnvBase,
+    WorldModelEnv,
+)
 from .transforms import (
+    ActionChunkTransform,
     ActionDiscretizer,
     ActionMask,
     ActionScaling,
+    ActionTokenizerTransform,
     AutoResetEnv,
     AutoResetTransform,
     BatchSizeTransform,
@@ -94,6 +103,7 @@ from .transforms import (
     ConditionalPolicySwitch,
     ConditionalSkip,
     Crop,
+    DecodeVideoTransform,
     DeviceCastTransform,
     DiscreteActionProjection,
     DoubleToFloat,
@@ -137,6 +147,7 @@ from .transforms import (
     SqueezeTransform,
     Stack,
     StepCounter,
+    SuccessReward,
     TargetMacroAction,
     TargetReturn,
     TensorDictPrimer,
@@ -171,9 +182,11 @@ from .utils import (
 )
 
 __all__ = [
+    "ActionChunkTransform",
     "ActionDiscretizer",
     "ActionMask",
     "ActionScaling",
+    "ActionTokenizerTransform",
     "AntEnv",
     "CubeBowlEnv",
     "VecNormV2",
@@ -200,6 +213,7 @@ __all__ = [
     "DMControlEnv",
     "DMControlWrapper",
     "DTypeCastTransform",
+    "DecodeVideoTransform",
     "DeviceCastTransform",
     "DiscreteActionProjection",
     "DoubleToFloat",
@@ -295,10 +309,12 @@ __all__ = [
     "SqueezeTransform",
     "Stack",
     "StepCounter",
+    "SuccessReward",
     "TargetReturn",
     "TensorDictPrimer",
     "TerminateTransform",
     "TicTacToeEnv",
+    "ToyVLAEnv",
     "TimeMaxPool",
     "Timer",
     "ToTensorImage",
@@ -319,6 +335,7 @@ __all__ = [
     "VecNorm",
     "VmasEnv",
     "VmasWrapper",
+    "WorldModelEnv",
     "Walker2dEnv",
     "check_env_specs",
     "check_marl_grouping",

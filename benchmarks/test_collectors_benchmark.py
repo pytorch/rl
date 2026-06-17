@@ -55,6 +55,31 @@ def sync_collector_setup():
     return ((c,), {})
 
 
+def sync_collector_setup_preempt():
+    """Sync collector with preemption: exercises the per-step interruptor polling
+    in the workers and the masking path in the main process."""
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = EnvCreator(
+        lambda: TransformedEnv(
+            DMControlEnv("cheetah", "run", device=device), StepCounter(50)
+        )
+    )
+    c = MultiSyncCollector(
+        [env, env],
+        RandomPolicy(env().action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        preemptive_threshold=0.9,
+        cat_results="stack",
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c,), {})
+
+
 def async_collector_setup():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = EnvCreator(
@@ -217,6 +242,11 @@ def test_single(benchmark):
 
 def test_sync(benchmark):
     (c,), _ = sync_collector_setup()
+    benchmark(execute_collector, c)
+
+
+def test_sync_preempt(benchmark):
+    (c,), _ = sync_collector_setup_preempt()
     benchmark(execute_collector, c)
 
 

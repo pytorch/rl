@@ -11,7 +11,13 @@ import pytest
 import torch
 from tensordict import TensorDict
 
-from torchrl.envs import check_env_specs, LLMHashingEnv, PendulumEnv, TicTacToeEnv
+from torchrl.envs import (
+    check_env_specs,
+    LLMHashingEnv,
+    PendulumEnv,
+    TicTacToeEnv,
+    ToyVLAEnv,
+)
 from torchrl.envs.custom.trading import FinancialRegimeEnv
 from torchrl.testing import get_default_devices
 
@@ -133,6 +139,20 @@ class TestPendulum:
             r = env.rollout(10, tensordict=TensorDict(batch_size=[5], device=device))
             assert r.shape == torch.Size((5, 10))
 
+    def test_pendulum_angle_wrapped(self):
+        # ``th`` must stay within the ``Bounded(-pi, pi)`` observation/state
+        # spec even when the dynamics push the angle past the boundary;
+        # unbounded drift made ``check_env_specs`` flaky (#3798).
+        env = PendulumEnv()
+        td = env.reset()
+        td["th"] = torch.tensor(torch.pi - 1e-3)
+        td["thdot"] = torch.tensor(8.0)  # max speed, pushes past +pi
+        td["action"] = torch.ones(1)
+        for _ in range(10):
+            td = env.step(td)["next"]
+            assert env.observation_spec["th"].is_in(td["th"]), td["th"]
+            td["action"] = torch.ones(1)
+
     def test_pendulum_set_state(self):
         env = PendulumEnv()
         torch.manual_seed(0)
@@ -200,6 +220,71 @@ class TestPendulum:
         td = env.make_tensordict("some sentence")
         assert isinstance(td, TensorDict)
         env.check_env_specs(tensordict=td)
+
+
+class TestToyVLAEnv:
+    @pytest.mark.parametrize("batch_size", [(), (2,)])
+    def test_env_specs(self, batch_size):
+        env = ToyVLAEnv(batch_size=batch_size)
+        check_env_specs(env)
+        td = env.reset()
+        assert td["observation", "image"].dtype == torch.uint8
+        assert td["observation", "image"].shape == torch.Size([*batch_size, 3, 16, 16])
+        instruction = td["language_instruction"]
+        if batch_size:
+            instruction = instruction[0]
+        assert isinstance(instruction, str)
+
+    def test_state_echoes_action(self):
+        env = ToyVLAEnv(action_dim=3, state_dim=5, batch_size=[2])
+        td = env.reset()
+        td["action"] = torch.tensor([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+        nxt = env.step(td)["next", "observation", "state"]
+        torch.testing.assert_close(nxt[..., :3], td["action"])
+        assert (nxt[..., 3:] == 0).all()
+        # reward is the negative action norm
+        rew = env.step(td)["next", "reward"]
+        torch.testing.assert_close(rew, -td["action"].norm(dim=-1, keepdim=True))
+
+    def test_seeding(self):
+        img1 = ToyVLAEnv(seed=7).reset()["observation", "image"]
+        img2 = ToyVLAEnv(seed=7).reset()["observation", "image"]
+        img3 = ToyVLAEnv(seed=8).reset()["observation", "image"]
+        assert torch.equal(img1, img2)
+        assert not torch.equal(img1, img3)
+
+    def test_state_dim_validation(self):
+        with pytest.raises(ValueError, match="state_dim"):
+            ToyVLAEnv(action_dim=5, state_dim=3)
+
+    def test_with_multi_step_actor(self):
+        from tensordict.nn import TensorDictModuleBase
+        from torchrl.envs import TransformedEnv
+        from torchrl.envs.transforms import InitTracker
+        from torchrl.modules import MultiStepActorWrapper
+
+        calls = []
+
+        class ChunkActor(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action"]
+
+            def forward(self, td):
+                calls.append(1)
+                value = float(len(calls))
+                chunk = torch.full((*td.batch_size, 3, 4), value)
+                chunk[..., 1, :] += 0.1
+                chunk[..., 2, :] += 0.2
+                return td.set("action", chunk)
+
+        env = TransformedEnv(ToyVLAEnv(batch_size=[2]), InitTracker())
+        policy = MultiStepActorWrapper(ChunkActor(), n_steps=3, replan_interval=2)
+        rollout = env.rollout(4, policy)
+        # the state echo exposes the executed cadence: two actions per chunk,
+        # then a re-plan -- and the actor was only called on re-plan steps
+        executed = rollout["next", "observation", "state"][0, :, 0]
+        torch.testing.assert_close(executed, torch.tensor([1.0, 1.1, 2.0, 2.1]))
+        assert len(calls) == 2
 
 
 if __name__ == "__main__":

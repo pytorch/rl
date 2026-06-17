@@ -2310,6 +2310,15 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             :class:`~torchrl.envs.transforms.InitTracker` transform.
         keep_dim (bool, optional): whether to keep the time dimension of
             the macro during indexing. Defaults to ``False``.
+        replan_interval (int, optional): re-query the wrapped actor after this
+            many actions have been consumed from the cache (receding-horizon
+            execution; the actor call is skipped in between, which is the
+            point of action chunking for expensive policies such as VLAs).
+            Must be in ``[1, n_steps]``; ``replan_interval=1`` re-plans at
+            every step (closed loop). Defaults to ``None``, i.e. the whole
+            cache is consumed before re-querying (open loop). With
+            ``n_steps=None`` the bound is enforced at execution time against
+            the actual chunk length instead.
 
     Examples:
         >>> import torch.nn
@@ -2383,11 +2392,22 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         action_keys: list[NestedKey] | None = None,
         init_key: list[NestedKey] | None = None,
         keep_dim: bool = False,
+        replan_interval: int | None = None,
     ):
         self.action_keys = action_keys
         self.init_key = init_key
         self.n_steps = n_steps
         self.keep_dim = keep_dim
+        if replan_interval is not None:
+            replan_interval = int(replan_interval)
+            if replan_interval < 1 or (
+                n_steps is not None and replan_interval > n_steps
+            ):
+                raise ValueError(
+                    f"replan_interval must be in [1, n_steps={n_steps}], got "
+                    f"{replan_interval}."
+                )
+        self.replan_interval = replan_interval
 
         super().__init__()
         self.actor = actor
@@ -2424,7 +2444,13 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         counter = tensordict.get(self.counter_key, None)
         if counter is None:
             counter = is_init.int()
-        is_init = is_init | (counter == self.n_steps)
+        # re-query the actor every `replan_interval` actions (receding
+        # horizon); by default the whole cache is consumed first (open loop)
+        interval = (
+            self.replan_interval if self.replan_interval is not None else self.n_steps
+        )
+        if interval is not None:
+            is_init = is_init | (counter >= interval)
         if is_init.any():
             counter = counter.masked_fill(is_init, 0)
             tensordict_filtered = tensordict[is_init.reshape(tensordict.shape)]
@@ -2442,7 +2468,7 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                         action_orig, is_init_expand, action_computed
                     )
                 tensordict.set(action_key_orig, action_computed)
-        tensordict.set("counter", counter + 1)
+        tensordict.set(self.counter_key, counter + 1)
 
     def forward(
         self,
@@ -2466,6 +2492,16 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                 raise RuntimeError(
                     f"The action's time dimension (dim={parent_td.ndim}) doesn't match the n_steps argument ({self.n_steps}). "
                     f"The action shape was {action_entry.shape}."
+                )
+            if (
+                self.replan_interval is not None
+                and action_entry.shape[parent_td.ndim] < self.replan_interval
+            ):
+                raise RuntimeError(
+                    f"replan_interval ({self.replan_interval}) exceeds the "
+                    f"actor's action chunk length "
+                    f"({action_entry.shape[parent_td.ndim]}): the cache would "
+                    "replay stale actions before re-planning."
                 )
             base_idx = (
                 slice(

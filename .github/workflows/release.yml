@@ -612,6 +612,16 @@ jobs:
           echo "Wheels prepared for upload:"
           ls -la dist/
 
+      - name: Filter PyPI-incompatible local-version wheels
+        run: |
+          # PyPI rejects local versions such as X.Y.Z+cpu or X.Y.Z+cu128.
+          # Keep the default CPU wheels (built without +cpu above) and macOS
+          # wheels, but do not send CUDA/local-version artifacts to PyPI.
+          find dist -name "*+*.whl" -type f -print -delete
+          echo "Wheels remaining for PyPI upload:"
+          ls -la dist/
+          test -n "$(find dist -name '*.whl' -type f -print -quit)"
+
       - name: Publish to PyPI (OIDC)
         if: ${{ env.DRY_RUN != 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
