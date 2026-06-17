@@ -15,6 +15,7 @@ from typing import Literal, TypeVar
 import torch
 from tensordict import (
     is_tensor_collection,
+    lazy_stack,
     NestedKey,
     TensorClass,
     TensorDict,
@@ -89,13 +90,21 @@ class MCAdvantageSelector:
         max_combinations (int, optional): Maximum exact combinations to score
             for ``"balanced"`` selection. Larger candidate pools fall back to
             a deterministic greedy strategy. Defaults to ``100_000``.
+        in_keys (list of NestedKey, optional): Candidate keys consumed by the
+            selector. Defaults to ``["return"]``. ``MCAdvantage`` passes a
+            candidate-level tensordict with one entry per candidate trajectory,
+            containing ``"return"`` and a lazy-stacked ``"trajectories"``
+            tensordict with the full candidate trajectories. Subclasses can
+            set this argument and override :meth:`select` to implement custom
+            metadata- or trajectory-based selection.
 
     Examples:
         >>> import torch
         >>> from torchrl.objectives.llm import MCAdvantageSelector
+        >>> from tensordict import TensorDict
         >>> selector = MCAdvantageSelector()
         >>> selector.select(
-        ...     torch.tensor([0.0, 0.0, 0.0, 1.0]),
+        ...     TensorDict({"return": torch.tensor([0.0, 0.0, 0.0, 1.0])}, [4]),
         ...     group_size=2,
         ...     keep_return_bounds=(0.1, 0.9),
         ... )
@@ -107,6 +116,7 @@ class MCAdvantageSelector:
         strategy: Literal["first", "uniform", "balanced"] = "balanced",
         *,
         max_combinations: int = 100_000,
+        in_keys: list[NestedKey] | None = None,
     ) -> None:
         if strategy not in ("first", "uniform", "balanced"):
             raise ValueError(
@@ -117,34 +127,37 @@ class MCAdvantageSelector:
             raise ValueError(
                 f"max_combinations must be strictly positive, got {max_combinations}."
             )
+        if in_keys is None:
+            in_keys = ["return"]
+        elif not in_keys:
+            raise ValueError("in_keys must contain at least one key.")
         self.strategy = strategy
         self.max_combinations = int(max_combinations)
+        self.in_keys = list(in_keys)
 
     def select(
         self,
-        returns: torch.Tensor,
+        candidates: TensorDictBase,
         *,
         group_size: int,
         keep_return_bounds: tuple[float, float] | None = None,
-        trajectories: list[TensorDictBase] | None = None,
     ) -> list[int] | None:
         """Select candidate indices.
 
         Args:
-            returns (torch.Tensor): One scalar return per candidate trajectory.
+            candidates (TensorDictBase): Candidate-level tensordict with one
+                entry per candidate trajectory. The default selector reads the
+                first ``in_keys`` entry as a scalar value per candidate.
             group_size (int): Number of trajectories to select.
             keep_return_bounds (tuple of float, optional): Accepted exclusive
                 mean-return interval. If supplied and no valid subset is found,
                 ``None`` is returned.
-            trajectories (list of TensorDictBase, optional): Candidate
-                trajectories. The built-in strategies only use returns, but
-                subclasses can use the full trajectory metadata.
 
         Returns:
             list[int] or None: Selected candidate indices, or ``None`` when the
                 candidate group should be skipped.
         """
-        values = [float(value) for value in returns.detach().reshape(-1).cpu()]
+        values = self._values(candidates)
         candidate_count = len(values)
         if candidate_count < group_size:
             raise ValueError(
@@ -166,6 +179,22 @@ class MCAdvantageSelector:
                 indices if self._accepted(values, indices, keep_return_bounds) else None
             )
         return self._balanced_indices(values, group_size, keep_return_bounds)
+
+    @staticmethod
+    def _as_float_list(values: torch.Tensor) -> list[float]:
+        return [float(value) for value in values.detach().reshape(-1).cpu()]
+
+    def _values(self, candidates: TensorDictBase) -> list[float]:
+        key = self.in_keys[0]
+        values = candidates.select(key, strict=True).get(key)
+        candidate_count = candidates.numel()
+        if values.numel() != candidate_count:
+            raise ValueError(
+                "The built-in MCAdvantageSelector strategies expect one scalar "
+                f"value per candidate under {key!r}, got {values.shape=} for "
+                f"{candidates.batch_size=}."
+            )
+        return self._as_float_list(values)
 
     @staticmethod
     def _accepted(
@@ -1251,11 +1280,17 @@ class MCAdvantage(Transform):
         # its steps.
         rewards = [traj.get(self.rewards_key) for traj in trajs]
         returns = self._trajectory_returns(rewards)
+        candidates = TensorDict(
+            {
+                "return": returns,
+                "trajectories": lazy_stack(trajs, 0),
+            },
+            batch_size=[len(trajs)],
+        )
         selected_indices = self.candidate_selector.select(
-            returns,
+            candidates.select(*self.candidate_selector.in_keys, strict=True),
             group_size=self.grpo_size,
             keep_return_bounds=self.keep_return_bounds,
-            trajectories=trajs,
         )
         if selected_indices is None:
             if self.keep_return_bounds is not None and self.verbose:
@@ -1273,7 +1308,7 @@ class MCAdvantage(Transform):
         if candidate_count > self.grpo_size:
             first_indices = list(range(self.grpo_size))
             first_selection_kept = self.candidate_selector._accepted(
-                [float(value) for value in returns.detach().reshape(-1).cpu()],
+                MCAdvantageSelector._as_float_list(returns),
                 first_indices,
                 self.keep_return_bounds,
             )

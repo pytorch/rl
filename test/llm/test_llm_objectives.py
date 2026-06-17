@@ -48,49 +48,6 @@ def set_list_to_stack():
         yield
 
 
-@pytest.mark.parametrize("ndim", [1, 2])
-def test_mc_advantage(ndim):
-    # make trajectories
-    def make_silly_trajectory(n_steps=None):
-        while True:
-            if n_steps is None:
-                n_steps = torch.randint(low=2, high=100, size=(1,)).item()
-            tds = []
-            for _ in range(n_steps):
-                n_tokens = torch.randint(low=1, high=100, size=(1,)).item()
-                rewards = [torch.randn(n_tokens, 1)]
-                prompt = np.random.choice(prompts)
-                td = TensorDict(
-                    query=prompt,  # MCAdvantage expects "query" key, not "text"
-                    next=TensorDict(
-                        reward=rewards, done=torch.zeros(1, dtype=torch.bool)
-                    ),
-                )
-                tds.append(td)
-            tds[-1]["next", "done"] = torch.ones(1, dtype=torch.bool)
-            yield lazy_stack(tds)
-
-    rb = ReplayBuffer(storage=LazyStackStorage(100))
-    rb.append_transform(MCAdvantage(grpo_size=4))
-    if ndim == 1:
-        gen = make_silly_trajectory()
-        for _ in range(100):
-            trajectory = next(gen)
-            rb.extend(trajectory)
-        assert len(rb)
-        s = rb.sample(1)
-        assert "advantage" in s.keys()
-    else:
-        gen = make_silly_trajectory(n_steps=5)
-        for _ in range(100):
-            trajectory = lazy_stack([next(gen) for _ in range(3)])
-            trajectory = trajectory.view(-1)
-            rb.extend(trajectory)
-        assert len(rb)
-        s = rb.sample(1)
-        assert "advantage" in s.keys()
-
-
 def _make_group_traj(group_id, rewards, group_key="group_id"):
     n_steps = len(rewards)
     return TensorDict(
@@ -105,253 +62,325 @@ def _make_group_traj(group_id, rewards, group_key="group_id"):
     )
 
 
-@pytest.mark.parametrize("agg", ["sum", "max", "mean"])
-def test_mc_advantage_trajectory_return(agg):
-    # trajectory-level semantics: returns normalized across the group,
-    # advantage broadcast to every step of each trajectory
-    adv_t = MCAdvantage(grpo_size=3, prompt_key="group_id", trajectory_return=agg)
-    trajs = [
-        _make_group_traj(0, [0.0, 0.0]),
-        _make_group_traj(0, [0.0, 1.0, 1.0]),
-        _make_group_traj(0, [1.0, 0.0]),
-    ]
-    assert adv_t.inv(trajs[0]) is None
-    assert adv_t.inv(trajs[1]) is None
-    out = adv_t.inv(trajs[2])
-    reduce = {"sum": torch.sum, "max": torch.max, "mean": torch.mean}[agg]
-    returns = torch.stack([reduce(traj["next", "reward"]) for traj in trajs])
-    expected = (returns - returns.mean()) / returns.std().clamp_min(1e-6)
-    assert out["advantage"].shape == out["next", "reward"].shape
-    for chunk, exp in zip(out["advantage"].squeeze(-1).split([2, 3, 2]), expected):
-        torch.testing.assert_close(chunk, exp.expand_as(chunk))
+class TestMCAdvantage:
+    @pytest.mark.parametrize("ndim", [1, 2])
+    def test_mc_advantage(self, ndim):
+        # make trajectories
+        def make_silly_trajectory(n_steps=None):
+            while True:
+                if n_steps is None:
+                    n_steps = torch.randint(low=2, high=100, size=(1,)).item()
+                tds = []
+                for _ in range(n_steps):
+                    n_tokens = torch.randint(low=1, high=100, size=(1,)).item()
+                    rewards = [torch.randn(n_tokens, 1)]
+                    prompt = np.random.choice(prompts)
+                    td = TensorDict(
+                        query=prompt,  # MCAdvantage expects "query" key, not "text"
+                        next=TensorDict(
+                            reward=rewards, done=torch.zeros(1, dtype=torch.bool)
+                        ),
+                    )
+                    tds.append(td)
+                tds[-1]["next", "done"] = torch.ones(1, dtype=torch.bool)
+                yield lazy_stack(tds)
 
+        rb = ReplayBuffer(storage=LazyStackStorage(100))
+        rb.append_transform(MCAdvantage(grpo_size=4))
+        if ndim == 1:
+            gen = make_silly_trajectory()
+            for _ in range(100):
+                trajectory = next(gen)
+                rb.extend(trajectory)
+            assert len(rb)
+            s = rb.sample(1)
+            assert "advantage" in s.keys()
+        else:
+            gen = make_silly_trajectory(n_steps=5)
+            for _ in range(100):
+                trajectory = lazy_stack([next(gen) for _ in range(3)])
+                trajectory = trajectory.view(-1)
+                rb.extend(trajectory)
+            assert len(rb)
+            s = rb.sample(1)
+            assert "advantage" in s.keys()
 
-@pytest.mark.parametrize("group_key", ["group_id", ("meta", "group_id")])
-def test_mc_advantage_tensor_group_key(group_key):
-    # tensor group identifiers (under a flat or nested key) are grouped by
-    # value; interleaved groups complete independently
-    adv_t = MCAdvantage(grpo_size=2, prompt_key=group_key, trajectory_return="sum")
-    assert adv_t.inv(_make_group_traj(0, [1.0, 0.0], group_key=group_key)) is None
-    assert adv_t.inv(_make_group_traj(1, [0.0, 0.0], group_key=group_key)) is None
-    out0 = adv_t.inv(_make_group_traj(0, [0.0, 0.0], group_key=group_key))
-    assert out0 is not None
-    assert (out0[group_key] == 0).all()
-    out1 = adv_t.inv(_make_group_traj(1, [0.0, 1.0], group_key=group_key))
-    assert out1 is not None
-    assert (out1[group_key] == 1).all()
+    @pytest.mark.parametrize("agg", ["sum", "max", "mean"])
+    def test_mc_advantage_trajectory_return(self, agg):
+        # trajectory-level semantics: returns normalized across the group,
+        # advantage broadcast to every step of each trajectory
+        adv_t = MCAdvantage(grpo_size=3, prompt_key="group_id", trajectory_return=agg)
+        trajs = [
+            _make_group_traj(0, [0.0, 0.0]),
+            _make_group_traj(0, [0.0, 1.0, 1.0]),
+            _make_group_traj(0, [1.0, 0.0]),
+        ]
+        assert adv_t.inv(trajs[0]) is None
+        assert adv_t.inv(trajs[1]) is None
+        out = adv_t.inv(trajs[2])
+        reduce = {"sum": torch.sum, "max": torch.max, "mean": torch.mean}[agg]
+        returns = torch.stack([reduce(traj["next", "reward"]) for traj in trajs])
+        expected = (returns - returns.mean()) / returns.std().clamp_min(1e-6)
+        assert out["advantage"].shape == out["next", "reward"].shape
+        for chunk, exp in zip(out["advantage"].squeeze(-1).split([2, 3, 2]), expected):
+            torch.testing.assert_close(chunk, exp.expand_as(chunk))
 
+    @pytest.mark.parametrize("group_key", ["group_id", ("meta", "group_id")])
+    def test_mc_advantage_tensor_group_key(self, group_key):
+        # tensor group identifiers (under a flat or nested key) are grouped by
+        # value; interleaved groups complete independently
+        adv_t = MCAdvantage(grpo_size=2, prompt_key=group_key, trajectory_return="sum")
+        assert adv_t.inv(_make_group_traj(0, [1.0, 0.0], group_key=group_key)) is None
+        assert adv_t.inv(_make_group_traj(1, [0.0, 0.0], group_key=group_key)) is None
+        out0 = adv_t.inv(_make_group_traj(0, [0.0, 0.0], group_key=group_key))
+        assert out0 is not None
+        assert (out0[group_key] == 0).all()
+        out1 = adv_t.inv(_make_group_traj(1, [0.0, 1.0], group_key=group_key))
+        assert out1 is not None
+        assert (out1[group_key] == 1).all()
 
-def test_mc_advantage_dynamic_sampling():
-    adv_t = MCAdvantage(
-        grpo_size=2,
-        prompt_key="group_id",
-        trajectory_return="sum",
-        keep_return_bounds=(0.1, 0.9),
-    )
-    # all-failed group: dropped
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    # all-succeeded group: dropped
-    assert adv_t.inv(_make_group_traj(1, [1.0])) is None
-    assert adv_t.inv(_make_group_traj(1, [1.0])) is None
-    # mixed group: kept
-    assert adv_t.inv(_make_group_traj(2, [0.0])) is None
-    out = adv_t.inv(_make_group_traj(2, [1.0]))
-    assert out is not None
-    # processed groups (kept or dropped) do not linger in memory
-    assert not adv_t.queues
-    assert adv_t.completed_trajectories == 6
-    assert adv_t.completed_decisions == 6
-    assert adv_t.successful_trajectories == 3
-    assert adv_t.trajectory_return_sum == 3.0
-    assert adv_t.trajectory_return_max == 1.0
-    assert adv_t.completed_groups == 3
-    assert adv_t.written_groups == 1
-    assert adv_t.dropped_groups == 2
-    assert adv_t.queued_groups == 0
-    assert adv_t.queued_trajectories == 0
-    assert adv_t.max_queued_trajectories_per_group == 0
-    adv_t.reset_stats()
-    assert adv_t.completed_groups == 0
-    assert adv_t.written_groups == 0
-    assert adv_t.dropped_groups == 0
-    assert adv_t.rescued_groups == 0
-    assert adv_t.selected_trajectories == 0
-    assert adv_t.unselected_trajectories == 0
-    assert adv_t.completed_trajectories == 0
-    assert adv_t.completed_decisions == 0
-
-
-def test_mc_advantage_candidate_selection_rescues_dynamic_sampling_group():
-    selector = MCAdvantageSelector()
-    assert selector.select(
-        torch.tensor([0.0, 0.0, 0.0, 1.0]),
-        group_size=2,
-        keep_return_bounds=(0.1, 0.9),
-    ) == [0, 3]
-    adv_t = MCAdvantage(
-        grpo_size=2,
-        prompt_key="group_id",
-        trajectory_return="sum",
-        keep_return_bounds=(0.1, 0.9),
-        candidate_group_size=4,
-        candidate_selector=selector,
-    )
-    for _ in range(3):
-        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    out = adv_t.inv(_make_group_traj(0, [1.0]))
-    assert out is not None
-    assert out.shape == (2,)
-    assert out["advantage"].shape == out["next", "reward"].shape
-    assert adv_t.completed_groups == 1
-    assert adv_t.written_groups == 1
-    assert adv_t.dropped_groups == 0
-    assert adv_t.rescued_groups == 1
-    assert adv_t.selected_trajectories == 2
-    assert adv_t.unselected_trajectories == 2
-
-
-def test_mc_advantage_candidate_selection_writes_as_soon_as_useful():
-    adv_t = MCAdvantage(
-        grpo_size=2,
-        prompt_key="group_id",
-        trajectory_return="sum",
-        keep_return_bounds=(0.1, 0.9),
-        candidate_group_size=4,
-    )
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    out = adv_t.inv(_make_group_traj(0, [1.0]))
-    assert out is not None
-    assert out.shape == (2,)
-    assert adv_t.completed_groups == 1
-    assert adv_t.written_groups == 1
-    assert adv_t.dropped_groups == 0
-    assert adv_t.queued_groups == 0
-    assert adv_t.selected_trajectories == 2
-    assert adv_t.unselected_trajectories == 0
-
-
-def test_mc_advantage_candidate_selection_rescues_before_max_candidates():
-    adv_t = MCAdvantage(
-        grpo_size=2,
-        prompt_key="group_id",
-        trajectory_return="sum",
-        keep_return_bounds=(0.1, 0.9),
-        candidate_group_size=4,
-    )
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    out = adv_t.inv(_make_group_traj(0, [1.0]))
-    assert out is not None
-    assert out.shape == (2,)
-    assert adv_t.completed_groups == 1
-    assert adv_t.written_groups == 1
-    assert adv_t.rescued_groups == 1
-    assert adv_t.selected_trajectories == 2
-    assert adv_t.unselected_trajectories == 1
-
-
-def test_mc_advantage_candidate_selection_drops_without_valid_subset():
-    adv_t = MCAdvantage(
-        grpo_size=2,
-        prompt_key="group_id",
-        trajectory_return="sum",
-        keep_return_bounds=(0.1, 0.9),
-        candidate_group_size=4,
-    )
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    assert adv_t.completed_groups == 0
-    assert adv_t.queued_trajectories == 2
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    assert adv_t.completed_groups == 0
-    assert adv_t.queued_trajectories == 3
-    assert adv_t.inv(_make_group_traj(0, [0.0])) is None
-    assert adv_t.completed_groups == 1
-    assert adv_t.written_groups == 0
-    assert adv_t.dropped_groups == 1
-
-
-def test_mc_advantage_trajectory_return_rb():
-    # write path through a replay buffer: complete mixed groups are written,
-    # degenerate groups are filtered out
-    rb = ReplayBuffer(storage=LazyStackStorage(100))
-    rb.append_transform(
-        MCAdvantage(
+    def test_mc_advantage_dynamic_sampling(self):
+        adv_t = MCAdvantage(
             grpo_size=2,
             prompt_key="group_id",
             trajectory_return="sum",
             keep_return_bounds=(0.1, 0.9),
         )
-    )
-    rb.extend(_make_group_traj(0, [0.0, 0.0]))
-    assert len(rb) == 0
-    rb.extend(_make_group_traj(0, [0.0, 1.0]))
-    assert len(rb) == 4
-    rb.extend(_make_group_traj(1, [0.0, 0.0]))
-    rb.extend(_make_group_traj(1, [0.0, 0.0]))
-    assert len(rb) == 4
-    sample = rb.sample(4)
-    assert "advantage" in sample.keys()
+        # all-failed group: dropped
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        # all-succeeded group: dropped
+        assert adv_t.inv(_make_group_traj(1, [1.0])) is None
+        assert adv_t.inv(_make_group_traj(1, [1.0])) is None
+        # mixed group: kept
+        assert adv_t.inv(_make_group_traj(2, [0.0])) is None
+        out = adv_t.inv(_make_group_traj(2, [1.0]))
+        assert out is not None
+        # processed groups (kept or dropped) do not linger in memory
+        assert not adv_t.queues
+        assert adv_t.completed_trajectories == 6
+        assert adv_t.completed_decisions == 6
+        assert adv_t.successful_trajectories == 3
+        assert adv_t.trajectory_return_sum == 3.0
+        assert adv_t.trajectory_return_max == 1.0
+        assert adv_t.completed_groups == 3
+        assert adv_t.written_groups == 1
+        assert adv_t.dropped_groups == 2
+        assert adv_t.queued_groups == 0
+        assert adv_t.queued_trajectories == 0
+        assert adv_t.max_queued_trajectories_per_group == 0
+        adv_t.reset_stats()
+        assert adv_t.completed_groups == 0
+        assert adv_t.written_groups == 0
+        assert adv_t.dropped_groups == 0
+        assert adv_t.rescued_groups == 0
+        assert adv_t.selected_trajectories == 0
+        assert adv_t.unselected_trajectories == 0
+        assert adv_t.completed_trajectories == 0
+        assert adv_t.completed_decisions == 0
 
-
-def test_mc_advantage_multi_done_flat_batch():
-    # a single inv call carrying several concatenated trajectories (the
-    # layout a collector yields with trajs_per_batch + traj_format="cat") is
-    # split on the done flags and processed per trajectory
-    adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
-    flat = torch.cat(
-        [
-            _make_group_traj(0, [1.0, 0.0]),
-            _make_group_traj(0, [0.0, 0.0, 0.0]),
-            _make_group_traj(1, [0.0]),
-        ],
-        0,
-    )
-    out = adv_t.inv(flat)
-    # group 0 completed (both trajectories come out), group 1 stays queued
-    assert out.shape == (5,)
-    returns = torch.tensor([1.0, 0.0])
-    expected = (returns - returns.mean()) / returns.std().clamp_min(1e-6)
-    torch.testing.assert_close(
-        out["advantage"].squeeze(-1),
-        torch.cat([expected[0].expand(2), expected[1].expand(3)]),
-    )
-    assert sum(len(q) for q in adv_t.queues.values()) == 1
-    assert adv_t.max_queued_trajectories_per_group == 1
-
-
-def test_mc_advantage_validation():
-    with pytest.raises(ValueError, match="trajectory_return must be one of"):
-        MCAdvantage(grpo_size=2, trajectory_return="prod")
-    with pytest.raises(ValueError, match="dynamic sampling"):
-        MCAdvantage(grpo_size=2, keep_return_bounds=(0.1, 0.9))
-    with pytest.raises(ValueError, match="increasing"):
-        MCAdvantage(grpo_size=2, trajectory_return="sum", keep_return_bounds=(0.9, 0.1))
-    # group-relative normalization over a single trajectory would silently
-    # produce NaN advantages (std of one element)
-    with pytest.raises(ValueError, match="grpo_size >= 2"):
-        MCAdvantage(grpo_size=1, trajectory_return="sum")
-    with pytest.raises(ValueError, match="candidate_group_size"):
-        MCAdvantage(grpo_size=2, trajectory_return="sum", candidate_group_size=1)
-    with pytest.raises(ValueError, match="candidate_group_size > grpo_size"):
-        MCAdvantage(grpo_size=2, candidate_group_size=4)
-    with pytest.raises(ValueError, match="candidate_selection_min_size"):
-        MCAdvantage(
+    def test_mc_advantage_candidate_selection_rescues_dynamic_sampling_group(self):
+        selector = MCAdvantageSelector()
+        assert selector.select(
+            TensorDict({"return": torch.tensor([0.0, 0.0, 0.0, 1.0])}, [4]),
+            group_size=2,
+            keep_return_bounds=(0.1, 0.9),
+        ) == [0, 3]
+        adv_t = MCAdvantage(
             grpo_size=2,
+            prompt_key="group_id",
             trajectory_return="sum",
+            keep_return_bounds=(0.1, 0.9),
             candidate_group_size=4,
-            candidate_selection_min_size=1,
+            candidate_selector=selector,
         )
-    with pytest.raises(ValueError, match="candidate_selection_min_size"):
-        MCAdvantage(
+        for _ in range(3):
+            assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        out = adv_t.inv(_make_group_traj(0, [1.0]))
+        assert out is not None
+        assert out.shape == (2,)
+        assert out["advantage"].shape == out["next", "reward"].shape
+        assert adv_t.completed_groups == 1
+        assert adv_t.written_groups == 1
+        assert adv_t.dropped_groups == 0
+        assert adv_t.rescued_groups == 1
+        assert adv_t.selected_trajectories == 2
+        assert adv_t.unselected_trajectories == 2
+
+    def test_mc_advantage_candidate_selector_reads_tensordict(self):
+        class ScoreSelector(MCAdvantageSelector):
+            def __init__(self):
+                super().__init__(in_keys=[("trajectories", "selector_score")])
+
+            def select(self, candidates, *, group_size, keep_return_bounds=None):
+                trajectories = candidates.select(*self.in_keys, strict=True).get(
+                    "trajectories"
+                )
+                scores = torch.stack(
+                    [
+                        trajectory.get("selector_score")[0]
+                        for trajectory in trajectories.unbind(0)
+                    ]
+                )
+                return scores.topk(group_size).indices.tolist()
+
+        def make_scored_traj(score, rewards):
+            traj = _make_group_traj(0, rewards)
+            traj.set("selector_score", torch.full((len(rewards),), float(score)))
+            return traj
+
+        adv_t = MCAdvantage(
             grpo_size=2,
+            prompt_key="group_id",
             trajectory_return="sum",
-            candidate_group_size=4,
-            candidate_selection_min_size=5,
+            candidate_group_size=3,
+            candidate_selection_min_size=3,
+            candidate_selector=ScoreSelector(),
         )
-    with pytest.raises(ValueError, match="strategy must be one of"):
-        MCAdvantageSelector("unknown")
+        assert adv_t.inv(make_scored_traj(0, [0.0])) is None
+        assert adv_t.inv(make_scored_traj(2, [1.0])) is None
+        out = adv_t.inv(make_scored_traj(1, [0.0]))
+        assert out is not None
+        assert out["selector_score"].tolist() == [2.0, 1.0]
+
+    def test_mc_advantage_candidate_selection_writes_as_soon_as_useful(self):
+        adv_t = MCAdvantage(
+            grpo_size=2,
+            prompt_key="group_id",
+            trajectory_return="sum",
+            keep_return_bounds=(0.1, 0.9),
+            candidate_group_size=4,
+        )
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        out = adv_t.inv(_make_group_traj(0, [1.0]))
+        assert out is not None
+        assert out.shape == (2,)
+        assert adv_t.completed_groups == 1
+        assert adv_t.written_groups == 1
+        assert adv_t.dropped_groups == 0
+        assert adv_t.queued_groups == 0
+        assert adv_t.selected_trajectories == 2
+        assert adv_t.unselected_trajectories == 0
+
+    def test_mc_advantage_candidate_selection_rescues_before_max_candidates(self):
+        adv_t = MCAdvantage(
+            grpo_size=2,
+            prompt_key="group_id",
+            trajectory_return="sum",
+            keep_return_bounds=(0.1, 0.9),
+            candidate_group_size=4,
+        )
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        out = adv_t.inv(_make_group_traj(0, [1.0]))
+        assert out is not None
+        assert out.shape == (2,)
+        assert adv_t.completed_groups == 1
+        assert adv_t.written_groups == 1
+        assert adv_t.rescued_groups == 1
+        assert adv_t.selected_trajectories == 2
+        assert adv_t.unselected_trajectories == 1
+
+    def test_mc_advantage_candidate_selection_drops_without_valid_subset(self):
+        adv_t = MCAdvantage(
+            grpo_size=2,
+            prompt_key="group_id",
+            trajectory_return="sum",
+            keep_return_bounds=(0.1, 0.9),
+            candidate_group_size=4,
+        )
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        assert adv_t.completed_groups == 0
+        assert adv_t.queued_trajectories == 2
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        assert adv_t.completed_groups == 0
+        assert adv_t.queued_trajectories == 3
+        assert adv_t.inv(_make_group_traj(0, [0.0])) is None
+        assert adv_t.completed_groups == 1
+        assert adv_t.written_groups == 0
+        assert adv_t.dropped_groups == 1
+
+    def test_mc_advantage_trajectory_return_rb(self):
+        # write path through a replay buffer: complete mixed groups are written,
+        # degenerate groups are filtered out
+        rb = ReplayBuffer(storage=LazyStackStorage(100))
+        rb.append_transform(
+            MCAdvantage(
+                grpo_size=2,
+                prompt_key="group_id",
+                trajectory_return="sum",
+                keep_return_bounds=(0.1, 0.9),
+            )
+        )
+        rb.extend(_make_group_traj(0, [0.0, 0.0]))
+        assert len(rb) == 0
+        rb.extend(_make_group_traj(0, [0.0, 1.0]))
+        assert len(rb) == 4
+        rb.extend(_make_group_traj(1, [0.0, 0.0]))
+        rb.extend(_make_group_traj(1, [0.0, 0.0]))
+        assert len(rb) == 4
+        sample = rb.sample(4)
+        assert "advantage" in sample.keys()
+
+    def test_mc_advantage_multi_done_flat_batch(self):
+        # a single inv call carrying several concatenated trajectories (the
+        # layout a collector yields with trajs_per_batch + traj_format="cat") is
+        # split on the done flags and processed per trajectory
+        adv_t = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+        flat = torch.cat(
+            [
+                _make_group_traj(0, [1.0, 0.0]),
+                _make_group_traj(0, [0.0, 0.0, 0.0]),
+                _make_group_traj(1, [0.0]),
+            ],
+            0,
+        )
+        out = adv_t.inv(flat)
+        # group 0 completed (both trajectories come out), group 1 stays queued
+        assert out.shape == (5,)
+        returns = torch.tensor([1.0, 0.0])
+        expected = (returns - returns.mean()) / returns.std().clamp_min(1e-6)
+        torch.testing.assert_close(
+            out["advantage"].squeeze(-1),
+            torch.cat([expected[0].expand(2), expected[1].expand(3)]),
+        )
+        assert sum(len(q) for q in adv_t.queues.values()) == 1
+        assert adv_t.max_queued_trajectories_per_group == 1
+
+    def test_mc_advantage_validation(self):
+        with pytest.raises(ValueError, match="trajectory_return must be one of"):
+            MCAdvantage(grpo_size=2, trajectory_return="prod")
+        with pytest.raises(ValueError, match="dynamic sampling"):
+            MCAdvantage(grpo_size=2, keep_return_bounds=(0.1, 0.9))
+        with pytest.raises(ValueError, match="increasing"):
+            MCAdvantage(
+                grpo_size=2, trajectory_return="sum", keep_return_bounds=(0.9, 0.1)
+            )
+        # group-relative normalization over a single trajectory would silently
+        # produce NaN advantages (std of one element)
+        with pytest.raises(ValueError, match="grpo_size >= 2"):
+            MCAdvantage(grpo_size=1, trajectory_return="sum")
+        with pytest.raises(ValueError, match="candidate_group_size"):
+            MCAdvantage(grpo_size=2, trajectory_return="sum", candidate_group_size=1)
+        with pytest.raises(ValueError, match="candidate_group_size > grpo_size"):
+            MCAdvantage(grpo_size=2, candidate_group_size=4)
+        with pytest.raises(ValueError, match="candidate_selection_min_size"):
+            MCAdvantage(
+                grpo_size=2,
+                trajectory_return="sum",
+                candidate_group_size=4,
+                candidate_selection_min_size=1,
+            )
+        with pytest.raises(ValueError, match="candidate_selection_min_size"):
+            MCAdvantage(
+                grpo_size=2,
+                trajectory_return="sum",
+                candidate_group_size=4,
+                candidate_selection_min_size=5,
+            )
+        with pytest.raises(ValueError, match="strategy must be one of"):
+            MCAdvantageSelector("unknown")
 
 
 # Mock infrastructure moved to conftest.py
