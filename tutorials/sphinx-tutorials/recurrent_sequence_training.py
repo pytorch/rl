@@ -31,6 +31,8 @@ Recurrent training on sequence batches
         required — this tutorial is its multi-step complement
 """
 
+from __future__ import annotations
+
 #########################################################################
 # Overview
 # --------
@@ -46,7 +48,11 @@ Recurrent training on sequence batches
 # 2. **Recurrent mode** (full ``[B, T]`` sequence per forward call). The LSTM
 #    processes a whole time dimension at once. This is used inside loss /
 #    advantage code over replayed trajectory slices, where you want to
-#    backprop through several timesteps in a single batched call.
+#    backprop through several timesteps in a single batched call. Rectangular
+#    ``[B, T]`` tensors are one option, but TorchRL also accepts the flat,
+#    ragged slices returned by :class:`~torchrl.data.replay_buffers.SliceSampler`:
+#    the flat dimension is treated as a packed time axis and ``is_init``
+#    partitions it into independent chunks.
 #
 # This tutorial focuses on (2): how to collect data, sample multi-step
 # slices, and run a recurrent policy in full-sequence mode without leaking
@@ -233,11 +239,9 @@ rb = TensorDictReplayBuffer(
 rb.extend(data)
 
 sample = rb.sample()
+is_init_positions = sample["is_init"].squeeze(-1).nonzero().squeeze(-1).tolist()
 print("Sampled batch shape:", sample.shape)
-print(
-    "is_init True positions (slice starts):",
-    sample["is_init"].nonzero().squeeze(-1).tolist(),
-)
+print("is_init True positions (slice starts):", is_init_positions)
 
 ######################################################################
 # What ``is_init`` marks
@@ -246,9 +250,11 @@ print(
 # Each ``True`` value in the sampled batch's ``is_init`` flags the first
 # timestep of a slice (or a trajectory boundary that fell inside a slice
 # because the underlying episode ended mid-slice). Downstream code — the
-# recurrent module's full-sequence forward, GAE / advantage computation,
-# mask-aware loss reduction — all read these markers to know where to
-# reset hidden state and where to mask.
+# recurrent module's full-sequence forward and GAE / advantage computation —
+# reads these markers to know where to reset hidden state. Padding masks are a
+# separate signal: when ``pad_output=True`` is used, ``SliceSampler`` writes a
+# ``("collector", "mask")`` key for consumers that need to ignore padded
+# timesteps.
 
 ######################################################################
 # Multi-step (full-sequence) recurrent forward
@@ -350,15 +356,16 @@ torch.testing.assert_close(
 print("Hidden-state isolation across is_init boundary: verified.")
 
 ######################################################################
-# A tiny training loop
-# --------------------
+# A tiny gradient-path smoke test
+# -------------------------------
 #
-# We close with a minimal supervised training loop on top of the same
+# We close with a minimal supervised update on top of the same
 # infrastructure. We use the simplest possible objective — match the
 # action logits to a constant target — purely to exercise the
-# ``set_recurrent_mode(True)`` + replay-buffer + LSTM gradient path. In a
-# real recurrent training job, this is where you would plug in your
-# advantage estimator and policy loss.
+# ``set_recurrent_mode(True)`` + replay-buffer + LSTM gradient path. In a real
+# recurrent training job, this block is where you would compute returns or
+# advantages and call the objective module, still under the same recurrent
+# context manager.
 
 trainable_policy = make_policy()
 optimizer = torch.optim.Adam(trainable_policy.parameters(), lr=3e-4)
