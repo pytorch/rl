@@ -993,7 +993,7 @@ class BatchedEnvBase(EnvBase):
         def _is_non_tensor(spec) -> bool:
             if isinstance(spec, NonTensor):
                 return True
-            return isinstance(spec, Stacked) and isinstance(spec[0], NonTensor)
+            return isinstance(spec, Stacked) and isinstance(spec._specs[0], NonTensor)
 
         non_tensor_keys = []
         for spec in (

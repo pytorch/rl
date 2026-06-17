@@ -27,6 +27,7 @@ __all__ = ["VLAWrapperBase"]
 
 ActionHead = Literal["continuous", "tokens"]
 LogProbsMode = Literal["sequence", "token"]
+SamplingMode = Literal["greedy", "sample"]
 
 
 class VLAWrapperBase(TensorDictModuleBase):
@@ -83,6 +84,10 @@ class VLAWrapperBase(TensorDictModuleBase):
             log-probability per sample) or ``"token"`` (per-token
             log-probabilities, ``[*B, chunk_size, action_dim]``) for the
             ``"tokens"`` head.
+        mode (str, optional): backward-compatible alias for
+            ``default_interaction_type``. ``"sample"`` maps to
+            ``InteractionType.RANDOM`` and ``"greedy"`` maps to
+            ``InteractionType.DETERMINISTIC``. Defaults to ``None``.
 
     .. note::
         This base deliberately does **not** inherit from the text-generation
@@ -114,6 +119,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         use_state: bool = True,
         default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
         log_probs_mode: LogProbsMode = "sequence",
+        mode: SamplingMode | None = None,
     ) -> None:
         super().__init__()
         if action_head not in ("continuous", "tokens"):
@@ -122,6 +128,13 @@ class VLAWrapperBase(TensorDictModuleBase):
             )
         if action_head == "tokens" and not vocab_size:
             raise ValueError("vocab_size must be set for the 'tokens' action head.")
+        if mode is not None:
+            if mode == "sample":
+                default_interaction_type = InteractionType.RANDOM
+            elif mode == "greedy":
+                default_interaction_type = InteractionType.DETERMINISTIC
+            else:
+                raise ValueError(f"mode must be 'greedy' or 'sample', got {mode!r}.")
         if not isinstance(default_interaction_type, InteractionType):
             raise ValueError(
                 "default_interaction_type must be an InteractionType, got "
