@@ -22,7 +22,11 @@ from torchrl.data.vla.schema import (
     STATE_KEY,
     validate_vla_tensordict,
 )
-from torchrl.data.vla.tokenizers import ActionTokenizerBase, UniformActionTokenizer
+from torchrl.data.vla.tokenizers import (
+    ActionTokenizerBase,
+    UniformActionTokenizer,
+    VocabTailActionTokenizer,
+)
 
 __all__ = [
     "ActionSpace",
@@ -30,6 +34,7 @@ __all__ = [
     "GripperMode",
     "RobotDatasetMetadata",
     "UniformActionTokenizer",
+    "VocabTailActionTokenizer",
     "validate_vla_tensordict",
     "OBSERVATION_KEY",
     "IMAGE_KEY",
