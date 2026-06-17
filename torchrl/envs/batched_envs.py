@@ -2278,18 +2278,30 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     inplace=False,
                     num_threads=1,
                 )
+            except RuntimeError as err:
+                if "self.stride(-1) must be 1" not in str(err):
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+                data = [
+                    local_data.contiguous().consolidate(
+                        share_memory=False,
+                        inplace=False,
+                        num_threads=1,
+                    )
+                    for local_data in tensordict.unbind(0)
+                ]
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
         else:
             data = tensordict
 
-        for i, local_data in zip(workers_range, data.unbind(0)):
+        data_iter = data if isinstance(data, list) else data.unbind(0)
+        for i, local_data in zip(workers_range, data_iter):
             env_device = (
                 self.meta_data[i].device
                 if isinstance(self.meta_data, list)
                 else self.meta_data.device
             )
-            if data.device != env_device:
+            if local_data.device != env_device:
                 if env_device is None:
                     local_data.clear_device_()
                 elif env_device.type == "mps":
