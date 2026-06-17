@@ -161,6 +161,7 @@ class MultiSyncCollectorConfig(BaseCollectorConfig):
     cat_results: Any = None
     set_truncated: bool = False
     use_buffers: bool = False
+    buffer_depth: int | None = None
     replay_buffer: ConfigBase | None = None
     extend_buffer: bool = False
     trust_policy: bool = True
@@ -223,6 +224,7 @@ class MultiAsyncCollectorConfig(BaseCollectorConfig):
     cat_results: Any = None
     set_truncated: bool = False
     use_buffers: bool = False
+    buffer_depth: int | None = None
     replay_buffer: ConfigBase | None = None
     extend_buffer: bool = False
     trust_policy: bool = True

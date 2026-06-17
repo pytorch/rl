@@ -124,6 +124,8 @@ class MultiAsyncCollector(MultiCollector):
 
     __doc__ += MultiCollector.__doc__
 
+    _supports_buffer_depth = True
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.out_tensordicts = defaultdict(lambda: None)
@@ -195,6 +197,20 @@ class MultiAsyncCollector(MultiCollector):
     def _get_from_queue(self, timeout=None) -> tuple[int, int, TensorDictBase]:
         new_data, j = self.queue_out.get(timeout=timeout)
         use_buffers = self._use_buffers
+        if self.buffer_depth > 1:
+            # Ring-buffer transport: the first message for each (worker, slot)
+            # pair carries the shared-memory buffer itself, later messages only
+            # carry the indices. The returned tensordict is a view of the slot:
+            # it is NOT cloned, since the worker rotates across ``buffer_depth``
+            # slots and will not rewrite this one before ``buffer_depth - 1``
+            # further rollouts.
+            if len(new_data) == 3:
+                data, idx, slot = new_data
+                self.out_tensordicts[(idx, slot)] = data
+            else:
+                idx, slot = new_data
+            out = self.out_tensordicts[(idx, slot)]
+            return idx, j, out
         if self.replay_buffer is not None:
             idx = new_data
         elif j == 0 or not use_buffers:
@@ -294,6 +310,12 @@ class MultiAsyncCollector(MultiCollector):
         return super()._shutdown_main(*args, **kwargs)
 
     def reset(self, reset_idx: Sequence[bool] | None = None) -> None:
+        if self.running and self.buffer_depth == 2:
+            warnings.warn(
+                "Calling reset() while iterating grants workers one extra rollout "
+                "of lookahead: with buffer_depth=2, tensordicts yielded before this "
+                "call may be overwritten. Clone them if needed, or use buffer_depth=3."
+            )
         super().reset(reset_idx)
         if self.queue_out.full():
             time.sleep(_TIMEOUT)  # wait until queue is empty

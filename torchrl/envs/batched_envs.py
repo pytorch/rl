@@ -19,7 +19,7 @@ from inspect import getattr_static
 from multiprocessing import connection
 from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
-from typing import Any
+from typing import Any, Literal
 from warnings import warn
 
 import torch
@@ -61,6 +61,21 @@ _CONSOLIDATE_ERR_CAPTURE = (
     "TensorDict.consolidate failed. You can deactivate the tensordict consolidation via the "
     "`consolidate` keyword argument of the ParallelEnv constructor."
 )
+
+# Opcodes written by the parent into the shared command flags when
+# ``worker_wait`` is "adaptive" or "spin". Only payload-free hot-path commands
+# are dispatched this way; everything else goes through the pipe.
+_CMD_NONE = 0
+_CMD_TO_STR = {1: "step", 2: "step_and_maybe_reset"}
+_STR_TO_CMD = {v: k for k, v in _CMD_TO_STR.items()}
+# Worker sleep states for the "adaptive" wait strategy.
+_WORKER_AWAKE = 0
+_WORKER_SLEEPING = 1
+# How long a sleeping worker blocks on the pipe before re-checking the shared
+# command flag. This only matters in the (theoretical) lost-wake race where the
+# parent reads the sleep state before it becomes visible: the worker then picks
+# the command up at the next recheck instead of waiting forever.
+_WAKE_RECHECK_INTERVAL = 0.05
 
 
 def _to_device_mps_safe(
@@ -328,6 +343,28 @@ class BatchedEnvBase(EnvBase):
         daemon (bool, optional): whether the processes should be daemonized.
             This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
             Defaults to ``False``.
+        worker_wait (str, optional): how workers wait for the next command.
+            To be used only with :class:`~torchrl.envs.ParallelEnv` subclasses,
+            and only effective when ``use_buffers=True``.
+
+            - ``"block"`` (default): workers block on the pipe. Each step incurs
+              one pipe message (a syscall and a small pickle) per worker.
+            - ``"adaptive"``: payload-free hot-path commands (``step`` and
+              ``step_and_maybe_reset``) are written as opcodes to a shared-memory
+              flag that workers spin-poll, eliminating the per-step syscalls.
+              After ``spin_for`` seconds without a command, workers fall back to
+              blocking on the pipe (and the parent wakes them through it), so
+              long gaps between steps (e.g. a slow policy) don't burn CPU.
+            - ``"spin"``: workers spin indefinitely. Lowest latency, but each
+              worker keeps one CPU core busy at all times; only use when workers
+              do not outnumber the available cores.
+
+            Commands that carry a payload (resets, seeds, non-tensor data, RNN
+            key passthrough) always travel through the pipe, whatever the mode.
+        spin_for (float, optional): how long (in seconds) workers spin before
+            falling back to a blocking pipe wait when ``worker_wait="adaptive"``.
+            Should roughly cover the typical time between two consecutive
+            commands (e.g. the policy forward pass). Defaults to ``1e-3``.
         auto_wrap_envs (bool, optional): if ``True`` (default), lambda functions passed as
             ``create_env_fn`` will be automatically wrapped in an :class:`~torchrl.envs.EnvCreator`
             to enable pickling for multiprocessing with the ``spawn`` start method.
@@ -458,6 +495,8 @@ class BatchedEnvBase(EnvBase):
         use_buffers: bool | None = None,
         consolidate: bool = True,
         daemon: bool = False,
+        worker_wait: Literal["block", "adaptive", "spin"] = "block",
+        spin_for: float = 1e-3,
     ):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
@@ -468,6 +507,14 @@ class BatchedEnvBase(EnvBase):
         self._use_buffers = use_buffers
         self.consolidate = consolidate
         self.daemon = daemon
+        if worker_wait not in ("block", "adaptive", "spin"):
+            raise ValueError(
+                f"worker_wait must be one of 'block', 'adaptive' or 'spin', got {worker_wait!r}."
+            )
+        if spin_for <= 0:
+            raise ValueError(f"spin_for must be a positive float, got {spin_for}.")
+        self.worker_wait = worker_wait
+        self.spin_for = spin_for
 
         self._single_task = callable(create_env_fn) or (len(set(create_env_fn)) == 1)
         if callable(create_env_fn):
@@ -525,6 +572,10 @@ class BatchedEnvBase(EnvBase):
             raise TypeError(
                 f"Cannot use mp_start_method={mp_start_method} with envs of type {type(self)}."
             )
+        if worker_wait != "block" and not isinstance(self, ParallelEnv):
+            raise TypeError(
+                f"Cannot use worker_wait={worker_wait} with envs of type {type(self)}."
+            )
         self._mp_start_method = mp_start_method
 
     is_spec_locked = EnvBase.is_spec_locked
@@ -540,6 +591,8 @@ class BatchedEnvBase(EnvBase):
         num_sub_threads: int | None = None,
         non_blocking: bool | None = None,
         daemon: bool | None = None,
+        worker_wait: Literal["block", "adaptive", "spin"] | None = None,
+        spin_for: float | None = None,
     ) -> BatchedEnvBase:
         """Configure parallel execution parameters before the environment starts.
 
@@ -560,6 +613,13 @@ class BatchedEnvBase(EnvBase):
             non_blocking (bool, optional): if ``True``, device moves will be done using
                 the ``non_blocking=True`` option.
             daemon (bool, optional): whether the processes should be daemonized.
+            worker_wait (str, optional): how workers wait for the next command.
+                One of ``"block"`` (wait on the pipe, default), ``"adaptive"``
+                (spin on a shared-memory flag for ``spin_for`` seconds, then fall
+                back to the pipe) or ``"spin"`` (always spin). See the
+                :class:`~torchrl.envs.ParallelEnv` documentation for details.
+            spin_for (float, optional): how long (in seconds) workers spin before
+                falling back to a blocking pipe wait when ``worker_wait="adaptive"``.
 
         Returns:
             self: Returns self for method chaining.
@@ -594,6 +654,20 @@ class BatchedEnvBase(EnvBase):
             self._non_blocking = non_blocking
         if daemon is not None:
             self.daemon = daemon
+        if worker_wait is not None:
+            if worker_wait not in ("block", "adaptive", "spin"):
+                raise ValueError(
+                    f"worker_wait must be one of 'block', 'adaptive' or 'spin', got {worker_wait!r}."
+                )
+            if worker_wait != "block" and not isinstance(self, ParallelEnv):
+                raise TypeError(
+                    f"Cannot use worker_wait={worker_wait} with envs of type {type(self)}."
+                )
+            self.worker_wait = worker_wait
+        if spin_for is not None:
+            if spin_for <= 0:
+                raise ValueError(f"spin_for must be a positive float, got {spin_for}.")
+            self.spin_for = spin_for
         return self
 
     def select_and_clone(self, name, tensor, selected_keys=None):
@@ -1770,6 +1844,24 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         # Eliminates futex syscalls from mp.Event on the critical path.
         self._shm_done_flags = mp.RawArray("b", _num_workers)
 
+        # Shared-memory command flags (parent -> worker direction): the parent
+        # writes an opcode that workers spin-poll, removing the per-step pipe
+        # send. Requires buffers since the opcode carries no payload.
+        worker_wait = self.worker_wait
+        if worker_wait != "block" and not self._use_buffers:
+            warn(
+                f"worker_wait={worker_wait!r} requires use_buffers=True; "
+                "falling back to worker_wait='block'."
+            )
+            worker_wait = "block"
+        self._worker_wait = worker_wait
+        if worker_wait != "block":
+            self._shm_cmd_flags = mp.RawArray("b", _num_workers)
+            self._shm_worker_states = mp.RawArray("b", _num_workers)
+        else:
+            self._shm_cmd_flags = None
+            self._shm_worker_states = None
+
         kwargs = [{"mp_event": self._events[i]} for i in range(_num_workers)]
         if self._use_buffers:
             for i in range(_num_workers):
@@ -1777,6 +1869,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     {
                         "worker_idx": i,
                         "shm_done_flags": self._shm_done_flags,
+                        "shm_cmd_flags": self._shm_cmd_flags,
+                        "shm_worker_states": self._shm_worker_states,
+                        "worker_wait": worker_wait,
+                        "spin_for": self.spin_for,
                     }
                 )
         with clear_mpi_env_vars():
@@ -2022,7 +2118,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
         self._sync_m2w()
         for i, _data in zip(workers_range, data):
-            self.parent_channels[i].send(("step_and_maybe_reset", _data))
+            self._send_hot_cmd(i, "step_and_maybe_reset", _data)
 
         self._wait_for_workers(workers_range)
         if self._non_tensor_keys:
@@ -2131,6 +2227,24 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             return result, result_
 
         return tensordict, tensordict_
+
+    def _send_hot_cmd(self, i: int, cmd: str, data: dict) -> None:
+        """Dispatch a hot-path command to worker ``i``.
+
+        When shared-memory command flags are enabled (``worker_wait`` is
+        "adaptive" or "spin") and the command carries no payload, the command
+        is published as an opcode in shared memory (no syscall, no pickling).
+        If the worker advertised that it fell back to a blocking pipe wait, a
+        "wake" message is additionally sent through the pipe.
+
+        Commands with a payload always go through the pipe.
+        """
+        if self._shm_cmd_flags is not None and not data:
+            self._shm_cmd_flags[i] = _STR_TO_CMD[cmd]
+            if self._shm_worker_states[i] == _WORKER_SLEEPING:
+                self.parent_channels[i].send(("wake", None))
+        else:
+            self.parent_channels[i].send((cmd, data))
 
     def _wait_for_workers(self, workers_range):
         """Wait for all workers to signal completion.
@@ -2392,7 +2506,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             self.event.synchronize()
 
         for i in workers_range:
-            self.parent_channels[i].send(("step", data[i]))
+            self._send_hot_cmd(i, "step", data[i])
 
         self._wait_for_workers(workers_range)
 
@@ -2652,6 +2766,9 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         self._cuda_events = None
         self._events = None
         self.event = None
+        self._shm_done_flags = None
+        self._shm_cmd_flags = None
+        self._shm_worker_states = None
 
     @_check_start
     def set_seed(
@@ -2765,6 +2882,10 @@ def _run_worker_pipe_shared_mem(
     filter_warnings: bool = False,
     worker_idx: int | None = None,
     shm_done_flags=None,
+    shm_cmd_flags=None,
+    shm_worker_states=None,
+    worker_wait: Literal["block", "adaptive", "spin"] = "block",
+    spin_for: float = 1e-3,
 ) -> None:
     pid = os.getpid()
     # Handle warning filtering (moved from _ProcessNoWarn)
@@ -2813,7 +2934,6 @@ def _run_worker_pipe_shared_mem(
     _last_cmd = "N/A"
     # Create a timeit instance to track elapsed time since worker start
     # Use shared memory for done signaling (avoids futex syscalls).
-    # Command delivery still goes through pipes (kernel wakeup is efficient).
     if shm_done_flags is not None and worker_idx is not None:
 
         def _signal_done():
@@ -2824,28 +2944,90 @@ def _run_worker_pipe_shared_mem(
         def _signal_done():
             mp_event.set()
 
+    def _raise_timeout():
+        torchrl_logger.debug(
+            f"batched_env worker {pid}: TIMEOUT after {_timeout}s waiting for cmd, "
+            f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
+            f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
+        )
+        raise TimeoutError(
+            f"Worker timed out after {_timeout}s, "
+            f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
+        )
+
+    # Command delivery: with worker_wait="block" (default), commands arrive
+    # through the pipe (kernel wakeup). With "adaptive"/"spin", payload-free
+    # hot-path commands arrive as opcodes in shared memory that we spin-poll,
+    # removing the per-step syscall + pickling; the pipe is still checked
+    # periodically for cold-path commands (reset, seed, close, attributes...).
+    if shm_cmd_flags is None or worker_idx is None or worker_wait == "block":
+
+        def _wait_cmd():
+            if child_pipe.poll(_timeout):
+                return child_pipe.recv()
+            _raise_timeout()
+
+    else:
+        _adaptive = worker_wait == "adaptive"
+
+        def _sleep_until_cmd(t_start):
+            # Advertise that we are about to block on the pipe so the parent
+            # sends a "wake" message in addition to the shared-memory opcode.
+            # The short poll timeout covers the (theoretical) window where the
+            # parent reads the state before our write becomes visible.
+            shm_worker_states[worker_idx] = _WORKER_SLEEPING
+            try:
+                while True:
+                    op = shm_cmd_flags[worker_idx]
+                    if op != _CMD_NONE:
+                        shm_cmd_flags[worker_idx] = _CMD_NONE
+                        return _CMD_TO_STR[op], None
+                    if child_pipe.poll(_WAKE_RECHECK_INTERVAL):
+                        cmd_data = child_pipe.recv()
+                        if cmd_data[0] != "wake":
+                            return cmd_data
+                        # "wake": loop back and consume the opcode.
+                        continue
+                    if time.time() - t_start > _timeout:
+                        _raise_timeout()
+            finally:
+                shm_worker_states[worker_idx] = _WORKER_AWAKE
+
+        def _wait_cmd():
+            t_start = time.time()
+            n_spins = 0
+            while True:
+                op = shm_cmd_flags[worker_idx]
+                if op != _CMD_NONE:
+                    shm_cmd_flags[worker_idx] = _CMD_NONE
+                    return _CMD_TO_STR[op], None
+                n_spins += 1
+                # Periodically check the pipe (cold-path commands, stale
+                # wakes, EOF on parent death) and the timeout.
+                if (n_spins & 0x3FF) == 0:
+                    if child_pipe.poll(0):
+                        cmd_data = child_pipe.recv()
+                        if cmd_data[0] != "wake":
+                            return cmd_data
+                        # Stale wake from an already-consumed opcode: ignore.
+                        continue
+                    elapsed = time.time() - t_start
+                    if _adaptive and elapsed > spin_for:
+                        return _sleep_until_cmd(t_start)
+                    if elapsed > _timeout:
+                        _raise_timeout()
+
     _worker_timer = timeit(f"batched_env_worker/{pid}/lifetime").start()
     while True:
         try:
-            if child_pipe.poll(_timeout):
-                cmd, data = child_pipe.recv()
-                _cmd_count += 1
-                _last_cmd = cmd
-                # Log every 1000 commands
-                if _cmd_count % 1000 == 0:
-                    torchrl_logger.debug(
-                        f"batched_env worker {pid}: cmd_count={_cmd_count}, "
-                        f"elapsed={_worker_timer.elapsed():.1f}s, last_cmd={cmd}"
-                    )
-            else:
+            cmd, data = _wait_cmd()
+            _cmd_count += 1
+            _last_cmd = cmd
+            # Log every 1000 commands
+            if _cmd_count % 1000 == 0:
                 torchrl_logger.debug(
-                    f"batched_env worker {pid}: TIMEOUT after {_timeout}s waiting for cmd, "
-                    f"elapsed_since_start={_worker_timer.elapsed():.1f}s, "
-                    f"last_cmd={_last_cmd}, cmd_count={_cmd_count}"
-                )
-                raise TimeoutError(
-                    f"Worker timed out after {_timeout}s, "
-                    f"increase timeout if needed through the BATCHED_PIPE_TIMEOUT environment variable."
+                    f"batched_env worker {pid}: cmd_count={_cmd_count}, "
+                    f"elapsed={_worker_timer.elapsed():.1f}s, last_cmd={cmd}"
                 )
         except EOFError as err:
             torchrl_logger.debug(
