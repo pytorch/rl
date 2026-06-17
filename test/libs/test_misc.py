@@ -201,12 +201,12 @@ class TestOpenSpiel:
             td = env.reset()
             assert (td == td_init).all()
 
-    def test_chance_not_implemented(self):
-        with pytest.raises(
-            NotImplementedError,
-            match="not yet supported",
-        ):
-            OpenSpielEnv("bridge")
+    def test_chance_nodes_supported(self):
+        # Verify that games with chance nodes now load successfully
+        env = OpenSpielEnv("bridge")
+        td = env.reset()
+        assert not env._env.is_chance_node()
+        assert td.shape == torch.Size([])
 
 
 # NOTE: Each of the registered envs are around 180 MB, so only test a few.
