@@ -623,6 +623,30 @@ def test_replay_buffer_iter(size, drop_last):
         assert i == (size - 1) // 3
 
 
+def test_replay_buffer_prefetch_queue_length():
+    """Test that the prefetch queue maintains the correct length.
+    
+    This test verifies that after sampling from a replay buffer with prefetching
+    enabled, the prefetch queue has exactly `prefetch` items computing in the
+    background (no off-by-one error).
+    """
+    torch.manual_seed(0)
+    
+    rb = ReplayBuffer(
+        storage=ListStorage(max_size=100),
+        batch_size=2,
+        prefetch=2
+    )
+
+    rb.extend(torch.arange(100))
+
+    _ = rb.sample()
+
+    assert len(rb._prefetch_queue) == 2, (
+        f"Expected prefetch queue to have 2 items, but got {len(rb._prefetch_queue)}."
+    )
+
+
 if __name__ == "__main__":
     args, unknown = argparse.ArgumentParser().parse_known_args()
     pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)
