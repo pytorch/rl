@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 
+import numpy as np
 import pytest
 import torch
 from tensordict import NonTensorData, TensorDict
@@ -305,8 +306,6 @@ class TestVocabTailActionTokenizer:
     def test_matches_openvla_reference(self):
         # oracle: the OpenVLA ActionTokenizer formulas (numpy), see
         # https://github.com/openvla/openvla/blob/main/prismatic/vla/action_tokenizer.py
-        import numpy as np
-
         vocab, n_bins = 32000, 256
         tok = VocabTailActionTokenizer(n_bins, full_vocab_size=vocab)
         bins = tok.bins.numpy()

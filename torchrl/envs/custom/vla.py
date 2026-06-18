@@ -413,7 +413,7 @@ class ToyVLAEnv(EnvBase):
         if self.group_repeats is not None:
             out["group_id"] = self._group_id.clone()
         out["terminated"] = success
-        out["done"] = success
+        out["done"] = success.clone()
         return out
 
     def _set_seed(self, seed: int | None) -> None:
