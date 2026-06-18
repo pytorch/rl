@@ -25,6 +25,7 @@
 #  - [Performance], [Perf] → Performance
 #  - [BC-Breaking], [BCBreaking] → bc breaking
 #  - [Deprecation], [Deprecated] → Deprecation
+#  - [Algorithm], [Algorithms] → new algo
 #  - [Quality] → Quality
 #  - [Versioning] → versioning
 #  - [WIP] → WIP
@@ -84,6 +85,7 @@ jobs:
           | `[Performance]` or `[Perf]` | Performance | `[Performance] Optimize tensor ops` |
           | `[BC-Breaking]` | bc breaking | `[BC-Breaking] Remove deprecated API` |
           | `[Deprecation]` | Deprecation | `[Deprecation] Mark old function` |
+          | `[Algorithm]` or `[Algorithms]` | new algo | `[Algorithm] Add new objective` |
           | `[Quality]` | Quality | `[Quality] Fix typos and add codespell` |
           | `[Versioning]` | versioning | `[Versioning] Bump release version` |
           | `[WIP]` | WIP | `[WIP] Draft implementation` |
@@ -162,6 +164,9 @@ jobs:
               ;;
             Deprecation|Deprecated|deprecation|deprecated)
               LABEL="Deprecation"
+              ;;
+            Algorithm|Algorithms|algorithm|algorithms)
+              LABEL="new algo"
               ;;
             Quality|quality)
               LABEL="Quality"
