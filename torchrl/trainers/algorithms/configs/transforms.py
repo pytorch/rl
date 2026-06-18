@@ -198,6 +198,13 @@ class CatFramesConfig(TransformConfig):
     dim: int = -3
     in_keys: list[str] | None = None
     out_keys: list[str] | None = None
+    padding: str = "same"
+    padding_value: float = 0.0
+    as_inverse: bool = False
+    reset_key: str | None = None
+    done_key: str | None = None
+    future: bool = False
+    mask_key: str | None = None
     _target_: str = "torchrl.envs.transforms.transforms.CatFrames"
 
     def __post_init__(self) -> None:

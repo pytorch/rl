@@ -2515,14 +2515,87 @@ class TestActionChunkTransform(TransformBase):
         with pytest.raises(ValueError, match="immediately follow"):
             t(TensorDict({"action": torch.randn(2, 4, 3)}, batch_size=[2, 4]))
 
-    def test_compile_build_chunk(self):
+    @staticmethod
+    def _reference_gather(action, H):
+        # the pre-0.14 dedicated gather (arange + clamp + index_select), kept
+        # as the ground truth the CatFrames recipe must reproduce exactly
+        T = action.shape[-2]
+        idx = torch.arange(T).unsqueeze(-1) + torch.arange(H).unsqueeze(0)
+        is_pad = idx >= T
+        idx = idx.clamp_max(T - 1).reshape(-1)
+        chunk = action.index_select(-2, idx).unflatten(-2, (T, H))
+        is_pad = is_pad.expand(chunk.shape[:-1]).contiguous()
+        return chunk, is_pad
+
+    @pytest.mark.parametrize("batch_size", [(), (2,), (3, 2)])
+    @pytest.mark.parametrize("chunk_size", [1, 3, 7])
+    def test_equivalence_with_reference_gather(self, batch_size, chunk_size):
+        torch.manual_seed(0)
+        action = torch.randn(*batch_size, 5, 4)
+        t = ActionChunkTransform(chunk_size=chunk_size)
+        out = t(TensorDict({"action": action}, batch_size=batch_size))
+        ref_chunk, ref_pad = self._reference_gather(action, chunk_size)
+        # byte-identical: the recipe copies the same source elements
+        assert torch.equal(out["action_chunk"], ref_chunk)
+        assert torch.equal(out["action_is_pad"], ref_pad)
+
+    def test_done_aware_chunking(self):
+        # a done inside the window: chunks must not cross the trajectory
+        # boundary (steps past it are padded with the last valid action)
+        action = torch.arange(4.0).view(1, 4, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True  # boundary between steps 1 and 2
+        td = TensorDict({"action": action, ("next", "done"): done}, batch_size=[1, 4])
+        out = ActionChunkTransform(3)(td)
+        expected_chunk = torch.tensor(
+            [[0, 1, 1], [1, 1, 1], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        expected_pad = torch.tensor([[0, 0, 1], [0, 1, 1], [0, 0, 1], [0, 1, 1]]).bool()
+        assert torch.equal(out["action_is_pad"][0], expected_pad)
+
+    def test_done_key_none_ignores_dones(self):
+        action = torch.arange(4.0).view(1, 4, 1)
+        done = torch.zeros(1, 4, 1, dtype=torch.bool)
+        done[0, 1] = True
+        td = TensorDict({"action": action, ("next", "done"): done}, batch_size=[1, 4])
+        out = ActionChunkTransform(3, done_key=None)(td)
+        # the boundary is ignored: the chunk at t=0 reads across the done
+        expected_chunk = torch.tensor(
+            [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
+        ).float()
+        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+
+    def test_done_shape_mismatch_raises(self):
+        td = TensorDict(
+            {
+                "action": torch.randn(2, 4, 3),
+                ("next", "done"): torch.zeros(2, 5, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        with pytest.raises(ValueError, match="does not line up"):
+            ActionChunkTransform(2)(td)
+
+    def test_clone_keeps_recipe(self):
+        t = ActionChunkTransform(
+            chunk_size=3, action_key=("data", "action"), done_key=None
+        ).clone()
+        assert isinstance(t, ActionChunkTransform)
+        assert t.chunk_size == 3
+        assert t.action_key == ("data", "action")
+        assert t.done_key is None
+        td = TensorDict({"data": {"action": torch.randn(2, 4, 3)}}, batch_size=[2, 4])
+        assert t(td)["action_chunk"].shape == torch.Size([2, 4, 3, 3])
+
+    def test_compile(self):
         t = ActionChunkTransform(chunk_size=3)
-        action = torch.randn(2, 5, 2)
-        eager_chunk, eager_pad = t._build_chunk(action)
-        compiled = torch.compile(t._build_chunk, fullgraph=True)
-        c_chunk, c_pad = compiled(action)
-        torch.testing.assert_close(c_chunk, eager_chunk)
-        assert torch.equal(c_pad, eager_pad)
+        td = TensorDict({"action": torch.randn(2, 5, 2)}, batch_size=[2, 5])
+        eager = t(td.clone())
+        compiled = torch.compile(t)
+        out = compiled(td.clone())
+        torch.testing.assert_close(out["action_chunk"], eager["action_chunk"])
+        assert torch.equal(out["action_is_pad"], eager["action_is_pad"])
 
 
 class TestActionTokenizerTransform(TransformBase):
