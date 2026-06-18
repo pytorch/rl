@@ -1,0 +1,71 @@
+name: LIBERO Tests on Linux
+
+on:
+  pull_request:
+    paths:
+      - "torchrl/envs/libs/libero.py"
+      - "torchrl/envs/libs/__init__.py"
+      - "torchrl/envs/__init__.py"
+      - "test/libs/test_libero.py"
+      - ".github/workflows/test-linux-libero.yml"
+      - ".github/unittest/linux_libs/scripts_libero/**"
+  push:
+    branches:
+      - nightly
+      - main
+      - release/*
+    paths:
+      - "torchrl/envs/libs/libero.py"
+      - "torchrl/envs/libs/__init__.py"
+      - "torchrl/envs/__init__.py"
+      - "test/libs/test_libero.py"
+      - ".github/workflows/test-linux-libero.yml"
+      - ".github/unittest/linux_libs/scripts_libero/**"
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: test-linux-libero-${{ github.ref == 'refs/heads/main' && format('ci-master-{0}', github.sha) || format('ci-{0}', github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  unittests-libero:
+    strategy:
+      matrix:
+        python_version: ["3.10"]
+        cuda_arch_version: ["12.8"]
+      fail-fast: false
+    uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
+    with:
+      repository: pytorch/rl
+      runner: "linux.g5.4xlarge.nvidia.gpu"
+      gpu-arch-type: cuda
+      gpu-arch-version: "12.8"
+      docker-image: "nvidia/cuda:12.8.0-devel-ubuntu22.04"
+      timeout: 120
+      upload-artifact: test-results-libero
+      script: |
+        if [[ "${{ github.ref }}" =~ release/* ]]; then
+          export RELEASE=1
+          export TORCH_VERSION=stable
+        else
+          export RELEASE=0
+          export TORCH_VERSION=nightly
+        fi
+
+        set -euo pipefail
+        export PYTHON_VERSION="${{ matrix.python_version }}"
+        export CU_VERSION="cu128"
+        export TAR_OPTIONS="--no-same-owner"
+        export UPLOAD_CHANNEL="nightly"
+        export TF_CPP_MIN_LOG_LEVEL=0
+        export BATCHED_PIPE_TIMEOUT=60
+        export TD_GET_DEFAULTS_TO_NONE=1
+
+        nvidia-smi
+
+        bash .github/unittest/linux_libs/scripts_libero/run_all.sh
