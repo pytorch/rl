@@ -12,7 +12,6 @@ from typing import Any, Literal
 
 import numpy as np
 import torch
-import yaml
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
@@ -55,7 +54,9 @@ def _ensure_libero_config() -> None:
     }
     os.makedirs(config_dir, exist_ok=True)
     with open(config_file, "w") as file:
-        yaml.dump(paths, file)
+        for key, value in paths.items():
+            value = str(value).replace("'", "''")
+            file.write(f"{key}: '{value}'\n")
 
 
 def _get_suites() -> list[str]:
