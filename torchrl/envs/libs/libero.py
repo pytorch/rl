@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import importlib.util
 import os
-from typing import Literal
+from collections.abc import Mapping
+from functools import partial
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -19,7 +21,8 @@ from torchrl.data.tensor_specs import (
     NonTensor,
     Unbounded,
 )
-from torchrl.envs.common import _EnvWrapper
+from torchrl.envs.batched_envs import ParallelEnv
+from torchrl.envs.common import _EnvPostInit, _EnvWrapper
 from torchrl.envs.utils import _classproperty
 
 _has_libero = importlib.util.find_spec("libero") is not None
@@ -63,6 +66,106 @@ def _get_suites() -> list[str]:
     from libero.libero import benchmark
 
     return sorted(benchmark.get_benchmark_dict())
+
+
+def _split_libero_worker_kwargs(
+    kwargs: Mapping[str, Any], num_workers: int
+) -> list[dict[str, Any]]:
+    """Broadcast or dispatch ``LiberoEnv`` kwargs over parallel workers."""
+    worker_kwargs = [{} for _ in range(num_workers)]
+    for key, value in kwargs.items():
+        if isinstance(value, list):
+            if len(value) != num_workers:
+                raise ValueError(
+                    f"Length of {key} list ({len(value)}) must match "
+                    f"num_workers ({num_workers})."
+                )
+            values = value
+        else:
+            values = [value] * num_workers
+        for index, item in enumerate(values):
+            if key == "env_kwargs" and item is not None:
+                if not isinstance(item, Mapping):
+                    raise TypeError(
+                        "env_kwargs must be a dict or a list of dicts, "
+                        f"got {type(item).__name__}."
+                    )
+                item = dict(item)
+            worker_kwargs[index][key] = item
+    return worker_kwargs
+
+
+def _normalize_libero_num_workers(
+    num_workers: int | None,
+    num_envs: int | None,
+) -> int:
+    if num_workers is None:
+        num_workers = 1 if num_envs is None else num_envs
+    elif num_envs is not None and int(num_envs) != int(num_workers):
+        raise ValueError(
+            f"num_workers ({num_workers}) and num_envs ({num_envs}) were both "
+            "provided with different values."
+        )
+    num_workers = int(num_workers)
+    if num_workers < 1:
+        raise ValueError(f"num_workers must be >= 1, got {num_workers}.")
+    return num_workers
+
+
+class _LiberoEnvMeta(_EnvPostInit):
+    """Metaclass that returns a lazy ``ParallelEnv`` for ``LiberoEnv`` workers."""
+
+    def __call__(
+        cls,
+        *args,
+        num_workers: int | None = None,
+        num_envs: int | None = None,
+        **kwargs,
+    ):
+        if num_workers is None:
+            num_workers = kwargs.pop("num_workers", None)
+        else:
+            kwargs.pop("num_workers", None)
+        if num_envs is None:
+            num_envs = kwargs.pop("num_envs", None)
+        else:
+            kwargs.pop("num_envs", None)
+        num_workers = _normalize_libero_num_workers(num_workers, num_envs)
+
+        if cls.__name__ != "LiberoEnv":
+            return super().__call__(*args, **kwargs)
+
+        if num_workers == 1:
+            if any(isinstance(value, list) for value in kwargs.values()):
+                kwargs = _split_libero_worker_kwargs(kwargs, num_workers)[0]
+            return super().__call__(*args, **kwargs)
+
+        if len(args) > 2:
+            raise TypeError(
+                f"LiberoEnv expected at most 2 positional arguments, got {len(args)}."
+            )
+        if args and "task_suite" in kwargs:
+            raise TypeError("LiberoEnv got multiple values for argument 'task_suite'.")
+        if len(args) > 1 and "task_id" in kwargs:
+            raise TypeError("LiberoEnv got multiple values for argument 'task_id'.")
+        worker_base_kwargs = dict(kwargs)
+        worker_base_kwargs["task_suite"] = (
+            args[0] if args else worker_base_kwargs.pop("task_suite", None)
+        )
+        worker_base_kwargs["task_id"] = (
+            args[1] if len(args) > 1 else worker_base_kwargs.pop("task_id", None)
+        )
+        if (
+            worker_base_kwargs["task_suite"] is None
+            or worker_base_kwargs["task_id"] is None
+        ):
+            raise TypeError("task_suite and task_id must both be specified.")
+        worker_kwargs = _split_libero_worker_kwargs(worker_base_kwargs, num_workers)
+        make_envs = [
+            partial(cls, num_workers=1, **worker_kwarg)
+            for worker_kwarg in worker_kwargs
+        ]
+        return ParallelEnv(num_workers, make_envs)
 
 
 class LiberoWrapper(_EnvWrapper):
@@ -463,7 +566,7 @@ class LiberoWrapper(_EnvWrapper):
         super().close(raise_if_closed=raise_if_closed)
 
 
-class LiberoEnv(LiberoWrapper):
+class LiberoEnv(LiberoWrapper, metaclass=_LiberoEnvMeta):
     """LIBERO environment built from a task-suite name and task id.
 
     GitHub: https://github.com/Lifelong-Robot-Learning/LIBERO
@@ -484,19 +587,34 @@ class LiberoEnv(LiberoWrapper):
         task_id (int): the task index inside the suite.
 
     Keyword Args:
-        camera_height (int, optional): rendered image height. Defaults to
-            ``256`` (the SimpleVLA-RL / OpenVLA-OFT resolution).
-        camera_width (int, optional): rendered image width. Defaults to
-            ``256``.
-        render_gpu_device_id (int, optional): GPU device id used by
+        num_workers (int, optional): if greater than ``1``, return a
+            :class:`~torchrl.envs.ParallelEnv` with ``num_workers`` LIBERO
+            workers. Defaults to ``1``.
+        num_envs (int, optional): alias for ``num_workers``.
+        camera_height (int or list of int, optional): rendered image height.
+            When ``num_workers > 1``, a list dispatches one value per worker
+            and must have length ``num_workers``. Defaults to ``256`` (the
+            SimpleVLA-RL / OpenVLA-OFT resolution).
+        camera_width (int or list of int, optional): rendered image width.
+            When ``num_workers > 1``, a list dispatches one value per worker
+            and must have length ``num_workers``. Defaults to ``256``.
+        render_gpu_device_id (int or list of int, optional): GPU device id used by
             robosuite for offscreen rendering. This is the EGL-visible device
             id inside the process/container, not necessarily the global CUDA
             ordinal. Use this to spread LIBERO render workers across multiple
             GPUs, e.g. ``worker_idx % num_render_gpus``. If omitted, robosuite
-            selects its default device. Defaults to ``None``.
-        env_kwargs (dict, optional): extra keyword arguments forwarded to
-            ``OffScreenRenderEnv`` (e.g. ``horizon``).
-        **kwargs: see :class:`~torchrl.envs.LiberoWrapper`.
+            selects its default device. When ``num_workers > 1``, a list
+            dispatches one value per worker and must have length
+            ``num_workers``. Defaults to ``None``.
+        env_kwargs (dict or list of dict, optional): extra keyword arguments
+            forwarded to ``OffScreenRenderEnv`` (e.g. ``horizon``). When
+            ``num_workers > 1``, a list dispatches one dict per worker and
+            must have length ``num_workers``.
+        **kwargs: see :class:`~torchrl.envs.LiberoWrapper`. When
+            ``num_workers > 1``, list-valued keyword arguments are dispatched
+            across workers and must have length ``num_workers``; use tuples for
+            sequence-valued arguments that should be broadcast to every worker
+            (for example ``proprio_keys``).
 
     Examples:
         >>> from torchrl.envs import LiberoEnv
@@ -519,10 +637,10 @@ class LiberoEnv(LiberoWrapper):
         task_suite: str | None = None,
         task_id: int | None = None,
         *,
-        camera_height: int = 256,
-        camera_width: int = 256,
-        render_gpu_device_id: int | None = None,
-        env_kwargs: dict | None = None,
+        camera_height: int | list[int] = 256,
+        camera_width: int | list[int] = 256,
+        render_gpu_device_id: int | list[int] | None = None,
+        env_kwargs: dict | list[dict] | None = None,
         **kwargs,
     ):
         if task_suite is None or task_id is None:

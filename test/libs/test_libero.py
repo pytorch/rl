@@ -4,11 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 """Tests for the LIBERO environment adapter.
 
-LIBERO is not installed in any CI environment yet (it ships from source,
-not PyPI): this module currently only runs where LIBERO is installed
-locally (see the LiberoWrapper docstring for install notes; on headless
-Linux set ``MUJOCO_GL=egl``). The demo-replay acceptance test additionally
-needs the official demo datasets (set ``LIBERO_DATASET_PATH``).
+LIBERO ships from source rather than PyPI. The dedicated LIBERO CI installs it
+from GitHub; local runs need the same setup (see the LiberoWrapper docstring
+for install notes; on headless Linux set ``MUJOCO_GL=egl``). The demo-replay
+acceptance test additionally needs the official demo datasets (set
+``LIBERO_DATASET_PATH``).
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ import os
 import pytest
 import torch
 
+import torchrl.envs.libs.libero as libero_module
 from torchrl.envs.libs.libero import _has_libero, LiberoEnv, LiberoWrapper
 from torchrl.envs.utils import check_env_specs
 
@@ -26,6 +27,70 @@ _has_h5py = importlib.util.find_spec("h5py") is not None
 
 # Keep simulator instantiations cheap: small renders, few settle steps.
 _FAST = {"camera_height": 64, "camera_width": 64, "settle_steps": 2}
+
+
+class _FakeParallelEnv:
+    def __init__(self, num_workers, create_env_fn):
+        self.num_workers = num_workers
+        self.create_env_fn = create_env_fn
+
+
+def test_parallel_env_dispatch(monkeypatch):
+    monkeypatch.setattr(libero_module, "ParallelEnv", _FakeParallelEnv)
+
+    env = LiberoEnv(
+        "libero_spatial",
+        task_id=0,
+        num_workers=2,
+        camera_height=[64, 128],
+        camera_width=32,
+        render_gpu_device_id=[0, 1],
+        env_kwargs=[{"horizon": 7}, {"horizon": 11}],
+        group_id_offset=[0, 1000],
+    )
+
+    assert env.num_workers == 2
+    first, second = env.create_env_fn
+    assert first.keywords["num_workers"] == 1
+    assert first.keywords["task_suite"] == "libero_spatial"
+    assert first.keywords["task_id"] == 0
+    assert first.keywords["camera_height"] == 64
+    assert first.keywords["camera_width"] == 32
+    assert first.keywords["render_gpu_device_id"] == 0
+    assert first.keywords["env_kwargs"] == {"horizon": 7}
+    assert first.keywords["group_id_offset"] == 0
+    assert second.keywords["camera_height"] == 128
+    assert second.keywords["camera_width"] == 32
+    assert second.keywords["render_gpu_device_id"] == 1
+    assert second.keywords["env_kwargs"] == {"horizon": 11}
+    assert second.keywords["group_id_offset"] == 1000
+
+
+def test_parallel_env_num_envs_alias(monkeypatch):
+    monkeypatch.setattr(libero_module, "ParallelEnv", _FakeParallelEnv)
+
+    env = LiberoEnv(
+        task_suite="libero_spatial",
+        task_id=0,
+        num_envs=2,
+        camera_height=[64, 64],
+    )
+
+    assert env.num_workers == 2
+
+
+def test_parallel_env_dispatch_validation():
+    with pytest.raises(ValueError, match="camera_height"):
+        LiberoEnv("libero_spatial", task_id=0, num_workers=2, camera_height=[64])
+    with pytest.raises(ValueError, match="num_workers .* num_envs"):
+        LiberoEnv("libero_spatial", task_id=0, num_workers=2, num_envs=3)
+    with pytest.raises(TypeError, match="env_kwargs"):
+        LiberoEnv(
+            "libero_spatial",
+            task_id=0,
+            num_workers=2,
+            env_kwargs=[{"horizon": 7}, 11],
+        )
 
 
 @pytest.mark.skipif(not _has_libero, reason="libero not found")
@@ -174,6 +239,32 @@ class TestLibero:
         )
         try:
             assert env._env.env.render_gpu_device_id == -1
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_parallel_env_specs(self):
+        env = LiberoEnv(
+            "libero_spatial",
+            task_id=0,
+            num_workers=2,
+            camera_height=[64, 64],
+            camera_width=64,
+            render_gpu_device_id=[-1, -1],
+            group_id_offset=[0, 1000],
+            settle_steps=2,
+            max_episode_steps=4,
+        )
+        try:
+            assert env.num_workers == 2
+            assert env.batch_size == torch.Size([2])
+            assert env.full_observation_spec["observation", "image"].shape == (
+                2,
+                3,
+                64,
+                64,
+            )
+            assert env.create_env_fn[0].keywords["group_id_offset"] == 0
+            assert env.create_env_fn[1].keywords["group_id_offset"] == 1000
         finally:
             env.close(raise_if_closed=False)
 
