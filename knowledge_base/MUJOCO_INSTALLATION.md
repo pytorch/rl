@@ -26,7 +26,7 @@ will not run on GPU. Therefore, our advice is to use the egl backend.
 If you have sudo access on your machine, install the generic OpenGL/EGL
 dependencies needed by MuJoCo:
 ```shell
-$ sudo apt-get install libglfw3 libglew2.0 libgl1-mesa-glx libosmesa6 \
+$ sudo apt-get install libglfw3 libglew2.0 libglx-mesa0 libosmesa6 \
     libegl-dev libglvnd0 libglx0 libgles2
 ```
 For NVIDIA EGL rendering, the NVIDIA graphics userspace libraries must also
