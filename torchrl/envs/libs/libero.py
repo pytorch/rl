@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch
+import yaml
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl.data.tensor_specs import (
@@ -42,8 +43,6 @@ def _ensure_libero_config() -> None:
     config_file = os.path.join(config_dir, "config.yaml")
     if os.path.exists(config_file):
         return
-    import yaml
-
     # locate libero/libero without importing it (importing runs the prompt)
     spec = importlib.util.find_spec("libero.libero")
     root = os.path.dirname(spec.origin)
@@ -546,12 +545,26 @@ class LiberoWrapper(_EnvWrapper):
 
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         action = tensordict.get("action").detach().cpu().numpy().astype(np.float64)
-        obs, _, _, _ = self._env.step(action)
+        obs, _, env_done, _ = self._env.step(action)
         self._elapsed += 1
         success = bool(self._env.check_success())
+        robosuite_env = getattr(self._env, "env", None)
+        robosuite_done = bool(getattr(robosuite_env, "done", False))
+        robosuite_horizon = getattr(robosuite_env, "horizon", None)
+        robosuite_timestep = getattr(robosuite_env, "timestep", None)
+        horizon_done = (
+            robosuite_horizon is not None
+            and robosuite_timestep is not None
+            and robosuite_timestep >= robosuite_horizon
+        )
         truncated = (
-            self.max_episode_steps is not None
-            and self._elapsed >= self.max_episode_steps
+            bool(env_done)
+            or robosuite_done
+            or horizon_done
+            or (
+                self.max_episode_steps is not None
+                and self._elapsed >= self.max_episode_steps
+            )
         )
         out = self._read_obs(obs, success=success)
         out["reward"] = torch.tensor([float(success)])
@@ -559,11 +572,6 @@ class LiberoWrapper(_EnvWrapper):
         out["truncated"] = torch.tensor([truncated and not success], dtype=torch.bool)
         out["done"] = torch.tensor([success or truncated], dtype=torch.bool)
         return out
-
-    def close(self, *, raise_if_closed: bool = True) -> None:
-        if not self.is_closed:
-            self._env.close()
-        super().close(raise_if_closed=raise_if_closed)
 
 
 class LiberoEnv(LiberoWrapper, metaclass=_LiberoEnvMeta):
