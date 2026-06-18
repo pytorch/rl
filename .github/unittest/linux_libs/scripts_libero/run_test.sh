@@ -33,6 +33,7 @@ json_report_args="--json-report --json-report-file=${json_report_dir}/test-resul
 python .github/unittest/helpers/coverage_run_parallel.py -m pytest test/libs/test_libero.py \
   ${json_report_args} \
   --instafail -v --durations 200 --capture no \
+  --timeout 300 --timeout-method=thread \
   -k 'not demo_replay_success' \
   --error-for-skips
 coverage combine -q
