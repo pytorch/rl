@@ -42,7 +42,6 @@ import warnings
 import hydra
 import torch
 import tqdm
-from tensordict import TensorDictBase
 from torchrl._utils import logger as torchrl_logger, timeit
 from torchrl.record.loggers import generate_exp_name, get_logger
 from utils import (
@@ -78,15 +77,16 @@ def _trainable_policy_state_dict(policy) -> dict[str, torch.Tensor]:
     }
 
 
-def _load_trainable_policy_state_dict(policy, state_dict: dict[str, torch.Tensor]):
-    missing, unexpected = policy.load_state_dict(state_dict, strict=False)
+def _load_trainable_policy_state_dict(
+    policy, state_dict: dict[str, torch.Tensor]
+) -> None:
+    if not state_dict:
+        raise RuntimeError("Policy checkpoint did not contain trainable weights.")
+    _, unexpected = policy.load_state_dict(state_dict, strict=False)
     if unexpected:
         raise RuntimeError(
             f"Unexpected policy checkpoint keys: {', '.join(unexpected)}"
         )
-    if len(missing) == len(policy.state_dict()):
-        raise RuntimeError("Policy checkpoint did not match policy.")
-    return missing
 
 
 def _eval_device(cfg) -> torch.device:
@@ -260,85 +260,6 @@ class _EvaluatorProcess:
         raise RuntimeError(f"Evaluator process failed to initialize: {error}")
 
 
-class _CollectorStats:
-    """Accumulate raw rollout diagnostics from collector writer polls."""
-
-    def __init__(self) -> None:
-        self.reset()
-
-    def reset(self) -> None:
-        self.raw_decisions = 0
-        self.raw_trajectories = 0
-        self._episode_lengths = []
-        self._episode_successes = []
-        self._episode_returns = []
-
-    def __call__(self, batch: TensorDictBase) -> None:
-        self.raw_decisions += int(batch.numel())
-        try:
-            flat = batch.reshape(-1)
-            done = flat["next", "done"].squeeze(-1).bool()
-        except KeyError:
-            return
-        if not done.any():
-            return
-        traj_ids = flat.get(("collector", "traj_ids"), None)
-        if traj_ids is None:
-            self._record_done_delimited(flat, done)
-            return
-        traj_ids = traj_ids.reshape(-1)
-        valid_done = done & traj_ids.ge(0)
-        if not valid_done.any():
-            return
-        for traj_id in torch.unique(traj_ids[valid_done]).detach().cpu().tolist():
-            traj_mask = traj_ids == traj_id
-            self._record_trajectory(flat, traj_mask)
-
-    @property
-    def episode_lengths(self) -> torch.Tensor:
-        if not self._episode_lengths:
-            return torch.zeros(0, dtype=torch.long)
-        return torch.stack(self._episode_lengths)
-
-    @property
-    def episode_successes(self) -> torch.Tensor:
-        if not self._episode_successes:
-            return torch.zeros(0)
-        return torch.stack(self._episode_successes)
-
-    @property
-    def episode_returns(self) -> torch.Tensor:
-        if not self._episode_returns:
-            return torch.zeros(0)
-        return torch.stack(self._episode_returns)
-
-    def _record_done_delimited(self, flat: TensorDictBase, done: torch.Tensor) -> None:
-        episode_idx = done.long().cumsum(0) - done.long()
-        episodes = int(done.sum())
-        for episode in range(episodes):
-            self._record_trajectory(flat, episode_idx == episode)
-
-    def _record_trajectory(self, flat: TensorDictBase, traj_mask: torch.Tensor) -> None:
-        if not bool(traj_mask.any()):
-            return
-        success = flat.get(("next", "success"), None)
-        reward = flat.get(("next", "reward"), None)
-        self.raw_trajectories += 1
-        self._episode_lengths.append(traj_mask.sum().detach().cpu())
-        if success is None:
-            self._episode_successes.append(torch.zeros(()))
-        else:
-            self._episode_successes.append(
-                success.reshape(-1)[traj_mask].float().max().detach().cpu()
-            )
-        if reward is None:
-            self._episode_returns.append(torch.zeros(()))
-        else:
-            self._episode_returns.append(
-                reward.reshape(-1)[traj_mask].float().sum().detach().cpu()
-            )
-
-
 def save_checkpoint(path, policy, optim, scheduler, iteration):
     torch.save(
         {
@@ -457,14 +378,12 @@ def main(cfg):  # noqa: F821
     replay_buffer, advantage_transform = make_replay_buffer(cfg, buffer_device)
     loss_module = make_loss_module(cfg, policy)
     optim, scheduler = make_optimizer(cfg, loss_module)
-    collector_stats = _CollectorStats()
     collector = make_collector(
         cfg,
         train_env,
         rollout_policy,
         rollout_device,
         replay_buffer=replay_buffer,
-        post_collect_hook=collector_stats,
     )
     collector_iter = iter(collector)
 
@@ -522,7 +441,6 @@ def main(cfg):  # noqa: F821
         # reads that context, so the script never mutates it.
         with timeit("collect") as collect_timer:
             if not retry_same_policy:
-                collector_stats.reset()
                 advantage_transform.reset_stats()
                 same_policy_collect_polls = 0
                 same_policy_collect_time = 0.0
@@ -559,7 +477,7 @@ def main(cfg):  # noqa: F821
                         collect_polls / collect_polls_per_group_wave,
                         replay_decisions,
                         min_replay_decisions,
-                        collector_stats.raw_decisions,
+                        advantage_transform.completed_decisions,
                         advantage_transform.completed_trajectories,
                         advantage_transform.written_groups,
                         advantage_transform.dropped_groups,
@@ -633,7 +551,7 @@ def main(cfg):  # noqa: F821
                 "buffer/max_queued_trajectories_per_group": (
                     advantage_transform.max_queued_trajectories_per_group
                 ),
-                "collector/raw_decisions": collector_stats.raw_decisions,
+                "collector/raw_decisions": completed_decisions,
                 "collector/completed_decisions": completed_decisions,
                 "collector/raw_trajectories": completed_trajectories,
                 "collector/completed_trajectories": completed_trajectories,

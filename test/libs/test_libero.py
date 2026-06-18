@@ -123,6 +123,24 @@ class TestLibero:
         finally:
             env.close(raise_if_closed=False)
 
+    def test_env_horizon_truncates(self):
+        env = LiberoEnv(
+            "libero_spatial",
+            task_id=0,
+            env_kwargs={"horizon": _FAST["settle_steps"] + 1},
+            max_episode_steps=10,
+            **_FAST,
+        )
+        try:
+            td = env.reset()
+            td["action"] = env.full_action_spec["action"].zero()
+            td = env.step(td)["next"]
+            assert td["done"].all()
+            assert td["truncated"].all()
+            assert not td["terminated"].any()
+        finally:
+            env.close(raise_if_closed=False)
+
     def test_wrapper(self):
         from libero.libero import benchmark, get_libero_path
         from libero.libero.envs import OffScreenRenderEnv
