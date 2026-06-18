@@ -87,5 +87,8 @@ uv_pip_install \
   termcolor \
   tqdm
 
-python -c "import functorch; import tensordict; import torchrl"
-PYTHONPATH="${libero_dir}:${PYTHONPATH:-}" python -c "from libero.libero import benchmark; from libero.libero.envs import OffScreenRenderEnv; print(sorted(benchmark.get_benchmark_dict()))"
+timeout 120s python -c "import functorch; import tensordict; import torchrl"
+
+export LIBERO_CONFIG_PATH="${root_dir}/.libero-ci"
+timeout 120s env PYTHONPATH="${libero_dir}:${PYTHONPATH:-}" python -c "from torchrl.envs.libs.libero import _ensure_libero_config; _ensure_libero_config()"
+timeout 120s env PYTHONPATH="${libero_dir}:${PYTHONPATH:-}" python -c "from libero.libero import benchmark; from libero.libero.envs import OffScreenRenderEnv; print(sorted(benchmark.get_benchmark_dict()))"
