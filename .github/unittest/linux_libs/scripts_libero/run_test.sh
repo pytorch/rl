@@ -18,14 +18,14 @@ export DISPLAY=:99
 export MKL_THREADING_LAYER=GNU
 export CUDA_VISIBLE_DEVICES=0
 
-python -m torch.utils.collect_env
+timeout 300s python -m torch.utils.collect_env
 git config --global --add safe.directory '*'
 
 Xvfb :99 -screen 0 1024x768x24 &
 
-python -c 'import torch; t = torch.ones([2, 2], device="cuda:0" if torch.cuda.is_available() else "cpu"); print(t); print("tensor device:" + str(t.device))'
-python -c 'from torchrl.envs.libs.libero import _ensure_libero_config; _ensure_libero_config()'
-python -c 'from libero.libero import benchmark; from libero.libero.envs import OffScreenRenderEnv; print("LIBERO suites:", sorted(benchmark.get_benchmark_dict()))'
+timeout 120s python -c 'import torch; t = torch.ones([2, 2], device="cuda:0" if torch.cuda.is_available() else "cpu"); print(t); print("tensor device:" + str(t.device))'
+timeout 120s python -c 'from torchrl.envs.libs.libero import _ensure_libero_config; _ensure_libero_config()'
+timeout 120s python -c 'from libero.libero import benchmark; from libero.libero.envs import OffScreenRenderEnv; print("LIBERO suites:", sorted(benchmark.get_benchmark_dict()))'
 
 json_report_dir="${RUNNER_ARTIFACT_DIR:-${root_dir}}"
 json_report_args="--json-report --json-report-file=${json_report_dir}/test-results-libero.json --json-report-indent=2"
