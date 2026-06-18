@@ -30,8 +30,11 @@ uv_pip_install \
   future \
   hydra-core \
   hypothesis \
+  importlib_metadata \
+  orjson \
   packaging \
   psutil \
+  "pyvers>=0.2.0,<0.3.0" \
   pybind11[global] \
   pytest \
   pytest-asyncio \
