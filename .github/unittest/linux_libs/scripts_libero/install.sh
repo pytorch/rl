@@ -48,9 +48,9 @@ uv_pip_install \
   wheel
 
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
-  uv_pip_install --upgrade --pre torch torchvision --index-url "${torch_index}"
+  uv_pip_install --upgrade --pre torch --index-url "${torch_index}"
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
-  uv_pip_install --upgrade torch torchvision --index-url "${stable_torch_index}"
+  uv_pip_install --upgrade torch --index-url "${stable_torch_index}"
 else
   echo "Failed to install pytorch"
   exit 1
