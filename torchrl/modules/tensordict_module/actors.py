@@ -2312,6 +2312,10 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             wrapped actor that hold action chunks. Defaults to VLA-style chunk
             outputs (``("vla_action", "chunk")`` first, then keys ending in
             ``"_chunk"``) when present, and to ``action_keys`` otherwise.
+            When a chunk key differs from the corresponding environment action
+            key, the chunk key itself is used as the cache. A separate
+            ``*_orig`` cache key is only introduced when the chunk key and the
+            action key are the same.
         init_key (NestedKey, optional): the key of the entry indicating
             when the environment has gone through a reset.
             Defaults to ``"is_init"`` which is the ``out_key`` from the
@@ -2468,19 +2472,24 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             tensordict_filtered = tensordict[is_init.reshape(tensordict.shape)]
             output = self.actor(tensordict_filtered)
 
-            for action_key, action_key_orig in self._actor_keys_map.items():
+            for action_key, cache_key in self._actor_keys_map.items():
                 chunk_key = self._chunk_keys_map[action_key]
                 action_computed = output.get(chunk_key, default=None)
-                action_orig = tensordict.get(action_key_orig, default=None)
-                if action_orig is None:
+                cached_action = tensordict.get(cache_key, default=None)
+                if cached_action is None:
                     if not is_init.all():
                         raise self._NO_INIT_ERR
                 else:
-                    is_init_expand = expand_as_right(is_init, action_orig)
+                    is_init_expand = expand_as_right(is_init, cached_action)
                     action_computed = torch.masked_scatter(
-                        action_orig, is_init_expand, action_computed
+                        cached_action, is_init_expand, action_computed
                     )
-                tensordict.set(action_key_orig, action_computed)
+                if cached_action is None and not isinstance(cache_key, str):
+                    cache_parent = output.get(cache_key[:-1], default=None)
+                    if cache_parent is not None:
+                        tensordict.set(cache_key[:-1], cache_parent)
+                        continue
+                tensordict.set(cache_key, action_computed)
         tensordict.set(self.counter_key, counter + 1)
 
     def forward(
@@ -2488,14 +2497,14 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         tensordict: TensorDictBase,
     ) -> TensorDictBase:
         self._init(tensordict)
-        for action_key, action_key_orig in self._actor_keys_map.items():
-            # get orig
-            if isinstance(action_key_orig, str):
+        counter = tensordict.get(self.counter_key)
+        for action_key, cache_key in self._actor_keys_map.items():
+            if isinstance(cache_key, str):
                 parent_td = tensordict
-                action_entry = parent_td.get(action_key_orig, None)
+                action_entry = parent_td.get(cache_key, None)
             else:
-                parent_td = tensordict.get(action_key_orig[:-1])
-                action_entry = parent_td.get(action_key_orig[-1], None)
+                parent_td = tensordict.get(cache_key[:-1])
+                action_entry = parent_td.get(cache_key[-1], None)
             if action_entry is None:
                 raise self._NO_INIT_ERR
             if (
@@ -2516,20 +2525,28 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                     f"({action_entry.shape[parent_td.ndim]}): the cache would "
                     "replay stale actions before re-planning."
                 )
-            base_idx = (
-                slice(
-                    None,
-                ),
-            ) * parent_td.ndim
-            if not self.keep_dim:
-                cur_action = action_entry[base_idx + (0,)]
-            else:
-                cur_action = action_entry[base_idx + (slice(1),)]
-            tensordict.set(action_key, cur_action)
-            tensordict.set(
-                action_key_orig,
-                torch.roll(action_entry, shifts=-1, dims=parent_td.ndim),
+            action_index = (
+                (counter - 1)
+                .to(torch.long)
+                .reshape(action_entry.shape[: parent_td.ndim])
             )
+            if self.n_steps is None and self.replan_interval is None:
+                action_index = action_index.remainder(
+                    action_entry.shape[parent_td.ndim]
+                )
+            index = action_index.reshape(
+                *action_entry.shape[: parent_td.ndim],
+                1,
+                *([1] * (action_entry.ndim - parent_td.ndim - 1)),
+            ).expand(
+                *action_entry.shape[: parent_td.ndim],
+                1,
+                *action_entry.shape[parent_td.ndim + 1 :],
+            )
+            cur_action = action_entry.gather(parent_td.ndim, index)
+            if not self.keep_dim:
+                cur_action = cur_action.squeeze(parent_td.ndim)
+            tensordict.set(action_key, cur_action)
         return tensordict
 
     @property
@@ -2622,6 +2639,7 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     def chunk_keys(self, value):
         if value is None:
             return
+        self.__dict__["_actor_keys_map_values"] = None
         self.__dict__["_chunk_keys_map_values"] = None
         if not isinstance(value, list):
             value = [value]
@@ -2647,14 +2665,15 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         val = self.__dict__.get("_actor_keys_map_values", None)
         if val is None:
 
-            def _replace_last(action_key):
+            def _default_cache_key(action_key):
+                chunk_key = self._chunk_keys_map[action_key]
+                if chunk_key != action_key:
+                    return chunk_key
                 if isinstance(action_key, tuple):
-                    action_key_orig = (*action_key[:-1], action_key[-1] + "_orig")
-                else:
-                    action_key_orig = action_key + "_orig"
-                return action_key_orig
+                    return (*action_key[:-1], action_key[-1] + "_orig")
+                return action_key + "_orig"
 
-            val = {key: _replace_last(key) for key in self.action_keys}
+            val = {key: _default_cache_key(key) for key in self.action_keys}
             self.__dict__["_actor_keys_map_values"] = val
         return val
 

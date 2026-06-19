@@ -197,7 +197,8 @@ should keep its one-step MDP: tell the wrapper which policy key contains the
 chunk, let it cache the chunk and write the one-step env key (``"action"`` by
 default), and re-query the expensive VLA only when the cache expires or an
 ``"is_init"`` reset flag is observed. The wrapper auto-discovers the default
-VLA key ``("vla_action", "chunk")`` from the policy's ``out_keys``. Use
+VLA key ``("vla_action", "chunk")`` from the policy's ``out_keys`` and keeps
+that key as the cache rather than copying it to a second root key. Use
 :class:`~torchrl.envs.transforms.MultiAction` only when you want the env-side
 transform to execute a whole chunk per policy call and accept the resulting
 re-timed MDP; in that case use :meth:`~torchrl.envs.transforms.MultiAction.from_vla`
@@ -265,8 +266,7 @@ cached action under the env-facing ``"action"`` key per environment step.
     for _ in range(max_steps):
         td = actor(td)
         # td now contains:
-        # - ("vla_action", "chunk"): the predicted H-step chunk on re-plan steps
-        # - vla_action: the structured policy output
+        # - ("vla_action", "chunk"): the cached H-step policy chunk
         # - action: the single env-facing action served from the cache
         td = env.step(td)
         td = td["next"]

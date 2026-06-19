@@ -794,13 +794,14 @@ class TestBatchedActor:
         for _ in range(6):
             td = actor(td.exclude("action"))
             executed.append(round(td["action"][0, 0].item(), 1))
+            assert td["vla_action", "chunk"].shape == torch.Size([2, n_steps, 1])
+            assert "action_orig" not in td.keys(True, True)
             td["is_init"] = torch.zeros(2, 1, dtype=torch.bool)
         assert executed == [1.0, 1.1, 1.2, 1.3, 2.0, 2.1]
         assert len(calls) == 2
         assert actor.out_keys == [
             ("vla_action", "chunk"),
             "action",
-            "action_orig",
             "counter",
         ]
 
@@ -826,7 +827,8 @@ class TestBatchedActor:
         )
         td = actor(td)
         assert td["motor_action"].shape == torch.Size([2, 1])
-        assert "motor_action_orig" in td.keys()
+        assert td["vla_action", "chunk"].shape == torch.Size([2, n_steps, 1])
+        assert "motor_action_orig" not in td.keys(True, True)
 
     def test_replan_interval_validation(self):
         actor_base = TensorDictModule(
@@ -978,6 +980,17 @@ class TestTinyVLA:
         assert "action_chunk" not in out.keys(True, True)
         assert policy.out_keys == [("vla_action", "chunk")]
         assert ("observation", "image") in policy.in_keys
+
+    def test_multistep_actor_uses_vla_chunk_as_cache(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2)
+        actor = MultiStepActorWrapper(policy, n_steps=2)
+        td = _make_obs_td()
+        td["is_init"] = torch.ones(2, 1, dtype=torch.bool)
+        out = actor(td)
+        assert isinstance(out["vla_action"], VLAAction)
+        assert out["vla_action", "chunk"].shape == torch.Size([2, 2, 3])
+        assert out["action"].shape == torch.Size([2, 3])
+        assert "action_orig" not in out.keys(True, True)
 
     def test_tokens(self):
         policy = TinyVLA(
