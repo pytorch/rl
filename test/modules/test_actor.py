@@ -1143,6 +1143,22 @@ class TestTinyVLA:
         assert out["vla_action", "tokens"].shape == torch.Size([2, 4, 2, 3])
         assert out["vla_action", "log_probs"].shape == torch.Size([2, 4])
 
+    def test_num_samples_inplace(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            num_samples=4,
+            inplace=True,
+        )
+        td = _make_obs_td()
+        out = policy(td)
+        assert out is td
+        assert out.batch_size == torch.Size([2])
+        assert out["vla_action", "tokens"].shape == torch.Size([2, 4, 2, 3])
+        assert out["vla_action", "log_probs"].shape == torch.Size([2, 4])
+
     def test_num_samples_log_prob_recompute(self):
         policy = TinyVLA(
             action_dim=3,

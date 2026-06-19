@@ -40,6 +40,11 @@ class OpenVLAImagePreprocessor:
         mean (torch.Tensor | sequence, optional): Per-channel normalization mean.
         std (torch.Tensor | sequence, optional): Per-channel normalization std.
 
+    .. note::
+        Floating-point inputs are ambiguous: this helper treats float images with
+        maximum value at most ``1`` as normalized ``[0, 1]`` data and rescales
+        them to uint8; other float images are interpreted as ``[0, 255]`` data.
+
     Examples:
         >>> import torch
         >>> from torchrl.data.vla import OpenVLAImagePreprocessor
@@ -122,6 +127,8 @@ class OpenVLAImagePreprocessor:
             return images.contiguous()
         if images.is_floating_point():
             scale = 1.0
+            # Float inputs are accepted either as normalized [0, 1] images or
+            # as [0, 255] images; use the max value to disambiguate.
             if images.numel() and float(images.detach().max()) <= 1.0:
                 scale = 255.0
             return images.mul(scale).clamp(0, 255).to(torch.uint8).contiguous()

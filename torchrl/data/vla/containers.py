@@ -101,4 +101,8 @@ def _set_action_chunk(action: VLAAction, value: torch.Tensor | None) -> None:
     action._tensordict.set("chunk", value)
 
 
+# ``chunk`` also names a TensorDictBase method. ``shadow`` lets the field be
+# stored, but the generated descriptor would otherwise expose the method rather
+# than the action tensor. Re-install the descriptor explicitly so
+# ``vla_action.chunk`` and ``td["vla_action", "chunk"]`` stay equivalent.
 VLAAction.chunk = property(_get_action_chunk, _set_action_chunk)

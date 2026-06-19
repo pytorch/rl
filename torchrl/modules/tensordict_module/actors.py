@@ -2481,6 +2481,9 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                         raise self._NO_INIT_ERR
                 else:
                     is_init_expand = expand_as_right(is_init, cached_action)
+                    # Only the chunk/cache tensor is refreshed on partial
+                    # re-plans; auxiliary VLA leaves such as tokens or
+                    # log-probs are not used for action dispatch.
                     action_computed = torch.masked_scatter(
                         cached_action, is_init_expand, action_computed
                     )
