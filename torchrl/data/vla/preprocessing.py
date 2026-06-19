@@ -12,6 +12,8 @@ from typing import Literal
 import torch
 import torch.nn.functional as F
 
+from torchrl._utils import implement_for
+
 _has_pil = importlib.util.find_spec("PIL") is not None
 _has_torchvision = importlib.util.find_spec("torchvision") is not None
 
@@ -19,6 +21,37 @@ __all__ = ["OpenVLAImagePreprocessor"]
 
 _CROP_AREA_SCALE = 0.9
 _CROP_LINEAR_SCALE = _CROP_AREA_SCALE**0.5
+
+
+@implement_for("torchvision")
+def _torchvision_jpeg_roundtrip(
+    images: torch.Tensor, jpeg_quality: int, device: torch.device
+) -> torch.Tensor:
+    raise ModuleNotFoundError("torchvision is required for JPEG preprocessing.")
+
+
+@_torchvision_jpeg_roundtrip.register(from_version=None, to_version="0.20")
+def _(images: torch.Tensor, jpeg_quality: int, device: torch.device) -> torch.Tensor:
+    from torchvision.io import decode_jpeg, encode_jpeg, ImageReadMode
+
+    encoded = [
+        encode_jpeg(image.cpu(), quality=jpeg_quality) for image in images.unbind(0)
+    ]
+    decoded = [
+        decode_jpeg(image, mode=ImageReadMode.RGB, device=device) for image in encoded
+    ]
+    return torch.stack(decoded, 0)
+
+
+@_torchvision_jpeg_roundtrip.register(from_version="0.20")
+def _(images: torch.Tensor, jpeg_quality: int, device: torch.device) -> torch.Tensor:
+    from torchvision.io import decode_jpeg, encode_jpeg, ImageReadMode
+
+    encoded = encode_jpeg(list(images.unbind(0)), quality=jpeg_quality)
+    decoded = decode_jpeg(encoded, mode=ImageReadMode.RGB, device=device)
+    if isinstance(decoded, list):
+        decoded = torch.stack(decoded, 0)
+    return decoded
 
 
 class OpenVLAImagePreprocessor:
@@ -158,35 +191,9 @@ class OpenVLAImagePreprocessor:
         return images[..., top : top + crop_h, left : left + crop_w]
 
     def _torchvision(self, images: torch.Tensor) -> torch.Tensor:
-        from torchvision.io import decode_jpeg, encode_jpeg, ImageReadMode
-
         device = images.device
         images = self._resize(images)
-        image_list = list(images.unbind(0))
-        try:
-            encoded = encode_jpeg(image_list, quality=self.jpeg_quality)
-        except (RuntimeError, TypeError):
-            encoded = [
-                encode_jpeg(image, quality=self.jpeg_quality) for image in image_list
-            ]
-            decoded = [
-                decode_jpeg(image, mode=ImageReadMode.RGB, device=device)
-                for image in encoded
-            ]
-            decoded = torch.stack(decoded, 0)
-        else:
-            try:
-                decoded = decode_jpeg(encoded, mode=ImageReadMode.RGB, device=device)
-            except (RuntimeError, TypeError):
-                if not isinstance(encoded, list):
-                    encoded = [encoded]
-                decoded = [
-                    decode_jpeg(image, mode=ImageReadMode.RGB, device=device)
-                    for image in encoded
-                ]
-                decoded = torch.stack(decoded, 0)
-        if isinstance(decoded, list):
-            decoded = torch.stack(decoded, 0)
+        decoded = _torchvision_jpeg_roundtrip(images, self.jpeg_quality, device)
         decoded = self._center_crop(decoded)
         decoded = self._resize(decoded)
         return decoded
