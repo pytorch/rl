@@ -253,7 +253,6 @@ cached action under the env-facing ``"action"`` key per environment step.
     policy = TinyVLA(
         action_dim=env.action_spec.shape[-1],
         chunk_size=H,
-        output_mode="chunk",
     )
 
     actor = MultiStepActorWrapper(
@@ -302,7 +301,7 @@ observations and predicts a chunk with the same nested key that
         )
     )
 
-    policy = TinyVLA(action_dim=action_dim, chunk_size=H, output_mode="chunk")
+    policy = TinyVLA(action_dim=action_dim, chunk_size=H)
     loss_module = BCLoss(policy, loss_function="l1")
     loss_module.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
 
