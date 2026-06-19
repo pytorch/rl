@@ -10,7 +10,9 @@ dataset metadata, and action tokenizers.
 """
 from __future__ import annotations
 
+from torchrl.data.vla.containers import VLAAction, VLAImages, VLAObservation
 from torchrl.data.vla.metadata import ActionSpace, GripperMode, RobotDatasetMetadata
+from torchrl.data.vla.preprocessing import OpenVLAImagePreprocessor
 from torchrl.data.vla.schema import (
     ACTION_CHUNK_KEY,
     ACTION_IS_PAD_KEY,
@@ -32,8 +34,12 @@ __all__ = [
     "ActionSpace",
     "ActionTokenizerBase",
     "GripperMode",
+    "OpenVLAImagePreprocessor",
     "RobotDatasetMetadata",
     "UniformActionTokenizer",
+    "VLAAction",
+    "VLAImages",
+    "VLAObservation",
     "VocabTailActionTokenizer",
     "validate_vla_tensordict",
     "OBSERVATION_KEY",

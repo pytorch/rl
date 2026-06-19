@@ -89,7 +89,7 @@ video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
-vla = ["lerobot>=0.5.0; python_version >= '3.12'"]
+vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision"]
 rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",

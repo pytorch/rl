@@ -17,6 +17,12 @@ from tensordict.nn.distributions import NormalParamExtractor
 from torch import distributions as dist, nn
 
 from torchrl.data import Bounded, Composite
+from torchrl.data.vla import (
+    UniformActionTokenizer,
+    VLAAction,
+    VLAImages,
+    VLAObservation,
+)
 from torchrl.envs import CatFrames, Compose, InitTracker, SerialEnv, TransformedEnv
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import (
@@ -875,6 +881,12 @@ class TestVLAWrapperBase:
         with pytest.raises(ValueError, match="action_head"):
             VLAWrapperBase(action_dim=2, chunk_size=2, action_head="diffusion")
 
+    def test_invalid_modes(self):
+        with pytest.raises(ValueError, match="input_mode"):
+            VLAWrapperBase(action_dim=2, chunk_size=2, input_mode="features")
+        with pytest.raises(ValueError, match="output_mode"):
+            VLAWrapperBase(action_dim=2, chunk_size=2, output_mode="actions")
+
     def test_invalid_interaction_type(self):
         with pytest.raises(ValueError, match="default_interaction_type"):
             VLAWrapperBase(action_dim=2, chunk_size=2, default_interaction_type="beam")
@@ -900,7 +912,9 @@ class TestTinyVLA:
         policy = TinyVLA(action_dim=7, chunk_size=4)
         out = policy(_make_obs_td())
         assert out["action_chunk"].shape == torch.Size([2, 4, 7])
-        assert policy.out_keys == ["action_chunk"]
+        assert isinstance(out["vla_action"], VLAAction)
+        assert out["vla_action"].chunk.shape == torch.Size([2, 4, 7])
+        assert policy.out_keys == ["vla_action", "action_chunk"]
         assert ("observation", "image") in policy.in_keys
 
     def test_tokens(self):
@@ -908,7 +922,9 @@ class TestTinyVLA:
             action_dim=7, chunk_size=4, action_head="tokens", vocab_size=64
         )
         out = policy(_make_obs_td())
+        assert isinstance(out["vla_action"], VLAAction)
         assert out["action_tokens"].shape == torch.Size([2, 4, 7])
+        assert out["vla_action"].tokens.shape == torch.Size([2, 4, 7])
         # one sequence-level log-prob per sample (summed over the chunk): the
         # contract PPO-style objectives expect from sample_log_prob
         assert out["log_probs"].shape == torch.Size([2])
@@ -956,9 +972,13 @@ class TestTinyVLA:
 
     def test_set_keys(self):
         policy = TinyVLA(action_dim=3, chunk_size=2)
-        policy.set_keys(instruction="instr", action_chunk=("pred", "chunk"))
+        policy.set_keys(
+            instruction="instr",
+            action_chunk=("pred", "chunk"),
+            vla_action=("pred", "vla_action"),
+        )
         assert "instr" in policy.in_keys
-        assert policy.out_keys == [("pred", "chunk")]
+        assert policy.out_keys == [("pred", "vla_action"), ("pred", "chunk")]
         td = TensorDict(
             {
                 "observation": {
@@ -970,6 +990,133 @@ class TestTinyVLA:
             batch_size=[2],
         )
         assert policy(td)["pred", "chunk"].shape == torch.Size([2, 2, 3])
+        assert policy(td)["pred", "vla_action"].chunk.shape == torch.Size([2, 2, 3])
+
+    def test_preprocessed_vla_observation(self):
+        obs = VLAObservation(
+            images=VLAImages(
+                image=torch.zeros(2, 3, 16, 16, dtype=torch.uint8),
+                batch_size=[2],
+            ),
+            state=torch.randn(2, 5),
+            instruction=NonTensorStack("a", "b"),
+            batch_size=[2],
+        )
+        td = TensorDict({"vla_observation": obs}, batch_size=[2])
+        policy = TinyVLA(action_dim=3, chunk_size=2, input_mode="preprocessed")
+        out = policy(td)
+        assert policy.in_keys == ["vla_observation"]
+        assert out["action_chunk"].shape == torch.Size([2, 2, 3])
+
+    def test_tensordict_out_and_inplace_false(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2, inplace=False)
+        td = _make_obs_td()
+        out = policy(td)
+        assert "action_chunk" not in td.keys(True, True)
+        assert out["action_chunk"].shape == torch.Size([2, 2, 3])
+        td_out = TensorDict({}, batch_size=[2])
+        result = policy(td, tensordict_out=td_out)
+        assert result is td_out
+        assert td_out["vla_action"].chunk.shape == torch.Size([2, 2, 3])
+
+    def test_logits_only_and_log_prob(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            return_logits=False,
+        )
+        td = _make_obs_td()
+        logits_only = policy(td.clone(), logits_only=True)
+        assert logits_only["action_logits"].shape == torch.Size([2, 2, 3, 16])
+        assert "action_tokens" not in logits_only.keys(True, True)
+        rollout = policy(td.clone())
+        data = td.clone()
+        data["action_tokens"] = rollout["action_tokens"]
+        data = policy.log_prob(data)
+        torch.testing.assert_close(
+            data["log_probs"],
+            policy.get_dist(td.clone()).log_prob(rollout["action_tokens"]),
+        )
+
+    def test_logits_only_constructor(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            logits_only=True,
+        )
+        out = policy(_make_obs_td())
+        assert policy.out_keys == ["vla_action", "action_logits"]
+        assert out["action_logits"].shape == torch.Size([2, 2, 3, 16])
+        assert "action_tokens" not in out.keys(True, True)
+
+    def test_num_samples(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            num_samples=4,
+            inplace=False,
+        )
+        out = policy(_make_obs_td())
+        assert out.batch_size == torch.Size([2, 4])
+        assert out["action_tokens"].shape == torch.Size([2, 4, 2, 3])
+        assert out["log_probs"].shape == torch.Size([2, 4])
+
+    def test_num_samples_log_prob_recompute(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            num_samples=4,
+            inplace=False,
+        )
+        td = _make_obs_td()
+        out = policy(td.clone())
+        data = td.clone()
+        data["action_tokens"] = out["action_tokens"]
+        data = policy.log_prob(data)
+        assert data["log_probs"].shape == torch.Size([2, 4])
+
+    def test_output_mode_both_decodes_tokens(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            output_mode="both",
+            action_tokenizer=UniformActionTokenizer(16, low=-1.0, high=1.0),
+        )
+        out = policy(_make_obs_td())
+        assert out["action_tokens"].shape == torch.Size([2, 2, 3])
+        assert out["action_chunk"].shape == torch.Size([2, 2, 3])
+        assert out["vla_action"].chunk.shape == torch.Size([2, 2, 3])
+
+    def test_token_output_mode_chunk_only(self):
+        policy = TinyVLA(
+            action_dim=3,
+            chunk_size=2,
+            action_head="tokens",
+            vocab_size=16,
+            output_mode="chunk",
+            action_tokenizer=UniformActionTokenizer(16, low=-1.0, high=1.0),
+        )
+        out = policy(_make_obs_td())
+        assert out["action_chunk"].shape == torch.Size([2, 2, 3])
+        assert "action_tokens" not in out.keys(True, True)
+
+    def test_get_new_version(self):
+        policy = TinyVLA(action_dim=3, chunk_size=2)
+        other = policy.get_new_version(inplace=False, action_chunk_key=("pred", "a"))
+        assert other is not policy
+        assert other.inplace is False
+        assert other.tensor_keys.action_chunk == ("pred", "a")
+        assert policy.tensor_keys.action_chunk == "action_chunk"
 
     def test_greedy_deterministic(self):
         policy = TinyVLA(
@@ -1035,7 +1182,8 @@ class TestLeRobotPolicyWrapper:
         )
         out = policy(_make_obs_td())
         assert out["action_chunk"].shape == torch.Size([2, 4, 7])
-        assert policy.out_keys == ["action_chunk"]
+        assert out["vla_action"].chunk.shape == torch.Size([2, 4, 7])
+        assert policy.out_keys == ["vla_action", "action_chunk"]
 
     def test_builds_lerobot_batch(self):
         dummy = _DummyChunkPolicy(2, 3)

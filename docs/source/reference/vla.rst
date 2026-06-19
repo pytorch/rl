@@ -38,6 +38,7 @@ and the LeRobot dataset format::
         action_chunk: float [*B, T, chunk, action_dim],       # built for training
         action_is_pad: bool [*B, T, chunk],                   # chunk validity mask
         action_tokens: long [*B, T, chunk, action_dim],       # tokenized actions
+        vla_action: VLAAction(...),                           # structured policy output
         next: TensorDict(...),                                 # TED layout
     )
 
@@ -61,6 +62,9 @@ Data and metadata
     :template: rl_template_noinherit.rst
 
     RobotDatasetMetadata
+    VLAAction
+    VLAImages
+    VLAObservation
     validate_vla_tensordict
 
 Robot VLA trajectories can be loaded into the canonical schema from
@@ -110,14 +114,38 @@ a language-model head.
     UniformActionTokenizer
     VocabTailActionTokenizer
 
+Image preprocessing
+-------------------
+
+The reusable :class:`~torchrl.data.vla.OpenVLAImagePreprocessor` implements the
+OpenVLA-style image preprocessing order used by OpenVLA-OFT policies: square
+resize, JPEG quality-95 round trip, optional 0.9-area center crop and resize
+back. Its default backend keeps images as tensors and uses ``torchvision`` JPEG
+codecs, while ``backend="pil"`` remains available as a reference path.
+
+.. currentmodule:: torchrl.data.vla
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    OpenVLAImagePreprocessor
+
 Policies
 --------
 
 A VLA policy is an ordinary :class:`~tensordict.nn.TensorDictModuleBase` that
 maps images, optional proprioceptive state and a language instruction to an
-action chunk (continuous) or action tokens (discrete). :class:`~torchrl.modules.vla.VLAWrapperBase`
-fixes that contract; :class:`~torchrl.modules.vla.TinyVLA` is a small reference
-policy for tests and tutorials.
+action chunk (continuous), action tokens (discrete), or both.
+:class:`~torchrl.modules.vla.VLAWrapperBase` fixes that contract with explicit
+``input_mode`` / ``output_mode`` settings, ``tensordict_out`` and
+``logits_only`` forward paths, plus ``get_dist`` and ``log_prob`` methods for
+loss-time recomputation. Existing flat keys (``action_chunk``,
+``action_tokens``, ``action_logits``, ``action_mask`` and ``log_probs``) remain
+the loss/transform compatibility path; the same values are mirrored into a
+structured :class:`~torchrl.data.vla.VLAAction` under ``vla_action``.
+:class:`~torchrl.modules.vla.TinyVLA` is a small reference policy for tests and
+tutorials.
 
 .. currentmodule:: torchrl.modules.vla
 

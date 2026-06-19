@@ -14,7 +14,7 @@ from tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl.data.vla.schema import IMAGE_KEY, INSTRUCTION_KEY, STATE_KEY
-from torchrl.modules.vla.common import VLAWrapperBase
+from torchrl.modules.vla.common import InputMode, OutputMode, VLAWrapperBase
 
 _has_lerobot = importlib.util.find_spec("lerobot") is not None
 
@@ -98,12 +98,18 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         image_key: NestedKey = IMAGE_KEY,
         state_key: NestedKey = STATE_KEY,
         instruction_key: NestedKey = INSTRUCTION_KEY,
+        input_mode: InputMode = "canonical",
+        output_mode: OutputMode | None = None,
+        inplace: bool | str | None = True,
     ) -> None:
         super().__init__(
             action_dim=action_dim,
             chunk_size=chunk_size,
             action_head="continuous",
             use_state=use_state,
+            input_mode=input_mode,
+            output_mode=output_mode,
+            inplace=inplace,
         )
         self.set_keys(image=image_key, state=state_key, instruction=instruction_key)
         self.policy = policy
@@ -111,14 +117,10 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         self.camera_name = camera_name
 
     def _to_lerobot_batch(self, tensordict: TensorDictBase) -> dict:
-        batch = {
-            f"observation.images.{self.camera_name}": tensordict.get(
-                self.tensor_keys.image
-            )
-        }
+        batch = {f"observation.images.{self.camera_name}": self._get_image(tensordict)}
         if self.use_state:
-            batch["observation.state"] = tensordict.get(self.tensor_keys.state)
-        instruction = tensordict.get(self.tensor_keys.instruction)
+            batch["observation.state"] = self._get_state(tensordict)
+        instruction = self._get_instruction(tensordict)
         batch["task"] = getattr(instruction, "tolist", lambda: instruction)()
         return batch
 

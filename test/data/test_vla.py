@@ -7,6 +7,7 @@ robot-dataset metadata container and the action tokenizers."""
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 
 import numpy as np
@@ -18,11 +19,18 @@ from torchrl.data.vla import (
     ACTION_KEY,
     ActionTokenizerBase,
     INSTRUCTION_KEY,
+    OpenVLAImagePreprocessor,
     RobotDatasetMetadata,
     UniformActionTokenizer,
     validate_vla_tensordict,
+    VLAAction,
+    VLAImages,
+    VLAObservation,
     VocabTailActionTokenizer,
 )
+
+_has_pil = importlib.util.find_spec("PIL") is not None
+_has_torchvision = importlib.util.find_spec("torchvision") is not None
 
 
 def _make_vla_td(batch=2, action_dim=7, *, with_instruction=True, finite=True):
@@ -239,6 +247,62 @@ class TestVLASchema:
             )
             == []
         )
+
+
+class TestVLAContainers:
+    def test_action_container(self):
+        action = VLAAction(
+            chunk=torch.zeros(2, 4, 7),
+            tokens=torch.zeros(2, 4, 7, dtype=torch.long),
+            batch_size=[2],
+        )
+        assert action.chunk.shape == torch.Size([2, 4, 7])
+        assert action.tokens.dtype == torch.long
+
+    def test_observation_container(self):
+        images = VLAImages(
+            image=torch.zeros(2, 3, 16, 16, dtype=torch.uint8), batch_size=[2]
+        )
+        obs = VLAObservation(
+            images=images,
+            state=torch.zeros(2, 5),
+            instruction=["pick", "place"],
+            batch_size=[2],
+        )
+        assert obs.images.image.shape == torch.Size([2, 3, 16, 16])
+        assert obs.state.shape == torch.Size([2, 5])
+
+
+class TestOpenVLAImagePreprocessor:
+    @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
+    def test_pil_backend_shapes(self):
+        proc = OpenVLAImagePreprocessor(size=32, backend="pil", center_crop=True)
+        images = torch.randint(0, 256, (2, 3, 24, 40), dtype=torch.uint8)
+        out = proc(images)
+        assert out.shape == torch.Size([2, 3, 32, 32])
+        assert out.dtype == torch.uint8
+
+    @pytest.mark.skipif(
+        not (_has_pil and _has_torchvision), reason="Pillow/torchvision not found"
+    )
+    def test_torchvision_backend_matches_reference_shape(self):
+        images = torch.randint(0, 256, (2, 3, 24, 40), dtype=torch.uint8)
+        pil = OpenVLAImagePreprocessor(size=32, backend="pil", center_crop=False)
+        tv = OpenVLAImagePreprocessor(size=32, backend="torchvision", center_crop=False)
+        ref = pil(images)
+        fast = tv(images)
+        assert fast.shape == ref.shape == torch.Size([2, 3, 32, 32])
+        assert fast.dtype == ref.dtype == torch.uint8
+        assert (fast.float() - ref.float()).abs().mean() < 25.0
+
+    @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
+    def test_normalization(self):
+        proc = OpenVLAImagePreprocessor(
+            size=16, backend="pil", mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]
+        )
+        out = proc(torch.zeros(3, 16, 16, dtype=torch.uint8))
+        assert out.shape == torch.Size([3, 16, 16])
+        assert out.dtype == torch.float32
 
 
 class TestActionTokenizer:

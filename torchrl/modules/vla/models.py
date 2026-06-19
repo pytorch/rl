@@ -13,11 +13,14 @@ from tensordict.nn import InteractionType
 from torch import nn
 
 from torchrl.data.utils import DEVICE_TYPING
+from torchrl.data.vla import ActionTokenizerBase
 from torchrl.modules.models.models import ConvNet, MLP
 
 from torchrl.modules.vla.common import (
     ActionHead,
+    InputMode,
     LogProbsMode,
+    OutputMode,
     SamplingMode,
     VLAWrapperBase,
 )
@@ -100,6 +103,14 @@ class TinyVLA(VLAWrapperBase):
         log_probs_mode: LogProbsMode = "sequence",
         mode: SamplingMode | None = None,
         device: DEVICE_TYPING | None = None,
+        input_mode: InputMode = "canonical",
+        output_mode: OutputMode | None = None,
+        action_tokenizer: ActionTokenizerBase | None = None,
+        return_log_probs: bool | None = None,
+        return_logits: bool = False,
+        logits_only: bool = False,
+        inplace: bool | str | None = True,
+        num_samples: int | None = None,
     ) -> None:
         super().__init__(
             action_dim=action_dim,
@@ -107,9 +118,18 @@ class TinyVLA(VLAWrapperBase):
             action_head=action_head,
             vocab_size=vocab_size,
             use_state=use_state,
+            input_mode=input_mode,
+            output_mode=output_mode,
+            action_tokenizer=action_tokenizer,
             default_interaction_type=default_interaction_type,
             log_probs_mode=log_probs_mode,
+            return_log_probs=return_log_probs,
+            return_logits=return_logits,
+            logits_only=logits_only,
+            inplace=inplace,
+            num_samples=num_samples,
             mode=mode,
+            device=device,
         )
         self.hidden_dim = int(hidden_dim)
         self.text_vocab = int(text_vocab)
@@ -138,7 +158,7 @@ class TinyVLA(VLAWrapperBase):
         return torch.tensor(indices, dtype=torch.long, device=device)
 
     def _instruction_strings(self, tensordict: TensorDictBase, batch: int) -> list[str]:
-        instruction = tensordict.get(self.tensor_keys.instruction)
+        instruction = self._get_instruction(tensordict)
         data = getattr(instruction, "tolist", lambda: instruction)()
         if isinstance(data, str):
             data = [data] * batch
@@ -147,7 +167,7 @@ class TinyVLA(VLAWrapperBase):
         return data
 
     def _features(self, tensordict: TensorDictBase) -> torch.Tensor:
-        image = tensordict.get(self.tensor_keys.image)
+        image = self._get_image(tensordict)
         if image.dtype == torch.uint8:
             image = image.float() / 255.0
         else:
@@ -155,9 +175,7 @@ class TinyVLA(VLAWrapperBase):
         batch = image.shape[0]
         feats = [self.image_encoder(image)]
         if self.use_state:
-            feats.append(
-                self.state_encoder(tensordict.get(self.tensor_keys.state).float())
-            )
+            feats.append(self.state_encoder(self._get_state(tensordict).float()))
         strings = self._instruction_strings(tensordict, batch)
         feats.append(self.text_embedding(self._hash_text(strings, image.device)))
         return self.trunk(torch.cat(feats, dim=-1))
