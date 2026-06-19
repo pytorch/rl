@@ -767,6 +767,63 @@ class TestBatchedActor:
         assert executed == expected
         assert len(calls) == -(-6 // interval)  # ceil division
 
+    def test_replan_interval_chunk_key(self):
+        # VLA-style policies write action_chunk while the environment consumes
+        # action: no extra TensorDictModule should be needed to bridge the keys.
+        n_steps, calls = 4, []
+
+        def make_chunk(x):
+            calls.append(1)
+            chunk = torch.full((x.shape[0], n_steps, 1), float(len(calls)))
+            chunk += torch.arange(n_steps).view(1, n_steps, 1) / 10
+            return chunk
+
+        actor_base = TensorDictModule(
+            make_chunk, in_keys=["observation"], out_keys=["action_chunk"]
+        )
+        actor = MultiStepActorWrapper(
+            actor_base, n_steps=n_steps, chunk_keys=["action_chunk"]
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 1),
+                "is_init": torch.ones(2, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        executed = []
+        for _ in range(6):
+            td = actor(td.exclude("action"))
+            executed.append(round(td["action"][0, 0].item(), 1))
+            td["is_init"] = torch.zeros(2, 1, dtype=torch.bool)
+        assert executed == [1.0, 1.1, 1.2, 1.3, 2.0, 2.1]
+        assert len(calls) == 2
+        assert actor.out_keys == ["action_chunk", "action", "action_orig", "counter"]
+
+    def test_replan_interval_chunk_key_to_custom_action_key(self):
+        n_steps = 3
+        actor_base = TensorDictModule(
+            lambda x: torch.zeros(x.shape[0], n_steps, 1),
+            in_keys=["observation"],
+            out_keys=["action_chunk"],
+        )
+        actor = MultiStepActorWrapper(
+            actor_base,
+            n_steps=n_steps,
+            action_keys=["motor_action"],
+            chunk_keys=["action_chunk"],
+        )
+        td = TensorDict(
+            {
+                "observation": torch.zeros(2, 1),
+                "is_init": torch.ones(2, 1, dtype=torch.bool),
+            },
+            batch_size=[2],
+        )
+        td = actor(td)
+        assert td["motor_action"].shape == torch.Size([2, 1])
+        assert "motor_action_orig" in td.keys()
+
     def test_replan_interval_validation(self):
         actor_base = TensorDictModule(
             lambda x: x, in_keys=["observation"], out_keys=["action"]

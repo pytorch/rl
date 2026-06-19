@@ -1665,6 +1665,28 @@ class TestMultiAction(TransformBase):
         # one reward slot per executed base step
         assert rollout["next", "reward"].shape == (4, h, 1)
 
+    def test_action_chunk_key(self):
+        h, a = 3, 2
+
+        class ChunkPolicy(TensorDictModuleBase):
+            in_keys = [("observation", "state")]
+            out_keys = ["action_chunk"]
+
+            def forward(self, td):
+                chunk = torch.zeros(*td.batch_size, h, a)
+                td.set("action_chunk", chunk)
+                return td
+
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=a, state_dim=2 * a),
+            MultiAction(action_key="action", chunk_key="action_chunk"),
+        )
+        check_env_specs(env)
+        assert env.full_action_spec["action_chunk"].shape == torch.Size([-1, a])
+        rollout = env.rollout(4, ChunkPolicy())
+        assert rollout["action_chunk"].shape == (4, h, a)
+        assert rollout["next", "reward"].shape == (4, h, 1)
+
     @pytest.mark.parametrize("batch_size", [(), (1,)])
     def test_token_policy_pipeline(self, batch_size):
         # token-head policy: emits only action tokens + log-probs; the

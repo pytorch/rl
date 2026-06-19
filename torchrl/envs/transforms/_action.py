@@ -708,6 +708,13 @@ class MultiAction(Transform):
         stack_observations (bool, optional): if ``True``, each step's observation will be stack in the output tensordict.
             If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The
             stack dimension is the same as the action stack dimension. Defaults to ``False``.
+        action_key (NestedKey, optional): the one-step action key consumed by
+            the base environment. Defaults to the parent environment action key.
+        chunk_key (NestedKey, optional): the policy-facing key that holds the
+            stacked actions. Defaults to ``action_key`` for backward
+            compatibility. Set this to values such as ``"action_chunk"`` when a
+            chunk policy should act through :class:`MultiAction` without
+            re-keying its output.
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionChunkTransform` -- when
         the stacked actions are a chunk policy's *prediction* (overlapping
@@ -724,8 +731,16 @@ class MultiAction(Transform):
         dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,
+        action_key: NestedKey | None = None,
+        chunk_key: NestedKey | None = None,
     ):
-        super().__init__()
+        if action_key is None and chunk_key is not None:
+            action_key = "action"
+        if action_key is not None and chunk_key is None:
+            chunk_key = action_key
+        in_keys_inv = None if action_key is None else [action_key]
+        out_keys_inv = None if chunk_key is None else [chunk_key]
+        super().__init__(in_keys_inv=in_keys_inv, out_keys_inv=out_keys_inv)
         self.stack_rewards = stack_rewards
         self.stack_observations = stack_observations
         self.dim = dim
@@ -764,8 +779,17 @@ class MultiAction(Transform):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Get the actions
         parent = self.parent
-        action_keys = parent.action_keys
-        actions = tensordict.select(*action_keys)
+        action_keys = self.in_keys_inv or parent.action_keys
+        chunk_keys = self.out_keys_inv or action_keys
+        if len(action_keys) != len(chunk_keys):
+            raise ValueError(
+                "action_key and chunk_key lists must have the same length, got "
+                f"{len(action_keys)} and {len(chunk_keys)}."
+            )
+        actions = tensordict.empty()
+        for action_key, chunk_key in zip(action_keys, chunk_keys):
+            action = tensordict.get(chunk_key)
+            actions.set(action_key, action)
         actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + self.dim)
         actions = actions.unbind(-1)
         td = tensordict
@@ -882,15 +906,27 @@ class MultiAction(Transform):
             raise KeyError(
                 f"{type(self).__name__} requires an action spec to be present."
             )
-        for _ in range(self.dim):
-            action_spec = action_spec.unsqueeze(input_spec.ndim)
-        # Make the dim dynamic
-        action_spec = action_spec.expand(
-            tuple(
-                d if i != (input_spec.ndim + self.dim - 1) else -1
-                for i, d in enumerate(action_spec.shape)
+        action_keys = self.in_keys_inv or list(action_spec.keys(True, True))
+        chunk_keys = self.out_keys_inv or action_keys
+        if len(action_keys) != len(chunk_keys):
+            raise ValueError(
+                "action_key and chunk_key lists must have the same length, got "
+                f"{len(action_keys)} and {len(chunk_keys)}."
             )
-        )
+        for action_key, chunk_key in zip(action_keys, chunk_keys):
+            leaf_spec = action_spec[action_key]
+            for _ in range(self.dim):
+                leaf_spec = leaf_spec.unsqueeze(input_spec.ndim)
+            # Make the dim dynamic
+            leaf_spec = leaf_spec.expand(
+                tuple(
+                    d if i != (input_spec.ndim + self.dim - 1) else -1
+                    for i, d in enumerate(leaf_spec.shape)
+                )
+            )
+            action_spec[chunk_key] = leaf_spec
+            if chunk_key != action_key:
+                del action_spec[action_key]
         input_spec["full_action_spec"] = action_spec
         return input_spec
 

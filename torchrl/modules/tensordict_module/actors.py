@@ -2303,7 +2303,15 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         action_keys (list of NestedKeys, optional): the action keys from
             the environment. Can be retrieved from ``env.action_keys``.
             Defaults to all ``out_keys`` of the ``actor`` which end
-            with the ``"action"`` string.
+            with the ``"action"`` string. If ``chunk_keys`` is provided and
+            ``action_keys`` is omitted, the action keys are inferred from the
+            chunk keys by stripping a trailing ``"_chunk"`` suffix, e.g.
+            ``"action_chunk"`` maps to ``"action"``.
+        chunk_keys (list of NestedKeys, optional): the keys written by the
+            wrapped actor that hold action chunks. Defaults to ``action_keys``
+            for backward compatibility. Set this when a chunk policy writes a
+            policy-facing key such as ``"action_chunk"`` while the environment
+            consumes a one-step key such as ``"action"``.
         init_key (NestedKey, optional): the key of the entry indicating
             when the environment has gone through a reset.
             Defaults to ``"is_init"`` which is the ``out_key`` from the
@@ -2390,11 +2398,13 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         n_steps: int | None = None,
         *,
         action_keys: list[NestedKey] | None = None,
+        chunk_keys: list[NestedKey] | None = None,
         init_key: list[NestedKey] | None = None,
         keep_dim: bool = False,
         replan_interval: int | None = None,
     ):
         self.action_keys = action_keys
+        self.chunk_keys = chunk_keys
         self.init_key = init_key
         self.n_steps = n_steps
         self.keep_dim = keep_dim
@@ -2418,11 +2428,13 @@ class MultiStepActorWrapper(TensorDictModuleBase):
 
     @property
     def out_keys(self):
-        return (
-            self.actor.out_keys
-            + list(self._actor_keys_map.values())
-            + [self.counter_key]
-        )
+        out_keys = list(self.actor.out_keys)
+        for key in (
+            self.action_keys + list(self._actor_keys_map.values()) + [self.counter_key]
+        ):
+            if key not in out_keys:
+                out_keys.append(key)
+        return out_keys
 
     def _get_and_move(self, tensordict: TensorDictBase) -> TensorDictBase:
         for action_key in self.action_keys:
@@ -2457,7 +2469,8 @@ class MultiStepActorWrapper(TensorDictModuleBase):
             output = self.actor(tensordict_filtered)
 
             for action_key, action_key_orig in self._actor_keys_map.items():
-                action_computed = output.get(action_key, default=None)
+                chunk_key = self._chunk_keys_map[action_key]
+                action_computed = output.get(chunk_key, default=None)
                 action_orig = tensordict.get(action_key_orig, default=None)
                 if action_orig is None:
                     if not is_init.all():
@@ -2523,6 +2536,13 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     def action_keys(self) -> list[NestedKey]:
         action_keys = self.__dict__.get("_action_keys", None)
         if action_keys is None:
+            chunk_keys = self.__dict__.get("_chunk_keys", None)
+            if chunk_keys is not None:
+                action_keys = [
+                    self._infer_action_key_from_chunk_key(key) for key in chunk_keys
+                ]
+                self.__dict__["_action_keys"] = action_keys
+                return action_keys
 
             def ends_with_action(key):
                 if isinstance(key, str):
@@ -2539,9 +2559,55 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         if value is None:
             return
         self.__dict__["_actor_keys_map_values"] = None
+        self.__dict__["_chunk_keys_map_values"] = None
         if not isinstance(value, list):
             value = [value]
         self._action_keys = [unravel_key(key) for key in value]
+
+    @staticmethod
+    def _infer_action_key_from_chunk_key(chunk_key: NestedKey) -> NestedKey:
+        chunk_key = unravel_key(chunk_key)
+        if isinstance(chunk_key, str):
+            if chunk_key.endswith("_chunk"):
+                action_key = chunk_key[: -len("_chunk")]
+                return action_key or chunk_key
+            return chunk_key
+        last = chunk_key[-1]
+        if last.endswith("_chunk"):
+            action_key = last[: -len("_chunk")]
+            return (*chunk_key[:-1], action_key or last)
+        return chunk_key
+
+    @property
+    def chunk_keys(self) -> list[NestedKey]:
+        chunk_keys = self.__dict__.get("_chunk_keys", None)
+        if chunk_keys is None:
+            return self.action_keys
+        return chunk_keys
+
+    @chunk_keys.setter
+    def chunk_keys(self, value):
+        if value is None:
+            return
+        self.__dict__["_chunk_keys_map_values"] = None
+        if not isinstance(value, list):
+            value = [value]
+        self._chunk_keys = [unravel_key(key) for key in value]
+
+    @property
+    def _chunk_keys_map(self) -> dict[NestedKey, NestedKey]:
+        val = self.__dict__.get("_chunk_keys_map_values", None)
+        if val is None:
+            action_keys = self.action_keys
+            chunk_keys = self.chunk_keys
+            if len(action_keys) != len(chunk_keys):
+                raise ValueError(
+                    "action_keys and chunk_keys must have the same length, got "
+                    f"{len(action_keys)} and {len(chunk_keys)}."
+                )
+            val = dict(zip(action_keys, chunk_keys))
+            self.__dict__["_chunk_keys_map_values"] = val
+        return val
 
     @property
     def _actor_keys_map(self) -> dict[NestedKey, NestedKey]:

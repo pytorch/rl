@@ -185,24 +185,25 @@ backward-compatible composition:
 Chunked policies predict ``[*B, H, action_dim]`` while a standard env consumes
 ``[*B, action_dim]``. The bridge is explicit. Use
 :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` when the env
-should keep its one-step MDP: copy ``"action_chunk"`` to the env action key
-``"action"``, let the wrapper cache the chunk, and re-query the expensive VLA
-only when the cache expires or an ``"is_init"`` reset flag is observed. Use
+should keep its one-step MDP: tell the wrapper which policy key contains the
+chunk (for example ``chunk_keys=["action_chunk"]``), let it cache the chunk and
+write the one-step env key (``"action"`` by default), and re-query the expensive
+VLA only when the cache expires or an ``"is_init"`` reset flag is observed. Use
 :class:`~torchrl.envs.transforms.MultiAction` only when you want the env-side
 transform to execute a whole chunk per policy call and accept the resulting
-re-timed MDP.
+re-timed MDP; in that case pass ``chunk_key="action_chunk"`` to make the env
+consume the policy chunk key directly.
 
 Inference loop sketch
 ---------------------
 
 The following pseudocode shows the default one-step env contract. The VLA
-returns chunks, a one-line TensorDict module exposes them as the env action key,
-and :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` serves one
-cached action per environment step.
+returns chunks under ``"action_chunk"``, and
+:class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` serves one
+cached action under the env-facing ``"action"`` key per environment step.
 
 .. code-block:: python
 
-    from tensordict.nn import TensorDictModule, TensorDictSequential
     from torchrl.envs import InitTracker, TransformedEnv
     from torchrl.modules import MultiStepActorWrapper
     from torchrl.modules.vla import TinyVLA
@@ -218,14 +219,10 @@ cached action per environment step.
         output_mode="chunk",
     )
 
-    chunk_as_env_action = TensorDictModule(
-        lambda chunk: chunk,
-        in_keys=["action_chunk"],
-        out_keys=["action"],
-    )
     actor = MultiStepActorWrapper(
-        TensorDictSequential(policy, chunk_as_env_action),
+        policy,
         n_steps=H,
+        chunk_keys=["action_chunk"],
         replan_interval=None,  # open-loop: consume the full chunk before re-querying
     )
 
@@ -244,6 +241,8 @@ cached action per environment step.
 For token-output policies, request decoded chunks with ``output_mode="both"``
 and pass an ``action_tokenizer`` to the wrapper. The env still consumes
 ``"action"``; token fields remain available for logging or RL fine-tuning.
+If the base environment action key is not ``"action"``, pass
+``action_keys=[env_action_key]`` alongside ``chunk_keys``.
 
 Training loop sketch
 --------------------
