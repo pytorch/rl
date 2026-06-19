@@ -6,8 +6,8 @@
 
 The environment factory wires the chunk-decision data path: one outer step of
 the transformed environment is one policy (chunk) decision. The policy emits
-``action_tokens`` for a whole chunk in a single forward; the tokenizer
-transform decodes them into the continuous chunk on the inverse path;
+``("vla_action", "tokens")`` for a whole chunk in a single forward; the
+tokenizer transform decodes them into the continuous chunk on the inverse path;
 ``MultiAction`` unbinds the chunk and steps the base environment once per
 action; ``SuccessReward`` and ``StepCounter`` run once per outer step, so the
 decision reward is the binary success flag and episodes are truncated in
@@ -32,7 +32,11 @@ from tensordict import TensorDictBase
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.vla import ActionTokenizerBase, UniformActionTokenizer
+from torchrl.data.vla import (
+    ACTION_TOKENS_KEY,
+    ActionTokenizerBase,
+    UniformActionTokenizer,
+)
 from torchrl.envs import (
     ActionTokenizerTransform,
     Compose,
@@ -54,6 +58,7 @@ from torchrl.record import VideoRecorder
 # group ids must be unique across parallel workers: each worker gets a
 # disjoint offset block
 GROUP_ID_OFFSET = 10**6
+LOG_PROBS_KEY = ("vla_action", "log_probs")
 
 
 def candidate_group_size(cfg) -> int:
@@ -154,6 +159,7 @@ def make_policy(cfg, device: torch.device) -> VLAWrapperBase:
             log_probs_mode=log_probs_mode,
             use_wrist_image=cfg.policy.use_wrist_image,
             center_crop=cfg.policy.center_crop,
+            image_backend=cfg.policy.get("image_backend", "torchvision"),
             gripper_binarize=cfg.policy.get("gripper_binarize", False),
             gripper_binarize_threshold=cfg.policy.get(
                 "gripper_binarize_threshold", 0.0
@@ -180,7 +186,13 @@ def make_policy(cfg, device: torch.device) -> VLAWrapperBase:
 def make_action_tokenizer(cfg, policy: VLAWrapperBase) -> ActionTokenizerBase:
     if cfg.policy.backend == "openvla":
         # the codec lives in the checkpoint (vocab-tail mapping + norm_stats)
-        return policy.action_tokenizer()
+        if policy.action_tokenizer is None:
+            raise RuntimeError(
+                "The OpenVLA policy did not expose an action tokenizer. Check "
+                "that the checkpoint carries dataset action statistics and "
+                "that policy.unnorm_key selects one of them."
+            )
+        return policy.action_tokenizer
     return UniformActionTokenizer(cfg.tokenizer.vocab_size, low=-1.0, high=1.0)
 
 
@@ -409,7 +421,9 @@ def make_loss_module(cfg, policy: VLAWrapperBase) -> ClipPPOLoss:
         entropy_bonus=False,
     )
     loss_module.set_keys(
-        action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+        action=ACTION_TOKENS_KEY,
+        sample_log_prob=LOG_PROBS_KEY,
+        advantage="advantage",
     )
     return loss_module
 
@@ -519,8 +533,9 @@ def make_collector(
     # TransformedEnv) deliberately expose a device-less outer TensorDict even
     # though the simulator action path is CPU-only. If only ``policy_device``
     # is passed, Collector keeps CUDA policy outputs on the carrier and hands
-    # CUDA ``action_tokens`` to the env inverse transforms. The rollout still
-    # runs, but the decoded CPU simulator actions can silently diverge from
+    # CUDA ``("vla_action", "tokens")`` to the env inverse transforms. The
+    # rollout still runs, but the decoded CPU simulator actions can silently
+    # diverge from
     # env.rollout(auto_cast_to_device=True). Force the env side to CPU when the
     # env does not advertise a device so sampled tokens are copied back before
     # MuJoCo/ParallelEnv stepping.
