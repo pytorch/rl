@@ -24,6 +24,7 @@ from torchrl.data.vla.schema import (
     IMAGE_KEY,
     INSTRUCTION_KEY,
     STATE_KEY,
+    VLA_ACTION_KEY,
 )
 from torchrl.data.vla.tokenizers import ActionTokenizerBase
 
@@ -41,9 +42,9 @@ class VLAWrapperBase(TensorDictModuleBase):
 
     A VLA policy maps images, optional proprioceptive state, and a language
     instruction to either a continuous action chunk or discrete action tokens.
-    This base keeps the flat key contract used by existing TorchRL losses and
-    transforms while also mirroring outputs into a structured
-    :class:`~torchrl.data.vla.VLAAction` container under ``"vla_action"``.
+    Outputs are stored in a structured :class:`~torchrl.data.vla.VLAAction`
+    container under ``"vla_action"`` by default. Its fields are ordinary nested
+    TensorDict keys, e.g. ``("vla_action", "chunk")`` for continuous chunks.
 
     Keyword Args:
         action_dim (int): The dimensionality of a single action.
@@ -93,9 +94,9 @@ class VLAWrapperBase(TensorDictModuleBase):
         ...     batch_size=[2],
         ... )
         >>> out = policy(td)
-        >>> out["action_chunk"].shape
-        torch.Size([2, 4, 7])
         >>> out["vla_action"].chunk.shape
+        torch.Size([2, 4, 7])
+        >>> out["vla_action", "chunk"].shape
         torch.Size([2, 4, 7])
     """
 
@@ -109,12 +110,12 @@ class VLAWrapperBase(TensorDictModuleBase):
         instruction: NestedKey = INSTRUCTION_KEY
         observation: NestedKey = "vla_observation"
         action: NestedKey = ACTION_KEY
-        vla_action: NestedKey = "vla_action"
+        vla_action: NestedKey = VLA_ACTION_KEY
         action_chunk: NestedKey = ACTION_CHUNK_KEY
         action_tokens: NestedKey = ACTION_TOKENS_KEY
-        action_logits: NestedKey = "action_logits"
-        action_mask: NestedKey = "action_mask"
-        log_probs: NestedKey = "log_probs"
+        action_logits: NestedKey = (VLA_ACTION_KEY, "logits")
+        action_mask: NestedKey = (VLA_ACTION_KEY, "mask")
+        log_probs: NestedKey = (VLA_ACTION_KEY, "log_probs")
 
     def __init__(
         self,
@@ -142,12 +143,12 @@ class VLAWrapperBase(TensorDictModuleBase):
         instruction_key: NestedKey = INSTRUCTION_KEY,
         observation_key: NestedKey = "vla_observation",
         action_key: NestedKey = ACTION_KEY,
-        vla_action_key: NestedKey = "vla_action",
-        action_chunk_key: NestedKey = ACTION_CHUNK_KEY,
-        action_tokens_key: NestedKey = ACTION_TOKENS_KEY,
-        action_logits_key: NestedKey = "action_logits",
-        action_mask_key: NestedKey = "action_mask",
-        log_probs_key: NestedKey = "log_probs",
+        vla_action_key: NestedKey = VLA_ACTION_KEY,
+        action_chunk_key: NestedKey | None = None,
+        action_tokens_key: NestedKey | None = None,
+        action_logits_key: NestedKey | None = None,
+        action_mask_key: NestedKey | None = None,
+        log_probs_key: NestedKey | None = None,
         inplace: Literal[True, False, "empty"] | None = True,
         device: torch.device | str | None = None,
         num_samples: int | None = None,
@@ -214,6 +215,16 @@ class VLAWrapperBase(TensorDictModuleBase):
         self.inplace = True if inplace is None else inplace
         self.device = None if device is None else torch.device(device)
         self.num_samples = None if num_samples is None else int(num_samples)
+        if action_chunk_key is None:
+            action_chunk_key = self._vla_field_key(vla_action_key, "chunk")
+        if action_tokens_key is None:
+            action_tokens_key = self._vla_field_key(vla_action_key, "tokens")
+        if action_logits_key is None:
+            action_logits_key = self._vla_field_key(vla_action_key, "logits")
+        if action_mask_key is None:
+            action_mask_key = self._vla_field_key(vla_action_key, "mask")
+        if log_probs_key is None:
+            log_probs_key = self._vla_field_key(vla_action_key, "log_probs")
         self._tensor_keys = self._AcceptedKeys(
             image=image_key,
             wrist_image=wrist_image_key,
@@ -234,8 +245,29 @@ class VLAWrapperBase(TensorDictModuleBase):
     def tensor_keys(self) -> _AcceptedKeys:
         return self._tensor_keys
 
+    @staticmethod
+    def _vla_field_key(vla_action_key: NestedKey, field: str) -> NestedKey:
+        if isinstance(vla_action_key, str):
+            return (vla_action_key, field)
+        return (*vla_action_key, field)
+
+    def _is_vla_field_key(self, key: NestedKey, field: str) -> bool:
+        return key == self._vla_field_key(self._tensor_keys.vla_action, field)
+
     def set_keys(self, **kwargs) -> VLAWrapperBase:
         """Set the tensordict key names used by the policy."""
+        old_vla_action_key = self._tensor_keys.vla_action
+        vla_field_keys = (
+            ("action_chunk", "chunk"),
+            ("action_tokens", "tokens"),
+            ("action_logits", "logits"),
+            ("action_mask", "mask"),
+            ("log_probs", "log_probs"),
+        )
+        old_default_field_keys = {
+            key: self._vla_field_key(old_vla_action_key, field)
+            for key, field in vla_field_keys
+        }
         for key, value in kwargs.items():
             if key not in self._AcceptedKeys.__dataclass_fields__:
                 raise ValueError(
@@ -243,6 +275,16 @@ class VLAWrapperBase(TensorDictModuleBase):
                     f"{list(self._AcceptedKeys.__dataclass_fields__)}."
                 )
             setattr(self._tensor_keys, key, value)
+        if "vla_action" in kwargs:
+            for key, field in vla_field_keys:
+                if key not in kwargs and (
+                    getattr(self._tensor_keys, key) == old_default_field_keys[key]
+                ):
+                    setattr(
+                        self._tensor_keys,
+                        key,
+                        self._vla_field_key(self._tensor_keys.vla_action, field),
+                    )
         self._update_keys()
         return self
 
@@ -255,7 +297,7 @@ class VLAWrapperBase(TensorDictModuleBase):
         else:
             in_keys = [self._tensor_keys.observation]
         self.in_keys = in_keys
-        out_keys = [self._tensor_keys.vla_action]
+        out_keys = []
         if self.action_head == "tokens" and self.logits_only:
             out_keys.append(self._tensor_keys.action_logits)
             self.out_keys = out_keys
@@ -387,16 +429,6 @@ class VLAWrapperBase(TensorDictModuleBase):
         log_probs: torch.Tensor | None = None,
         mask: torch.Tensor | None = None,
     ) -> None:
-        if chunk is not None:
-            out.set(self._tensor_keys.action_chunk, chunk)
-        if tokens is not None:
-            out.set(self._tensor_keys.action_tokens, tokens)
-        if logits is not None:
-            out.set(self._tensor_keys.action_logits, logits)
-        if log_probs is not None:
-            out.set(self._tensor_keys.log_probs, log_probs)
-        if mask is not None:
-            out.set(self._tensor_keys.action_mask, mask)
         action = VLAAction(
             chunk=chunk,
             tokens=tokens,
@@ -407,6 +439,26 @@ class VLAWrapperBase(TensorDictModuleBase):
             device=out.device,
         )
         out.set(self._tensor_keys.vla_action, action)
+        if chunk is not None and not self._is_vla_field_key(
+            self._tensor_keys.action_chunk, "chunk"
+        ):
+            out.set(self._tensor_keys.action_chunk, chunk)
+        if tokens is not None and not self._is_vla_field_key(
+            self._tensor_keys.action_tokens, "tokens"
+        ):
+            out.set(self._tensor_keys.action_tokens, tokens)
+        if logits is not None and not self._is_vla_field_key(
+            self._tensor_keys.action_logits, "logits"
+        ):
+            out.set(self._tensor_keys.action_logits, logits)
+        if log_probs is not None and not self._is_vla_field_key(
+            self._tensor_keys.log_probs, "log_probs"
+        ):
+            out.set(self._tensor_keys.log_probs, log_probs)
+        if mask is not None and not self._is_vla_field_key(
+            self._tensor_keys.action_mask, "mask"
+        ):
+            out.set(self._tensor_keys.action_mask, mask)
 
     def _dist_from_logits(
         self, logits: torch.Tensor, mask: torch.Tensor | None = None

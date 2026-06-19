@@ -20,9 +20,11 @@ format::
         ),
         language_instruction: NonTensorData | Text,           # raw or tokenized (per-traj)
         action: float [*B, T, action_dim],                    # raw, per-step
-        action_chunk: float [*B, T, chunk, action_dim],       # built for training
+        vla_action: VLAAction(
+            chunk: float [*B, T, chunk, action_dim],          # built for training
+            tokens: long [*B, T, chunk, action_dim],          # tokenized actions
+        ),
         action_is_pad: bool [*B, T, chunk],                   # chunk validity mask
-        action_tokens: long [*B, T, chunk, action_dim],       # tokenized actions
         next: TensorDict(...),                                 # TED layout
     )
 
@@ -42,6 +44,7 @@ __all__ = [
     "STATE_KEY",
     "INSTRUCTION_KEY",
     "ACTION_KEY",
+    "VLA_ACTION_KEY",
     "ACTION_CHUNK_KEY",
     "ACTION_IS_PAD_KEY",
     "ACTION_TOKENS_KEY",
@@ -63,12 +66,14 @@ INSTRUCTION_KEY: NestedKey = "language_instruction"
 # -- Action keys -------------------------------------------------------------
 #: Raw per-step continuous action ``[*B, T, action_dim]`` (dataset native).
 ACTION_KEY: NestedKey = "action"
+#: Structured action output container.
+VLA_ACTION_KEY: NestedKey = "vla_action"
 #: Continuous action chunk ``[*B, T, chunk, action_dim]`` (training target).
-ACTION_CHUNK_KEY: NestedKey = "action_chunk"
+ACTION_CHUNK_KEY: NestedKey = (VLA_ACTION_KEY, "chunk")
 #: Boolean mask ``[*B, T, chunk]`` marking valid (non-padded) chunk steps.
 ACTION_IS_PAD_KEY: NestedKey = "action_is_pad"
 #: Discrete action tokens ``[*B, T, chunk, action_dim]`` or ``[*B, T, L]``.
-ACTION_TOKENS_KEY: NestedKey = "action_tokens"
+ACTION_TOKENS_KEY: NestedKey = (VLA_ACTION_KEY, "tokens")
 
 
 def validate_vla_tensordict(
@@ -95,7 +100,7 @@ def validate_vla_tensordict(
 
     Keyword Args:
         instruction_key (NestedKey): language-instruction key.
-            Defaults to ``("observation", "language_instruction")``.
+            Defaults to ``"language_instruction"``.
         action_key (NestedKey): action key. Defaults to ``"action"``.
         image_key (NestedKey): image key.
             Defaults to ``("observation", "image")``.

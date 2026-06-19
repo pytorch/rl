@@ -2303,15 +2303,15 @@ class MultiStepActorWrapper(TensorDictModuleBase):
         action_keys (list of NestedKeys, optional): the action keys from
             the environment. Can be retrieved from ``env.action_keys``.
             Defaults to all ``out_keys`` of the ``actor`` which end
-            with the ``"action"`` string. If ``chunk_keys`` is provided and
-            ``action_keys`` is omitted, the action keys are inferred from the
-            chunk keys by stripping a trailing ``"_chunk"`` suffix, e.g.
-            ``"action_chunk"`` maps to ``"action"``.
+            with the ``"action"`` string. If ``chunk_keys`` is provided (or
+            can be inferred from the actor's output keys) and ``action_keys`` is
+            omitted, the action keys are inferred from the chunk keys. For
+            example ``"action_chunk"`` and ``("vla_action", "chunk")`` both map
+            to ``"action"``.
         chunk_keys (list of NestedKeys, optional): the keys written by the
-            wrapped actor that hold action chunks. Defaults to ``action_keys``
-            for backward compatibility. Set this when a chunk policy writes a
-            policy-facing key such as ``"action_chunk"`` while the environment
-            consumes a one-step key such as ``"action"``.
+            wrapped actor that hold action chunks. Defaults to VLA-style chunk
+            outputs (``("vla_action", "chunk")`` first, then keys ending in
+            ``"_chunk"``) when present, and to ``action_keys`` otherwise.
         init_key (NestedKey, optional): the key of the entry indicating
             when the environment has gone through a reset.
             Defaults to ``"is_init"`` which is the ``out_key`` from the
@@ -2536,21 +2536,14 @@ class MultiStepActorWrapper(TensorDictModuleBase):
     def action_keys(self) -> list[NestedKey]:
         action_keys = self.__dict__.get("_action_keys", None)
         if action_keys is None:
-            chunk_keys = self.__dict__.get("_chunk_keys", None)
-            if chunk_keys is not None:
+            chunk_keys = self.chunk_keys
+            if chunk_keys != self._default_action_keys_from_actor():
                 action_keys = [
                     self._infer_action_key_from_chunk_key(key) for key in chunk_keys
                 ]
                 self.__dict__["_action_keys"] = action_keys
                 return action_keys
-
-            def ends_with_action(key):
-                if isinstance(key, str):
-                    return key == "action"
-                return key[-1] == "action"
-
-            action_keys = [key for key in self.actor.out_keys if ends_with_action(key)]
-
+            action_keys = chunk_keys
             self.__dict__["_action_keys"] = action_keys
         return action_keys
 
@@ -2573,16 +2566,56 @@ class MultiStepActorWrapper(TensorDictModuleBase):
                 return action_key or chunk_key
             return chunk_key
         last = chunk_key[-1]
+        if last == "chunk" and len(chunk_key) >= 2 and chunk_key[-2] == "vla_action":
+            return "action"
         if last.endswith("_chunk"):
             action_key = last[: -len("_chunk")]
             return (*chunk_key[:-1], action_key or last)
         return chunk_key
 
+    @staticmethod
+    def _is_vla_chunk_key(key: NestedKey) -> bool:
+        return (
+            isinstance(key, tuple)
+            and len(key) >= 2
+            and key[-2:]
+            == (
+                "vla_action",
+                "chunk",
+            )
+        )
+
+    @staticmethod
+    def _is_chunk_key(key: NestedKey) -> bool:
+        if MultiStepActorWrapper._is_vla_chunk_key(key):
+            return True
+        if isinstance(key, str):
+            return key.endswith("_chunk")
+        return key[-1].endswith("_chunk")
+
+    def _default_action_keys_from_actor(self) -> list[NestedKey]:
+        def ends_with_action(key):
+            if isinstance(key, str):
+                return key == "action"
+            return key[-1] == "action"
+
+        return [key for key in self.actor.out_keys if ends_with_action(key)]
+
+    def _default_chunk_keys_from_actor(self) -> list[NestedKey]:
+        out_keys = list(self.actor.out_keys)
+        vla_chunk_keys = [key for key in out_keys if self._is_vla_chunk_key(key)]
+        if vla_chunk_keys:
+            return vla_chunk_keys
+        return [key for key in out_keys if self._is_chunk_key(key)]
+
     @property
     def chunk_keys(self) -> list[NestedKey]:
         chunk_keys = self.__dict__.get("_chunk_keys", None)
         if chunk_keys is None:
-            return self.action_keys
+            chunk_keys = self._default_chunk_keys_from_actor()
+            if not chunk_keys:
+                chunk_keys = self._default_action_keys_from_actor()
+            self.__dict__["_chunk_keys"] = chunk_keys
         return chunk_keys
 
     @chunk_keys.setter

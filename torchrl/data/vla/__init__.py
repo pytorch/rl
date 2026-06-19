@@ -23,6 +23,7 @@ from torchrl.data.vla.schema import (
     OBSERVATION_KEY,
     STATE_KEY,
     validate_vla_tensordict,
+    VLA_ACTION_KEY,
 )
 from torchrl.data.vla.tokenizers import (
     ActionTokenizerBase,
@@ -47,6 +48,7 @@ __all__ = [
     "STATE_KEY",
     "INSTRUCTION_KEY",
     "ACTION_KEY",
+    "VLA_ACTION_KEY",
     "ACTION_CHUNK_KEY",
     "ACTION_IS_PAD_KEY",
     "ACTION_TOKENS_KEY",

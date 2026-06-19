@@ -84,7 +84,7 @@ class TinyVLA(VLAWrapperBase):
         ...     },
         ...     batch_size=[2],
         ... )
-        >>> policy(td)["action_chunk"].shape
+        >>> policy(td)["vla_action", "chunk"].shape
         torch.Size([2, 4, 7])
     """
 

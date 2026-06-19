@@ -40,7 +40,11 @@ from torchrl.data import (
     TensorSpec,
     Unbounded,
 )
-from torchrl.data.vla import RobotDatasetMetadata, UniformActionTokenizer
+from torchrl.data.vla import (
+    ACTION_CHUNK_KEY,
+    RobotDatasetMetadata,
+    UniformActionTokenizer,
+)
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
@@ -1670,22 +1674,31 @@ class TestMultiAction(TransformBase):
 
         class ChunkPolicy(TensorDictModuleBase):
             in_keys = [("observation", "state")]
-            out_keys = ["action_chunk"]
+            out_keys = [ACTION_CHUNK_KEY]
 
             def forward(self, td):
                 chunk = torch.zeros(*td.batch_size, h, a)
-                td.set("action_chunk", chunk)
+                td.set(ACTION_CHUNK_KEY, chunk)
                 return td
 
         env = TransformedEnv(
             ToyVLAEnv(action_dim=a, state_dim=2 * a),
-            MultiAction(action_key="action", chunk_key="action_chunk"),
+            MultiAction.from_vla(),
         )
         check_env_specs(env)
-        assert env.full_action_spec["action_chunk"].shape == torch.Size([-1, a])
+        assert env.full_action_spec[ACTION_CHUNK_KEY].shape == torch.Size([-1, a])
         rollout = env.rollout(4, ChunkPolicy())
-        assert rollout["action_chunk"].shape == (4, h, a)
+        assert rollout[ACTION_CHUNK_KEY].shape == (4, h, a)
         assert rollout["next", "reward"].shape == (4, h, 1)
+
+    def test_missing_vla_chunk_key_error(self):
+        env = TransformedEnv(
+            ToyVLAEnv(action_dim=2, state_dim=4),
+            MultiAction.from_vla(),
+        )
+        td = env.reset()
+        with pytest.raises(KeyError, match="MultiAction.from_vla"):
+            env.step(td)
 
     @pytest.mark.parametrize("batch_size", [(), (1,)])
     def test_token_policy_pipeline(self, batch_size):
@@ -2528,7 +2541,7 @@ class TestActionChunkTransform(TransformBase):
         env = self._env()
         check_env_specs(env)
         assert "action" in env.full_action_spec.keys(True, True)
-        assert "action_chunk" not in env.full_action_spec.keys(True, True)
+        assert ACTION_CHUNK_KEY not in env.full_action_spec.keys(True, True)
 
     def test_serial_trans_env_check(self):
         env = SerialEnv(2, self._env)
@@ -2567,14 +2580,14 @@ class TestActionChunkTransform(TransformBase):
     def test_transform_no_env(self):
         t = ActionChunkTransform(chunk_size=4)
         out = t(TensorDict({"action": torch.randn(2, 6, 3)}, batch_size=[2, 6]))
-        assert out["action_chunk"].shape == torch.Size([2, 6, 4, 3])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([2, 6, 4, 3])
         assert out["action_is_pad"].shape == torch.Size([2, 6, 4])
         assert out["action_is_pad"].dtype == torch.bool
 
     def test_transform_compose(self):
         t = Compose(ActionChunkTransform(chunk_size=2))
         out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
-        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([5, 2, 3])
         assert out["action_is_pad"].shape == torch.Size([5, 2])
 
     def test_transform_env(self):
@@ -2593,7 +2606,7 @@ class TestActionChunkTransform(TransformBase):
         env.step(td)
         torch.testing.assert_close(captured["action"], td["action"])
         r = env.rollout(3)
-        assert "action_chunk" not in r.keys()
+        assert ACTION_CHUNK_KEY not in r.keys(True, True)
 
     def test_transform_model(self):
         t = ActionChunkTransform(chunk_size=3)
@@ -2603,7 +2616,7 @@ class TestActionChunkTransform(TransformBase):
         expected_chunk = torch.tensor(
             [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
         ).float()
-        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
         expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
         assert torch.equal(out["action_is_pad"][0], expected_pad)
 
@@ -2617,9 +2630,9 @@ class TestActionChunkTransform(TransformBase):
         # no-op, and the chunks are built on the sample path only
         rb.extend(TensorDict({"action": torch.randn(10, 5, 2)}, batch_size=[10]))
         stored = rb._storage._storage
-        assert "action_chunk" not in stored.keys()
+        assert ACTION_CHUNK_KEY not in stored.keys(True, True)
         sample = rb.sample()
-        assert sample["action_chunk"].shape[-2:] == torch.Size([3, 2])
+        assert sample[ACTION_CHUNK_KEY].shape[-2:] == torch.Size([3, 2])
         assert sample["action_is_pad"].shape[-1] == 3
 
     def test_transform_inverse(self):
@@ -2628,7 +2641,7 @@ class TestActionChunkTransform(TransformBase):
         action = torch.randn(2, 5)
         td = t.inv(TensorDict({"action": action}, batch_size=[2]))
         torch.testing.assert_close(td["action"], action)
-        assert "action_chunk" not in td.keys()
+        assert ACTION_CHUNK_KEY not in td.keys(True, True)
 
     # ActionChunkTransform-specific tests
     def test_values_and_padding(self):
@@ -2638,20 +2651,20 @@ class TestActionChunkTransform(TransformBase):
         expected_chunk = torch.tensor(
             [[0, 1, 2], [1, 2, 3], [2, 3, 3], [3, 3, 3]]
         ).float()
-        torch.testing.assert_close(out["action_chunk"][0, :, :, 0], expected_chunk)
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY][0, :, :, 0], expected_chunk)
         expected_pad = torch.tensor([[0, 0, 0], [0, 0, 0], [0, 0, 1], [0, 1, 1]]).bool()
         assert torch.equal(out["action_is_pad"][0], expected_pad)
 
     def test_no_batch_dim(self):
         t = ActionChunkTransform(chunk_size=2)
         out = t(TensorDict({"action": torch.randn(5, 3)}, batch_size=[5]))
-        assert out["action_chunk"].shape == torch.Size([5, 2, 3])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([5, 2, 3])
         assert out["action_is_pad"].shape == torch.Size([5, 2])
 
     def test_chunk_larger_than_horizon(self):
         t = ActionChunkTransform(chunk_size=10)
         out = t(TensorDict({"action": torch.arange(3).view(1, 3, 1).float()}, [1, 3]))
-        assert out["action_chunk"].shape == torch.Size([1, 3, 10, 1])
+        assert out[ACTION_CHUNK_KEY].shape == torch.Size([1, 3, 10, 1])
         # first chunk: steps 0,1,2 valid then padded
         assert not out["action_is_pad"][0, 0, :3].any()
         assert out["action_is_pad"][0, 0, 3:].all()
@@ -2686,7 +2699,7 @@ class TestActionChunkTransform(TransformBase):
         )
         windows = flat.reshape(2, 4)
         out = ActionChunkTransform(3)(windows)
-        chunk = out["action_chunk"][..., 0]
+        chunk = out[ACTION_CHUNK_KEY][..., 0]
         # neither slice pulls the other slice's actions across the boundary
         assert chunk[0].max() <= 3
         assert chunk[1].min() >= 10

@@ -35,10 +35,14 @@ and the LeRobot dataset format::
         ),
         language_instruction: NonTensorData | Text,           # raw or tokenized (per-traj)
         action: float [*B, T, action_dim],                    # raw, per-step
-        action_chunk: float [*B, T, chunk, action_dim],       # built for training
+        vla_action: VLAAction(
+            chunk: float [*B, T, chunk, action_dim],          # built for training
+            tokens: long [*B, T, chunk, action_dim],          # tokenized actions
+            log_probs: float [*B, T] or [*B, T, chunk, action_dim],
+            logits: float [*B, T, chunk, action_dim, vocab],
+            mask: bool [*B, T, chunk, action_dim, vocab],
+        ),
         action_is_pad: bool [*B, T, chunk],                   # chunk validity mask
-        action_tokens: long [*B, T, chunk, action_dim],       # tokenized actions
-        vla_action: VLAAction(...),                           # structured policy output
         next: TensorDict(...),                                 # TED layout
     )
 
@@ -145,7 +149,8 @@ TensorDict contract:
 - on ``step`` the environment consumes one continuous action under
   ``"action"`` with shape ``[*B, action_dim]``;
 - datasets and replay buffers may additionally carry training targets such as
-  ``"action_chunk"``, ``"action_tokens"`` and ``"action_is_pad"``.
+  ``("vla_action", "chunk")``, ``("vla_action", "tokens")`` and
+  ``"action_is_pad"``.
 
 The VLA TensorClasses are structured policy/data containers, not a required env
 API:
@@ -155,50 +160,81 @@ API:
 - :class:`~torchrl.data.vla.VLAObservation` lets a data pipeline store a
   structured or already-preprocessed observation under ``"vla_observation"``
   when a wrapper is built with ``input_mode="preprocessed"``.
-- :class:`~torchrl.data.vla.VLAAction` mirrors policy outputs under
-  ``"vla_action"`` for structured consumers, while the flat compatibility keys
-  remain the default path for envs, transforms and losses.
+- :class:`~torchrl.data.vla.VLAAction` stores policy outputs under
+  ``"vla_action"``. Its fields are also regular nested TensorDict keys such as
+  ``("vla_action", "chunk")`` and can be discovered by collectors, transforms
+  and losses.
 
 In other words, a wrapper may read either canonical env keys
 (``input_mode="canonical"``) or a preprocessed
 :class:`~torchrl.data.vla.VLAObservation`
-(``input_mode="preprocessed"``), but it always exposes flat outputs for
-backward-compatible composition:
+(``input_mode="preprocessed"``), and it exposes structured output keys by
+default:
 
 .. list-table:: Default policy outputs
     :header-rows: 1
 
     * - ``output_mode``
-      - Flat keys
-      - Structured mirror
+      - Default keys
+      - TensorClass field
     * - ``"chunk"``
-      - ``"action_chunk"``
+      - ``("vla_action", "chunk")``
       - ``"vla_action".chunk``
     * - ``"tokens"``
-      - ``"action_tokens"``, optional ``"log_probs"`` /
-        ``"action_logits"`` / ``"action_mask"``
+      - ``("vla_action", "tokens")``, optional
+        ``("vla_action", "log_probs")`` / ``("vla_action", "logits")`` /
+        ``("vla_action", "mask")``
       - ``"vla_action".tokens``, ``.log_probs``, ``.logits``, ``.mask``
     * - ``"both"``
-      - ``"action_chunk"`` and ``"action_tokens"`` plus optional token fields
+      - ``("vla_action", "chunk")`` and ``("vla_action", "tokens")`` plus
+        optional token fields
       - Both ``"vla_action".chunk`` and ``"vla_action".tokens``
 
 Chunked policies predict ``[*B, H, action_dim]`` while a standard env consumes
 ``[*B, action_dim]``. The bridge is explicit. Use
 :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` when the env
 should keep its one-step MDP: tell the wrapper which policy key contains the
-chunk (for example ``chunk_keys=["action_chunk"]``), let it cache the chunk and
-write the one-step env key (``"action"`` by default), and re-query the expensive
-VLA only when the cache expires or an ``"is_init"`` reset flag is observed. Use
+chunk, let it cache the chunk and write the one-step env key (``"action"`` by
+default), and re-query the expensive VLA only when the cache expires or an
+``"is_init"`` reset flag is observed. The wrapper auto-discovers the default
+VLA key ``("vla_action", "chunk")`` from the policy's ``out_keys``. Use
 :class:`~torchrl.envs.transforms.MultiAction` only when you want the env-side
 transform to execute a whole chunk per policy call and accept the resulting
-re-timed MDP; in that case pass ``chunk_key="action_chunk"`` to make the env
-consume the policy chunk key directly.
+re-timed MDP; in that case use :meth:`~torchrl.envs.transforms.MultiAction.from_vla`
+or pass ``chunk_key=("vla_action", "chunk")`` to make the env consume the
+policy chunk key directly.
+
+Choosing a chunk executor
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` when you
+want the environment clock to stay unchanged:
+
+- one outer rollout step is one base-environment step;
+- the collector records one reward/done/next-observation per base step;
+- the VLA is called only on re-plan steps and skipped while the cached chunk is
+  being served;
+- ``replan_interval=None`` is open-loop over the whole chunk,
+  ``replan_interval=1`` is closed-loop, and intermediate values are
+  receding-horizon execution.
+
+Use :class:`~torchrl.envs.transforms.MultiAction` when you intentionally want a
+macro-action environment:
+
+- one outer rollout step executes the whole chunk inside the env transform;
+- rewards and observations can be stacked over the chunk or collapsed to the
+  last base step;
+- the MDP is re-timed, which can be convenient for evaluation or scripted
+  macro-actions but changes the meaning of the rollout time dimension for RL.
+
+For online VLA RL, prefer :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper`
+unless you explicitly want macro-steps.
 
 Inference loop sketch
 ---------------------
 
 The following pseudocode shows the default one-step env contract. The VLA
-returns chunks under ``"action_chunk"``, and
+returns chunks under ``("vla_action", "chunk")``, and
 :class:`~torchrl.modules.tensordict_module.MultiStepActorWrapper` serves one
 cached action under the env-facing ``"action"`` key per environment step.
 
@@ -222,7 +258,6 @@ cached action under the env-facing ``"action"`` key per environment step.
     actor = MultiStepActorWrapper(
         policy,
         n_steps=H,
-        chunk_keys=["action_chunk"],
         replan_interval=None,  # open-loop: consume the full chunk before re-querying
     )
 
@@ -230,8 +265,8 @@ cached action under the env-facing ``"action"`` key per environment step.
     for _ in range(max_steps):
         td = actor(td)
         # td now contains:
-        # - action_chunk: the predicted H-step chunk on re-plan steps
-        # - vla_action: the structured mirror of the policy output
+        # - ("vla_action", "chunk"): the predicted H-step chunk on re-plan steps
+        # - vla_action: the structured policy output
         # - action: the single env-facing action served from the cache
         td = env.step(td)
         td = td["next"]
@@ -242,16 +277,16 @@ For token-output policies, request decoded chunks with ``output_mode="both"``
 and pass an ``action_tokenizer`` to the wrapper. The env still consumes
 ``"action"``; token fields remain available for logging or RL fine-tuning.
 If the base environment action key is not ``"action"``, pass
-``action_keys=[env_action_key]`` alongside ``chunk_keys``.
+``action_keys=[env_action_key]``.
 
 Training loop sketch
 --------------------
 
 For offline chunked behavior cloning, the replay buffer stores canonical
 observations and raw actions. Transforms build the training target
-``"action_chunk"`` and its padding mask; the VLA wrapper reads observations and
-predicts a chunk with the same flat key that :class:`~torchrl.objectives.BCLoss`
-uses.
+``("vla_action", "chunk")`` and its padding mask; the VLA wrapper reads
+observations and predicts a chunk with the same nested key that
+:class:`~torchrl.objectives.BCLoss` uses.
 
 .. code-block:: python
 
@@ -269,7 +304,7 @@ uses.
 
     policy = TinyVLA(action_dim=action_dim, chunk_size=H, output_mode="chunk")
     loss_module = BCLoss(policy, loss_function="l1")
-    loss_module.set_keys(action="action_chunk", pad_mask="action_is_pad")
+    loss_module.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
 
     optimizer = make_optimizer(policy.parameters())
     for _ in range(num_updates):
@@ -282,10 +317,11 @@ uses.
         optimizer.step()
 
 Token RL fine-tuning uses the same policy contract. The rollout stores sampled
-``"action_tokens"`` and behavior-policy ``"log_probs"``. During the update,
-``get_dist`` / ``log_prob`` recompute the current policy probabilities from the
-same observations, and :class:`~torchrl.objectives.ClipPPOLoss` consumes the
-flat token keys.
+``("vla_action", "tokens")`` and behavior-policy
+``("vla_action", "log_probs")``. During the update, ``get_dist`` /
+``log_prob`` recompute the current policy probabilities from the same
+observations, and :class:`~torchrl.objectives.ClipPPOLoss` consumes the nested
+token keys.
 
 .. code-block:: python
 
@@ -303,13 +339,13 @@ flat token keys.
     )
     ppo_loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False)
     ppo_loss.set_keys(
-        action="action_tokens",
-        sample_log_prob="log_probs",
+        action=("vla_action", "tokens"),
+        sample_log_prob=("vla_action", "log_probs"),
         advantage="advantage",
     )
 
     for _ in range(num_updates):
-        rollout = collector.next()  # contains sampled action_tokens and old log_probs
+        rollout = collector.next()  # contains sampled tokens and old log_probs
         rollout["advantage"] = compute_group_relative_advantage(rollout)
         # ClipPPOLoss calls the policy to recompute current token log-probs
         # against the stored actions, while log_probs remains the behavior
@@ -329,7 +365,7 @@ available for ratios:
 .. code-block:: python
 
     batch = policy.log_prob(batch, log_probs_key="new_log_probs")
-    ratio = (batch["new_log_probs"] - batch["log_probs"]).exp()
+    ratio = (batch["new_log_probs"] - batch["vla_action", "log_probs"]).exp()
 
 Policies
 --------
@@ -340,10 +376,9 @@ action chunk (continuous), action tokens (discrete), or both.
 :class:`~torchrl.modules.vla.VLAWrapperBase` fixes that contract with explicit
 ``input_mode`` / ``output_mode`` settings, ``tensordict_out`` and
 ``logits_only`` forward paths, plus ``get_dist`` and ``log_prob`` methods for
-loss-time recomputation. Existing flat keys (``action_chunk``,
-``action_tokens``, ``action_logits``, ``action_mask`` and ``log_probs``) remain
-the loss/transform compatibility path; the same values are mirrored into a
-structured :class:`~torchrl.data.vla.VLAAction` under ``vla_action``.
+loss-time recomputation. The default output keys are the nested
+``VLAAction`` fields, and can still be overridden through ``set_keys`` when a
+legacy flat layout is required.
 :class:`~torchrl.modules.vla.TinyVLA` is a small reference policy for tests and
 tutorials.
 
@@ -381,7 +416,7 @@ apply directly:
   ``pad_mask`` key::
 
       loss = BCLoss(policy, loss_function="l1")
-      loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+      loss.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
 
 - *Token RL fine-tuning* (GRPO-style, following SimpleVLA-RL / RL4VLA) is
   :class:`~torchrl.objectives.ClipPPOLoss` over the action tokens: advantages
@@ -392,5 +427,7 @@ apply directly:
 
       loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False)
       loss.set_keys(
-          action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+          action=("vla_action", "tokens"),
+          sample_log_prob=("vla_action", "log_probs"),
+          advantage="advantage",
       )

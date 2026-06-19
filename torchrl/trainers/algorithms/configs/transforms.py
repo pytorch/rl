@@ -743,8 +743,8 @@ class MultiActionConfig(TransformConfig):
     dim: int = 1
     stack_rewards: bool = True
     stack_observations: bool = False
-    action_key: str | None = None
-    chunk_key: str | None = None
+    action_key: Any | None = None
+    chunk_key: Any | None = None
     _target_: str = "torchrl.envs.transforms.transforms.MultiAction"
 
     def __post_init__(self) -> None:

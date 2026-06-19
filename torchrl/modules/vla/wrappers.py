@@ -31,7 +31,8 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
     TorchRL stack. On :meth:`forward` it builds a LeRobot-style batch dict from
     the canonical observation keys (``observation.state``,
     ``observation.images.<camera>``, ``task``), calls the wrapped policy, and
-    writes the returned continuous action chunk under ``action_chunk``.
+    writes the returned continuous action chunk under
+    ``("vla_action", "chunk")``.
 
     The wrapped object can be any callable / module that maps a LeRobot batch
     dict to an action chunk of shape ``[B, chunk_size, action_dim]``; by default
@@ -60,8 +61,8 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         integration are tested with a stand-in policy.
 
     .. note::
-        Only the continuous (``action_chunk``) head is supported -- external
-        policies emit continuous chunks, not TorchRL action-token logits.
+        Only the continuous chunk head is supported -- external policies emit
+        continuous chunks, not TorchRL action-token logits.
 
     Examples:
         >>> import torch
@@ -82,7 +83,7 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         ...     },
         ...     batch_size=[2],
         ... )
-        >>> policy(td)["action_chunk"].shape
+        >>> policy(td)["vla_action", "chunk"].shape
         torch.Size([2, 4, 7])
     """
 
