@@ -126,10 +126,8 @@ warnings.filterwarnings("ignore")
 
 import torch
 from tensordict import NonTensorStack, TensorDict
-from torchrl.data.vla import ACTION_CHUNK_KEY, ACTION_TOKENS_KEY
 
 torch.manual_seed(0)
-LOG_PROBS_KEY = ("vla_action", "log_probs")
 
 ##############################################################################
 # The canonical VLA schema
@@ -213,7 +211,7 @@ from torchrl.envs.transforms import ActionChunkTransform, ActionScaling
 T, H = 6, 4
 window = TensorDict({"action": torch.randn(2, T, action_dim)}, batch_size=[2, T])
 chunked = ActionChunkTransform(chunk_size=H)(window)
-chunked[ACTION_CHUNK_KEY].shape  # [2, T, H, action_dim]
+chunked["vla_action", "chunk"].shape  # [2, T, H, action_dim]
 
 ##############################################################################
 # :class:`~torchrl.envs.transforms.ActionScaling` handles action normalization.
@@ -243,7 +241,7 @@ normalized["action"]  # all ones
 from torchrl.modules.vla import TinyVLA
 
 policy = TinyVLA(action_dim=action_dim, chunk_size=H, hidden_dim=64)
-policy(make_observation())[ACTION_CHUNK_KEY].shape  # [batch, H, action_dim]
+policy(make_observation())["vla_action", "chunk"].shape  # [batch, H, action_dim]
 
 ##############################################################################
 # Behavior cloning
@@ -262,10 +260,10 @@ data = make_observation()
 expert = (
     data["observation", "state"] @ torch.randn(state_dim, H * action_dim)
 ).reshape(batch, H, action_dim)
-data[ACTION_CHUNK_KEY] = expert
+data["vla_action", "chunk"] = expert
 
 bc_loss = BCLoss(policy, loss_function="l1")
-bc_loss.set_keys(action=ACTION_CHUNK_KEY, pad_mask="action_is_pad")
+bc_loss.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
 initial = bc_loss(data)["loss_bc"].item()
 optimizer = torch.optim.Adam(bc_loss.parameters(), lr=1e-2)
 for _ in range(100):
@@ -396,13 +394,15 @@ with set_exploration_type(ExplorationType.RANDOM):
 # one advantage per sample, with the trailing singleton value-dim the PPO
 # losses expect (a flat [batch] advantage would silently broadcast wrong)
 rollout["advantage"] = torch.randn(batch, 1)
-rollout[LOG_PROBS_KEY] = rollout[LOG_PROBS_KEY].detach()
+rollout["vla_action", "log_probs"] = rollout["vla_action", "log_probs"].detach()
 
 grpo_loss = ClipPPOLoss(
     token_policy, critic_network=None, entropy_bonus=False, clip_epsilon=0.2
 )
 grpo_loss.set_keys(
-    action=ACTION_TOKENS_KEY, sample_log_prob=LOG_PROBS_KEY, advantage="advantage"
+    action=("vla_action", "tokens"),
+    sample_log_prob=("vla_action", "log_probs"),
+    advantage="advantage",
 )
 grpo_optimizer = torch.optim.Adam(grpo_loss.parameters(), lr=1e-3)
 grpo_optimizer.zero_grad()

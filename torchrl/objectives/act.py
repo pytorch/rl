@@ -62,7 +62,6 @@ class ACTLoss(LossModule):
         >>> import torch
         >>> from tensordict import TensorDict
         >>> from tensordict.nn import TensorDictModule
-        >>> from torchrl.data.vla import ACTION_CHUNK_KEY
         >>> from torchrl.modules.models import ACTModel
         >>> from torchrl.objectives import ACTLoss
         >>> model = ACTModel(obs_dim=14, action_dim=7, chunk_size=10)
@@ -75,7 +74,7 @@ class ACTLoss(LossModule):
         >>> td = TensorDict(
         ...     {
         ...         "observation": torch.randn(4, 14),
-        ...         ACTION_CHUNK_KEY: torch.randn(4, 10, 7),
+        ...         ("vla_action", "chunk"): torch.randn(4, 10, 7),
         ...     },
         ...     batch_size=[4],
         ... )
