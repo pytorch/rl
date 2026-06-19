@@ -30,6 +30,7 @@ import torch
 from tensordict import NonTensorStack, TensorDict
 from tensordict.nn import InteractionType
 from torch import nn
+from torchrl.data.vla import ACTION_TOKENS_KEY
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -46,6 +47,7 @@ if _has_deps:
 
 CHUNK, ACT_DIM, N_BINS = 8, 7, 256
 TRUE_VOCAB, PADDED_VOCAB, DIM = 32000, 32064, 16
+LOG_PROBS_KEY = ("vla_action", "log_probs")
 
 
 class _TinyVision(nn.Module):
@@ -477,10 +479,10 @@ def test_make_libero_worker_parallel_groups_by_init_state(monkeypatch):
 class TestOpenVLAOFTWrapper:
     def test_forward_shapes(self, policy):
         out = policy(_make_obs())
-        assert out["action_tokens"].shape == (2, CHUNK, ACT_DIM)
-        assert out["action_tokens"].min() >= 0
-        assert out["action_tokens"].max() < N_BINS
-        assert out["log_probs"].shape == (2,)
+        assert out[ACTION_TOKENS_KEY].shape == (2, CHUNK, ACT_DIM)
+        assert out[ACTION_TOKENS_KEY].min() >= 0
+        assert out[ACTION_TOKENS_KEY].max() < N_BINS
+        assert out[LOG_PROBS_KEY].shape == (2,)
 
     def test_temperature_contract_ratio_one(self, policy):
         # the go/no-go contract: with identical weights, the log-probs written
@@ -489,8 +491,8 @@ class TestOpenVLAOFTWrapper:
         obs = _make_obs()
         with torch.no_grad():
             out = policy(obs.clone())
-            recomputed = policy.get_dist(obs.clone()).log_prob(out["action_tokens"])
-        torch.testing.assert_close(recomputed, out["log_probs"])
+            recomputed = policy.get_dist(obs.clone()).log_prob(out[ACTION_TOKENS_KEY])
+        torch.testing.assert_close(recomputed, out[LOG_PROBS_KEY])
 
     def test_temperature_scales_logits(self):
         torch.manual_seed(0)
@@ -522,8 +524,8 @@ class TestOpenVLAOFTWrapper:
         )
         obs = _make_obs()
         with torch.no_grad():
-            first = policy(obs.clone())["action_tokens"]
-            second = policy(obs.clone())["action_tokens"]
+            first = policy(obs.clone())[ACTION_TOKENS_KEY]
+            second = policy(obs.clone())[ACTION_TOKENS_KEY]
             logits = policy._action_logits(obs.clone())
         torch.testing.assert_close(first, second)
         torch.testing.assert_close(first, logits.argmax(-1))
@@ -549,7 +551,7 @@ class TestOpenVLAOFTWrapper:
         torch.manual_seed(0)
         policy = OpenVLAOFTWrapper(_TinyOFT(), _FakeProcessor(), log_probs_mode="token")
         out = policy(_make_obs())
-        assert out["log_probs"].shape == (2, CHUNK, ACT_DIM)
+        assert out[LOG_PROBS_KEY].shape == (2, CHUNK, ACT_DIM)
 
     def test_preprocess_batches_images_and_caches_prompts(self):
         torch.manual_seed(0)
@@ -588,21 +590,21 @@ class TestOpenVLAOFTWrapper:
             batch_size=[],
         )
         out = policy(obs)
-        assert out["action_tokens"].shape == (CHUNK, ACT_DIM)
-        assert out["log_probs"].shape == ()
+        assert out[ACTION_TOKENS_KEY].shape == (CHUNK, ACT_DIM)
+        assert out[LOG_PROBS_KEY].shape == ()
 
     def test_action_tokenizer_decode(self, policy):
-        tokenizer = policy.action_tokenizer()
+        tokenizer = policy.action_tokenizer
         assert tokenizer.vocab_size == N_BINS
         out = policy(_make_obs())
-        actions = tokenizer.decode(out["action_tokens"])
+        actions = tokenizer.decode(out[ACTION_TOKENS_KEY])
         assert actions.shape == (2, CHUNK, ACT_DIM)
         # masked dims land inside the q01/q99 range, the gripper dim in [-1, 1]
         assert (actions[..., :-1] >= -0.5 - 1e-5).all()
         assert (actions[..., :-1] <= 0.5 + 1e-5).all()
         assert (actions[..., -1].abs() <= 1.0 + 1e-5).all()
         # decode -> encode is the identity on emitted tokens
-        torch.testing.assert_close(tokenizer.encode(actions), out["action_tokens"])
+        torch.testing.assert_close(tokenizer.encode(actions), out[ACTION_TOKENS_KEY])
 
     @pytest.mark.parametrize("ratio_level", ["sequence", "token"])
     def test_clip_ppo_loss_integration(self, ratio_level):
@@ -620,14 +622,14 @@ class TestOpenVLAOFTWrapper:
         with torch.no_grad():
             rollout = policy(obs.clone())
         data = obs.clone()
-        data["action_tokens"] = rollout["action_tokens"]
-        data["log_probs"] = rollout["log_probs"].detach()
+        data[ACTION_TOKENS_KEY] = rollout[ACTION_TOKENS_KEY]
+        data[LOG_PROBS_KEY] = rollout[LOG_PROBS_KEY].detach()
         advantage = torch.tensor([[1.0], [-0.5]])
         if ratio_level == "token":
             # one ratio per token: the decision's advantage is broadcast over
             # the token dims (as the training script does)
             data["advantage"] = advantage.view(-1, 1, 1, 1).expand(
-                *rollout["action_tokens"].shape, 1
+                *rollout[ACTION_TOKENS_KEY].shape, 1
             )
         else:
             data["advantage"] = advantage
@@ -638,7 +640,9 @@ class TestOpenVLAOFTWrapper:
             clip_epsilon=(0.2, 0.28),
         )
         loss.set_keys(
-            action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+            action=ACTION_TOKENS_KEY,
+            sample_log_prob=LOG_PROBS_KEY,
+            advantage="advantage",
         )
         out = loss(data)
         # identical weights: ratio == 1 everywhere, so the (negative) gain is

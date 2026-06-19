@@ -110,7 +110,7 @@ emit a single action; it emits a short **action chunk**. For a chunk length `H`
 and action dimension `A`, the token policy emits:
 
 ```text
-action_tokens [B, H, A]
+vla_action.tokens [B, H, A]
 ```
 
 Each entry is a discrete token. The transforms then turn that into environment
@@ -118,7 +118,7 @@ interaction:
 
 ```text
 policy forward
-  -> action_tokens [B, H, A]
+  -> ("vla_action", "tokens") [B, H, A]
   -> ActionTokenizerTransform.inverse   tokens -> continuous action_chunk
   -> MultiAction(stack_rewards=False)   execute H base-env actions
   -> SuccessReward                      convert task success into decision reward
@@ -159,8 +159,10 @@ continuous robot actions before the environment sees them.
 `openvla.py` wraps this policy as a TorchRL `VLAWrapperBase`. The wrapper owns
 the model-side details that would otherwise obscure the RL loop: prompt
 construction, image preprocessing, action-token decoding, temperature handling,
-and log-probability recomputation for PPO. The vendored modeling code under
-`openvla_oft/` comes from
+and log-probability recomputation for PPO. It writes the canonical structured
+VLA action container, so sampled tokens and their behavior log-probabilities
+live at `("vla_action", "tokens")` and `("vla_action", "log_probs")`. The
+vendored modeling code under `openvla_oft/` comes from
 [SimpleVLA-RL](https://github.com/PRIME-RL/SimpleVLA-RL) (MIT).
 
 Important compatibility note: the official continuous-head OpenVLA-OFT
@@ -175,7 +177,7 @@ policy = OpenVLAOFTWrapper.from_pretrained(
     temperature=1.6,
     device="cuda",
 )
-tokenizer = policy.action_tokenizer()  # decode tokens -> env actions
+tokenizer = policy.action_tokenizer  # decode tokens -> env actions
 ```
 
 Before spending RL compute on a checkpoint, validate the loading path by

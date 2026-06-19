@@ -101,13 +101,13 @@ class BCLoss(LossModule):
         >>> chunk_actor = TensorDictModule(
         ...     nn.Sequential(nn.Linear(n_obs, 8), nn.Unflatten(-1, (2, 4))),
         ...     in_keys=["observation"],
-        ...     out_keys=["action_chunk"],
+        ...     out_keys=[("vla_action", "chunk")],
         ... )
         >>> loss = BCLoss(chunk_actor, loss_function="l1")
-        >>> loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+        >>> loss.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
         >>> data = TensorDict({
         ...     "observation": torch.randn(2, n_obs),
-        ...     "action_chunk": torch.randn(2, 2, 4),
+        ...     "vla_action": {"chunk": torch.randn(2, 2, 4)},
         ...     "action_is_pad": torch.tensor([[False, False], [False, True]]),
         ... }, [2])
         >>> loss(data)["loss_bc"].shape

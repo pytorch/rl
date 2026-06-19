@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+from typing import Literal
 
 import numpy as np
 import torch
@@ -28,7 +29,7 @@ from tensordict import TensorDictBase
 from tensordict.nn import InteractionType
 from torch.nn.utils.rnn import pad_sequence
 
-from torchrl.data.vla import VocabTailActionTokenizer
+from torchrl.data.vla import OpenVLAImagePreprocessor, VocabTailActionTokenizer
 from torchrl.modules.vla import VLAWrapperBase
 
 from torchrl.modules.vla.common import LogProbsMode
@@ -126,10 +127,10 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
 
     Reads ``("observation", "image")`` (uint8 ``[*B, 3, H, W]``), optionally
     ``("observation", "wrist_image")``, and ``language_instruction``; writes
-    ``action_tokens`` (``[*B, chunk_size, action_dim]`` ids in the 256-way
-    action-token *window*) and their ``log_probs``. Decode the tokens to
-    environment actions with :meth:`action_tokenizer` (e.g. through
-    :class:`~torchrl.envs.transforms.ActionTokenizerTransform`).
+    ``("vla_action", "tokens")`` (``[*B, chunk_size, action_dim]`` ids in the
+    256-way action-token *window*) and their ``("vla_action", "log_probs")``.
+    Decode the tokens to environment actions with :attr:`action_tokenizer`
+    (e.g. through :class:`~torchrl.envs.transforms.ActionTokenizerTransform`).
 
     Args:
         model: a vendored ``OpenVLAForActionPrediction`` (token variant).
@@ -163,6 +164,11 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         center_crop (bool, optional): center-crop the images to 90% area
             before the processor resize, as in SimpleVLA-RL evaluation with
             augmented training. Defaults to ``False``.
+        image_backend (str, optional): backend passed to
+            :class:`~torchrl.data.vla.OpenVLAImagePreprocessor` for the fast
+            batched image path. ``"torchvision"`` keeps preprocessing in tensor
+            form when available; ``"pil"`` is the reference path. Defaults to
+            ``"torchvision"``.
         gripper_binarize (bool, optional): binarize the decoded gripper action
             to +/-1. The model emits a continuous gripper value but robots
             (LIBERO/robosuite) need a firm open/close, so without this the
@@ -190,6 +196,7 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         log_probs_mode: LogProbsMode = "sequence",
         use_wrist_image: bool = False,
         center_crop: bool = False,
+        image_backend: Literal["torchvision", "pil"] = "torchvision",
         gripper_binarize: bool = False,
         gripper_binarize_threshold: float = 0.0,
         gripper_invert: bool = False,
@@ -201,11 +208,29 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         if top_k is not None and int(top_k) < 1:
             raise ValueError(f"top_k must be >= 1 when provided, got {top_k}.")
         num_bins = len(model.bin_centers) + 1
+        if unnorm_key is None and model.norm_stats is not None:
+            if len(model.norm_stats) != 1:
+                raise ValueError(
+                    "the checkpoint carries statistics for several datasets; "
+                    f"pass unnorm_key explicitly (options: {sorted(model.norm_stats)})."
+                )
+            unnorm_key = next(iter(model.norm_stats))
+        action_tokenizer = None
+        if model.norm_stats is not None and unnorm_key is not None:
+            action_tokenizer = VocabTailActionTokenizer.from_norm_stats(
+                model.norm_stats,
+                unnorm_key,
+                num_bins=num_bins,
+                gripper_binarize=gripper_binarize,
+                gripper_binarize_threshold=gripper_binarize_threshold,
+                gripper_invert=gripper_invert,
+            )
         super().__init__(
             action_dim=ACTION_DIM,
             chunk_size=NUM_ACTIONS_CHUNK,
             action_head="tokens",
             vocab_size=num_bins,
+            action_tokenizer=action_tokenizer,
             use_state=False,
             default_interaction_type=default_interaction_type,
             log_probs_mode=log_probs_mode,
@@ -216,19 +241,18 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         self.top_k = int(top_k) if top_k is not None else None
         self.use_wrist_image = bool(use_wrist_image)
         self.center_crop = bool(center_crop)
+        self.image_backend = image_backend
         self.gripper_binarize = bool(gripper_binarize)
         self.gripper_binarize_threshold = float(gripper_binarize_threshold)
         self.gripper_invert = bool(gripper_invert)
         self.num_bins = num_bins
         self._prompt_cache: dict[str, torch.Tensor] = {}
-        if unnorm_key is None and model.norm_stats is not None:
-            if len(model.norm_stats) != 1:
-                raise ValueError(
-                    "the checkpoint carries statistics for several datasets; "
-                    f"pass unnorm_key explicitly (options: {sorted(model.norm_stats)})."
-                )
-            unnorm_key = next(iter(model.norm_stats))
         self.unnorm_key = unnorm_key
+        self._image_preprocessor = self._make_image_preprocessor(
+            processor, image_backend
+        )
+        if self._image_preprocessor is not None:
+            self.image_backend = self._image_preprocessor.backend
         if self.use_wrist_image:
             self.in_keys = [*self.in_keys, ("observation", "wrist_image")]
 
@@ -293,16 +317,14 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         )
         return cls(model, processor, **kwargs)
 
-    def action_tokenizer(self) -> VocabTailActionTokenizer:
-        """The matching window-id tokenizer (decode tokens -> env actions)."""
-        return VocabTailActionTokenizer.from_norm_stats(
-            self.model.norm_stats,
-            self.unnorm_key,
-            num_bins=self.num_bins,
-            gripper_binarize=self.gripper_binarize,
-            gripper_binarize_threshold=self.gripper_binarize_threshold,
-            gripper_invert=self.gripper_invert,
-        )
+    def make_action_tokenizer(self) -> VocabTailActionTokenizer:
+        """Return the matching window-id tokenizer (tokens -> env actions)."""
+        if self.action_tokenizer is None:
+            raise RuntimeError(
+                "OpenVLA-OFT action statistics are missing; cannot build an "
+                "action tokenizer."
+            )
+        return self.action_tokenizer
 
     # -- preprocessing (shared by rollout and loss-time recompute) ---------
     def _to_pil(self, image: torch.Tensor):
@@ -358,7 +380,9 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         return input_ids
 
     @staticmethod
-    def _fast_square_pixel_values(pil_images, image_processor) -> torch.Tensor | None:
+    def _image_processor_config(
+        image_processor,
+    ) -> tuple[int, torch.Tensor, torch.Tensor] | None:
         input_sizes = getattr(image_processor, "input_sizes", None)
         normalize_params = getattr(image_processor, "tvf_normalize_params", None)
         if (
@@ -369,25 +393,47 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
             or tuple(input_sizes[0][-2:]) != (_OPENVLA_IMAGE_SIZE, _OPENVLA_IMAGE_SIZE)
         ):
             return None
-        arrays = np.stack([np.asarray(image, dtype=np.uint8) for image in pil_images])
-        pixels = torch.from_numpy(arrays).permute(0, 3, 1, 2).to(torch.float32)
-        pixels = pixels.div_(255.0)
-        mean = torch.as_tensor(normalize_params[0]["mean"], dtype=pixels.dtype).view(
-            1, -1, 1, 1
+        return (
+            int(input_sizes[0][-1]),
+            torch.as_tensor(normalize_params[0]["mean"], dtype=torch.float32),
+            torch.as_tensor(normalize_params[0]["std"], dtype=torch.float32),
         )
-        std = torch.as_tensor(normalize_params[0]["std"], dtype=pixels.dtype).view(
-            1, -1, 1, 1
-        )
-        return pixels.sub_(mean).div_(std)
 
-    def _pixel_values_from_pil(self, pil_images) -> torch.Tensor | None:
-        image_processor = getattr(self.processor, "image_processor", None)
+    def _make_image_preprocessor(
+        self, processor, image_backend: Literal["torchvision", "pil"]
+    ) -> OpenVLAImagePreprocessor | None:
+        image_processor = getattr(processor, "image_processor", None)
         if image_processor is None:
             return None
-        pixel_values = self._fast_square_pixel_values(pil_images, image_processor)
-        if pixel_values is not None:
-            return pixel_values
-        return image_processor(pil_images, return_tensors="pt")["pixel_values"]
+        config = self._image_processor_config(image_processor)
+        if config is None:
+            return None
+        size, mean, std = config
+        try:
+            return OpenVLAImagePreprocessor(
+                size=size,
+                jpeg_quality=_JPEG_QUALITY,
+                center_crop=self.center_crop,
+                backend=image_backend,
+                mean=mean,
+                std=std,
+            )
+        except ImportError:
+            if image_backend != "torchvision":
+                raise
+            return OpenVLAImagePreprocessor(
+                size=size,
+                jpeg_quality=_JPEG_QUALITY,
+                center_crop=self.center_crop,
+                backend="pil",
+                mean=mean,
+                std=std,
+            )
+
+    def _pixel_values_from_images(self, images: torch.Tensor) -> torch.Tensor | None:
+        if self._image_preprocessor is None:
+            return None
+        return self._image_preprocessor(images)
 
     def _preprocess(self, images, wrist_images, instructions):
         pad_token_id = self.processor.tokenizer.pad_token_id
@@ -395,12 +441,10 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
             self._prompt_input_ids(instruction) for instruction in instructions
         ]
         if all(input_ids is not None for input_ids in input_ids_list):
-            pil_images = [self._to_pil(image) for image in images]
-            pixel_values = self._pixel_values_from_pil(pil_images)
+            pixel_values = self._pixel_values_from_images(images)
             if pixel_values is not None:
                 if wrist_images is not None:
-                    pil_wrist_images = [self._to_pil(image) for image in wrist_images]
-                    wrist_pixel_values = self._pixel_values_from_pil(pil_wrist_images)
+                    wrist_pixel_values = self._pixel_values_from_images(wrist_images)
                     if wrist_pixel_values is None:
                         return self._preprocess_slow(images, wrist_images, instructions)
                     pixel_values = torch.cat((pixel_values, wrist_pixel_values), dim=1)

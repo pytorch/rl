@@ -57,6 +57,7 @@ policy:
   top_k: null # null = full categorical; small values keep token exploration local
   use_wrist_image: false
   center_crop: true # the SimpleVLA-RL checkpoints are trained with augmentations
+  image_backend: torchvision # OpenVLA image preprocessing backend: torchvision | pil
   # the model emits a continuous gripper; LIBERO/robosuite needs a firm +/-1
   # open/close (demo gripper is binary, -1 open / +1 close). SimpleVLA-RL
   # applies sign(2*g - 1) then inverts, i.e. a 0.5 binarization threshold
