@@ -14,8 +14,11 @@ import pytest
 import torch
 from tensordict import NonTensorStack, TensorDict
 
+from torchrl.data.vla import ACTION_CHUNK_KEY, ACTION_TOKENS_KEY
 from torchrl.modules.vla import TinyVLA
 from torchrl.objectives import BCLoss, ClipPPOLoss
+
+LOG_PROBS_KEY = ("vla_action", "log_probs")
 
 
 def _make_bc_td(batch=4, chunk=4, action_dim=3, pad=False):
@@ -30,7 +33,7 @@ def _make_bc_td(batch=4, chunk=4, action_dim=3, pad=False):
         {
             "observation": obs,
             "language_instruction": NonTensorStack(*[f"t{i}" for i in range(batch)]),
-            "action_chunk": torch.randn(batch, chunk, action_dim),
+            ACTION_CHUNK_KEY: torch.randn(batch, chunk, action_dim),
             "action_is_pad": is_pad,
         },
         batch_size=[batch],
@@ -42,7 +45,7 @@ def _make_chunked_bc_loss(policy, **kwargs):
     # the action and the padding mask excluded from the loss
     kwargs.setdefault("loss_function", "l1")
     loss = BCLoss(policy, **kwargs)
-    loss.set_keys(action="action_chunk", pad_mask="action_is_pad")
+    loss.set_keys(action=ACTION_CHUNK_KEY, pad_mask="action_is_pad")
     return loss
 
 
@@ -75,12 +78,12 @@ class TestChunkedBC:
     def test_masking_excludes_padded_steps(self):
         loss = _make_chunked_bc_loss(self._policy())
         td = _make_bc_td(pad=True)
-        td["action_chunk"][:, -1, :] = 1e6  # huge target on the padded step
+        td[ACTION_CHUNK_KEY][:, -1, :] = 1e6  # huge target on the padded step
         masked = loss(td)["loss_bc"]
         unmasked = loss(td.exclude("action_is_pad"))["loss_bc"]
         assert masked < unmasked  # the padded (huge) step is ignored when masked
 
-    def test_nested_action_chunk_key(self):
+    def test_custom_action_chunk_key(self):
         policy = TinyVLA(action_dim=2, chunk_size=3)
         policy.set_keys(action_chunk=("targets", "chunk"))
         td = TensorDict(
@@ -134,7 +137,7 @@ def _make_token_ppo_loss(policy, **kwargs):
     kwargs.setdefault("clip_epsilon", 0.2)
     loss = ClipPPOLoss(policy, critic_network=None, entropy_bonus=False, **kwargs)
     loss.set_keys(
-        action="action_tokens", sample_log_prob="log_probs", advantage="advantage"
+        action=ACTION_TOKENS_KEY, sample_log_prob=LOG_PROBS_KEY, advantage="advantage"
     )
     return loss
 
@@ -150,8 +153,8 @@ class TestTokenPPO:
         with torch.no_grad():
             coll = policy(obs.clone())
         td = obs.clone()
-        td["action_tokens"] = coll["action_tokens"]
-        td["log_probs"] = coll["log_probs"].detach()
+        td[ACTION_TOKENS_KEY] = coll[ACTION_TOKENS_KEY]
+        td[LOG_PROBS_KEY] = coll[LOG_PROBS_KEY].detach()
         # the advantage carries the trailing singleton value-dim the PPO
         # losses expect; a flat [batch] advantage would broadcast wrong
         td["advantage"] = torch.full((batch, 1), float(advantage))
@@ -168,14 +171,17 @@ class TestTokenPPO:
         # the token head emits one (summed) log-prob per sample, matching the
         # sample_log_prob contract of the PPO losses
         policy, obs, td = self._setup(batch=3)
-        assert td["log_probs"].shape == torch.Size([3])
+        assert td[LOG_PROBS_KEY].shape == torch.Size([3])
         dist = policy.get_dist(obs.clone())
-        assert dist.log_prob(td["action_tokens"]).shape == torch.Size([3])
+        assert dist.log_prob(td[ACTION_TOKENS_KEY]).shape == torch.Size([3])
 
     def _taken_logprob(self, policy, obs, td):
         with torch.no_grad():
             return (
-                policy.get_dist(obs.clone()).log_prob(td["action_tokens"]).sum().item()
+                policy.get_dist(obs.clone())
+                .log_prob(td[ACTION_TOKENS_KEY])
+                .sum()
+                .item()
             )
 
     def test_positive_advantage_increases_logprob(self):
@@ -211,13 +217,13 @@ class TestTokenPPO:
         # [batch, batch] outer product inside the PPO loss
         policy, obs, td = self._setup(batch=4)
         td["advantage"] = torch.tensor([[1.0], [-1.0], [2.0], [0.5]])
-        td["log_probs"] = td["log_probs"] + 0.3  # ratio != 1 so clipping bites
+        td[LOG_PROBS_KEY] = td[LOG_PROBS_KEY] + 0.3  # ratio != 1 so clipping bites
         out = _make_token_ppo_loss(policy, reduction="none")(td)["loss_objective"]
         assert out.shape == torch.Size([4])
         with torch.no_grad():
             log_weight = (
-                policy.get_dist(obs.clone()).log_prob(td["action_tokens"])
-                - td["log_probs"]
+                policy.get_dist(obs.clone()).log_prob(td[ACTION_TOKENS_KEY])
+                - td[LOG_PROBS_KEY]
             )
         ratio = log_weight.exp().unsqueeze(-1)
         gain = torch.min(

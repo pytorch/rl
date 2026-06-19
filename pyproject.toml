@@ -74,6 +74,7 @@ explicit = true
 [tool.uv.sources]
 tensordict = { git = "https://github.com/pytorch/tensordict" }
 torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
+torchvision = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
 
 [[tool.uv.dependency-metadata]]
 name = "lerobot"
@@ -89,7 +90,7 @@ video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
-vla = ["lerobot>=0.5.0; python_version >= '3.12'"]
+vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
 rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",

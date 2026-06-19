@@ -708,6 +708,14 @@ class MultiAction(Transform):
         stack_observations (bool, optional): if ``True``, each step's observation will be stack in the output tensordict.
             If ``False``, only the last observation will be returned. The observation spec is adapted accordingly. The
             stack dimension is the same as the action stack dimension. Defaults to ``False``.
+        action_key (NestedKey, optional): the one-step action key consumed by
+            the base environment. Defaults to the parent environment action key.
+        chunk_key (NestedKey, optional): the policy-facing key that holds the
+            stacked actions. Defaults to ``action_key`` for backward
+            compatibility. Set this to values such as
+            ``("vla_action", "chunk")`` when a chunk policy should act through
+            :class:`MultiAction` without re-keying its output. See also
+            :meth:`from_vla`.
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionChunkTransform` -- when
         the stacked actions are a chunk policy's *prediction* (overlapping
@@ -724,11 +732,38 @@ class MultiAction(Transform):
         dim: int = 1,
         stack_rewards: bool = True,
         stack_observations: bool = False,
+        action_key: NestedKey | None = None,
+        chunk_key: NestedKey | None = None,
     ):
-        super().__init__()
+        if action_key is None and chunk_key is not None:
+            action_key = "action"
+        if action_key is not None and chunk_key is None:
+            chunk_key = action_key
+        in_keys_inv = None if action_key is None else [action_key]
+        out_keys_inv = None if chunk_key is None else [chunk_key]
+        super().__init__(in_keys_inv=in_keys_inv, out_keys_inv=out_keys_inv)
         self.stack_rewards = stack_rewards
         self.stack_observations = stack_observations
         self.dim = dim
+
+    @classmethod
+    def from_vla(cls, *, action_key: NestedKey = ACTION_KEY, **kwargs) -> MultiAction:
+        """Build a :class:`MultiAction` that consumes the default VLA chunk key.
+
+        Args:
+            action_key (NestedKey): the one-step action key consumed by the base
+                environment. Defaults to ``"action"``.
+
+        Keyword Args:
+            Additional :class:`MultiAction` keyword arguments.
+
+        Examples:
+            >>> from torchrl.envs.transforms import MultiAction
+            >>> transform = MultiAction.from_vla(stack_rewards=False)
+            >>> transform.out_keys_inv
+            [('vla_action', 'chunk')]
+        """
+        return cls(action_key=action_key, chunk_key=ACTION_CHUNK_KEY, **kwargs)
 
     def _stack_tds(self, td_list, next_tensordict, keys):
         td = torch.stack(td_list + [next_tensordict.select(*keys)], -1)
@@ -764,8 +799,25 @@ class MultiAction(Transform):
     def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
         # Get the actions
         parent = self.parent
-        action_keys = parent.action_keys
-        actions = tensordict.select(*action_keys)
+        action_keys = self.in_keys_inv or parent.action_keys
+        chunk_keys = self.out_keys_inv or action_keys
+        if len(action_keys) != len(chunk_keys):
+            raise ValueError(
+                "action_key and chunk_key lists must have the same length, got "
+                f"{len(action_keys)} and {len(chunk_keys)}."
+            )
+        actions = tensordict.empty()
+        for action_key, chunk_key in zip(action_keys, chunk_keys):
+            action = tensordict.get(chunk_key, None)
+            if action is None:
+                raise KeyError(
+                    f"{type(self).__name__} expected stacked actions at key "
+                    f"{chunk_key!r} before env.step, but the key was missing. "
+                    "For VLA policies, use MultiAction.from_vla() or pass "
+                    "chunk_key=('vla_action', 'chunk'). Available keys are "
+                    f"{list(tensordict.keys(True, True))}."
+                )
+            actions.set(action_key, action)
         actions = actions.auto_batch_size_(batch_dims=tensordict.ndim + self.dim)
         actions = actions.unbind(-1)
         td = tensordict
@@ -882,15 +934,27 @@ class MultiAction(Transform):
             raise KeyError(
                 f"{type(self).__name__} requires an action spec to be present."
             )
-        for _ in range(self.dim):
-            action_spec = action_spec.unsqueeze(input_spec.ndim)
-        # Make the dim dynamic
-        action_spec = action_spec.expand(
-            tuple(
-                d if i != (input_spec.ndim + self.dim - 1) else -1
-                for i, d in enumerate(action_spec.shape)
+        action_keys = self.in_keys_inv or list(action_spec.keys(True, True))
+        chunk_keys = self.out_keys_inv or action_keys
+        if len(action_keys) != len(chunk_keys):
+            raise ValueError(
+                "action_key and chunk_key lists must have the same length, got "
+                f"{len(action_keys)} and {len(chunk_keys)}."
             )
-        )
+        for action_key, chunk_key in zip(action_keys, chunk_keys):
+            leaf_spec = action_spec[action_key]
+            for _ in range(self.dim):
+                leaf_spec = leaf_spec.unsqueeze(input_spec.ndim)
+            # Make the dim dynamic
+            leaf_spec = leaf_spec.expand(
+                tuple(
+                    d if i != (input_spec.ndim + self.dim - 1) else -1
+                    for i, d in enumerate(leaf_spec.shape)
+                )
+            )
+            action_spec[chunk_key] = leaf_spec
+            if chunk_key != action_key:
+                del action_spec[action_key]
         input_spec["full_action_spec"] = action_spec
         return input_spec
 
@@ -1751,7 +1815,7 @@ class ActionChunkTransform(Transform):
     OpenVLA-OFT, pi0, SmolVLA): instead of predicting a single action, the
     policy predicts a short horizon ``H`` of future actions. This transform
     turns a per-step action tensor ``[*B, T, action_dim]`` into the
-    corresponding training target ``action_chunk`` of shape
+    corresponding training target ``("vla_action", "chunk")`` of shape
     ``[*B, T, H, action_dim]`` -- for each time step ``t`` it gathers the
     actions ``a[t], a[t+1], ..., a[t+H-1]`` -- together with a boolean
     ``action_is_pad`` mask ``[*B, T, H]`` marking the steps that ran past the
@@ -1802,7 +1866,7 @@ class ActionChunkTransform(Transform):
         action_key (NestedKey): the per-step action to read.
             Defaults to ``"action"``.
         chunk_key (NestedKey): where to write the action chunk.
-            Defaults to ``"action_chunk"``.
+            Defaults to ``("vla_action", "chunk")``.
         pad_key (NestedKey): where to write the padding mask.
             Defaults to ``"action_is_pad"``.
         time_dim (int): the time dimension of the action tensor (the action
@@ -1819,7 +1883,7 @@ class ActionChunkTransform(Transform):
         ...     {"action": torch.arange(4).view(1, 4, 1).float()}, batch_size=[1, 4]
         ... )
         >>> td = t(td)
-        >>> td["action_chunk"][0, :, :, 0]
+        >>> td["vla_action", "chunk"][0, :, :, 0]
         tensor([[0., 1., 2.],
                 [1., 2., 3.],
                 [2., 3., 3.],
@@ -1841,7 +1905,7 @@ class ActionChunkTransform(Transform):
         ...     {"action": torch.randn(8, 4, 1)}, batch_size=[8]
         ... )  # 8 trajectory windows of T=4 steps each
         >>> indices = rb.extend(windows)
-        >>> rb.sample()["action_chunk"].shape  # [batch, T, chunk_size, action_dim]
+        >>> rb.sample()["vla_action", "chunk"].shape  # [batch, T, chunk_size, action_dim]
         torch.Size([2, 4, 3, 1])
     """
 
@@ -1949,7 +2013,8 @@ class ActionTokenizerTransform(Transform):
     Keyword Args:
         in_key (NestedKey): the continuous action. Defaults to ``"action"``.
         out_key (NestedKey): the discrete token ids. Defaults to
-            ``"action_tokens"``.
+            ``("vla_action", "tokens")``. Pass ``"action_tokens"`` for the
+            flat compatibility key.
 
     Examples:
         >>> import torch
@@ -1959,10 +2024,10 @@ class ActionTokenizerTransform(Transform):
         >>> tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
         >>> t = ActionTokenizerTransform(tok)
         >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
-        >>> td["action_tokens"]
+        >>> td["vla_action", "tokens"]
         tensor([[  0, 128, 255]])
         >>> # the inverse decodes tokens back to a continuous action
-        >>> back = t.inv(TensorDict({"action_tokens": td["action_tokens"]}, batch_size=[1]))
+        >>> back = t.inv(TensorDict({("vla_action", "tokens"): td["vla_action", "tokens"]}, batch_size=[1]))
         >>> back["action"].shape
         torch.Size([1, 3])
         >>> # on a replay buffer: raw actions written through extend are stored
@@ -1976,7 +2041,7 @@ class ActionTokenizerTransform(Transform):
         >>> indices = rb.extend(
         ...     TensorDict({"action": torch.rand(8, 3) * 2 - 1}, batch_size=[8])
         ... )
-        >>> rb.sample()["action_tokens"].shape
+        >>> rb.sample()["vla_action", "tokens"].shape
         torch.Size([2, 3])
         >>> # on an environment: the policy-facing action spec becomes the token
         >>> # interface, and emitted tokens are decoded before the base env
@@ -1984,9 +2049,9 @@ class ActionTokenizerTransform(Transform):
         >>> from torchrl.envs import GymEnv, TransformedEnv
         >>> tok_env = UniformActionTokenizer(256, low=-2.0, high=2.0)  # Pendulum bounds
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), ActionTokenizerTransform(tok_env))
-        >>> env.full_action_spec["action_tokens"].shape
+        >>> env.full_action_spec["vla_action", "tokens"].shape
         torch.Size([1])
-        >>> env.rollout(2)["action_tokens"].dtype
+        >>> env.rollout(2)["vla_action", "tokens"].dtype
         torch.int64
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionDiscretizer` -- the
