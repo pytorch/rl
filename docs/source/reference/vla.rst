@@ -171,23 +171,37 @@ In other words, a wrapper may read either canonical env keys
 (``input_mode="preprocessed"``), and it exposes structured output keys by
 default:
 
+Here ``H`` is ``chunk_size`` and ``*B`` is the TensorDict batch shape.
+
 .. list-table:: Default policy outputs
     :header-rows: 1
 
     * - ``output_mode``
       - Default keys
+      - dtype
+      - shape
       - TensorClass field
     * - ``"chunk"``
       - ``("vla_action", "chunk")``
+      - floating point
+      - ``[*B, H, action_dim]``
       - ``"vla_action".chunk``
     * - ``"tokens"``
       - ``("vla_action", "tokens")``, optional
         ``("vla_action", "log_probs")`` / ``("vla_action", "logits")`` /
         ``("vla_action", "mask")``
+      - ``long`` for tokens, floating point for log-probs/logits, ``bool`` for
+        mask
+      - tokens: ``[*B, H, action_dim]``; log-probs: ``[*B]`` in
+        ``log_probs_mode="sequence"`` or ``[*B, H, action_dim]`` in
+        ``log_probs_mode="token"``; logits/mask:
+        ``[*B, H, action_dim, vocab_size]``
       - ``"vla_action".tokens``, ``.log_probs``, ``.logits``, ``.mask``
     * - ``"both"``
       - ``("vla_action", "chunk")`` and ``("vla_action", "tokens")`` plus
         optional token fields
+      - floating point for chunk; token-field dtypes as above
+      - chunk: ``[*B, H, action_dim]``; token-field shapes as above
       - Both ``"vla_action".chunk`` and ``"vla_action".tokens``
 
 Chunked policies predict ``[*B, H, action_dim]`` while a standard env consumes
