@@ -160,6 +160,7 @@ def make_observation(batch=batch):
 
 
 obs = make_observation()
+obs
 
 ##############################################################################
 # Action chunking and normalization
@@ -261,6 +262,7 @@ expert = (
     data["observation", "state"] @ torch.randn(state_dim, H * action_dim)
 ).reshape(batch, H, action_dim)
 data["vla_action", "chunk"] = expert
+data["action_is_pad"] = torch.zeros(batch, H, dtype=torch.bool)
 
 bc_loss = BCLoss(policy, loss_function="l1")
 bc_loss.set_keys(action=("vla_action", "chunk"), pad_mask="action_is_pad")
@@ -320,44 +322,30 @@ base_env.action_spec
 ##############################################################################
 # The wrapper auto-discovers the policy's ``("vla_action", "chunk")`` output
 # and serves the base env's ``"action"`` key from it. ``InitTracker`` provides
-# the ``is_init`` flag the wrapper uses to re-plan on resets. We also count the
-# policy calls to see the receding horizon at work.
+# the ``is_init`` flag the wrapper uses to re-plan on resets.
 
-from tensordict.nn import WrapModule
 from torchrl.envs.transforms import InitTracker, TransformedEnv
 from torchrl.modules import MultiStepActorWrapper
 
-policy_calls = []
-
-
-def counted_policy(td):
-    policy_calls.append(1)
-    return policy(td)
-
-
-actor = MultiStepActorWrapper(
-    WrapModule(counted_policy, in_keys=policy.in_keys, out_keys=policy.out_keys),
-    n_steps=H,
-    replan_interval=2,
-)
+actor = MultiStepActorWrapper(policy, n_steps=H, replan_interval=2)
 env = TransformedEnv(base_env, InitTracker())
 
 ##############################################################################
 # A plain :meth:`~torchrl.envs.EnvBase.rollout` runs the interaction loop. The
-# executed per-step actions are recorded under ``action``; the policy itself
-# only ran on the re-plan steps (0, 2 and 4 -- three calls for six steps,
-# instead of six).
+# executed per-step actions are recorded under ``action``. The wrapper counter
+# shows the receding-horizon cadence: with ``replan_interval=2`` it serves two
+# actions from the cache, then re-plans.
 
 eval_rollout = env.rollout(6, actor)
 eval_rollout["action"].shape  # [2, 6, action_dim]: the executed actions
 
 ##############################################################################
-# The call count proves the skipping, and the env's state echo confirms the
-# executed cadence matches what the wrapper served from its cache:
-
-len(policy_calls)  # 3: the wrapped policy ran every replan_interval=2 steps
+eval_rollout["counter"][0, :, 0]  # tensor([1, 2, 1, 2, 1, 2])
 
 ##############################################################################
+# The env's state echo confirms that the executed cadence matches what the
+# wrapper served from its cache:
+
 executed = eval_rollout["next", "observation", "state"][..., :action_dim]
 torch.allclose(executed, eval_rollout["action"])  # True: echo of what env got
 
@@ -390,7 +378,7 @@ token_policy = TinyVLA(
 # evaluation uses ``set_exploration_type(ExplorationType.DETERMINISTIC)``. We
 # sample here to mimic a behavior-policy rollout -- no policy mutation needed.
 with set_exploration_type(ExplorationType.RANDOM):
-    rollout = token_policy(make_observation())  # writes tokens + log_probs
+    rollout = token_policy(make_observation())  # writes nested tokens + log-probs
 # one advantage per sample, with the trailing singleton value-dim the PPO
 # losses expect (a flat [batch] advantage would silently broadcast wrong)
 rollout["advantage"] = torch.randn(batch, 1)
