@@ -32,6 +32,11 @@ from torchrl.data.vla import (
 _has_pil = importlib.util.find_spec("PIL") is not None
 _has_torchvision = importlib.util.find_spec("torchvision") is not None
 
+if _has_torchvision:
+    import torchvision.io as torchvision_io
+else:
+    torchvision_io = None
+
 
 def _make_vla_td(batch=2, action_dim=7, *, with_instruction=True, finite=True):
     obs = {"image": torch.zeros(batch, 3, 8, 8, dtype=torch.uint8)}
@@ -294,6 +299,48 @@ class TestOpenVLAImagePreprocessor:
         assert fast.shape == ref.shape == torch.Size([2, 3, 32, 32])
         assert fast.dtype == ref.dtype == torch.uint8
         assert (fast.float() - ref.float()).abs().mean() < 25.0
+
+    @pytest.mark.skipif(not _has_torchvision, reason="torchvision not found")
+    def test_torchvision_backend_falls_back_to_single_image_jpeg(self, monkeypatch):
+        original_encode_jpeg = torchvision_io.encode_jpeg
+
+        def encode_jpeg(input, quality=75):
+            if isinstance(input, list):
+                raise RuntimeError(
+                    "image::encode_jpeg() Expected a value of type 'Tensor'"
+                )
+            return original_encode_jpeg(input, quality=quality)
+
+        monkeypatch.setattr(torchvision_io, "encode_jpeg", encode_jpeg)
+        proc = OpenVLAImagePreprocessor(
+            size=32, backend="torchvision", center_crop=False
+        )
+        images = torch.randint(0, 256, (2, 3, 24, 40), dtype=torch.uint8)
+        out = proc(images)
+        assert out.shape == torch.Size([2, 3, 32, 32])
+        assert out.dtype == torch.uint8
+
+    @pytest.mark.skipif(not _has_torchvision, reason="torchvision not found")
+    def test_torchvision_backend_falls_back_to_single_image_decode(self, monkeypatch):
+        original_decode_jpeg = torchvision_io.decode_jpeg
+
+        def decode_jpeg(input, mode=None, device="cpu"):
+            if isinstance(input, list):
+                raise RuntimeError(
+                    "image::decode_jpeg() Expected a value of type 'Tensor'"
+                )
+            if mode is None:
+                mode = torchvision_io.ImageReadMode.UNCHANGED
+            return original_decode_jpeg(input, mode=mode, device=device)
+
+        monkeypatch.setattr(torchvision_io, "decode_jpeg", decode_jpeg)
+        proc = OpenVLAImagePreprocessor(
+            size=32, backend="torchvision", center_crop=False
+        )
+        images = torch.randint(0, 256, (2, 3, 24, 40), dtype=torch.uint8)
+        out = proc(images)
+        assert out.shape == torch.Size([2, 3, 32, 32])
+        assert out.dtype == torch.uint8
 
     @pytest.mark.skipif(not _has_pil, reason="Pillow not found")
     def test_normalization(self):

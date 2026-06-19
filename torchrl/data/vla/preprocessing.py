@@ -162,8 +162,29 @@ class OpenVLAImagePreprocessor:
 
         device = images.device
         images = self._resize(images)
-        encoded = encode_jpeg(list(images.unbind(0)), quality=self.jpeg_quality)
-        decoded = decode_jpeg(encoded, mode=ImageReadMode.RGB, device=device)
+        image_list = list(images.unbind(0))
+        try:
+            encoded = encode_jpeg(image_list, quality=self.jpeg_quality)
+        except (RuntimeError, TypeError):
+            encoded = [
+                encode_jpeg(image, quality=self.jpeg_quality) for image in image_list
+            ]
+            decoded = [
+                decode_jpeg(image, mode=ImageReadMode.RGB, device=device)
+                for image in encoded
+            ]
+            decoded = torch.stack(decoded, 0)
+        else:
+            try:
+                decoded = decode_jpeg(encoded, mode=ImageReadMode.RGB, device=device)
+            except (RuntimeError, TypeError):
+                if not isinstance(encoded, list):
+                    encoded = [encoded]
+                decoded = [
+                    decode_jpeg(image, mode=ImageReadMode.RGB, device=device)
+                    for image in encoded
+                ]
+                decoded = torch.stack(decoded, 0)
         if isinstance(decoded, list):
             decoded = torch.stack(decoded, 0)
         decoded = self._center_crop(decoded)
