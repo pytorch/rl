@@ -2013,7 +2013,8 @@ class ActionTokenizerTransform(Transform):
     Keyword Args:
         in_key (NestedKey): the continuous action. Defaults to ``"action"``.
         out_key (NestedKey): the discrete token ids. Defaults to
-            ``"action_tokens"``.
+            ``("vla_action", "tokens")``. Pass ``"action_tokens"`` for the
+            flat compatibility key.
 
     Examples:
         >>> import torch
@@ -2023,10 +2024,10 @@ class ActionTokenizerTransform(Transform):
         >>> tok = UniformActionTokenizer(256, low=-1.0, high=1.0)
         >>> t = ActionTokenizerTransform(tok)
         >>> td = t(TensorDict({"action": torch.tensor([[-1.0, 0.0, 1.0]])}, batch_size=[1]))
-        >>> td["action_tokens"]
+        >>> td["vla_action", "tokens"]
         tensor([[  0, 128, 255]])
         >>> # the inverse decodes tokens back to a continuous action
-        >>> back = t.inv(TensorDict({"action_tokens": td["action_tokens"]}, batch_size=[1]))
+        >>> back = t.inv(TensorDict({("vla_action", "tokens"): td["vla_action", "tokens"]}, batch_size=[1]))
         >>> back["action"].shape
         torch.Size([1, 3])
         >>> # on a replay buffer: raw actions written through extend are stored
@@ -2040,7 +2041,7 @@ class ActionTokenizerTransform(Transform):
         >>> indices = rb.extend(
         ...     TensorDict({"action": torch.rand(8, 3) * 2 - 1}, batch_size=[8])
         ... )
-        >>> rb.sample()["action_tokens"].shape
+        >>> rb.sample()["vla_action", "tokens"].shape
         torch.Size([2, 3])
         >>> # on an environment: the policy-facing action spec becomes the token
         >>> # interface, and emitted tokens are decoded before the base env
@@ -2048,9 +2049,9 @@ class ActionTokenizerTransform(Transform):
         >>> from torchrl.envs import GymEnv, TransformedEnv
         >>> tok_env = UniformActionTokenizer(256, low=-2.0, high=2.0)  # Pendulum bounds
         >>> env = TransformedEnv(GymEnv("Pendulum-v1"), ActionTokenizerTransform(tok_env))
-        >>> env.full_action_spec["action_tokens"].shape
+        >>> env.full_action_spec["vla_action", "tokens"].shape
         torch.Size([1])
-        >>> env.rollout(2)["action_tokens"].dtype
+        >>> env.rollout(2)["vla_action", "tokens"].dtype
         torch.int64
 
     .. seealso:: :class:`~torchrl.envs.transforms.ActionDiscretizer` -- the
