@@ -48,15 +48,24 @@ warnings.filterwarnings("ignore")
 # ------------------
 #
 # Structurally, a VLA is a vision-language model (VLM) with an *action head*.
-# The backbone -- a pretrained multimodal transformer such as PaliGemma (pi0),
-# SmolVLM (SmolVLA) or Llama/SigLIP stacks (OpenVLA) -- encodes the camera
-# images and the instruction; a comparatively small head turns that
-# representation into robot actions. Two head families dominate:
+# The backbone -- a pretrained multimodal transformer such as
+# `PaliGemma <https://huggingface.co/google/paligemma-3b-pt-224>`__ (used by
+# `pi0 <https://github.com/Physical-Intelligence/openpi>`__),
+# `SmolVLM <https://huggingface.co/HuggingFaceTB/SmolVLM-Instruct>`__ (used by
+# `SmolVLA <https://huggingface.co/lerobot/smolvla_base>`__) or the
+# `OpenVLA <https://github.com/openvla/openvla>`__ Llama/SigLIP stack --
+# encodes the camera images and the instruction; a comparatively small head
+# turns that representation into robot actions. Two head families dominate:
 #
-# - **token heads** (RT-2, OpenVLA): actions are discretized into tokens and
-#   emitted through the language-model head, autoregressively -- which is what
-#   makes LLM-style RL objectives applicable to robotics;
-# - **continuous chunk heads** (ACT, OpenVLA-OFT, pi0, SmolVLA): a regression,
+# - **token heads** (`RT-2 <https://robotics-transformer2.github.io/>`__,
+#   `OpenVLA <https://huggingface.co/openvla/openvla-7b>`__): actions are
+#   discretized into tokens and emitted through the language-model head,
+#   autoregressively -- which is what makes LLM-style RL objectives applicable
+#   to robotics;
+# - **continuous chunk heads** (`ACT <https://github.com/tonyzhaozh/act>`__,
+#   `OpenVLA-OFT <https://github.com/moojink/openvla-oft>`__,
+#   `pi0 <https://huggingface.co/lerobot/pi0_base>`__,
+#   `SmolVLA <https://huggingface.co/lerobot/smolvla_base>`__): a regression,
 #   diffusion or flow-matching head predicts a short horizon of ``H`` future
 #   actions (an *action chunk*) in one forward pass.
 #
