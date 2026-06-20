@@ -122,7 +122,8 @@ class GPT2RewardModel(nn.Module):
         rejected_rewards = rejected_batch.rewards
 
         bs = chosen_rewards.shape[0]
-        loss = torch.tensor(0.0, device=chosen_rewards.device)
+        loss = chosen_rewards.sum() * 0.0 + rejected_rewards.sum() * 0.0
+        valid_count = 0
 
         # TODO: this loop can likely be made more efficient
         for i in range(bs):
@@ -144,8 +145,11 @@ class GPT2RewardModel(nn.Module):
             c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
             r_truncated_reward = rejected_rewards[i][divergence_ind:end_ind]
 
-            loss += -F.logsigmoid(c_truncated_reward - r_truncated_reward).mean()
-        return loss / bs
+            loss = loss - F.logsigmoid(c_truncated_reward - r_truncated_reward).mean()
+            valid_count += 1
+        if valid_count == 0:
+            return loss
+        return loss / valid_count
 
     @classmethod
     def from_pretrained(cls, path):

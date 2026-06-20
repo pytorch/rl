@@ -406,17 +406,60 @@ def test_compute_reward_loss_identical_sequences():
 
     chosen_batch = SimpleNamespace(
         input_ids=input_ids,
-        rewards=torch.randn(1, seq_len),
+        rewards=torch.randn(1, seq_len, requires_grad=True),
     )
     rejected_batch = SimpleNamespace(
         input_ids=input_ids.clone(),
-        rewards=torch.randn(1, seq_len),
+        rewards=torch.randn(1, seq_len, requires_grad=True),
     )
     loss = GPT2RewardModel.compute_reward_loss(
         chosen_batch, rejected_batch, pad_token_id=pad_token_id
     )
     assert loss.shape == torch.Size([])
     assert loss.item() == 0.0
+    loss.backward()
+    torch.testing.assert_close(
+        chosen_batch.rewards.grad, torch.zeros_like(chosen_batch.rewards)
+    )
+    torch.testing.assert_close(
+        rejected_batch.rewards.grad, torch.zeros_like(rejected_batch.rewards)
+    )
+
+
+def test_compute_reward_loss_normalizes_by_non_identical_sequences():
+    pad_token_id = 50256
+    chosen_ids = torch.tensor(
+        [
+            [1, 2, 3, 4, pad_token_id],
+            [1, 2, 9, 4, pad_token_id],
+        ]
+    )
+    rejected_ids = torch.tensor(
+        [
+            [1, 2, 3, 4, pad_token_id],
+            [1, 2, 3, 4, pad_token_id],
+        ]
+    )
+    chosen_rewards = torch.tensor(
+        [
+            [0.0, 0.0, 10.0, 10.0, 0.0],
+            [0.0, 0.0, 2.0, 2.0, 0.0],
+        ]
+    )
+    rejected_rewards = torch.tensor(
+        [
+            [0.0, 0.0, -10.0, -10.0, 0.0],
+            [0.0, 0.0, 1.0, 1.0, 0.0],
+        ]
+    )
+    chosen_batch = SimpleNamespace(input_ids=chosen_ids, rewards=chosen_rewards)
+    rejected_batch = SimpleNamespace(input_ids=rejected_ids, rewards=rejected_rewards)
+
+    loss = GPT2RewardModel.compute_reward_loss(
+        chosen_batch, rejected_batch, pad_token_id=pad_token_id
+    )
+    expected_loss = -F.logsigmoid(chosen_rewards[1, 2:4] - rejected_rewards[1, 2:4])
+    torch.testing.assert_close(loss, expected_loss.mean())
 
 
 @pytest.mark.skipif(
