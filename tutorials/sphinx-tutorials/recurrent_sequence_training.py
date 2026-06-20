@@ -20,6 +20,9 @@ Recurrent training on sequence batches
         :class:`~torchrl.data.replay_buffers.SliceSampler`
       * How to train a recurrent policy in *full-sequence* mode using
         :class:`~torchrl.modules.set_recurrent_mode`
+      * How :class:`~torchrl.modules.set_recurrent_mode` is used in
+        collectors (sequential, ``False``) vs. loss modules (recurrent, ``True``),
+        and how to control it across processes and workers
       * Why ``is_init`` at slice starts is what keeps hidden state from
         leaking across episode boundaries inside a replay batch
 
@@ -257,31 +260,88 @@ print("is_init True positions (slice starts):", is_init_positions)
 # timesteps.
 
 ######################################################################
-# Multi-step (full-sequence) recurrent forward
-# --------------------------------------------
+# Sequential mode vs. recurrent mode
+# ------------------------------------
 #
-# Now the payoff. By default, ``LSTMModule.forward`` runs in *sequential*
-# mode — one step at a time, using the hidden state in the TensorDict.
-# Inside :class:`~torchrl.modules.set_recurrent_mode(True)`, the same
-# module runs in *recurrent* mode: it batches the time dimension into a
-# single ``nn.LSTM`` call.
+# :class:`~torchrl.modules.set_recurrent_mode` has two modes:
 #
-# We feed the sample in **exactly the ragged, concatenated shape the sampler
-# returned** — no reshape to a rectangular ``[B, T]`` tensor, no padding.
-# This is the canonical TorchRL pattern: the recurrent path reads the
-# ``is_init`` markers and, whenever one fires in the interior of the batch (a
-# trajectory boundary that fell inside the sampled window), it *splits the
-# batch along that boundary*, runs the LSTM independently on each resulting
-# chunk, and stitches the outputs back together. Hidden state from one
-# trajectory never bleeds into the next.
+# - ``set_recurrent_mode(False)`` (*sequential*): the LSTM processes **one
+#   timestep at a time**, reading ``rs_h`` / ``rs_c`` from the TensorDict
+#   and writing the updated state into ``("next", "rs_h")`` /
+#   ``("next", "rs_c")``. This is the natural mode during **collection**:
+#   the collector calls the policy once per environment step.
+# - ``set_recurrent_mode(True)`` (*recurrent*): the LSTM processes a **whole
+#   time batch** in a single ``nn.LSTM`` call, using ``is_init`` to reset
+#   the hidden state at trajectory boundaries. This is the mode used during
+#   **training** over replayed slices.
 #
-# Reshaping to ``[num_slices, slice_len]`` would be both unnecessary and
-# unsafe: with ``strict_length=False`` the sampler is explicitly allowed to
-# return slices *shorter* than ``slice_len`` (and an effective batch smaller
-# than requested), so the flat batch is not guaranteed to be rectangular.
-# Feeding it ragged sidesteps the issue entirely and is what every loss and
-# advantage module in the library already expects.
+# **How set_recurrent_mode is managed in collectors and loss modules:**
+#
+# - During *collection*, the collector calls the policy inside sequential
+#   mode. The default ``default_recurrent_mode=False`` on
+#   :class:`~torchrl.modules.LSTMModule` means no explicit context manager
+#   is required — the LSTM automatically runs step-by-step.
+#   If you need to override this (e.g. in a custom collector), wrap the
+#   policy call with ``set_recurrent_mode(False)``.
+# - All built-in TorchRL **loss modules** wrap their ``forward`` with
+#   ``set_recurrent_mode(True)`` automatically, so you never need to set
+#   the mode manually when calling a loss. The same applies to advantage
+#   estimators and value estimators.
+# - In **multi-process / distributed** settings (e.g.
+#   :class:`~torchrl.collectors.MultiaSyncDataCollector`), each worker
+#   process carries its own thread-local recurrent mode. The mode set in
+#   the main process does **not** propagate to worker processes. Workers
+#   always start with the default (sequential, ``False``); the training
+#   process sets recurrent mode independently when computing the loss.
+#
+# **Equivalence of sequential and recurrent mode:**
+#
+# Running the LSTM step-by-step under ``set_recurrent_mode(False)`` and
+# running it in a single batch under ``set_recurrent_mode(True)`` produce
+# numerically identical outputs. We verify this now on a short sequence.
 
+# Build a minimal hand-crafted 4-step trajectory so the equivalence is
+# unambiguous: one trajectory, is_init only at t=0, zero initial hidden.
+T_equiv = 4
+demo = TensorDict(
+    {
+        "observation": torch.randn(T_equiv, OBS_DIM),
+        "rs_h": torch.zeros(T_equiv, 1, HIDDEN),
+        "rs_c": torch.zeros(T_equiv, 1, HIDDEN),
+        "is_init": torch.tensor([True, False, False, False]),
+    },
+    batch_size=[T_equiv],
+)
+
+# --- set_recurrent_mode(False): one call per step ---
+# The LSTM reads rs_h / rs_c, processes a single timestep, and writes the
+# updated state into ("next", "rs_h") / ("next", "rs_c"). We thread the
+# hidden state from one step to the next by hand.
+outs_seq = []
+h = torch.zeros(1, 1, HIDDEN)
+c = torch.zeros(1, 1, HIDDEN)
+for t in range(T_equiv):
+    step = demo[t : t + 1].clone()
+    step["rs_h"] = h
+    step["rs_c"] = c
+    with set_recurrent_mode(False):
+        step_out = policy(step)
+    outs_seq.append(step_out["features"])
+    h = step_out["next", "rs_h"]
+    c = step_out["next", "rs_c"]
+features_seq = torch.cat(outs_seq, dim=0)
+
+# --- set_recurrent_mode(True): one batched call ---
+with set_recurrent_mode(True):
+    out_rec = policy(demo.clone())
+
+# They must be numerically identical.
+torch.testing.assert_close(features_seq, out_rec["features"], rtol=1e-4, atol=1e-5)
+print(
+    "set_recurrent_mode(False) step-by-step == set_recurrent_mode(True) batched: verified."
+)
+
+# Now run the full replay sample in recurrent mode (the training-time pattern).
 with set_recurrent_mode(True):
     out = policy(sample.clone())
 
