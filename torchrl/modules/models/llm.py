@@ -34,13 +34,20 @@ class GPT2RewardModel(nn.Module):
         >>> assert rewards.shape == model_inputs["input_ids"].shape
         >>> assert end_scores.shape[1] == 1
 
+    Args:
+        model_path (str, optional): path or model identifier used to initialize the
+            underlying GPT2 model.
+        pad_token_id (int, optional): padding token id used to locate the final
+            non-padding token. If ``None``, this is inferred from the tokenizer
+            associated with ``model_path`` and falls back to the model config.
+
     """
 
-    def __init__(self, model_path=None):
+    def __init__(self, model_path=None, pad_token_id=None):
         if not _has_transformers:
             raise ImportError("The transformers library is missing.")
 
-        from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+        from transformers import GPT2LMHeadModel
 
         super().__init__()
         if model_path is not None:
@@ -53,7 +60,40 @@ class GPT2RewardModel(nn.Module):
 
         # replace last layer with the reward layer
         self.lm_head = nn.Linear(self.config.n_embd, 1, bias=False)
-        self.pad_id = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
+        self.pad_id = self._get_pad_token_id(model, model_path, pad_token_id)
+
+    @staticmethod
+    def _get_pad_token_id(model, model_path, pad_token_id):
+        if pad_token_id is not None:
+            return pad_token_id
+
+        tokenizer_model_path = "gpt2" if model_path is None else model_path
+        try:
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_path)
+        except Exception:
+            tokenizer = None
+
+        if tokenizer is not None:
+            tokenizer_pad_token_id = getattr(tokenizer, "pad_token_id", None)
+            if tokenizer_pad_token_id is not None:
+                return tokenizer_pad_token_id
+            tokenizer_eos_token_id = getattr(tokenizer, "eos_token_id", None)
+            if tokenizer_eos_token_id is not None:
+                return tokenizer_eos_token_id
+
+        config_pad_token_id = getattr(model.config, "pad_token_id", None)
+        if config_pad_token_id is not None:
+            return config_pad_token_id
+        config_eos_token_id = getattr(model.config, "eos_token_id", None)
+        if config_eos_token_id is not None:
+            return config_eos_token_id
+
+        raise ValueError(
+            "Could not infer a padding token id from the tokenizer or model config. "
+            "Pass pad_token_id explicitly to GPT2RewardModel."
+        )
 
     def forward(self, input_ids, attention_mask):
         """Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token."""
