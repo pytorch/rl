@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator, Sequence
 from typing import Literal
 
 import torch
-from tensordict import lazy_stack, TensorDictBase
+from tensordict import lazy_stack, NestedKey, TensorDictBase
 
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
@@ -191,6 +191,11 @@ class AsyncBatchedCollector(BaseCollector):
             placement configuration. Mutually exclusive with ``device``,
             ``policy_device``, ``output_device``, ``env_device``, and
             ``storing_device``.
+        policy_version (int, optional): initial behavior-policy version
+            attached to server outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -284,6 +289,8 @@ class AsyncBatchedCollector(BaseCollector):
         storing_device: torch.device | str | None = None,
         server_config: InferenceServerConfig | None = None,
         device_config: InferenceDeviceConfig | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
         server_backend: Literal["thread", "process"] = "thread",
     ):
         if policy is not None and policy_factory is not None:
@@ -389,6 +396,8 @@ class AsyncBatchedCollector(BaseCollector):
                 stats_window_size=(
                     1024 if server_config is None else server_config.stats_window_size
                 ),
+                policy_version=policy_version,
+                policy_version_key=policy_version_key,
             )
         else:
             self._server = InferenceServer(
@@ -407,7 +416,10 @@ class AsyncBatchedCollector(BaseCollector):
                 stats_window_size=(
                     1024 if server_config is None else server_config.stats_window_size
                 ),
+                policy_version=policy_version,
+                policy_version_key=policy_version_key,
             )
+        self._policy_version_key = policy_version_key
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -455,7 +467,10 @@ class AsyncBatchedCollector(BaseCollector):
         # inherited by the child process.
         if self._clients is None:
             self._clients = [
-                PolicyClientModule(self._transport.client())
+                PolicyClientModule(
+                    self._transport.client(),
+                    policy_version_key=self._policy_version_key or "policy_version",
+                )
                 for _ in range(self._num_envs)
             ]
 

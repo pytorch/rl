@@ -15,6 +15,7 @@ from statistics import mean
 import torch
 from tensordict import lazy_stack
 from tensordict.base import TensorDictBase
+from tensordict.utils import NestedKey
 from torch import nn
 
 from torchrl.modules.inference_server._config import (
@@ -77,6 +78,11 @@ class InferenceServer:
         device_config (InferenceDeviceConfig, optional): structured device
             placement configuration. Mutually exclusive with ``device``,
             ``policy_device``, and ``output_device``.
+        policy_version (int, optional): initial behavior-policy version
+            attached to inference outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
 
     Example:
         >>> from tensordict.nn import TensorDictModule
@@ -115,6 +121,8 @@ class InferenceServer:
         server_config: InferenceServerConfig | None = None,
         device_config: InferenceDeviceConfig | None = None,
         shutdown_event: threading.Event | MPEvent | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
     ):
         if server_config is not None:
             if (
@@ -161,6 +169,8 @@ class InferenceServer:
         )
         self.weight_sync = weight_sync
         self._weight_sync_model_id = weight_sync_model_id
+        self._policy_version = int(policy_version)
+        self.policy_version_key = policy_version_key
         self.collect_stats = collect_stats
         self.stats_window_size = stats_window_size
 
@@ -182,6 +192,7 @@ class InferenceServer:
         self._stats_started_at = time.monotonic()
         self._num_requests = 0
         self._num_batches = 0
+        self._num_weight_updates = 0
         self._batch_sizes: list[int] = []
         self._queue_wait_ms: list[float] = []
         self._forward_ms: list[float] = []
@@ -244,10 +255,22 @@ class InferenceServer:
                 "p95_queue_ms": self._percentile(queue_wait_ms, 0.95),
                 "p50_forward_ms": self._percentile(forward_ms, 0.50),
                 "p95_forward_ms": self._percentile(forward_ms, 0.95),
+                "policy_version": self._policy_version,
+                "weight_updates": self._num_weight_updates,
             }
             if reset:
                 self._reset_stats()
             return result
+
+    @property
+    def policy_version(self) -> int:
+        """The current behavior-policy version served with inference outputs."""
+        return self._policy_version
+
+    def _mark_weight_update(self) -> None:
+        with self._stats_lock:
+            self._policy_version += 1
+            self._num_weight_updates += 1
 
     # -- lifecycle ------------------------------------------------------------
 
@@ -305,7 +328,24 @@ class InferenceServer:
         if ws is None:
             return
         with self._model_lock:
-            ws.receive(timeout=0.0)
+            weights = ws.receive(timeout=0.0)
+        if weights is not None:
+            self._mark_weight_update()
+
+    def _set_policy_version(self, result_batch: TensorDictBase) -> TensorDictBase:
+        """Annotate inference outputs with the behavior policy version."""
+        if self.policy_version_key is None:
+            return result_batch
+        device = result_batch.device
+        if device is None:
+            device = self.output_device or self.policy_device or torch.device("cpu")
+        version = torch.full(
+            result_batch.batch_size,
+            self.policy_version,
+            dtype=torch.long,
+            device=device,
+        )
+        return result_batch.set(self.policy_version_key, version)
 
     @torch.no_grad()
     def _run(self) -> None:
@@ -365,6 +405,7 @@ class InferenceServer:
                         result_batch = self.model(batch)
                     if self.output_device is not None:
                         result_batch = result_batch.to(self.output_device)
+                    result_batch = self._set_policy_version(result_batch)
                     forward_ms = (time.monotonic() - forward_start) * 1000.0
                     self._record_batch_stats(
                         batch_size=len(callbacks),
@@ -464,6 +505,11 @@ class ProcessInferenceServer:
         device_config (InferenceDeviceConfig, optional): structured device
             placement configuration. Mutually exclusive with ``device``,
             ``policy_device``, and ``output_device``.
+        policy_version (int, optional): initial behavior-policy version
+            attached to inference outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
         mp_context: multiprocessing context or start-method name. Defaults to
             ``"spawn"``.
 
@@ -506,6 +552,8 @@ class ProcessInferenceServer:
         weight_sync_model_id: str = "policy",
         server_config: InferenceServerConfig | None = None,
         device_config: InferenceDeviceConfig | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
         mp_context: str | mp.context.BaseContext | None = None,
     ) -> None:
         if server_config is not None:
@@ -560,6 +608,8 @@ class ProcessInferenceServer:
             "stats_window_size": stats_window_size,
             "weight_sync": weight_sync,
             "weight_sync_model_id": weight_sync_model_id,
+            "policy_version": policy_version,
+            "policy_version_key": policy_version_key,
         }
 
     def start(self) -> ProcessInferenceServer:

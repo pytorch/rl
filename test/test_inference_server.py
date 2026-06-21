@@ -260,6 +260,7 @@ class TestInferenceServerCore:
         assert stats["batches"] >= 1
         assert stats["avg_batch_size"] > 0
         assert stats["p95_forward_ms"] >= 0
+        assert stats["policy_version"] == 0
 
     def test_structured_config(self):
         transport = ThreadingTransport()
@@ -277,6 +278,19 @@ class TestInferenceServerCore:
             stats = server.stats()
         assert result["action"].device.type == "cpu"
         assert stats["requests"] == 1
+
+    def test_policy_version_is_returned(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy,
+            transport,
+            policy_version=12,
+            policy_version_key=("meta", "policy_version"),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+        assert result["meta", "policy_version"].item() == 12
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -345,6 +359,18 @@ class TestPolicyClientModule:
             future = remote_policy.submit(TensorDict({"observation": torch.randn(4)}))
             result = future.result(timeout=5.0)
         assert "action" in result.keys()
+
+    def test_bounded_staleness_raises(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, policy_version=1):
+            remote_policy = PolicyClientModule(
+                transport,
+                target_policy_version=3,
+                max_policy_lag=1,
+            )
+            with pytest.raises(RuntimeError, match="too stale"):
+                remote_policy(TensorDict({"observation": torch.randn(4)}))
 
 
 # =============================================================================
@@ -748,6 +774,8 @@ class TestWeightSyncIntegration:
             result_after = client(td)
             # With zero weights the linear output should be zero (bias=0 too)
             assert torch.allclose(result_after["action"], torch.zeros(2), atol=1e-6)
+            assert result_after["policy_version"].item() == 1
+            assert server.stats()["weight_updates"] == 1
 
     def test_inference_continues_after_weight_update(self):
         """The server keeps serving after a weight update."""

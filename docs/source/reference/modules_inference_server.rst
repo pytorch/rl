@@ -82,10 +82,13 @@ TensorDict policy but inference should be served by the policy server:
     remote_policy = PolicyClientModule(
         transport,
         in_keys=["observation"],
-        out_keys=["action"],
+        out_keys=["action", "policy_version"],
     )
 
     data = remote_policy(data)
+
+The server writes ``policy_version`` by default so asynchronous collectors can
+track behavior-policy lag.
 
 Weight Synchronisation
 ^^^^^^^^^^^^^^^^^^^^^^
