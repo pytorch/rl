@@ -24,8 +24,10 @@ from torchrl.modules.inference_server import (
     InferenceServerConfig,
     InferenceTransport,
     MPTransport,
+    PolicyClientModule,
     ProcessInferenceServer,
     RayTransport,
+    RemotePolicy,
     SlotTransport,
     ThreadingTransport,
 )
@@ -314,6 +316,35 @@ class TestInferenceClient:
             assert isinstance(fut, concurrent.futures.Future)
             result = fut.result(timeout=5.0)
             assert "action" in result.keys()
+
+
+class TestPolicyClientModule:
+    def test_remote_policy_alias(self):
+        assert RemotePolicy is PolicyClientModule
+
+    def test_forward_as_tensordict_module(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(
+                transport,
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+            td = TensorDict({"observation": torch.randn(4)})
+            result = remote_policy(td)
+        assert result["action"].shape == (2,)
+        assert remote_policy.in_keys == ["observation"]
+        assert remote_policy.out_keys == ["action"]
+
+    def test_submit(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(transport)
+            future = remote_policy.submit(TensorDict({"observation": torch.randn(4)}))
+            result = future.result(timeout=5.0)
+        assert "action" in result.keys()
 
 
 # =============================================================================

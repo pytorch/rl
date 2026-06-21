@@ -21,6 +21,8 @@ Core API
     InferenceDeviceConfig
     ProcessInferenceServer
     InferenceClient
+    PolicyClientModule
+    RemotePolicy
     InferenceTransport
 
 Transport Backends
@@ -68,6 +70,22 @@ threads in the same process:
         ...
 
     server.shutdown()
+
+Remote policy module
+^^^^^^^^^^^^^^^^^^^^
+
+Use :class:`PolicyClientModule` when an actor or collector expects a regular
+TensorDict policy but inference should be served by the policy server:
+
+.. code-block:: python
+
+    remote_policy = PolicyClientModule(
+        transport,
+        in_keys=["observation"],
+        out_keys=["action"],
+    )
+
+    data = remote_policy(data)
 
 Weight Synchronisation
 ^^^^^^^^^^^^^^^^^^^^^^
