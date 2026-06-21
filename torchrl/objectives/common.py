@@ -22,7 +22,7 @@ from torch.nn import Parameter
 from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import default_value_kwargs, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -607,6 +607,38 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if len(devices) == 1:
             return list(devices)[0]
         return None
+
+    def _prepare_value_estimator_kwargs(self, value_type, **hyperparams):
+        """Common preamble for make_value_estimator overrides.
+
+        Handles three boilerplate steps that every subclass repeats:
+        defaulting ``value_type``, delegating the instance/subclass path to
+        the base-class handler, and building the ``hp`` dict from
+        :func:`~torchrl.objectives.utils.default_value_kwargs` merged with
+        any caller-supplied overrides.
+
+        Returns:
+            ``(resolved_value_type, hp)`` — the caller should continue with
+            its own if/elif value-type dispatch.
+
+            ``(None, None)`` — the call was fully handled (instance or
+            subclass path); the caller should ``return self``.
+        """
+        if value_type is None:
+            value_type = self.default_value_estimator
+
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return None, None
+
+        self.value_type = value_type
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        return value_type, hp
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.

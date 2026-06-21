@@ -34,7 +34,6 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
     _reduce,
-    default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
@@ -43,7 +42,6 @@ from torchrl.objectives.value import (
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
-    ValueEstimatorBase,
     VTrace,
 )
 
@@ -603,24 +601,13 @@ class A2CLoss(LossModule):
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
+            return self
 
         device = _get_default_device(self)
         hp["device"] = device
 
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.critic_network, **hp

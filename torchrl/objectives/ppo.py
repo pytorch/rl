@@ -39,7 +39,6 @@ from torchrl.objectives.utils import (
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
-    default_value_kwargs,
     distance_loss,
     ValueEstimators,
 )
@@ -48,7 +47,6 @@ from torchrl.objectives.value import (
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
-    ValueEstimatorBase,
     VTrace,
 )
 
@@ -916,20 +914,9 @@ class PPOLoss(LossModule):
         return td_out
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
+            return self
         if value_type == ValueEstimators.TD1:
             self._value_estimator = TD1Estimator(
                 value_network=self.critic_network, **hp
