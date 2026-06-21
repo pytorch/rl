@@ -9,6 +9,7 @@ from __future__ import annotations
 from .atari_dqn import AtariDQNExperienceReplay
 from .common import BaseDatasetExperienceReplay
 from .lerobot import lerobot_columns_to_tensordict, LeRobotExperienceReplay
+from .utils import load_dataset
 
 # Conditional imports for classes with external dependencies
 try:
@@ -49,6 +50,7 @@ except ImportError:
 __all__ = [
     "AtariDQNExperienceReplay",
     "BaseDatasetExperienceReplay",
+    "load_dataset",
     "D4RLExperienceReplay",
     "MinariExperienceReplay",
     "GenDGRLExperienceReplay",
