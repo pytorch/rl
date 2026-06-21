@@ -19,7 +19,9 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.modules.inference_server import (
     InferenceClient,
+    InferenceDeviceConfig,
     InferenceServer,
+    InferenceServerConfig,
     InferenceTransport,
     MPTransport,
     ProcessInferenceServer,
@@ -256,6 +258,23 @@ class TestInferenceServerCore:
         assert stats["batches"] >= 1
         assert stats["avg_batch_size"] > 0
         assert stats["p95_forward_ms"] >= 0
+
+    def test_structured_config(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server_config = InferenceServerConfig(max_batch_size=2, timeout=0.001)
+        device_config = InferenceDeviceConfig(policy_device="cpu", output_device="cpu")
+        with InferenceServer(
+            policy,
+            transport,
+            server_config=server_config,
+            device_config=device_config,
+        ) as server:
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+            stats = server.stats()
+        assert result["action"].device.type == "cpu"
+        assert stats["requests"] == 1
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -1003,6 +1022,30 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    def test_device_config_and_server_config(self):
+        """Collector accepts structured device and server config objects."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            server_config=InferenceServerConfig(max_batch_size=2),
+            device_config=InferenceDeviceConfig(
+                policy_device="cpu",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+        )
+        total = 0
+        for batch in collector:
+            assert batch.device is None or batch.device.type == "cpu"
+            total += batch.numel()
+        stats = collector.server_stats()
+        collector.shutdown()
+        assert total >= 20
+        assert stats["requests"] > 0
 
 
 # =============================================================================
