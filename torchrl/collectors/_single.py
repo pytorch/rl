@@ -7,7 +7,7 @@ import weakref
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
 from textwrap import indent
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -18,18 +18,24 @@ from torchrl import compile_with_warmup
 from torchrl._utils import (
     _ends_with,
     _make_ordinal_device,
+    _maybe_record_function,
+    _maybe_record_function_decorator,
     _replace_last,
     accept_remote_rref_udf_invocation,
     prod,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector, ProfileConfig
+from torchrl.collectors._base import BaseCollector
 from torchrl.collectors._constants import (
     cudagraph_mark_step_begin,
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
 )
-from torchrl.collectors.utils import _TrajectoryPool, split_trajectories
+from torchrl.collectors.utils import (
+    _TrajectoryPool,
+    _validate_traj_format,
+    split_trajectories,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import DEVICE_TYPING
@@ -42,118 +48,9 @@ from torchrl.envs.utils import (
     set_exploration_type,
 )
 from torchrl.modules import RandomPolicy, set_exploration_modules_spec_from_env
+from torchrl.modules.utils.utils import _maybe_append_env_transforms_from_module
 from torchrl.weight_update.utils import _resolve_model
 from torchrl.weight_update.weight_sync_schemes import WeightSyncScheme
-
-
-class _CollectorProfiler:
-    """Helper class for profiling collector rollouts in single-process mode.
-
-    Manages the PyTorch profiler lifecycle for the Collector class.
-    """
-
-    def __init__(self, profile_config: ProfileConfig):
-        self.config = profile_config
-        self.rollout_count = 0
-        self._profiler = None
-        self._stopped = False
-        self._active = False
-
-        # Set up profiler schedule
-        active_rollouts = self.config.num_rollouts - self.config.warmup_rollouts
-        profiler_schedule = torch.profiler.schedule(
-            skip_first=self.config.warmup_rollouts,
-            wait=0,
-            warmup=0,
-            active=active_rollouts,
-            repeat=1,
-        )
-
-        # Get activities
-        activities = self.config.get_activities()
-        if not activities:
-            return
-
-        # Determine trace handler
-        if self.config.on_trace_ready is not None:
-            on_trace_ready = self.config.on_trace_ready
-        else:
-            save_path = self.config.get_save_path(
-                0
-            )  # Use worker_idx 0 for single-process
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-
-            from torchrl import logger as torchrl_logger
-
-            def on_trace_ready(prof, save_path=save_path):
-                prof.export_chrome_trace(str(save_path))
-                torchrl_logger.info(f"Collector: Profiling trace saved to {save_path}")
-
-        self._profiler = torch.profiler.profile(
-            activities=activities,
-            schedule=profiler_schedule,
-            on_trace_ready=on_trace_ready,
-            record_shapes=self.config.record_shapes,
-            profile_memory=self.config.profile_memory,
-            with_stack=self.config.with_stack,
-            with_flops=self.config.with_flops,
-        )
-        self._active = True
-
-    def start(self) -> None:
-        """Start the profiler."""
-        from torchrl import logger as torchrl_logger
-
-        if self._profiler is not None and not self._stopped:
-            self._profiler.start()
-            torchrl_logger.info(
-                f"Collector: Profiling started. "
-                f"Will profile rollouts {self.config.warmup_rollouts} to {self.config.num_rollouts - 1}."
-            )
-
-    def step(self) -> bool:
-        """Step the profiler after a rollout.
-
-        Returns:
-            True if profiling is complete.
-        """
-        if self._profiler is None or self._stopped:
-            return False
-
-        self.rollout_count += 1
-        self._profiler.step()
-
-        # Check if profiling is complete
-        if self.rollout_count >= self.config.num_rollouts:
-            self.stop()
-            return True
-
-        return False
-
-    def stop(self) -> None:
-        """Stop the profiler and export trace."""
-        from torchrl import logger as torchrl_logger
-
-        if self._profiler is not None and not self._stopped:
-            self._profiler.stop()
-            self._stopped = True
-            torchrl_logger.info(
-                f"Collector: Profiling complete after {self.rollout_count} rollouts."
-            )
-
-    @property
-    def is_active(self) -> bool:
-        """Check if profiling is active."""
-        return self._active and not self._stopped
-
-    @contextlib.contextmanager
-    def profile_rollout(self):
-        """Context manager for profiling a single rollout."""
-        if self._profiler is not None and not self._stopped:
-            with torch.profiler.record_function("collector_rollout"):
-                yield
-        else:
-            yield
 
 
 def _cuda_sync_if_initialized():
@@ -274,8 +171,53 @@ class Collector(BaseCollector):
         split_trajs (bool, optional): Boolean indicating whether the resulting
             TensorDict should be split according to the trajectories.
             See :func:`~torchrl.collectors.utils.split_trajectories` for more
-            information.
+            information. Note that this splits and pads each fixed-frame
+            batch independently: trajectories spanning two batches remain
+            split across them. To receive only complete trajectories, see
+            ``trajs_per_batch``.
             Defaults to ``False``.
+        trajs_per_batch (int, optional): if set, the collector yields batches
+            of exactly this many *complete* trajectories instead of
+            fixed-frame batches: each yield has shape
+            ``(trajs_per_batch, max_traj_len)``, zero-padded along time, with
+            a ``("collector", "mask")`` entry marking the valid steps (see
+            ``traj_format`` for an unpadded alternative).
+            Episodes spanning internal collection steps are reassembled and
+            in-flight episodes are held back, so every row is a whole,
+            done-terminated trajectory (``frames_per_batch`` then only sets
+            the internal polling granularity). When combined with
+            ``replay_buffer``, complete trajectories are instead written to
+            the buffer as flat, unpadded 1-D sequences (and the collector
+            yields ``None``) -- the layout
+            :class:`~torchrl.data.replay_buffers.SliceSampler` expects.
+            See :ref:`collectors_replay_trajs`. The equivalent on
+            :class:`~torchrl.collectors.AsyncBatchedCollector` is the
+            ``yield_completed_trajectories`` flag.
+            Defaults to ``None`` (fixed-frame batches).
+        trajs_per_write (int, optional): together with ``trajs_per_batch``
+            and ``replay_buffer``, the number of complete trajectories
+            written to the buffer per extend call. Defaults to ``None``
+            (write every trajectory as soon as it completes).
+        traj_format (str, optional): layout of the batches yielded under
+            ``trajs_per_batch``. ``"padded"`` stacks trajectories
+            into ``(trajs_per_batch, max_traj_len)`` with zero padding and a
+            ``("collector", "mask")`` entry; ``"cat"`` concatenates them
+            along time into a flat, unpadded ``[sum_i T_i]`` batch in which
+            trajectories are contiguous and delimited by ``("next", "done")``
+            and ``("collector", "traj_ids")`` -- the same layout the
+            replay-buffer write path produces. Prefer ``"cat"`` when
+            trajectory lengths vary a lot or frames are large (e.g. images):
+            it avoids materializing the padding. Raises if set without
+            ``trajs_per_batch``; has no effect on replay-buffer writes
+            (always flat). Defaults to ``None``, which currently resolves to
+            ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
+        track_traj_ids (bool, optional): if ``False``, the collector will not
+            write ``("collector", "traj_ids")`` in the rollout nor update
+            trajectory identifiers at every environment step. This is useful
+            when trajectory splitting or trajectory-aware replay sampling is not
+            needed. Defaults to ``True``.
         exploration_type (ExplorationType, optional): interaction mode to be used when
             collecting data. Must be one of ``torchrl.envs.utils.ExplorationType.DETERMINISTIC``,
             ``torchrl.envs.utils.ExplorationType.RANDOM``, ``torchrl.envs.utils.ExplorationType.MODE``
@@ -330,6 +272,24 @@ class Collector(BaseCollector):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        auto_register_policy_transforms (bool, optional): if ``True``, the
+            collector inspects the policy for recurrent submodules
+            (:class:`~torchrl.modules.LSTMModule`,
+            :class:`~torchrl.modules.GRUModule`, anything implementing
+            ``make_tensordict_primer()``) and appends the matching
+            :class:`~torchrl.envs.transforms.InitTracker` and
+            :class:`~torchrl.envs.transforms.TensorDictPrimer` transforms to
+            the env if the env's specs don't already provide them. The check
+            is spec-based and idempotent, so passing an env that was already
+            wrapped via :class:`~torchrl.envs.EnvBase`'s ``policy=``
+            constructor argument is safe. If ``False``, the collector never
+            modifies the env. Defaults to ``None`` through v0.14, which
+            preserves the pre-v0.15 behavior (no auto-registration) but emits
+            a :class:`FutureWarning` if the env was missing transforms the
+            policy needed. The default flips to ``True`` in v0.15.
+
+            .. seealso:: :ref:`Auto-wrapping recurrent transforms via the
+                policy= argument <Environment-policy-arg>`.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             This is typically not used in :class:`~torchrl.collectors.Collector` as it operates in a single-process environment.
@@ -342,13 +302,59 @@ class Collector(BaseCollector):
             RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
             This enables cascading weight updates in hierarchies like:
-            RPCDataCollector -> MultiSyncCollector -> Collector.
+            RPCCollector -> MultiSyncCollector -> Collector.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on the environment, tagging every collected frame with the current version
+            under the ``"policy_version"`` key. The transform's version is bumped exactly once
+            per :meth:`update_policy_weights_` call — for multi-process collectors this happens
+            in each worker after the new weights have actually been applied, so per-frame
+            tagging tracks real weight updates rather than rollout iterations.
+
+            The recommended path is ``track_policy_version=True``: let the collector own the
+            transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a ``PolicyVersion``
+            **without** going through a collector (e.g. a hand-rolled rollout loop). Pre-creating
+            a transform and passing it to a collector is supported but discouraged because it
+            invites a divergence between the transform on the env and the one the collector
+            increments.
+
+            Defaults to ``False``.
+        compact_obs (bool, optional): if ``True``, the collector drops the
+            observation and state keys from the ``("next", ...)`` sub-tensordict
+            before stacking per-step data. Those keys are bit-for-bit identical
+            to the root keys of the next step (modulo the last frame of each
+            trajectory), so storing both copies roughly doubles the observation
+            footprint for nothing. ``("next", "reward")``, ``("next", "done")``
+            and ``("next", "truncated")`` are preserved because they cannot be
+            reconstructed from the root keys. The dropped keys can be
+            re-hydrated at sampling time with
+            :class:`~torchrl.envs.transforms.NextStateReconstructor`; trajectory
+            ends will carry ``NaN`` for the missing ``("next", obs)`` and the
+            value-estimator forward pass substitutes a finite placeholder so
+            GAE / TD targets stay numerically defined (see
+            :meth:`~torchrl.objectives.value.ValueEstimatorBase._sanitize_next_obs_nan`).
+
+            ``compact_obs=True`` composes cleanly with
+            :class:`~torchrl.objectives.value.advantages.GAE` configured with
+            ``shifted=True``: the budgeted shifted path can run the on-policy
+            advantage pass without rehydrating every per-step
+            ``("next", "observation")`` mirror. For vectorized environments
+            with large observations this is typically a sizeable GPU-memory
+            win at near-zero CPU cost.
+
+            Default is ``False`` because the canonical ``("next", obs)`` is
+            still required by some downstream losses — most notably
+            :class:`~torchrl.envs.transforms.MultiStepTransform`, which uses
+            the n-step ``("next", obs)`` (and its in-trajectory fallback at
+            the last ``n - 1`` frames) and cannot reconstruct that from root
+            obs alone. For a lossy-precision alternative that *does* preserve
+            boundary transitions (at the cost of a smaller memory saving), see
+            :class:`~torchrl.envs.transforms.NextObservationDelta`. See also
+            the *Memory-efficient RL training* tutorial for an end-to-end
+            pipeline. Defaults to ``False``.
+
 
     Examples:
         >>> from torchrl.envs.libs.gym import GymEnv
@@ -430,6 +436,7 @@ class Collector(BaseCollector):
         reset_at_each_iter: bool = False,
         postproc: Callable[[TensorDictBase], TensorDictBase] | None = None,
         split_trajs: bool | None = None,
+        track_traj_ids: bool = True,
         exploration_type: ExplorationType = DEFAULT_EXPLORATION_TYPE,
         return_same_td: bool = False,
         reset_when_done: bool = True,
@@ -438,7 +445,6 @@ class Collector(BaseCollector):
         use_buffers: bool | None = None,
         replay_buffer: ReplayBuffer | None = None,
         extend_buffer: bool = True,
-        local_init_rb: bool | None = None,
         trust_policy: bool | None = None,
         compile_policy: bool | dict[str, Any] | None = None,
         cudagraph_policy: bool | dict[str, Any] | None = None,
@@ -451,11 +457,26 @@ class Collector(BaseCollector):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
+        auto_register_policy_transforms: bool | None = None,
+        pre_collect_hook: Callable[[], None] | None = None,
+        post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+        compact_obs: bool = False,
         **kwargs,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
+        self._auto_register_policy_transforms = auto_register_policy_transforms
+        super().__init__(
+            pre_collect_hook=pre_collect_hook,
+            post_collect_hook=post_collect_hook,
+        )
 
         # Note: weight_sync_schemes can be used to send weights to components
         # within the environment (e.g., RayModuleTransform), not just sub-collectors
@@ -489,11 +510,13 @@ class Collector(BaseCollector):
         # Set up policy version tracking
         self._setup_policy_version_tracking(track_policy_version)
 
+        # Set up recurrent policy environment transforms
+        self.env = self._maybe_setup_policy_env_transforms(self.env, policy)
+
         # Set up replay buffer
         self._setup_replay_buffer(
             replay_buffer=replay_buffer,
             extend_buffer=extend_buffer,
-            local_init_rb=local_init_rb,
             postproc=postproc,
             split_trajs=split_trajs,
             return_same_td=return_same_td,
@@ -533,6 +556,10 @@ class Collector(BaseCollector):
         # Set up postproc
         self._setup_postproc(postproc)
 
+        # Set up compact_obs: keys to drop from ("next", ...) to avoid
+        # storing two copies of each observation. See `_setup_compact_obs`.
+        self._setup_compact_obs(compact_obs)
+
         # Calculate frames per batch
         self._setup_frames_per_batch(frames_per_batch)
 
@@ -543,16 +570,32 @@ class Collector(BaseCollector):
         self.return_same_td = return_same_td
         self.set_truncated = set_truncated
 
-        # Create shuttle and rollout buffers
-        self._make_shuttle()
-        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
-        self._set_truncated_keys()
-
         # Set split trajectories option
         if split_trajs is None:
             split_trajs = False
+        elif split_trajs:
+            if not track_traj_ids:
+                raise ValueError("split_trajs=True requires track_traj_ids=True.")
+            warnings.warn(
+                "split_trajs=True produces a (N_traj, T_max) zero-padded "
+                "tensordict with a 'mask' key. For sequence training, prefer "
+                "the contiguous-trajectory layout: pass a replay_buffer to "
+                "the collector and sample with "
+                ":class:`~torchrl.data.SliceSampler` (variable-length slices, "
+                "no padding, no mask). See "
+                ":ref:`Data layout: contiguous trajectories <data-layout>` "
+                "in the docs. This advisory will become a "
+                "DeprecationWarning in a future release.",
+                stacklevel=2,
+            )
         self.split_trajs = split_trajs
+        self.track_traj_ids = track_traj_ids
         self._exclude_private_keys = True
+
+        # Create carrier and rollout buffers
+        self._make_carrier()
+        self._maybe_make_final_rollout(make_rollout=self._use_buffers)
+        self._set_truncated_keys()
 
         # Set up interruptor and frame tracking
         self.interruptor = interruptor
@@ -590,6 +633,46 @@ class Collector(BaseCollector):
                 env.update_kwargs(create_env_kwargs)
         return env
 
+    def _maybe_setup_policy_env_transforms(
+        self,
+        env: EnvBase,
+        policy: TensorDictModule | Callable,
+    ) -> EnvBase:
+        """Attach env transforms required by the policy if absent.
+
+        Gated by the ``auto_register_policy_transforms`` constructor flag:
+
+        * ``True``  → spec-based detection + idempotent append.
+        * ``False`` → no-op (silent).
+        * ``None``  (default through v0.14) → no-op, but emit a
+          :class:`FutureWarning` if the env was missing transforms the policy
+          needs. Default flips to ``True`` in v0.15.
+        """
+        flag = self._auto_register_policy_transforms
+        if flag is True:
+            return _maybe_append_env_transforms_from_module(env, policy)
+        if flag is False:
+            return env
+        # flag is None — preserve the pre-v0.15 behavior but warn that this
+        # will change in v0.15.
+        from torchrl.modules.utils.utils import _compute_missing_env_transforms
+
+        missing = _compute_missing_env_transforms(env, policy)
+        if missing:
+            missing_names = ", ".join(type(t).__name__ for t in missing)
+            warnings.warn(
+                f"The env passed to {type(self).__name__} is missing "
+                f"transforms required by the policy ({missing_names}). "
+                "From torchrl v0.15 the collector will append them "
+                "automatically. To enable that behavior now (and silence "
+                "this warning), pass `auto_register_policy_transforms=True`. "
+                "To opt out permanently, pass "
+                "`auto_register_policy_transforms=False`.",
+                FutureWarning,
+                stacklevel=3,
+            )
+        return env
+
     def _init_policy(
         self,
         policy: TensorDictModule | Callable | None,
@@ -605,6 +688,12 @@ class Collector(BaseCollector):
                 policy = RandomPolicy(env.full_action_spec)
         elif policy_factory is not None:
             raise TypeError("policy_factory cannot be used with policy argument.")
+
+        # Lazily initialize a RandomPolicy that was constructed without an
+        # action_spec (supports both `policy=RandomPolicy()` and a
+        # `policy_factory` that returns one).
+        if isinstance(policy, RandomPolicy):
+            policy.set_action_spec_from_env(env)
 
         if trust_policy is None:
             trust_policy = isinstance(policy, (RandomPolicy, CudaGraphModule))
@@ -688,7 +777,6 @@ class Collector(BaseCollector):
         self,
         replay_buffer: ReplayBuffer | None,
         extend_buffer: bool,
-        local_init_rb: bool | None,
         postproc: Callable | None,
         split_trajs: bool | None,
         return_same_td: bool,
@@ -697,17 +785,7 @@ class Collector(BaseCollector):
         """Set up replay buffer configuration and validate compatibility."""
         self.replay_buffer = replay_buffer
         self.extend_buffer = extend_buffer
-
-        # Handle local_init_rb deprecation
-        if local_init_rb is None:
-            local_init_rb = False
-            if replay_buffer is not None and not local_init_rb:
-                warnings.warn(
-                    "local_init_rb=False is deprecated and will be removed in v0.12. "
-                    "The new storage-level initialization provides better performance.",
-                    FutureWarning,
-                )
-        self.local_init_rb = local_init_rb
+        self.local_init_rb = True
 
         # Validate replay buffer compatibility
         if self.replay_buffer is not None and not self._ignore_rb:
@@ -950,6 +1028,36 @@ class Collector(BaseCollector):
             if postproc is not self.postproc and postproc is not None:
                 self.postproc = postproc
 
+    def _setup_compact_obs(self, compact_obs: bool) -> None:
+        """Resolve the ``("next", ...)`` keys to drop when ``compact_obs=True``.
+
+        When enabled, the collector drops the observation and state keys from
+        the ``("next", ...)`` sub-tensordict before stacking. These keys are
+        bit-for-bit identical to the root keys of the next step (modulo the
+        last frame of the rollout), so storing both copies wastes memory.
+
+        ``("next", "reward")``, ``("next", "done")`` and ``("next", "truncated")``
+        are left in place since they cannot be reconstructed from the root keys.
+
+        The user can re-hydrate the dropped keys at sampling time with
+        :class:`~torchrl.envs.transforms.rb_transforms.NextStateReconstructor`
+        when consuming a ``SliceSampler``-backed replay buffer.
+        """
+        self.compact_obs = bool(compact_obs)
+        if not self.compact_obs:
+            self._compact_next_keys: tuple = ()
+            return
+        leaf_keys = list(self.env._observation_keys_step_mdp) + list(
+            self.env._state_keys_step_mdp
+        )
+        compact: list[tuple] = []
+        for k in leaf_keys:
+            if isinstance(k, tuple):
+                compact.append(("next", *k))
+            else:
+                compact.append(("next", k))
+        self._compact_next_keys = tuple(compact)
+
     def _setup_frames_per_batch(self, frames_per_batch: int) -> None:
         """Calculate and validate frames per batch."""
         if frames_per_batch % self.n_env != 0 and RL_WARNINGS:
@@ -1008,28 +1116,33 @@ class Collector(BaseCollector):
             pool = self._traj_pool_val = _TrajectoryPool()
         return pool
 
-    def _make_shuttle(self):
-        # Shuttle is a deviceless tensordict that just carried data from env to policy and policy to env
+    def _make_carrier(self):
+        # The carrier holds rollout state across iterations and calls.
         with torch.no_grad():
             self._carrier = self.env.reset()
         if self.policy_device != self.env_device or self.env_device is None:
-            self._shuttle_has_no_device = True
+            self._carrier_has_no_device = True
             self._carrier.clear_device_()
         else:
-            self._shuttle_has_no_device = False
+            self._carrier_has_no_device = False
 
-        traj_ids = self._traj_pool.get_traj_and_increment(
-            self.n_env, device=self.storing_device
-        ).view(self.env.batch_size)
-        self._carrier.set(
-            ("collector", "traj_ids"),
-            traj_ids,
-        )
+        if self.track_traj_ids:
+            traj_ids = self._traj_pool.get_traj_and_increment(
+                self.n_env, device=self.storing_device
+            ).view(self.env.batch_size)
+            self._carrier.set(
+                ("collector", "traj_ids"),
+                traj_ids,
+            )
 
     def _maybe_make_final_rollout(self, make_rollout: bool):
         if make_rollout:
             with torch.no_grad():
                 self._final_rollout = self.env.fake_tensordict()
+            if self._compact_next_keys:
+                self._final_rollout = self._final_rollout.exclude(
+                    *self._compact_next_keys
+                )
 
             # If storing device is not None, we use this to cast the storage.
             # If it is None and the env and policy are on the same device,
@@ -1097,6 +1210,28 @@ class Collector(BaseCollector):
                     if key in self._final_rollout.keys(True):
                         continue
                     self._final_rollout.set(key, spec.zero())
+            out_keys = getattr(_policy_to_check, "out_keys", ())
+            missing_out_keys = [
+                key for key in out_keys if key not in self._policy_output_keys
+            ]
+            if missing_out_keys:
+                with torch.no_grad():
+                    policy_input = self._carrier.copy()
+                    if self.policy_device:
+                        policy_input = policy_input.to(self.policy_device)
+                    if self.compiled_policy:
+                        cudagraph_mark_step_begin()
+                    policy_output = self._wrapped_policy(policy_input)
+                policy_output_keys = set(policy_output.keys(True, True))
+                missing_out_keys = [
+                    key for key in missing_out_keys if key in policy_output_keys
+                ]
+                if missing_out_keys:
+                    self._policy_output_keys.update(missing_out_keys)
+                    if make_rollout:
+                        self._final_rollout.update(
+                            policy_output.select(*missing_out_keys)
+                        )
         elif (
             not make_rollout
             and hasattr(
@@ -1210,16 +1345,17 @@ class Collector(BaseCollector):
                 .zero_()
             )
 
-            # in addition to outputs of the policy, we add traj_ids to
-            # _final_rollout which will be collected during rollout
-            self._final_rollout.set(
-                ("collector", "traj_ids"),
-                torch.zeros(
-                    *self._final_rollout.batch_size,
-                    dtype=torch.int64,
-                    device=self.storing_device,
-                ),
-            )
+            if self.track_traj_ids:
+                # in addition to outputs of the policy, we add traj_ids to
+                # _final_rollout which will be collected during rollout
+                self._final_rollout.set(
+                    ("collector", "traj_ids"),
+                    torch.zeros(
+                        *self._final_rollout.batch_size,
+                        dtype=torch.int64,
+                        device=self.storing_device,
+                    ),
+                )
             self._final_rollout.refine_names(..., "time")
 
     def _set_truncated_keys(self):
@@ -1263,6 +1399,7 @@ class Collector(BaseCollector):
         return super().next()
 
     # for RPC
+    @_maybe_record_function_decorator("Collector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -1280,6 +1417,16 @@ class Collector(BaseCollector):
         super().update_policy_weights_(
             policy_or_weights=policy_or_weights, worker_ids=worker_ids, **kwargs
         )
+
+        # Bump the local PolicyVersion transform (if track_policy_version is on).
+        # This is the canonical bump point for the leaf collector — it covers:
+        #   - User calls collector.update_policy_weights_() on a single-process
+        #     Collector.
+        #   - The receiver-side WeightSyncScheme cascade in a multi-process
+        #     worker (which calls inner_collector.update_policy_weights_()
+        #     after applying weights). MultiCollector does not inherit from
+        #     Collector, so its update_policy_weights_ does NOT bump here.
+        self.increment_version()
 
     def _maybe_fallback_update(
         self,
@@ -1385,13 +1532,6 @@ class Collector(BaseCollector):
             streams = []
             events = []
 
-        # Set up profiler if configured
-        profiler = None
-        if self._profile_config is not None:
-            profiler = _CollectorProfiler(self._profile_config)
-            if profiler.is_active:
-                profiler.start()
-
         with contextlib.ExitStack() as stack:
             for stream in streams:
                 stack.enter_context(torch.cuda.stream(stream))
@@ -1399,19 +1539,7 @@ class Collector(BaseCollector):
             while self._frames < self.total_frames:
                 self._iter += 1
 
-                # Use profiler context if profiling is active
-                profile_ctx = (
-                    profiler.profile_rollout()
-                    if profiler is not None and profiler.is_active
-                    else contextlib.nullcontext()
-                )
-
-                with profile_ctx:
-                    tensordict_out = self.rollout()
-
-                # Step the profiler after each rollout
-                if profiler is not None and profiler.is_active:
-                    profiler.step()
+                tensordict_out = self.rollout()
 
                 if tensordict_out is None:
                     # if a replay buffer is passed and self.extend_buffer=False, there is no tensordict_out
@@ -1427,6 +1555,8 @@ class Collector(BaseCollector):
                         for event in events:
                             event.record()
                             event.synchronize()
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(tensordict_out)
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
                     self.replay_buffer.extend(tensordict_out)
@@ -1442,11 +1572,10 @@ class Collector(BaseCollector):
                     # >>>      else:
                     # >>>          break
                     # >>> assert data0["done"] is not data1["done"]
-                    yield tensordict_out.clone()
-
-        # Stop profiler if it hasn't been stopped yet
-        if profiler is not None and profiler.is_active:
-            profiler.stop()
+                    tensordict_out = tensordict_out.clone()
+                    if self.post_collect_hook is not None:
+                        self.post_collect_hook(tensordict_out)
+                    yield tensordict_out
 
     def start(self):
         """Starts the collector in a separate thread for asynchronous data collection.
@@ -1607,18 +1736,47 @@ class Collector(BaseCollector):
             self._carrier.set(("collector", "traj_ids"), traj_ids)
 
     @torch.no_grad()
+    @_maybe_record_function_decorator("Collector.rollout")
     def rollout(self) -> TensorDictBase:
         """Computes a rollout in the environment using the provided policy.
+
+        Each call runs ``frames_per_batch`` env steps and returns (or writes
+        to the replay buffer) the resulting batch.  The per-timestep flow is:
+
+        1. **Carrier prep** — read ``self._carrier``, the persistent
+           tensordict that survives across timesteps (allocated once in
+           :meth:`_make_carrier`).  If ``reset_at_each_iter=True``, reset
+           the env first.
+        2. **Policy step** — cast the carrier to ``policy_device`` if it
+           differs from ``env_device`` (then ``_sync_policy()``), invoke
+           the policy, and merge its outputs back into the carrier.
+        3. **Env step** — cast the carrier to ``env_device`` if needed
+           (then ``_sync_env()``), call ``env.step_and_maybe_reset``, and
+           write the returned ``"next"`` sub-tensordict back into the
+           carrier.
+        4. **Persist** — append the per-step snapshot to a list after
+           casting to ``storing_device`` and ``_sync_storage()`` if needed,
+           or write it directly with ``replay_buffer.add(...)`` when direct
+           replay-buffer writes are enabled.
+        5. **Advance** — swap the carrier for the post-reset
+           ``env_next_output`` and update ``("collector", "traj_ids")`` for
+           any envs that finished.
+
+        See :ref:`ref_collectors_internals` for the full flow diagram and
+        an explanation of the carrier / sync / device-cast machinery.
 
         Returns:
             TensorDictBase containing the computed rollout.
 
         """
+        if self.pre_collect_hook is not None:
+            self.pre_collect_hook()
+
         if self.reset_at_each_iter:
             self._carrier.update(self.env.reset())
 
-        # self._shuttle.fill_(("collector", "step_count"), 0)
-        if self._use_buffers:
+        # self._carrier.fill_(("collector", "step_count"), 0)
+        if self._use_buffers and self.track_traj_ids:
             self._final_rollout.fill_(("collector", "traj_ids"), -1)
         else:
             pass
@@ -1645,7 +1803,8 @@ class Collector(BaseCollector):
                 else:
                     if self._cast_to_policy_device:
                         if self.policy_device is not None:
-                            # This is unsafe if the shuttle is in pin_memory -- otherwise cuda will be happy with non_blocking
+                            # This is unsafe if the carrier is in pin_memory;
+                            # otherwise CUDA will be happy with non_blocking.
                             non_blocking = (
                                 not self.no_cuda_sync
                                 or self.policy_device.type == "cuda"
@@ -1659,18 +1818,19 @@ class Collector(BaseCollector):
                         elif self.policy_device is None:
                             # we know the tensordict has a device otherwise we would not be here
                             # we can pass this, clear_device_ must have been called earlier
-                            # policy_input = self._shuttle.clear_device_()
+                            # policy_input = self._carrier.clear_device_()
                             policy_input = self._carrier
                     else:
                         policy_input = self._carrier
                     # we still do the assignment for security
                     if self.compiled_policy:
                         cudagraph_mark_step_begin()
-                    policy_output = self._wrapped_policy(policy_input)
+                    with _maybe_record_function("Collector.policy"):
+                        policy_output = self._wrapped_policy(policy_input)
                     if self.compiled_policy:
                         policy_output = policy_output.clone()
                     if self._carrier is not policy_output:
-                        # ad-hoc update shuttle
+                        # ad-hoc update carrier
                         self._carrier.update(
                             policy_output, keys_to_update=self._policy_output_keys
                         )
@@ -1688,27 +1848,35 @@ class Collector(BaseCollector):
                     elif self.env_device is None:
                         # we know the tensordict has a device otherwise we would not be here
                         # we can pass this, clear_device_ must have been called earlier
-                        # env_input = self._shuttle.clear_device_()
+                        # env_input = self._carrier.clear_device_()
                         env_input = self._carrier
                 else:
                     env_input = self._carrier
                 env_output, env_next_output = self.env.step_and_maybe_reset(env_input)
 
                 if self._carrier is not env_output:
-                    # ad-hoc update shuttle
+                    # ad-hoc update carrier
                     next_data = env_output.get("next")
-                    if self._shuttle_has_no_device:
+                    if self._carrier_has_no_device:
                         # Make sure
                         next_data.clear_device_()
                     self._carrier.set("next", next_data)
+
+                # When compact_obs is enabled, drop the obs/state keys from
+                # ("next", ...) before persisting the per-step td. The dropped
+                # keys are recoverable from the root keys of the next step.
+                if self._compact_next_keys:
+                    carrier_for_out = self._carrier.exclude(*self._compact_next_keys)
+                else:
+                    carrier_for_out = self._carrier
 
                 if (
                     self.replay_buffer is not None
                     and not self._ignore_rb
                     and not self.extend_buffer
                 ):
-                    self.replay_buffer.add(self._carrier)
-                    if self._increment_frames(self._carrier.numel()):
+                    self.replay_buffer.add(carrier_for_out)
+                    if self._increment_frames(carrier_for_out.numel()):
                         return
                 else:
                     if self.storing_device is not None:
@@ -1716,22 +1884,24 @@ class Collector(BaseCollector):
                             not self.no_cuda_sync or self.storing_device.type == "cuda"
                         )
                         tensordicts.append(
-                            self._carrier.to(
+                            carrier_for_out.to(
                                 self.storing_device, non_blocking=non_blocking
                             )
                         )
                         if not self.no_cuda_sync:
                             self._sync_storage()
                     else:
-                        tensordicts.append(self._carrier)
+                        tensordicts.append(carrier_for_out)
 
-                # carry over collector data without messing up devices
-                collector_data = self._carrier.get("collector").copy()
+                if self.track_traj_ids:
+                    # carry over collector data without messing up devices
+                    collector_data = self._carrier.get("collector").copy()
                 self._carrier = env_next_output
-                if self._shuttle_has_no_device:
+                if self._carrier_has_no_device:
                     self._carrier.clear_device_()
-                self._carrier.set("collector", collector_data)
-                self._update_traj_ids(env_output)
+                if self.track_traj_ids:
+                    self._carrier.set("collector", collector_data)
+                    self._update_traj_ids(env_output)
 
                 if (
                     self.interruptor is not None
@@ -1819,10 +1989,43 @@ class Collector(BaseCollector):
         return final_rollout
 
     @torch.no_grad()
+    def fake_tensordict(self) -> TensorDictBase:
+        """Return a zero-filled tensordict shaped like one batch from this collector.
+
+        The result mirrors what ``next(iter(collector))`` would yield:
+
+        - batch shape ``(*env.batch_size, frames_per_batch)`` with the last
+          dim named ``"time"``;
+        - env keys (observation / reward / done / terminated / truncated /
+          ``is_init`` when an :class:`~torchrl.envs.InitTracker` is on the
+          env), policy out-keys, and ``("collector", "traj_ids")`` when
+          trajectory tracking is enabled;
+        - ``compact_obs=True`` exclusions applied;
+        - ``set_truncated=True`` last-step ``truncated``/``done`` masking
+          applied;
+        - ``postproc`` / ``split_trajs`` / private-key exclusion applied,
+          mirroring :meth:`_postproc`.
+
+        Intended for storage initialization and ``torch.compile`` /
+        cudagraph warmup without having to step the environment first.
+        """
+        if getattr(self, "_final_rollout", None) is None:
+            self._maybe_make_final_rollout(make_rollout=True)
+        result = self._final_rollout.clone().zero_()
+        result = self._maybe_set_truncated(result)
+        return self._postproc(result)
+
+    @torch.no_grad()
     def reset(self, index=None, **kwargs) -> None:
-        """Resets the environments to a new initial state."""
-        # metadata
-        collector_metadata = self._carrier.get("collector").clone()
+        """Resets the environments to a new initial state.
+
+        When ``trajs_per_batch`` is in use, also drops in-flight episodes and
+        completed-but-not-yet-yielded trajectories, so post-reset batches
+        contain only post-reset data.
+        """
+        self._flush_trajectory_assembly()
+        if self.track_traj_ids:
+            collector_metadata = self._carrier.get("collector").clone()
         if index is not None:
             # check that the env supports partial reset
             if prod(self.env.batch_size) == 0:
@@ -1842,10 +2045,11 @@ class Collector(BaseCollector):
             self._carrier.zero_()
 
         self._carrier.update(self.env.reset(**kwargs), inplace=True)
-        collector_metadata["traj_ids"] = (
-            collector_metadata["traj_ids"] - collector_metadata["traj_ids"].min()
-        )
-        self._carrier["collector"] = collector_metadata
+        if self.track_traj_ids:
+            collector_metadata["traj_ids"] = (
+                collector_metadata["traj_ids"] - collector_metadata["traj_ids"].min()
+            )
+            self._carrier["collector"] = collector_metadata
 
     def shutdown(
         self,
@@ -1866,7 +2070,11 @@ class Collector(BaseCollector):
                 # Stop the background thread if one is running (from .start())
                 # before tearing down the env it may still be using.
                 self._stop = True
-                if hasattr(self, "_thread") and self._thread.is_alive():
+                if (
+                    hasattr(self, "_thread")
+                    and self._thread.is_alive()
+                    and threading.current_thread() is not self._thread
+                ):
                     self._thread.join(timeout=timeout)
                 self.closed = True
                 del self._carrier
@@ -2031,9 +2239,3 @@ class Collector(BaseCollector):
 
     def _receive_weights_scheme(self):
         return super()._receive_weights_scheme()
-
-
-class SyncDataCollector(Collector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.Collector`."""
-
-    ...

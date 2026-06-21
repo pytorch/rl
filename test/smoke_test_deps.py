@@ -5,10 +5,20 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 import tempfile
 
 import pytest
+
+# This file is a smoke test for optional deps. All optional-dep imports must
+# stay lazy: the file is collected even when none of these libraries are
+# installed (each test then handles the missing dep itself).
+_has_ale_py = importlib.util.find_spec("ale_py") is not None
+_has_dm_control = importlib.util.find_spec("dm_control") is not None
+_has_dm_env = importlib.util.find_spec("dm_env") is not None
+_has_gymnasium = importlib.util.find_spec("gymnasium") is not None
+_has_tensorboard = importlib.util.find_spec("tensorboard") is not None
 
 
 @pytest.mark.skipif(
@@ -20,7 +30,7 @@ def test_dm_control():
     import dm_env  # noqa: F401
     from dm_control import suite  # noqa: F401
     from dm_control.suite.wrappers import pixels  # noqa: F401
-    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv  # noqa
+    from torchrl.envs.libs.dm_control import _has_dmc, DMControlEnv
 
     assert _has_dmc
     env = DMControlEnv("cheetah", "run")
@@ -55,7 +65,8 @@ def test_gym():
                 f"gym and gymnasium load failed. Gym got error {err}."
             ) from ERROR
 
-    from torchrl.envs.libs.gym import _has_gym, GymEnv  # noqa
+    from torchrl.envs.libs.gym import _has_gym, GymEnv
+    from torchrl.testing import PONG_VERSIONED
 
     assert _has_gym
     # If gymnasium is installed without the atari extra, ALE won't be registered.
@@ -64,8 +75,6 @@ def test_gym():
         import ale_py  # noqa: F401
     except Exception:  # pragma: no cover
         pytest.skip("ALE not available (missing ale_py); skipping Atari gym test.")
-    from torchrl.testing import PONG_VERSIONED
-
     try:
         env = GymEnv(PONG_VERSIONED())
     except Exception as err:  # gymnasium.error.NamespaceNotFound and similar

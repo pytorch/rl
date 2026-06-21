@@ -46,15 +46,16 @@ fi
 # Solving circular import: https://stackoverflow.com/questions/75501048/how-to-fix-attributeerror-partially-initialized-module-charset-normalizer-has
 #pip install -U charset-normalizer
 
-# install tensordict
-#
-# NOTE:
-# - The olddeps CI job runs on older Python/torch stacks.
-# - Installing from tensordict `main` (git+https) is brittle as `main` may drop
-#   support for older Python versions at any time, which can lead to "tensordict
-#   not installed" failures in downstream smoke tests.
-# - Use the same (pinned) range as TorchRL itself to keep this job stable.
-python -m pip install "${TORCHRL_TENSORDICT_SPEC:-tensordict>=0.11.0,<0.12.0}"
+# install tensordict (from source on PR/nightly, from PyPI only on release/*)
+if [[ "$RELEASE" == 0 ]]; then
+  # pybind11 headers are required to build tensordict's C++ extension.
+  python -m pip install "pybind11[global]"
+  python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+  python -m pip install --no-deps git+https://github.com/pytorch/tensordict.git
+else
+  python -m pip install cloudpickle packaging importlib_metadata numpy orjson "pyvers>=0.2.0,<0.3.0"
+  python -m pip install --no-deps tensordict
+fi
 
 # smoke test
 python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"
@@ -64,5 +65,5 @@ python -c "import tensordict; print(f'tensordict: {tensordict.__version__}')"
 python -m pip install "setuptools<82"
 
 printf "* Installing torchrl\n"
-python -m pip install -e . --no-build-isolation
+python -m pip install -e . --no-build-isolation --no-deps
 python -c "import torchrl"

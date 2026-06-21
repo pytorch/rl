@@ -23,6 +23,11 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+    dispatch_value_estimator,
+    distance_loss,
+    ValueEstimators,
+)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class TD3Loss(LossModule):
@@ -385,7 +390,9 @@ class TD3Loss(LossModule):
         tensordict_actor_grad = tensordict.select(
             *self.actor_network.in_keys, strict=False
         )
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             tensordict_actor_grad = self.actor_network(tensordict_actor_grad)
         actor_loss_td = tensordict_actor_grad.select(
             *self.qvalue_network.in_keys, strict=False
@@ -429,7 +436,9 @@ class TD3Loss(LossModule):
             next_td_actor = step_mdp(tensordict).select(
                 *self.actor_network.in_keys, strict=False
             )  # next_observation ->
-            with self.target_actor_network_params.to_module(self.actor_network):
+            with self.target_actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ):
                 next_td_actor = self.actor_network(next_td_actor)
             next_action = (next_td_actor.get(self.tensor_keys.action) + noise).clamp(
                 self.min_action, self.max_action
@@ -526,6 +535,12 @@ class TD3Loss(LossModule):
         )
         return td_out
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
@@ -551,3 +566,23 @@ class TD3Loss(LossModule):
             "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
+            value_type = self.default_value_estimator
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+        # TD3 does not need a value network — the next state value is read
+        # straight from the input tensordict at forward time.
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value": self.tensor_keys.state_action_value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=None,
+            **hyperparams,
+        )

@@ -23,7 +23,7 @@ from torch import nn
 
 from torch.distributed import rpc
 from torchrl._utils import _ProcessNoWarn, logger as torchrl_logger, VERBOSE
-from torchrl.collectors._base import _LegacyCollectorMeta, BaseCollector
+from torchrl.collectors._base import BaseCollector
 
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
@@ -253,7 +253,7 @@ class RPCCollector(BaseCollector):
             updated.
             Defaults to ``False``, ie. updates have to be executed manually
             through
-            :meth:`~torchrl.collectors.distributed.DistributedDataCollector.update_policy_weights_`.
+            :meth:`~torchrl.collectors.distributed.DistributedCollector.update_policy_weights_`.
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -292,7 +292,7 @@ class RPCCollector(BaseCollector):
         weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
             RECEIVING weights from a parent process or training loop. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
-            This is typically used when RPCDataCollector is itself a worker in a larger distributed setup.
+            This is typically used when RPCCollector is itself a worker in a larger distributed setup.
             Defaults to ``None``.
         trajs_per_batch (int, optional): When set, each remote collector
             assembles complete trajectories (episodes ending with
@@ -425,6 +425,20 @@ class RPCCollector(BaseCollector):
             else [copy(collector_kwargs) for _ in range(self.num_workers)]
         )
 
+        # When the inner collector is a Multi*Collector built from a
+        # policy_factory (no policy instance), the inner collector's
+        # auto-scheme branch in MultiCollector only handles
+        # isinstance(policy, nn.Module); a remote update_policy_weights_(weights)
+        # would otherwise reach the remote node's main process but never
+        # propagate down to its worker subprocesses. Inject a default
+        # SharedMemWeightSyncScheme on the inner collector so the broadcast
+        # actually lands. Only when the user hasn't already supplied one.
+        needs_inner_shared_mem_scheme = (
+            policy is None
+            and any(policy_factory)
+            and collector_class in (MultiSyncCollector, MultiAsyncCollector)
+        )
+
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
@@ -447,6 +461,15 @@ class RPCCollector(BaseCollector):
             collector_kwarg["policy_device"] = self.policy_device[i]
             if trajs_per_batch is not None:
                 collector_kwarg["trajs_per_batch"] = trajs_per_batch
+            if (
+                needs_inner_shared_mem_scheme
+                and "weight_sync_schemes" not in collector_kwarg
+            ):
+                from torchrl.weight_update import SharedMemWeightSyncScheme
+
+                collector_kwarg["weight_sync_schemes"] = {
+                    "policy": SharedMemWeightSyncScheme()
+                }
 
         self.postproc = postproc
         self.split_trajs = split_trajs
@@ -633,7 +656,7 @@ class RPCCollector(BaseCollector):
             # main-node `policy` should be used only as a weight source on the
             # trainer, and NOT sent to remote collectors (which will build their
             # own policies from the factory). This mirrors the behaviour of
-            # `DistributedDataCollector` with multi-process collectors.
+            # `DistributedCollector` with multi-process collectors.
             policy_to_send = (
                 None
                 if (
@@ -924,7 +947,7 @@ class RPCWeightUpdater(WeightUpdaterBase):
     """A remote weight updater for synchronizing policy weights across remote workers using RPC.
 
     The `RPCWeightUpdater` class provides a mechanism for updating the weights of a policy
-    across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCDataCollector`
+    across remote inference workers using RPC. It is designed to work with the :class:`~torchrl.collectors.distributed.RPCCollector`
     to ensure that each worker receives the latest policy weights.
     This class is typically used in distributed data collection scenarios where remote workers
     are managed via RPC and need to be kept in sync with the central policy weights.
@@ -950,7 +973,7 @@ class RPCWeightUpdater(WeightUpdaterBase):
         synchronization logic, consider extending `WeightUpdaterBase` with a custom implementation.
 
     .. seealso:: :class:`~torchrl.collectors.WeightUpdaterBase` and
-        :class:`~torchrl.collectors.distributed.RPCDataCollector`.
+        :class:`~torchrl.collectors.distributed.RPCCollector`.
 
     """
 
@@ -1011,9 +1034,3 @@ class RPCWeightUpdater(WeightUpdaterBase):
                 torchrl_logger.debug(f"waiting for worker {i}")
                 futures[i].wait()
                 torchrl_logger.debug("got it!")
-
-
-class RPCDataCollector(RPCCollector, metaclass=_LegacyCollectorMeta):
-    """Deprecated version of :class:`~torchrl.collectors.distributed.RPCCollector`."""
-
-    ...

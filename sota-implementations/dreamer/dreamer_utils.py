@@ -939,8 +939,6 @@ def make_collector(
         replay_buffer=replay_buffer,
         postproc=storage_transform,
         track_policy_version=track_policy_version,
-        # Skip fake data initialization - storage handles coordination
-        local_init_rb=True,
         # Compile policy in workers (avoids serialization issues)
         compile_policy=compile_policy,
         cudagraph_policy=cudagraph_policy,

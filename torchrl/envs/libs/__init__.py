@@ -6,6 +6,7 @@
 from .brax import BraxEnv, BraxWrapper
 from .dm_control import DMControlEnv, DMControlWrapper
 from .envpool import MultiThreadedEnv, MultiThreadedEnvWrapper
+from .genesis import GenesisEnv, GenesisWrapper
 from .gym import (
     gym_backend,
     GymEnv,
@@ -19,12 +20,20 @@ from .habitat import HabitatEnv
 from .isaac_lab import IsaacLabWrapper
 from .isaacgym import IsaacGymEnv, IsaacGymWrapper
 from .jumanji import JumanjiEnv, JumanjiWrapper
+from .libero import LiberoEnv, LiberoWrapper
 from .meltingpot import MeltingpotEnv, MeltingpotWrapper
+from .mujoco_playground import (
+    MujocoPlaygroundAgentMapping,
+    MujocoPlaygroundAgentSpec,
+    MujocoPlaygroundEnv,
+    MujocoPlaygroundWrapper,
+)
 from .openml import OpenMLEnv
 from .openspiel import OpenSpielEnv, OpenSpielWrapper
 from .pettingzoo import PettingZooEnv, PettingZooWrapper
 from .procgen import ProcgenEnv, ProcgenWrapper
 from .robohive import RoboHiveEnv
+from .safety_gymnasium import SafetyGymnasiumEnv, SafetyGymnasiumWrapper
 from .smacv2 import SMACv2Env, SMACv2Wrapper
 from .unity_mlagents import UnityMLAgentsEnv, UnityMLAgentsWrapper
 from .vmas import VmasEnv, VmasWrapper
@@ -34,6 +43,8 @@ __all__ = [
     "BraxWrapper",
     "DMControlEnv",
     "DMControlWrapper",
+    "GenesisEnv",
+    "GenesisWrapper",
     "GymEnv",
     "GymWrapper",
     "HabitatEnv",
@@ -42,10 +53,16 @@ __all__ = [
     "IsaacLabWrapper",
     "JumanjiEnv",
     "JumanjiWrapper",
+    "LiberoEnv",
+    "LiberoWrapper",
     "MOGymEnv",
     "MOGymWrapper",
     "MeltingpotEnv",
     "MeltingpotWrapper",
+    "MujocoPlaygroundAgentMapping",
+    "MujocoPlaygroundAgentSpec",
+    "MujocoPlaygroundEnv",
+    "MujocoPlaygroundWrapper",
     "MultiThreadedEnv",
     "MultiThreadedEnvWrapper",
     "OpenMLEnv",
@@ -56,6 +73,8 @@ __all__ = [
     "ProcgenEnv",
     "ProcgenWrapper",
     "RoboHiveEnv",
+    "SafetyGymnasiumEnv",
+    "SafetyGymnasiumWrapper",
     "SMACv2Env",
     "SMACv2Wrapper",
     "UnityMLAgentsEnv",

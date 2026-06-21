@@ -22,7 +22,7 @@ Collectors Deep Dive: Trajectory Assembly
 
       * `TorchRL <https://github.com/pytorch/rl>`_ and
         `gymnasium <https://gymnasium.farama.org>`_ installed
-      * Familiarity with :class:`~torchrl.collectors.SyncDataCollector`
+      * Familiarity with :class:`~torchrl.collectors.Collector`
         (see :ref:`the data-collection tutorial <gs_storage_collector>`)
 """
 
@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore")
 # sphinx_gallery_end_ignore
 
 import torch
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.collectors.utils import split_trajectories
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.envs import GymEnv
@@ -58,7 +58,7 @@ env = GymEnv("CartPole-v1")
 env.set_seed(0)
 
 policy = RandomPolicy(env.action_spec)
-collector = SyncDataCollector(env, policy, frames_per_batch=200, total_frames=-1)
+collector = Collector(env, policy, frames_per_batch=200, total_frames=-1)
 
 for data in collector:
     print(data)
@@ -162,12 +162,13 @@ print(f"Nested result: {type(nested).__name__}, batch_size={nested.batch_size}")
 # and yield only once it has accumulated the requested number of
 # finished episodes.
 
-collector_trajs = SyncDataCollector(
+collector_trajs = Collector(
     env,
     policy,
     frames_per_batch=200,
     total_frames=-1,
     trajs_per_batch=5,
+    traj_format="padded",
 )
 
 for traj_data in collector_trajs:
@@ -183,12 +184,35 @@ print(f"Shape: {traj_data.shape}  →  (trajs_per_batch, max_episode_length)")
 print(traj_data["collector", "mask"])
 
 ######################################################################
+# ``traj_format`` controls the batch layout. ``"padded"`` (the current
+# default — it will change to ``"cat"`` in torchrl v0.16) stacks the
+# episodes with zero padding as above. ``"cat"`` concatenates them along
+# time instead: the batch is flat and unpadded, episodes are contiguous
+# and delimited by ``("next", "done")`` and ``("collector", "traj_ids")``.
+# Prefer it when episode lengths vary widely or frames are large (e.g.
+# images), since no memory is spent on padding:
+
+collector_trajs.shutdown()
+collector_cat = Collector(
+    env,
+    policy,
+    frames_per_batch=200,
+    total_frames=-1,
+    trajs_per_batch=5,
+    traj_format="cat",
+)
+
+traj_data_cat = next(iter(collector_cat))
+print(f"Shape: {traj_data_cat.shape}  →  (sum of the 5 episode lengths,)")
+print(traj_data_cat["next", "done"].squeeze(-1))
+
+######################################################################
 # Storing transitions and sampling trajectory slices
 # ---------------------------------------------------
 #
 # In off-policy training the standard pattern is to store **flat
 # transitions** in a :class:`~torchrl.data.ReplayBuffer` and let a
-# :class:`~torchrl.data.SliceSampler` carve out contiguous
+# :class:`~torchrl.data.replay_buffers.SliceSampler` carve out contiguous
 # sub-sequences that respect episode boundaries. The sampler uses
 # ``("next", "done")`` to locate where episodes end, so you never get a
 # slice that straddles two unrelated trajectories.
@@ -199,8 +223,8 @@ print(traj_data["collector", "mask"])
 # .. seealso::
 #   The :ref:`replay buffer tutorial <tuto_rb_traj>` covers trajectory
 #   storage in more depth, including alternative samplers such as
-#   :class:`~torchrl.data.PrioritizedSliceSampler` and
-#   :class:`~torchrl.data.SliceSamplerWithoutReplacement`.
+#   :class:`~torchrl.data.replay_buffers.PrioritizedSliceSampler` and
+#   :class:`~torchrl.data.replay_buffers.SliceSamplerWithoutReplacement`.
 
 from torchrl.data import SliceSampler
 
@@ -239,7 +263,7 @@ print(f"Unique trajectories in sample: {traj_ids.unique().numel()}")
 #
 # .. code-block:: python
 #
-#     collector = SyncDataCollector(env, policy, frames_per_batch=200, ...)
+#     collector = Collector(env, policy, frames_per_batch=200, ...)
 #     rb = ReplayBuffer(
 #         storage=LazyTensorStorage(max_size=100_000),
 #         sampler=SliceSampler(slice_len=16, end_key=("next", "done")),
@@ -345,5 +369,5 @@ collector_async.async_shutdown()
 
 # sphinx_gallery_start_ignore
 collector.shutdown()
-collector_trajs.shutdown()
+collector_cat.shutdown()
 # sphinx_gallery_end_ignore

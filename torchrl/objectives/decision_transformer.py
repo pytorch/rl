@@ -238,7 +238,9 @@ class OnlineDTLoss(LossModule):
         if target_actions.requires_grad:
             raise RuntimeError("target action cannot be part of a graph.")
 
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             action_dist = self.actor_network.get_dist(tensordict)
 
         log_likelihood = action_dist.log_prob(target_actions)
@@ -381,7 +383,9 @@ class DTLoss(LossModule):
         tensordict = tensordict.copy()
         target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             pred_actions = self.actor_network(tensordict).get(
                 self.tensor_keys.action_pred
             )

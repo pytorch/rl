@@ -8,14 +8,31 @@ from __future__ import annotations
 import argparse
 import gc
 import importlib.util
+import inspect
 
 import pytest
 import torch
+from torch.distributed.distributed_c10d import _new_process_group_helper
 from torchrl._utils import logger
+from torchrl.weight_update.llm import (
+    get_sglang_model_metadata,
+    SGLangCollectiveTransport,
+    SGLangWeightSender,
+    SGLangWeightSyncScheme,
+)
+from torchrl.weight_update.llm.sglang_nccl import _process_group_options_kwargs
 
 # Check for dependencies
 _has_sglang = importlib.util.find_spec("sglang") is not None
 _has_transformers = importlib.util.find_spec("transformers") is not None
+
+
+def test_process_group_options_kwargs_match_torch_signature():
+    kwargs = _process_group_options_kwargs()
+
+    assert len(kwargs) == 1
+    assert next(iter(kwargs)) in inspect.signature(_new_process_group_helper).parameters
+    assert next(iter(kwargs.values())) is None
 
 
 @pytest.mark.gpu
@@ -32,8 +49,6 @@ class TestSGLangWeightSyncScheme:
 
     def test_scheme_initialization(self):
         """Test SGLangWeightSyncScheme initialization with valid parameters."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -52,24 +67,17 @@ class TestSGLangWeightSyncScheme:
 
     def test_scheme_auto_port(self):
         """Test that master_port is auto-assigned when not provided."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=2,
         )
 
         assert scheme.master_port > 0
-        assert scheme.master_port < 65536
+        assert scheme.master_port <= 55535
         assert scheme.world_size == 3  # 1 trainer + 2 gpus
 
     def test_create_transport(self):
         """Test transport creation from scheme."""
-        from torchrl.weight_update.llm import (
-            SGLangCollectiveTransport,
-            SGLangWeightSyncScheme,
-        )
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -83,8 +91,6 @@ class TestSGLangWeightSyncScheme:
 
     def test_create_sender(self):
         """Test sender creation from scheme."""
-        from torchrl.weight_update.llm import SGLangWeightSender, SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -95,8 +101,6 @@ class TestSGLangWeightSyncScheme:
 
     def test_create_receiver_returns_none(self):
         """Test that create_receiver returns None (SGLang manages receivers)."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -143,8 +147,6 @@ class TestSGLangWeightSender:
 
     def test_register_model(self, source_model):
         """Test model registration."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -159,8 +161,6 @@ class TestSGLangWeightSender:
 
     def test_get_model_metadata(self, source_model):
         """Test model metadata extraction utility."""
-        from torchrl.weight_update.llm import get_sglang_model_metadata
-
         metadata = get_sglang_model_metadata(source_model)
 
         assert isinstance(metadata, dict)
@@ -174,8 +174,6 @@ class TestSGLangWeightSender:
 
     def test_update_weights_requires_init(self, source_model):
         """Test that update_weights fails if transport not initialized."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -190,8 +188,6 @@ class TestSGLangWeightSender:
 
     def test_update_weights_requires_model(self):
         """Test that update_weights fails if no model registered."""
-        from torchrl.weight_update.llm import SGLangWeightSyncScheme
-
         scheme = SGLangWeightSyncScheme(
             server_url="http://localhost:30000",
             num_gpus=1,
@@ -217,8 +213,6 @@ class TestSGLangCollectiveTransport:
 
     def test_transport_initialization(self):
         """Test transport initialization with valid parameters."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -237,8 +231,6 @@ class TestSGLangCollectiveTransport:
 
     def test_transport_device_parsing(self):
         """Test device specification parsing."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         # Test string device
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
@@ -274,8 +266,6 @@ class TestSGLangCollectiveTransport:
 
     def test_check_connection_before_init(self):
         """Test that check_connection returns False before init."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -288,8 +278,6 @@ class TestSGLangCollectiveTransport:
 
     def test_send_weights_requires_init(self):
         """Test that send_weights fails if not initialized."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",
@@ -304,8 +292,6 @@ class TestSGLangCollectiveTransport:
 
     def test_init_requires_rank_zero(self):
         """Test that init_all_workers_group only works for rank 0."""
-        from torchrl.weight_update.llm import SGLangCollectiveTransport
-
         transport = SGLangCollectiveTransport(
             server_url="http://localhost:30000",
             master_address="localhost",

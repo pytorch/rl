@@ -25,7 +25,7 @@ def main(cfg: DictConfig):  # noqa: F821
     from tensordict.nn import CudaGraphModule
 
     from torchrl._utils import timeit
-    from torchrl.collectors import SyncDataCollector
+    from torchrl.collectors import Collector
     from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
     from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
     from torchrl.envs import ExplorationType, set_exploration_type
@@ -63,7 +63,7 @@ def main(cfg: DictConfig):  # noqa: F821
     )
 
     # Create collector
-    collector = SyncDataCollector(
+    collector = Collector(
         create_env_fn=make_parallel_env(
             cfg.env.env_name,
             num_envs=cfg.env.num_envs,
