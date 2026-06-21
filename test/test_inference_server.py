@@ -344,6 +344,7 @@ class TestPolicyClientModule:
                 transport,
                 in_keys=["observation"],
                 out_keys=["action"],
+                max_inflight=1,
             )
             td = TensorDict({"observation": torch.randn(4)})
             result = remote_policy(td)
