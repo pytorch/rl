@@ -14,7 +14,6 @@ from tensordict.nn import dispatch, TensorDictModule
 from tensordict.utils import NestedKey
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce
 
 
 class GAILLoss(LossModule):
@@ -248,7 +247,7 @@ class GAILLoss(LossModule):
 
             loss += gp_loss
             out["gp_loss"] = gp_loss.detach()
-        loss = _reduce(loss, reduction=self.reduction)
+        loss = self._reduce_loss(loss, tensordict=tensordict)
         out["loss"] = loss
         td_out = TensorDict(out)
         self._clear_weakrefs(

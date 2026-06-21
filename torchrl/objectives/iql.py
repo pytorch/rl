@@ -19,7 +19,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _pseudo_vmap,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
@@ -480,7 +479,7 @@ class IQLLoss(LossModule):
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
-        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        loss_actor = self._reduce_loss(loss_actor, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -505,7 +504,7 @@ class IQLLoss(LossModule):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_q - value, self.expectile)
-        value_loss = _reduce(value_loss, reduction=self.reduction)
+        value_loss = self._reduce_loss(value_loss, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -539,7 +538,7 @@ class IQLLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
             tensordict,
@@ -908,7 +907,7 @@ class DiscreteIQLLoss(IQLLoss):
         # write log_prob in tensordict for alpha loss
         tensordict.set(self.tensor_keys.log_prob, log_prob.detach())
         loss_actor = -(exp_a * log_prob)
-        loss_actor = _reduce(loss_actor, reduction=self.reduction)
+        loss_actor = self._reduce_loss(loss_actor, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -958,7 +957,7 @@ class DiscreteIQLLoss(IQLLoss):
             self.value_network(td_copy)
         value = td_copy.get(self.tensor_keys.value).squeeze(-1)
         value_loss = self.loss_value_diff(min_Q - value, self.expectile)
-        value_loss = _reduce(value_loss, reduction=self.reduction)
+        value_loss = self._reduce_loss(value_loss, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -1011,7 +1010,7 @@ class DiscreteIQLLoss(IQLLoss):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
             tensordict,

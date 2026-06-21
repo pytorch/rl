@@ -36,7 +36,6 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _maybe_add_or_extend_key,
     _maybe_get_or_select,
-    _reduce,
     _sum_td_features,
     _validate_clip_epsilon,
     dispatch_value_estimator,
@@ -1460,7 +1459,11 @@ class ClipPPOLoss(PPOLoss):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
 
-        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        td_out.set(
+            "ESS",
+            self._reduce_loss(ess, tensordict=tensordict, reduction=self.reduction)
+            / batch,
+        )
         with torch.no_grad():
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())
