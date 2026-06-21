@@ -6,7 +6,11 @@
 from torchrl.modules.inference_server._monarch import MonarchTransport
 from torchrl.modules.inference_server._mp import MPTransport
 from torchrl.modules.inference_server._ray import RayTransport
-from torchrl.modules.inference_server._server import InferenceClient, InferenceServer
+from torchrl.modules.inference_server._server import (
+    InferenceClient,
+    InferenceServer,
+    ProcessInferenceServer,
+)
 from torchrl.modules.inference_server._slot import SlotTransport
 from torchrl.modules.inference_server._threading import ThreadingTransport
 from torchrl.modules.inference_server._transport import InferenceTransport
@@ -17,6 +21,7 @@ __all__ = [
     "InferenceTransport",
     "MonarchTransport",
     "MPTransport",
+    "ProcessInferenceServer",
     "RayTransport",
     "SlotTransport",
     "ThreadingTransport",
