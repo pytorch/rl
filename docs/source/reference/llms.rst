@@ -253,7 +253,7 @@ We provide a few task-specific environments, such as :class:`~torchrl.envs.llm.G
 :class:`~torchrl.envs.llm.IFEvalEnv` for the IFEval dataset, and :class:`~torchrl.envs.llm.MLGymEnv` for MLGym integration.
 
 These environments wrap a :class:`~torchrl.envs.llm.ChatEnv` and add a :class:`~torchrl.envs.llm.transforms.DataLoadingPrimer` transform
-(plus an optional reward parsing transform) in a :class:`~torchrl.envs.TransformedEnv` class.
+(plus an optional reward parsing transform) in a :class:`~torchrl.envs.transforms.TransformedEnv` class.
 
 
 

@@ -272,7 +272,9 @@ class RayTransport:
         if strategy is not None:
             strategy.apply_weights(model, weights_buffer)
         else:
-            weights_buffer.to_module(model)
+            WeightStrategy(extract_as="tensordict").apply_weights(
+                model, weights_buffer, inplace=False
+            )
 
         return weights_buffer
 

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import contextlib
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -43,6 +42,10 @@ from torchrl.objectives.value import (
     TD1Estimator,
     TDLambdaEstimator,
     VTrace,
+)
+    dispatch_value_estimator,
+    distance_loss,
+    ValueEstimators,
 )
 
 
@@ -455,7 +458,9 @@ class A2CLoss(LossModule):
             *self.actor_network.in_keys, strict=False
         ).copy()
         with (
-            self.actor_network_params.to_module(self.actor_network)
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -515,7 +520,9 @@ class A2CLoss(LossModule):
             *self.critic_network.in_keys, strict=False
         )
         with (
-            self.critic_network_params.to_module(self.critic_network)
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -578,8 +585,9 @@ class A2CLoss(LossModule):
             td_out.set("loss_critic", loss_critic)
             if value_clip_fraction is not None:
                 td_out.set("value_clip_fraction", value_clip_fraction)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -592,6 +600,15 @@ class A2CLoss(LossModule):
             "target_critic_network_params",
         )
         return td_out
+
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+        ValueEstimators.GAE,
+        ValueEstimators.MAGAE,
+        ValueEstimators.VTrace,
+    )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
@@ -638,3 +655,19 @@ class A2CLoss(LossModule):
             "sample_log_prob": self.tensor_keys.sample_log_prob,
         }
         self._value_estimator.set_keys(**tensor_keys)
+        hp.setdefault("device", _get_default_device(self))
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "advantage": self.tensor_keys.advantage,
+                "value": self.tensor_keys.value,
+                "value_target": self.tensor_keys.value_target,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+                "sample_log_prob": self.tensor_keys.sample_log_prob,
+            },
+            **hp,
+        )

@@ -12,6 +12,7 @@ Hooks for customizing the training loop at various points.
     BatchSubSampler
     ClearCudaCache
     CountFramesLog
+    EarlyStopping
     LogScalar
     OptimizerHook
     LogValidationReward

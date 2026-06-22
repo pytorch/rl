@@ -12,6 +12,7 @@ dependencies:
     - cloudpickle
     - pygame
     - moviepy<2.0.0
+    - scikit-video
     - tqdm
     - pytest
     - pytest-cov
@@ -24,6 +25,8 @@ dependencies:
     - pybind11[global]
     - pyyaml
     - scipy
+    - flatten_dict
+    - termcolor
     - hydra-core
     - patchelf
     - mujoco==2.3.3

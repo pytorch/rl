@@ -243,6 +243,7 @@ class timeit:
     """
 
     _REG = {}
+    _MARKS = {}
 
     def __init__(self, name):
         self.name = name
@@ -295,15 +296,28 @@ class timeit:
         """
         return time.time() - self.t0
 
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        t = self.elapsed()
-        val = self._REG.setdefault(self.name, [0.0, 0.0, 0])
+    @classmethod
+    def _record(cls, name: str, elapsed: float) -> None:
+        val = cls._REG.setdefault(name, [0.0, 0.0, 0])
 
         count = val[2]
         N = count + 1
-        val[0] = val[0] * (count / N) + t / N
-        val[1] += t
+        val[0] = val[0] * (count / N) + elapsed / N
+        val[1] += elapsed
         val[2] = N
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self._record(self.name, self.elapsed())
+
+    @classmethod
+    def mark_start(cls, name: str) -> None:
+        """Mark the start of a named timed event."""
+        cls._MARKS[name] = time.time()
+
+    @classmethod
+    def mark_end(cls, name: str) -> None:
+        """Mark the end of a named timed event and record its elapsed time."""
+        cls._record(name, time.time() - cls._MARKS.pop(name))
 
     @staticmethod
     def print(prefix: str | None = None) -> str:  # noqa: T202
@@ -394,26 +408,43 @@ class timeit:
         cls.erase()
 
 
-# Global flag to enable detailed profiling instrumentation.
-# When False (default), _maybe_record_function returns nullcontext() immediately
-# to avoid overhead in hot code paths.
-_PROFILING_ENABLED = False
+# Profiling instrumentation is gated by the TORCHRL_PROFILING env var, read
+# once at import time. When unset, `_maybe_record_function_decorator` returns
+# an identity decorator with zero per-call overhead, so instrumentation can be
+# sprinkled across hot paths (collectors, envs, modules) without penalty in
+# production. When set to "1", the instrumentation is armed and can still be
+# toggled at runtime via :func:`set_profiling_enabled` for dynamic control
+# during a session (e.g. enabling profiling only around a specific iteration).
+_PROFILING_ALLOWED = os.environ.get("TORCHRL_PROFILING", "0") == "1"
+_PROFILING_ENABLED = _PROFILING_ALLOWED
 
 # Singleton nullcontext to avoid repeated object creation
 _NULL_CONTEXT = nullcontext()
 
 
 def set_profiling_enabled(enabled: bool) -> None:
-    """Enable or disable detailed profiling instrumentation.
+    """Enable or disable detailed profiling instrumentation at runtime.
 
-    When disabled (default), `_maybe_record_function` and `_maybe_timeit`
-    return immediately with minimal overhead. Enable only when actively
-    profiling to avoid performance regression.
+    Profiling must first be armed at import time by setting the
+    ``TORCHRL_PROFILING=1`` environment variable before importing torchrl.
+    When the env var is unset, decorators added via
+    :func:`_maybe_record_function_decorator` are pure identity functions and
+    cannot be toggled on after the fact — calling this with ``enabled=True``
+    in that case emits a warning and is a no-op.
 
     Args:
         enabled: If True, enable profiling instrumentation.
     """
     global _PROFILING_ENABLED
+    if enabled and not _PROFILING_ALLOWED:
+        warnings.warn(
+            "set_profiling_enabled(True) called but TORCHRL_PROFILING=1 was "
+            "not set before importing torchrl. Decorated functions are pure "
+            "identities and cannot be toggled on at runtime. Set the env var "
+            "before import and retry.",
+            stacklevel=2,
+        )
+        return
     _PROFILING_ENABLED = enabled
 
 
@@ -431,8 +462,9 @@ def _maybe_timeit(name):
 def _maybe_record_function(name):
     """Return record_function context if profiling enabled and not compiling.
 
-    When _PROFILING_ENABLED is False (default), returns immediately with
-    minimal overhead to avoid performance regression in hot code paths.
+    When profiling was not armed via ``TORCHRL_PROFILING=1`` at import, or was
+    disabled at runtime via :func:`set_profiling_enabled`, returns a shared
+    nullcontext with minimal overhead.
     """
     if not _PROFILING_ENABLED:
         return _NULL_CONTEXT
@@ -443,13 +475,21 @@ def _maybe_record_function(name):
 
 
 def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable]:
-    """Decorator version of :func:`_maybe_record_function`.
+    """Decorator form of :func:`_maybe_record_function`.
 
-    This is preferred over sprinkling many context managers in hot code paths,
-    as it reduces Python overhead while keeping a useful profiler structure.
+    Prefer this over sprinkling context managers in hot code paths: when
+    ``TORCHRL_PROFILING=1`` is not set at import time, the returned decorator
+    is a pure identity (``lambda f: f``) with zero per-call overhead. This
+    makes it safe to decorate collectors, envs, and modules methods for a
+    ready-to-ship profiler infrastructure.
 
-    When _PROFILING_ENABLED is False (default), the decorator is a no-op.
+    When the env var is set, the decorator wraps the function in a
+    ``record_function`` context, gated by the runtime
+    :func:`set_profiling_enabled` flag so the profiler timeline can be scoped
+    to specific regions of interest.
     """
+    if not _PROFILING_ALLOWED:
+        return _identity_decorator
 
     def decorator(fn: Callable) -> Callable:
         @wraps(fn)
@@ -462,6 +502,11 @@ def _maybe_record_function_decorator(name: str) -> Callable[[Callable], Callable
         return wrapped
 
     return decorator
+
+
+def _identity_decorator(fn: Callable) -> Callable:
+    """Shared identity decorator used when profiling is not armed."""
+    return fn
 
 
 def _check_for_faulty_process(processes):
@@ -1301,6 +1346,172 @@ def safe_is_current_stream_capturing():
         return False
 
 
+_GB = 1024**3
+_EMPTY_CUDA_STATS = {
+    "allocated_gb": 0.0,
+    "reserved_gb": 0.0,
+    "max_allocated_gb": 0.0,
+    "max_reserved_gb": 0.0,
+}
+
+
+def _cuda_memory_device(device: torch.device | int | str | None) -> torch.device | None:
+    """Normalize a user CUDA memory device, or return ``None`` for no-op devices."""
+    if not torch.cuda.is_available():
+        return None
+    if device is None:
+        return _make_ordinal_device(torch.device("cuda"))
+    if isinstance(device, int):
+        return torch.device("cuda", device)
+    device = torch.device(device)
+    if device.type != "cuda":
+        return None
+    return _make_ordinal_device(device)
+
+
+def cuda_memory_stats(
+    device: torch.device | int | str | None = None,
+) -> dict[str, float]:
+    """Return current CUDA memory statistics for ``device`` in gigabytes.
+
+    Wraps :func:`torch.cuda.memory_allocated`, :func:`torch.cuda.memory_reserved`,
+    :func:`torch.cuda.max_memory_allocated` and :func:`torch.cuda.max_memory_reserved`
+    into a single dict suitable for logging or comparing phases of a training loop.
+
+    Args:
+        device: CUDA device to query. ``None`` (default) targets the current
+            CUDA device. CPU/MPS/unset devices return zeros (no warning) so the
+            helper can be called unconditionally from device-agnostic code.
+
+    Returns:
+        Mapping with keys ``"allocated_gb"``, ``"reserved_gb"``,
+        ``"max_allocated_gb"``, ``"max_reserved_gb"``. Values are floats in
+        gigabytes. When CUDA is not available, all values are ``0.0``.
+
+    Examples:
+        >>> from torchrl import cuda_memory_stats
+        >>> stats = cuda_memory_stats()
+        >>> sorted(stats)
+        ['allocated_gb', 'max_allocated_gb', 'max_reserved_gb', 'reserved_gb']
+
+    .. seealso::
+        :func:`reset_cuda_peak_stats`, :class:`cuda_memory_profile`.
+    """
+    dev = _cuda_memory_device(device)
+    if dev is None:
+        return dict(_EMPTY_CUDA_STATS)
+    return {
+        "allocated_gb": torch.cuda.memory_allocated(dev) / _GB,
+        "reserved_gb": torch.cuda.memory_reserved(dev) / _GB,
+        "max_allocated_gb": torch.cuda.max_memory_allocated(dev) / _GB,
+        "max_reserved_gb": torch.cuda.max_memory_reserved(dev) / _GB,
+    }
+
+
+def reset_cuda_peak_stats(
+    device: torch.device | int | str | None = None,
+) -> None:
+    """Reset the peak-memory counters for ``device``.
+
+    Thin wrapper around :func:`torch.cuda.reset_peak_memory_stats`. No-op when
+    CUDA is unavailable or ``device`` is non-CUDA.
+
+    Args:
+        device: CUDA device whose peaks should be cleared. ``None`` (default)
+            targets the current CUDA device.
+
+    Examples:
+        >>> from torchrl import reset_cuda_peak_stats
+        >>> reset_cuda_peak_stats()  # safe even without CUDA
+
+    .. seealso::
+        :func:`cuda_memory_stats`, :class:`cuda_memory_profile`.
+    """
+    dev = _cuda_memory_device(device)
+    if dev is None:
+        return
+    torch.cuda.reset_peak_memory_stats(dev)
+
+
+class cuda_memory_profile(_DecoratorContextManager):
+    """Context manager / decorator that reports CUDA memory deltas for a code block.
+
+    On ``__enter__`` (optionally) clears the peak-memory counters; on
+    ``__exit__`` reads :func:`cuda_memory_stats` and logs the delta (current -
+    pre-block) plus the new peaks. The collected stats are stored on the
+    ``stats`` attribute for programmatic access after the block exits.
+
+    Args:
+        label: Short identifier prepended to the log line and stored on the
+            instance for downstream metric routing.
+        device: CUDA device to profile. ``None`` (default) targets the current
+            CUDA device. On non-CUDA devices the manager is a no-op.
+        log: When ``True`` (default), emit a single ``INFO`` line via
+            :data:`torchrl.torchrl_logger` at exit. When ``False`` only the
+            ``stats`` attribute is populated.
+        reset_peaks: When ``True`` (default), reset peak counters on enter so
+            the reported ``max_*`` values reflect the block only.
+
+    Examples:
+        >>> import torch
+        >>> from torchrl import cuda_memory_profile
+        >>> with cuda_memory_profile("warmup", log=False) as prof:
+        ...     if torch.cuda.is_available():
+        ...         _ = torch.zeros(1, device="cuda")
+        >>> sorted(prof.stats)
+        ['allocated_gb', 'max_allocated_gb', 'max_reserved_gb', 'reserved_gb']
+
+    .. seealso::
+        :func:`cuda_memory_stats`, :func:`reset_cuda_peak_stats`, :class:`timeit`.
+    """
+
+    def __init__(
+        self,
+        label: str,
+        *,
+        device: torch.device | int | str | None = None,
+        log: bool = True,
+        reset_peaks: bool = True,
+    ) -> None:
+        self.label = label
+        self.device = device
+        self.log = log
+        self.reset_peaks = reset_peaks
+        self.stats: dict[str, float] = dict(_EMPTY_CUDA_STATS)
+        self._pre: dict[str, float] = dict(_EMPTY_CUDA_STATS)
+
+    def clone(self) -> cuda_memory_profile:
+        return type(self)(
+            self.label,
+            device=self.device,
+            log=self.log,
+            reset_peaks=self.reset_peaks,
+        )
+
+    def __enter__(self) -> cuda_memory_profile:
+        if self.reset_peaks:
+            reset_cuda_peak_stats(self.device)
+        self._pre = cuda_memory_stats(self.device)
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.stats = cuda_memory_stats(self.device)
+        if self.log:
+            delta_alloc = self.stats["allocated_gb"] - self._pre["allocated_gb"]
+            delta_reserved = self.stats["reserved_gb"] - self._pre["reserved_gb"]
+            logger.info(
+                "cuda_memory_profile[%s]: alloc=%.3f GB (Δ%+.3f), "
+                "reserved=%.3f GB (Δ%+.3f), max_alloc=%.3f GB, max_reserved=%.3f GB",
+                self.label,
+                self.stats["allocated_gb"],
+                delta_alloc,
+                self.stats["reserved_gb"],
+                delta_reserved,
+                self.stats["max_allocated_gb"],
+                self.stats["max_reserved_gb"],
+            )
+
+
 class _RayServiceMetaClass(type):
     """Metaclass that enables dynamic class selection based on use_ray_service parameter.
 
@@ -1363,6 +1574,23 @@ def as_remote(cls, remote_config: dict[str, Any] | None = None):
 
     if remote_config is None:
         remote_config = {}
+    else:
+        remote_config = dict(remote_config)
+
+    # Propagate TORCHRL_PROFILING to the remote actor so ``_maybe_record_function_decorator``
+    # is armed inside it. We must ensure the env var is set in the actor's process before
+    # torchrl is imported there — the decorator captures ``_PROFILING_ALLOWED`` at import.
+    profiling = os.environ.get("TORCHRL_PROFILING")
+    if profiling:
+        runtime_env = remote_config.get("runtime_env") or {}
+        if not isinstance(runtime_env, dict):
+            runtime_env = dict(runtime_env)
+        env_vars = runtime_env.get("env_vars") or {}
+        if not isinstance(env_vars, dict):
+            env_vars = dict(env_vars)
+        env_vars.setdefault("TORCHRL_PROFILING", profiling)
+        runtime_env["env_vars"] = env_vars
+        remote_config["runtime_env"] = runtime_env
 
     remote_collector = ray.remote(**remote_config)(cls)
     remote_collector.is_remote = True
@@ -1471,7 +1699,7 @@ def merge_ray_runtime_env(ray_init_config: dict[str, Any]) -> dict[str, Any]:
         runtime_env["env_vars"] = dict(runtime_env["env_vars"])
 
     # Auto-propagate common env vars to Ray workers
-    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME"):
+    for key in ("WANDB_API_KEY", "HF_TOKEN", "HF_HOME", "TORCHRL_PROFILING"):
         val = os.environ.get(key)
         if val and key not in runtime_env["env_vars"]:
             runtime_env["env_vars"][key] = val

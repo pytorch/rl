@@ -24,10 +24,11 @@ from typing import Any, Literal, TYPE_CHECKING
 
 import torch
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import implement_for, logger as torchrl_logger
 
 # Import RLvLLMEngine and shared utilities
 from .base import RLvLLMEngine
+from .vllm_plugin import FP32_OVERRIDES_ENV_VAR
 
 
 _has_vllm = True
@@ -46,6 +47,22 @@ try:
 except ImportError:
     vllm = None
     _has_vllm = False
+
+
+if _has_vllm:
+
+    @implement_for("vllm", None, "0.18.0")
+    def _compilation_config(level: int) -> dict:
+        return {"level": level}
+
+    @implement_for("vllm", "0.18.0")
+    def _compilation_config(level: int) -> dict:  # noqa: F811
+        return {"mode": level}
+
+else:
+
+    def _compilation_config(level: int) -> dict:
+        return {"mode": level}
 
 
 def _get_ray():
@@ -424,7 +441,16 @@ class _AsyncLLMEngine:
         Args:
             update_request: WeightTransferUpdateRequest (or dict) for the engine.
         """
-        return await self.engine.update_weights(update_request)
+        start_weight_update = getattr(self.engine, "start_weight_update", None)
+        finish_weight_update = getattr(self.engine, "finish_weight_update", None)
+        if start_weight_update is None:
+            return await self.engine.update_weights(update_request)
+        await start_weight_update(is_checkpoint_format=True)
+        try:
+            return await self.engine.update_weights(update_request)
+        finally:
+            if finish_weight_update is not None:
+                await finish_weight_update()
 
     def get_world_size(self):
         """Get the world size (TP * DP) for this engine instance."""
@@ -1903,10 +1929,13 @@ def make_async_vllm_engine(
         compile (bool, optional): Whether to enable model compilation for better performance. Defaults to True.
         enable_fp32_output (bool, optional): Whether to enable FP32 output for the final layer. Defaults to False.
             This can help with numerical stability for certain models. Requires model-specific support in
-            torchrl.modules.llm.backends._models.
+            torchrl.modules.llm.backends.vllm._models.
         tensor_parallel_size (int, optional): Number of devices to use, per replica. Defaults to None.
         data_parallel_size (int, optional): Number of data parallel groups to use. Defaults to None.
         pipeline_parallel_size (int, optional): Number of pipeline parallel groups to use. Defaults to None.
+        enable_prefix_caching (bool, optional): Whether to enable vLLM prefix
+            caching. Defaults to ``False`` to avoid reusing prompt KV caches
+            across online weight updates.
         **kwargs: Additional arguments passed to AsyncEngineArgs.
 
     Returns:
@@ -1938,6 +1967,9 @@ def make_async_vllm_engine(
     # Set FP32 output environment variable if requested
     if enable_fp32_output:
         os.environ["VLLM_ENABLE_FP32_OUTPUT"] = "1"
+        # Opt the engine + its child vLLM processes into torchrl's FP32 model
+        # overrides (the general-plugin no-ops without this).
+        os.environ[FP32_OVERRIDES_ENV_VAR] = "1"
         torchrl_logger.info(
             "Enabled FP32 output for vLLM (VLLM_ENABLE_FP32_OUTPUT=1). "
             "This will use FP32 for the final output layer if the model supports it."
@@ -1972,17 +2004,18 @@ def make_async_vllm_engine(
     if pipeline_parallel_size is None:
         pipeline_parallel_size = 1
 
-    # Create engine args
-    # Don't explicitly set enable_prefix_caching to avoid conflicts
-    kwargs.setdefault("enable_prefix_caching", True)
+    # Prefix caches are keyed by prompt content, not by the model weights that
+    # produced their KV entries. AsyncVLLM is commonly used with online weight
+    # updates, so keep prefix caching off unless the caller explicitly opts in.
+    kwargs.setdefault("enable_prefix_caching", False)
 
     # Set compilation flag - this controls whether vLLM will compile the model for better performance
     # Disabled by default in GRPO since it can cause issues during training
     if "compilation_config" not in kwargs:
         if compile:
-            kwargs["compilation_config"] = {"level": 3}  # PIECEWISE compilation
+            kwargs["compilation_config"] = _compilation_config(3)
         else:
-            kwargs["compilation_config"] = {"level": 0}  # NO_COMPILATION
+            kwargs["compilation_config"] = _compilation_config(0)
 
     engine_args = AsyncEngineArgs(
         model=model_name,

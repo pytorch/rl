@@ -48,7 +48,7 @@ pixels or states etc).
 Forward and inverse transforms
 ------------------------------
 
-Transforms also have an :meth:`~torchrl.envs.Transform.inv` method that is called before the action is applied in reverse
+Transforms also have an :meth:`~torchrl.envs.transforms.Transform.inv` method that is called before the action is applied in reverse
 order over the composed transform chain. This allows applying transforms to data in the environment before the action is
 taken in the environment. The keys to be included in this inverse transform are passed through the `"in_keys_inv"`
 keyword argument, and the out-keys default to these values in most cases:
@@ -67,7 +67,7 @@ In transforms, `in_keys` and `out_keys` define the interaction between the base 
 (e.g., your policy):
 
 - `in_keys` refers to the base environment's perspective (inner = `base_env` of the
-  :class:`~torchrl.envs.TransformedEnv`).
+  :class:`~torchrl.envs.transforms.TransformedEnv`).
 - `out_keys` refers to the outside world (outer = `policy`, `agent`, etc.).
 
 For example, with `in_keys=["obs"]` and `out_keys=["obs_standardized"]`, the policy will "see" a standardized
@@ -78,7 +78,7 @@ Similarly, for inverse keys:
 - `in_keys_inv` refers to entries as seen by the base environment.
 - `out_keys_inv` refers to entries as seen or produced by the policy.
 
-The following figure illustrates this concept for the :class:`~torchrl.envs.RenameTransform` class: the input
+The following figure illustrates this concept for the :class:`~torchrl.envs.transforms.RenameTransform` class: the input
 `TensorDict` of the `step` function must include the `out_keys_inv` as they are part of the outside world. The
 transform changes these names to match the names of the inner, base environment using the `in_keys_inv`.
 The inverse process is executed with the output tensordict, where the `in_keys` are mapped to the corresponding
@@ -120,7 +120,7 @@ Exposing Specs to the Outside World
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 `TransformedEnv` will expose the specs corresponding to the `out_keys_inv` for actions and states.
-For example, with :class:`~torchrl.envs.ActionDiscretizer`, the environment's action (e.g., `"action"`) is a float-valued
+For example, with :class:`~torchrl.envs.transforms.ActionDiscretizer`, the environment's action (e.g., `"action"`) is a float-valued
 tensor that should not be generated when using :meth:`~torchrl.envs.EnvBase.rand_action` with the transformed
 environment. Instead, `"action_discrete"` should be generated, and its continuous counterpart obtained from the
 transform. Therefore, the user should see the `"action_discrete"` entry being exposed, but not `"action"`.
@@ -148,22 +148,22 @@ Tips for subclassing `Transform`
 There are various ways of subclassing a transform. The things to take into considerations are:
 
 - Is the transform identical for each tensor / item being transformed? Use
-  :meth:`~torchrl.envs.Transform._apply_transform` and :meth:`~torchrl.envs.Transform._inv_apply_transform`.
+  :meth:`~torchrl.envs.transforms.Transform._apply_transform` and :meth:`~torchrl.envs.transforms.Transform._inv_apply_transform`.
 - The transform needs access to the input data to env.step as well as output? Rewrite
-  :meth:`~torchrl.envs.Transform._step`.
-  Otherwise, rewrite :meth:`~torchrl.envs.Transform._call` (or :meth:`~torchrl.envs.Transform._inv_call`).
-- Is the transform to be used within a replay buffer? Overwrite :meth:`~torchrl.envs.Transform.forward`,
-  :meth:`~torchrl.envs.Transform.inv`, :meth:`~torchrl.envs.Transform._apply_transform` or
-  :meth:`~torchrl.envs.Transform._inv_apply_transform`.
+  :meth:`~torchrl.envs.transforms.Transform._step`.
+  Otherwise, rewrite :meth:`~torchrl.envs.transforms.Transform._call` (or :meth:`~torchrl.envs.transforms.Transform._inv_call`).
+- Is the transform to be used within a replay buffer? Overwrite :meth:`~torchrl.envs.transforms.Transform.forward`,
+  :meth:`~torchrl.envs.transforms.Transform.inv`, :meth:`~torchrl.envs.transforms.Transform._apply_transform` or
+  :meth:`~torchrl.envs.transforms.Transform._inv_apply_transform`.
 - Within a transform, you can access (and make calls to) the parent environment using
-  :attr:`~torchrl.envs.Transform.parent` (the base env + all transforms till this one) or
-  :meth:`~torchrl.envs.Transform.container` (The object that encapsulates the transform).
-- Don't forget to edits the specs if needed: top level: :meth:`~torchrl.envs.Transform.transform_output_spec`,
-  :meth:`~torchrl.envs.Transform.transform_input_spec`.
-  Leaf level: :meth:`~torchrl.envs.Transform.transform_observation_spec`,
-  :meth:`~torchrl.envs.Transform.transform_action_spec`, :meth:`~torchrl.envs.Transform.transform_state_spec`,
-  :meth:`~torchrl.envs.Transform.transform_reward_spec` and
-  :meth:`~torchrl.envs.Transform.transform_reward_spec`.
+  :attr:`~torchrl.envs.transforms.Transform.parent` (the base env + all transforms till this one) or
+  :meth:`~torchrl.envs.transforms.Transform.container` (The object that encapsulates the transform).
+- Don't forget to edits the specs if needed: top level: :meth:`~torchrl.envs.transforms.Transform.transform_output_spec`,
+  :meth:`~torchrl.envs.transforms.Transform.transform_input_spec`.
+  Leaf level: :meth:`~torchrl.envs.transforms.Transform.transform_observation_spec`,
+  :meth:`~torchrl.envs.transforms.Transform.transform_action_spec`, :meth:`~torchrl.envs.transforms.Transform.transform_state_spec`,
+  :meth:`~torchrl.envs.transforms.Transform.transform_reward_spec` and
+  :meth:`~torchrl.envs.transforms.Transform.transform_reward_spec`.
 
 For practical examples, see the methods listed above.
 
@@ -245,8 +245,11 @@ Available Transforms
 
     Transform
     TransformedEnv
+    ActionChunkTransform
     ActionDiscretizer
     ActionMask
+    ActionScaling
+    ActionTokenizerTransform
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
@@ -261,21 +264,36 @@ Available Transforms
     ConditionalSkip
     Crop
     DTypeCastTransform
+    DecodeVideoTransform
     DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
     EndOfLifeTransform
     ExcludeTransform
+    ExpandAs
     FiniteTensorDictCheck
+    FlattenAction
     FlattenObservation
     FrameSkipTransform
     GrayScale
     Hash
+    HumanoidMacroAction
     InitTracker
     LineariseRewards
+    MacroAction
+    MacroPrimitive
+    MacroPrimitiveTransform
+    TargetMacroAction
+    RobotMacroAction
+    RobotMacroActionMode
+    SatelliteMacroAction
+    SatelliteAttitudeTransform
+    URScriptPrimitive
     MeanActionSelector
     ModuleTransform
     MultiAction
+    NextObservationDelta
+    NextStateReconstructor
     NoopResetEnv
     ObservationNorm
     ObservationTransform
@@ -283,6 +301,7 @@ Available Transforms
     PinMemoryTransform
     R3MTransform
     RandomCropTensorDict
+    RandomTruncationTransform
     RemoveEmptySpecs
     RenameTransform
     Resize
@@ -295,13 +314,16 @@ Available Transforms
     SqueezeTransform
     Stack
     StepCounter
+    SuccessReward
     TargetReturn
     TensorDictPrimer
+    TerminateTransform
     TimeMaxPool
     Timer
     Tokenizer
     ToTensorImage
     TrajCounter
+    URScriptPrimitiveTransform
     UnaryTransform
     UnsqueezeTransform
     VC1Transform
@@ -311,6 +333,24 @@ Available Transforms
     VecNorm
     VecNormV2
     gSDENoise
+
+Functional transforms
+---------------------
+
+Some transforms expose a pure, stateless functional core (the PyTorch
+``torch.nn.functional`` / ``torch.nn.Module`` split) that can be reused directly
+on plain tensors, outside the transform machinery. The stateful transform
+delegates to the functional so that the two stay equivalent.
+
+.. currentmodule:: torchrl.envs.transforms.functional
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    cat_frames
+
+.. currentmodule:: torchrl.envs.transforms
 
 Environments with masked actions
 --------------------------------

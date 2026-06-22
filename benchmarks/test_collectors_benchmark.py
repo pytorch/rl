@@ -9,11 +9,7 @@ import pytest
 import torch.cuda
 import tqdm
 
-from torchrl.collectors import (
-    MultiaSyncDataCollector,
-    MultiSyncDataCollector,
-    SyncDataCollector,
-)
+from torchrl.collectors import Collector, MultiAsyncCollector, MultiSyncCollector
 from torchrl.data import LazyTensorStorage, ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper
 from torchrl.envs import EnvCreator, GymEnv, ParallelEnv, StepCounter, TransformedEnv
@@ -24,7 +20,7 @@ from torchrl.modules import RandomPolicy
 def single_collector_setup():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -45,12 +41,37 @@ def sync_collector_setup():
             DMControlEnv("cheetah", "run", device=device), StepCounter(50)
         )
     )
-    c = MultiSyncDataCollector(
+    c = MultiSyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
         frames_per_batch=100,
         device=device,
+    )
+    c = iter(c)
+    for i, _ in enumerate(c):
+        if i == 10:
+            break
+    return ((c,), {})
+
+
+def sync_collector_setup_preempt():
+    """Sync collector with preemption: exercises the per-step interruptor polling
+    in the workers and the masking path in the main process."""
+    device = "cuda:0" if torch.cuda.device_count() else "cpu"
+    env = EnvCreator(
+        lambda: TransformedEnv(
+            DMControlEnv("cheetah", "run", device=device), StepCounter(50)
+        )
+    )
+    c = MultiSyncCollector(
+        [env, env],
+        RandomPolicy(env().action_spec),
+        total_frames=-1,
+        frames_per_batch=100,
+        device=device,
+        preemptive_threshold=0.9,
+        cat_results="stack",
     )
     c = iter(c)
     for i, _ in enumerate(c):
@@ -66,7 +87,7 @@ def async_collector_setup():
             DMControlEnv("cheetah", "run", device=device), StepCounter(50)
         )
     )
-    c = MultiaSyncDataCollector(
+    c = MultiAsyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -86,7 +107,7 @@ def single_collector_setup_pixels():
     #     DMControlEnv("cheetah", "run", device=device, from_pixels=True), StepCounter(50)
     # )
     env = TransformedEnv(GymEnv("ALE/Pong-v5"), StepCounter(50))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -109,7 +130,7 @@ def sync_collector_setup_pixels():
             StepCounter(50),
         )
     )
-    c = MultiSyncDataCollector(
+    c = MultiSyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -132,7 +153,7 @@ def async_collector_setup_pixels():
             StepCounter(50),
         )
     )
-    c = MultiaSyncDataCollector(
+    c = MultiAsyncCollector(
         [env, env],
         RandomPolicy(env().action_spec),
         total_frames=-1,
@@ -164,7 +185,7 @@ def single_collector_with_rb_setup():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = TransformedEnv(DMControlEnv("cheetah", "run", device=device), StepCounter(50))
     rb = ReplayBuffer(storage=LazyTensorStorage(10000))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -185,7 +206,7 @@ def single_collector_with_rb_setup_pixels():
     device = "cuda:0" if torch.cuda.device_count() else "cpu"
     env = TransformedEnv(GymEnv("ALE/Pong-v5"), StepCounter(50))
     rb = ReplayBuffer(storage=LazyTensorStorage(10000))
-    c = SyncDataCollector(
+    c = Collector(
         env,
         RandomPolicy(env.action_spec),
         total_frames=-1,
@@ -221,6 +242,11 @@ def test_single(benchmark):
 
 def test_sync(benchmark):
     (c,), _ = sync_collector_setup()
+    benchmark(execute_collector, c)
+
+
+def test_sync_preempt(benchmark):
+    (c,), _ = sync_collector_setup_preempt()
     benchmark(execute_collector, c)
 
 
@@ -278,7 +304,7 @@ class TestRBGCollector:
 
         fpb = n_wokrers_per_col * 100
         total_frames = n_wokrers_per_col * 100_000
-        c = MultiaSyncDataCollector(
+        c = MultiAsyncCollector(
             [make_env] * n_col,
             policy,
             frames_per_batch=fpb,

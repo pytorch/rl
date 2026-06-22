@@ -23,6 +23,10 @@ from torchrl.objectives.utils import (
     ValueEstimators,
 )
 from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
+    dispatch_value_estimator,
+    distance_loss,
+    ValueEstimators,
+)
 
 
 class DDPGLoss(LossModule):
@@ -185,7 +189,7 @@ class DDPGLoss(LossModule):
     ]
 
     actor_network: TensorDictModule
-    value_network: actor_network
+    value_network: TensorDictModule
     actor_network_params: TensorDictParams
     value_network_params: TensorDictParams
     target_actor_network_params: TensorDictParams
@@ -217,7 +221,7 @@ class DDPGLoss(LossModule):
         params_meta = params.apply(
             self._make_meta_params, device=torch.device("meta"), filter_empty=False
         )
-        with params_meta.to_module(actor_critic):
+        with params_meta.to_module(actor_critic, preserve_module_state=False):
             self.__dict__["actor_critic"] = deepcopy(actor_critic)
 
         self.convert_to_functional(
@@ -324,13 +328,19 @@ class DDPGLoss(LossModule):
         td_copy = tensordict.select(
             *self.actor_in_keys, *self.value_exclusive_keys, strict=False
         ).detach()
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             td_copy = self.actor_network(td_copy)
-        with self._cached_detached_value_params.to_module(self.value_network):
+        with self._cached_detached_value_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
-        loss_actor = _reduce(loss_actor, self.reduction, weights=weights)
+        loss_actor = self._reduce_loss(
+            loss_actor, tensordict=tensordict, weights=weights
+        )
         self._clear_weakrefs(
             tensordict,
             loss_actor,
@@ -348,7 +358,9 @@ class DDPGLoss(LossModule):
         weights = self._maybe_get_priority_weight(tensordict)
         # value loss
         td_copy = tensordict.select(*self.value_network.in_keys, strict=False).detach()
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
         pred_val = td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
 
@@ -378,7 +390,9 @@ class DDPGLoss(LossModule):
                 "target_value_max": target_value.max(),
                 "pred_value_max": pred_val.max(),
             }
-        loss_value = _reduce(loss_value, self.reduction, weights=weights)
+        loss_value = self._reduce_loss(
+            loss_value, tensordict=tensordict, weights=weights
+        )
         self._clear_weakrefs(
             tensordict,
             "value_network_params",
@@ -387,6 +401,12 @@ class DDPGLoss(LossModule):
             "actor_network_params",
         )
         return loss_value, metadata
+
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
@@ -414,6 +434,19 @@ class DDPGLoss(LossModule):
             "terminated": self.tensor_keys.terminated,
         }
         self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value": self.tensor_keys.state_action_value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=self.actor_critic,
+            **hp,
+        )
 
     @property
     @_cache_values

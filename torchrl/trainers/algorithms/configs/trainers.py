@@ -12,10 +12,12 @@ import torch
 from tensordict.nn import TensorDictModuleBase
 
 from torchrl.collectors import BaseCollector
+from torchrl.data import Categorical, Composite, OneHot
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import TargetNetUpdater
 from torchrl.objectives.value.advantages import GAE
-from torchrl.trainers.algorithms.configs.common import ConfigBase
+from torchrl.trainers import TrainerHookBase
+from torchrl.trainers.algorithms.configs.common import _normalize_hydra_key, ConfigBase
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -33,12 +35,23 @@ class TrainerConfig(ConfigBase):
         """Post-initialization hook for trainer configurations."""
 
 
+def _register_trainer_hooks(trainer: Any, hooks: list[Any] | None) -> None:
+    if hooks is None:
+        return
+    for index, hook in enumerate(hooks):
+        if not isinstance(hook, TrainerHookBase):
+            raise TypeError(
+                "trainer hooks must be TrainerHookBase instances with a "
+                f"register(trainer) method, got {type(hook)} at index {index}."
+            )
+        hook.register(trainer)
+
+
 @dataclass
 class SACTrainerConfig(TrainerConfig):
-    """Configuration class for SAC (Soft Actor Critic) trainer.
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.SACTrainer`.
 
-    This class defines the configuration parameters for creating a SAC trainer,
-    including both required and optional fields with sensible defaults.
+    Every kwarg accepted by ``SACTrainer.__init__`` is exposed as a field here.
     """
 
     collector: Any
@@ -62,6 +75,19 @@ class SACTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    batch_size: int | None = None
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_sac_trainer"
 
@@ -96,11 +122,26 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    batch_size = kwargs.pop("batch_size", None)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
 
     # Instantiate networks first
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
 
     if not isinstance(collector, BaseCollector):
@@ -141,7 +182,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return SACTrainer(
+    trainer = SACTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -157,18 +198,31 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        batch_size=batch_size,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
 class PPOTrainerConfig(TrainerConfig):
-    """Configuration class for PPO (Proximal Policy Optimization) trainer.
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.PPOTrainer`.
 
-    This class defines the configuration parameters for creating a PPO trainer,
-    including both required and optional fields with sensible defaults.
+    Every kwarg accepted by ``PPOTrainer.__init__`` is exposed as a field here.
 
     Args:
         collector: The data collector for gathering training data.
@@ -225,6 +279,21 @@ class PPOTrainerConfig(TrainerConfig):
     gae: Any = None
     weight_update_map: dict[str, str] | None = None
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    batch_size: int | None = None
+    gamma: float = 0.99
+    lmbda: float = 0.95
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ppo_trainer"
 
@@ -260,6 +329,23 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     create_env_fn = kwargs.pop("create_env_fn")
     weight_update_map = kwargs.pop("weight_update_map", None)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    batch_size = kwargs.pop("batch_size", None)
+    gamma = kwargs.pop("gamma", 0.99)
+    lmbda = kwargs.pop("lmbda", 0.95)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
 
     if create_env_fn is not None:
         # could be referenced somewhere else, no need to raise an error
@@ -268,9 +354,9 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     async_collection = kwargs.pop("async_collection", False)
 
     # Instantiate networks first
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
     else:
         critic_network = loss_module.critic_network
@@ -320,7 +406,7 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
     if not isinstance(gae, (GAE, TensorDictModuleBase)) and gae is not None:
         gae = gae()
 
-    return PPOTrainer(
+    trainer = PPOTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -336,18 +422,37 @@ def _make_ppo_trainer(*args, **kwargs) -> PPOTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        batch_size=batch_size,
+        gamma=gamma,
+        lmbda=lmbda,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         num_epochs=num_epochs,
         async_collection=async_collection,
         add_gae=add_gae,
         gae=gae,
         weight_update_map=weight_update_map,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
 class DQNTrainerConfig(TrainerConfig):
-    """Configuration class for DQN (Deep Q-Network) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DQNTrainer`.
+
+    Every kwarg accepted by ``DQNTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -372,6 +477,20 @@ class DQNTrainerConfig(TrainerConfig):
     annealing_num_steps: int = 250_000
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_observations: bool = False
+    hooks: list[Any] | None = None
+    mixing_strategy: str | None = None
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    aggregated_reward_key: Any = None
+    aggregated_episode_reward_key: Any = None
+    action_key: Any = "action"
+    observation_key: Any = "observation"
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_dqn_trainer"
 
@@ -410,23 +529,48 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     annealing_num_steps = kwargs.pop("annealing_num_steps", 250_000)
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_observations = kwargs.pop("log_observations", False)
+    hooks = kwargs.pop("hooks", None)
+    mixing_strategy = kwargs.pop("mixing_strategy", None)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    aggregated_reward_key = _normalize_hydra_key(
+        kwargs.pop("aggregated_reward_key", None)
+    )
+    aggregated_episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("aggregated_episode_reward_key", None)
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
 
     if value_network is not None and not isinstance(value_network, torch.nn.Module):
         value_network = value_network()
 
-    from torchrl.data import Composite, OneHot
-
-    action_spec = value_network.spec.get("action", default=None)
+    action_spec = value_network.spec.get(action_key, default=None)
     if action_spec is None:
-        n_actions = value_network.module[0].out_features
-        action_spec = OneHot(n=n_actions)
-    spec = Composite(action=action_spec)
+        net = value_network.module[0]
+        n_actions = (
+            net.n_agent_outputs if hasattr(net, "n_agent_outputs") else net.out_features
+        )
+        if getattr(value_network, "action_space", None) == "categorical":
+            action_spec = Categorical(n=n_actions)
+        else:
+            action_spec = OneHot(n=n_actions)
+    spec = Composite({action_key: action_spec})
 
     greedy_module = EGreedyModule(
         annealing_num_steps=annealing_num_steps,
         eps_init=eps_init,
         eps_end=eps_end,
         spec=spec,
+        action_key=action_key,
     )
     exploration_policy = TensorDictSequential(value_network, greedy_module)
 
@@ -438,7 +582,16 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
             collector = collector(replay_buffer=replay_buffer, **collector_kwargs)
 
     if not isinstance(loss_module, LossModule):
-        loss_module = loss_module(value_network=value_network)
+        if mixing_strategy in (None, "iql"):
+            loss_module = loss_module(value_network=value_network)
+        elif mixing_strategy in ("qmix", "vdn"):
+            loss_module = loss_module(local_value_network=value_network)
+        else:
+            raise ValueError(
+                "mixing_strategy must be one of None, 'iql', 'qmix', or 'vdn', "
+                f"got {mixing_strategy}."
+            )
+
     if not isinstance(target_net_updater, TargetNetUpdater):
         target_net_updater = target_net_updater(loss_module)
     if not isinstance(optimizer, torch.optim.Optimizer):
@@ -455,7 +608,7 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return DQNTrainer(
+    trainer = DQNTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -471,16 +624,34 @@ def _make_dqn_trainer(*args, **kwargs) -> DQNTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         greedy_module=greedy_module,
+        mixing_strategy=mixing_strategy,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        aggregated_reward_key=aggregated_reward_key,
+        aggregated_episode_reward_key=aggregated_episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
 class DDPGTrainerConfig(TrainerConfig):
-    """Configuration class for DDPG (Deep Deterministic Policy Gradient) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.DDPGTrainer`.
+
+    Every kwarg accepted by ``DDPGTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -503,6 +674,18 @@ class DDPGTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
+    done_key: Any = "done"
+    terminated_key: Any = "terminated"
+    reward_key: Any = "reward"
+    episode_reward_key: Any = "reward_sum"
+    action_key: Any = "action"
+    observation_key: Any = "observation"
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_ddpg_trainer"
 
@@ -536,12 +719,25 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    done_key = _normalize_hydra_key(kwargs.pop("done_key", "done"))
+    terminated_key = _normalize_hydra_key(kwargs.pop("terminated_key", "terminated"))
+    reward_key = _normalize_hydra_key(kwargs.pop("reward_key", "reward"))
+    episode_reward_key = _normalize_hydra_key(
+        kwargs.pop("episode_reward_key", "reward_sum")
+    )
+    action_key = _normalize_hydra_key(kwargs.pop("action_key", "action"))
+    observation_key = _normalize_hydra_key(kwargs.pop("observation_key", "observation"))
+    hooks = kwargs.pop("hooks", None)
 
-    if actor_network is not None:
+    if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
-    if critic_network is not None:
+    if critic_network is not None and not isinstance(critic_network, torch.nn.Module):
         critic_network = critic_network()
-
     if not isinstance(collector, BaseCollector):
         if not async_collection:
             collector = collector()
@@ -568,7 +764,7 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return DDPGTrainer(
+    trainer = DDPGTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -584,15 +780,31 @@ def _make_ddpg_trainer(*args, **kwargs) -> DDPGTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
+        done_key=done_key,
+        terminated_key=terminated_key,
+        reward_key=reward_key,
+        episode_reward_key=episode_reward_key,
+        action_key=action_key,
+        observation_key=observation_key,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
 class IQLTrainerConfig(TrainerConfig):
-    """Configuration class for IQL (Implicit Q-Learning) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.IQLTrainer`.
+
+    Every kwarg accepted by ``IQLTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -616,6 +828,12 @@ class IQLTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_iql_trainer"
 
@@ -650,6 +868,12 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None:
         actor_network = actor_network()
@@ -686,7 +910,7 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return IQLTrainer(
+    trainer = IQLTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -702,15 +926,25 @@ def _make_iql_trainer(*args, **kwargs) -> IQLTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
 class CQLTrainerConfig(TrainerConfig):
-    """Configuration class for CQL (Conservative Q-Learning) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.CQLTrainer`.
+
+    Every kwarg accepted by ``CQLTrainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -733,6 +967,12 @@ class CQLTrainerConfig(TrainerConfig):
     target_net_updater: Any = None
     async_collection: bool = False
     log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
+    hooks: list[Any] | None = None
 
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_cql_trainer"
 
@@ -766,6 +1006,12 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
+    hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None:
         actor_network = actor_network()
@@ -798,7 +1044,7 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
     if not isinstance(logger, Logger) and logger is not None:
         raise ValueError(f"logger must be a Logger, got {type(logger)}")
 
-    return CQLTrainer(
+    trainer = CQLTrainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -814,15 +1060,25 @@ def _make_cql_trainer(*args, **kwargs) -> CQLTrainer:
         log_interval=log_interval,
         save_trainer_file=save_trainer_file,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         target_net_updater=target_net_updater,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer
 
 
 @dataclass
 class TD3TrainerConfig(TrainerConfig):
-    """Configuration class for TD3 (Twin Delayed DDPG) trainer."""
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.TD3Trainer`.
+
+    Every kwarg accepted by ``TD3Trainer.__init__`` is exposed as a field here.
+    """
 
     collector: Any
     total_frames: int
@@ -840,11 +1096,23 @@ class TD3TrainerConfig(TrainerConfig):
     seed: int | None = None
     clip_grad_norm: bool = True
     clip_norm: float | None = None
+    frame_skip: int = 1
+    progress_bar: bool = True
+    save_trainer_interval: int = 10000
+    log_interval: int = 10000
+    num_epochs: int = 1
     async_collection: bool = False
+    log_timings: bool = False
+    auto_log_optim_steps: bool = True
+    enable_logging: bool = True
+    log_rewards: bool = True
+    log_actions: bool = True
+    log_observations: bool = False
     create_env_fn: Any = None
     target_net_updater: Any = None
     policy_update_delay: int = 2
     value_estimator_gamma: float | None = None
+    hooks: list[Any] | None = None
     _target_: str = "torchrl.trainers.algorithms.configs.trainers._make_td3_trainer"
 
     def __post_init__(self) -> None:
@@ -880,6 +1148,11 @@ def _make_td3_trainer(*args, **kwargs):
     num_epochs = kwargs.pop("num_epochs", 1)
     async_collection = kwargs.pop("async_collection", False)
     log_timings = kwargs.pop("log_timings", False)
+    auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
+    enable_logging = kwargs.pop("enable_logging", True)
+    log_rewards = kwargs.pop("log_rewards", True)
+    log_actions = kwargs.pop("log_actions", True)
+    log_observations = kwargs.pop("log_observations", False)
     actor_network = kwargs.pop("actor_network", None)
     qvalue_network = kwargs.pop("qvalue_network", None)
     exploration_module = kwargs.pop("exploration_module", None)
@@ -887,6 +1160,7 @@ def _make_td3_trainer(*args, **kwargs):
     target_net_updater = kwargs.pop("target_net_updater", None)
     policy_update_delay = kwargs.pop("policy_update_delay", 2)
     value_estimator_gamma = kwargs.pop("value_estimator_gamma", None)
+    hooks = kwargs.pop("hooks", None)
 
     if actor_network is not None and not isinstance(actor_network, torch.nn.Module):
         actor_network = actor_network()
@@ -980,7 +1254,7 @@ def _make_td3_trainer(*args, **kwargs):
     if not isinstance(logger, Logger) and logger is not None:
         raise TypeError(f"logger must be a Logger or None, got {type(logger)}")
 
-    return TD3Trainer(
+    trainer = TD3Trainer(
         collector=collector,
         total_frames=total_frames,
         frame_skip=frame_skip,
@@ -998,8 +1272,15 @@ def _make_td3_trainer(*args, **kwargs):
         save_trainer_file=save_trainer_file,
         num_epochs=num_epochs,
         replay_buffer=replay_buffer,
+        enable_logging=enable_logging,
+        log_rewards=log_rewards,
+        log_actions=log_actions,
+        log_observations=log_observations,
         async_collection=async_collection,
         log_timings=log_timings,
+        auto_log_optim_steps=auto_log_optim_steps,
         target_net_updater=target_net_updater,
         exploration_module=exploration_module,
     )
+    _register_trainer_hooks(trainer, hooks)
+    return trainer

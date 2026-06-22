@@ -15,7 +15,7 @@ For general IsaacLab installation and cluster setup (not specific to TorchRL), s
 IsaacLabWrapper
 ---------------
 
-Use :class:`~torchrl.envs.libs.isaac_lab.IsaacLabWrapper` to wrap a gymnasium
+Use :class:`~torchrl.envs.IsaacLabWrapper` to wrap a gymnasium
 IsaacLab environment into a TorchRL-compatible :class:`~torchrl.envs.EnvBase`:
 
 .. code-block:: python
@@ -47,6 +47,112 @@ Key defaults:
 
     Reward shape: IsaacLab rewards are ``(num_envs,)``.  The wrapper
     unsqueezes to ``(num_envs, 1)`` for TorchRL compatibility.
+
+Headless camera rendering
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For headless RGB capture, prefer IsaacLab tiled cameras over viewport
+rendering. Add a tiled camera to the IsaacLab config before instantiating the
+environment, launch IsaacLab with cameras enabled, then ask
+``IsaacLabWrapper`` to read the camera sensor into the TensorDict:
+
+.. code-block:: python
+
+    import argparse
+    import gymnasium as gym
+    import torch
+    from isaaclab.app import AppLauncher
+    from isaaclab_tasks.manager_based.classic.ant.ant_env_cfg import AntEnvCfg
+    from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
+
+    parser = argparse.ArgumentParser()
+    AppLauncher.add_app_launcher_args(parser)
+    args, _ = parser.parse_known_args([
+        "--headless",
+        "--enable_cameras",
+        "--rendering_mode",
+        "performance",
+        "--device",
+        "cuda:0",
+    ])
+    app = AppLauncher(args).app
+
+    cfg = IsaacLabWrapper.add_tiled_camera_config(
+        AntEnvCfg(),
+        width=320,
+        height=240,
+        pos=(-7.0, 0.0, 3.0),
+        rot=(0.9945, 0.0, 0.1045, 0.0),
+    )
+    env = gym.make("Isaac-Ant-v0", cfg=cfg)
+    env = IsaacLabWrapper(env, from_tiled_camera=True, device=torch.device("cuda:0"))
+
+    td = env.reset()
+    pixels = td["pixels"]  # shape: (num_envs, height, width, 3)
+
+The helper also exposes Isaac Lab's renderer selection directly. For example,
+on Isaac Lab versions with the pluggable renderer stack installed, use the
+Newton Warp renderer when RTX rendering is not available:
+
+.. code-block:: python
+
+    cfg = IsaacLabWrapper.add_tiled_camera_config(
+        AntEnvCfg(),
+        renderer_backend="newton_warp",
+        data_type="rgb",
+    )
+
+Cluster rendering dependencies
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Headless camera rendering still needs a working NVIDIA graphics stack inside
+the container. Minimal CUDA images often omit the EGL/GLVND and Vulkan runtime
+packages that Isaac Sim uses for headless cameras. On Debian/Ubuntu images,
+install the generic loader/runtime packages before launching Isaac Lab:
+
+.. code-block:: bash
+
+    sudo apt-get update
+    sudo apt-get install -y libegl-dev libglvnd0 libglx0 libvulkan1 vulkan-tools
+
+If IsaacLab reports ``ERROR_INCOMPATIBLE_DRIVER``, cannot create a Vulkan
+instance, or ``GPU Foundation is not initialized``, verify the NVIDIA Vulkan
+ICD and GL/EGL userspace before debugging TorchRL:
+
+.. code-block:: bash
+
+    nvidia-smi --query-gpu=driver_version,name --format=csv,noheader | head
+    ldconfig -p | grep -E 'libEGL_nvidia|libnvidia-eglcore|libGLX_nvidia'
+    ls /usr/share/glvnd/egl_vendor.d/
+    ls /usr/share/vulkan/icd.d/
+    VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json vulkaninfo --summary
+
+The NVIDIA userspace libraries must match the host driver. If using distro
+NVIDIA packages, install a ``libnvidia-gl-<driver-version>`` package matching
+the host driver when available. Some package repositories provide a newer patch
+release than the host driver; in that case, use a matching driver userspace
+bundle and point the process at it:
+
+.. code-block:: bash
+
+    export LD_LIBRARY_PATH=/path/to/nvidia/lib:${LD_LIBRARY_PATH}
+    export VK_ICD_FILENAMES=/path/to/nvidia_icd.json
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    export XDG_RUNTIME_DIR=/tmp/xdg-runtime-${USER}
+    mkdir -p "${XDG_RUNTIME_DIR}" && chmod 700 "${XDG_RUNTIME_DIR}"
+
+For evaluator workers that should render on a dedicated physical GPU, expose
+only that GPU to the worker and use ``cuda:0`` inside the worker:
+
+.. code-block:: bash
+
+    python examples/collectors/isaaclab_rnn_ppo_memory.py \
+        --eval \
+        --eval-cuda-visible-devices 2 \
+        --eval-worker-device cuda:0 \
+        --eval-nvidia-lib-dir /path/to/nvidia/lib \
+        --eval-vulkan-icd /path/to/nvidia_icd.json \
+        --eval-xdg-runtime-dir /tmp/xdg-runtime-eval
 
 Collector
 ---------
@@ -138,7 +244,7 @@ If you need distributed collection across multiple GPUs/nodes, use
 Replay Buffer
 -------------
 
-The :class:`~torchrl.data.SliceSampler` needs enough sequential data.  With
+The :class:`~torchrl.data.replay_buffers.SliceSampler` needs enough sequential data.  With
 ``batch_length=50``, you need at least 50 time steps per trajectory before
 sampling::
 
@@ -147,7 +253,7 @@ sampling::
                         = 204,800
 
 For GPU-resident replay buffers, use
-:class:`~torchrl.data.LazyTensorStorage` with the target CUDA device.
+:class:`~torchrl.data.replay_buffers.LazyTensorStorage` with the target CUDA device.
 This avoids CPU→GPU transfer at sample time (but adds it at extend time).
 
 TorchRL-Specific Gotchas
@@ -162,7 +268,7 @@ TorchRL-Specific Gotchas
 
 3. **``TensorDictPrimer`` ``expand_specs``**: When adding primers (e.g.,
    ``state``, ``belief``) to a pre-vectorized env, you MUST pass
-   ``expand_specs=True`` to :class:`~torchrl.envs.TensorDictPrimer`.
+   ``expand_specs=True`` to :class:`~torchrl.envs.transforms.TensorDictPrimer`.
    Otherwise the primer shapes ``()`` conflict with the env's ``batch_size``
    ``(4096,)``.
 

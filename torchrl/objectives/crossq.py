@@ -20,18 +20,12 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _reduce,
     _vmap_func,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _delezify(func):
@@ -468,49 +462,31 @@ class CrossQLoss(LossModule):
             )
         self._set_in_keys()
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-
-        value_net = None
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=None,
+            **hyperparams,
+        )
 
     @property
     def device(self) -> torch.device:
@@ -564,7 +540,9 @@ class CrossQLoss(LossModule):
         """
         loss_qvalue, value_metadata = self.qvalue_loss(tensordict)
         loss_actor, metadata_actor = self.actor_loss(tensordict)
-        loss_alpha = self.alpha_loss(log_prob=metadata_actor["log_prob"])
+        loss_alpha = self.alpha_loss(
+            log_prob=metadata_actor["log_prob"], tensordict=tensordict
+        )
         tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if loss_actor.shape != loss_qvalue.shape:
             raise RuntimeError(
@@ -622,7 +600,9 @@ class CrossQLoss(LossModule):
         tensordict = tensordict.copy()
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(tensordict)
             a_reparm = dist.rsample()
         log_prob = dist.log_prob(a_reparm)
@@ -643,7 +623,7 @@ class CrossQLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q.shape}"
             )
         actor_loss = self._alpha * log_prob - min_q
-        return _reduce(actor_loss, reduction=self.reduction), {
+        return self._reduce_loss(actor_loss, tensordict=tensordict), {
             "log_prob": log_prob.detach()
         }
 
@@ -666,7 +646,9 @@ class CrossQLoss(LossModule):
         with torch.no_grad():
             with set_exploration_type(
                 ExplorationType.RANDOM
-            ), self.actor_network_params.to_module(self.actor_network):
+            ), self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            ):
                 next_tensordict = tensordict.get("next").clone(False)
                 next_dist = self.actor_network.get_dist(next_tensordict)
                 next_action = next_dist.sample()
@@ -712,15 +694,18 @@ class CrossQLoss(LossModule):
             loss_function=self.loss_function,
         ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
-        return _reduce(loss_qval, reduction=self.reduction), metadata
+        return self._reduce_loss(loss_qval, tensordict=tensordict), metadata
 
-    def alpha_loss(self, log_prob: Tensor) -> Tensor:
+    def alpha_loss(
+        self, log_prob: Tensor, tensordict: TensorDictBase | None = None
+    ) -> Tensor:
         """Compute the entropy loss.
 
         The entropy loss should be computed last.
 
         Args:
             log_prob (torch.Tensor): a log-probability as computed by the :meth:`~.actor_loss` and returned in the `metadata`.
+            tensordict (TensorDictBase, optional): the input tensordict.
 
         Returns: a differentiable tensor with the entropy loss.
         """
@@ -730,7 +715,7 @@ class CrossQLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
-        return _reduce(alpha_loss, reduction=self.reduction)
+        return self._reduce_loss(alpha_loss, tensordict=tensordict)
 
     @property
     def _alpha(self):

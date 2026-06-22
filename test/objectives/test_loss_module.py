@@ -10,9 +10,11 @@ import functools
 import operator
 import warnings
 from dataclasses import dataclass
+from enum import Enum
 
 import pytest
 import torch
+import torchrl.objectives.utils
 from _objectives_common import _has_functorch, FUNCTORCH_ERR
 
 from tensordict import TensorDict, TensorDictBase
@@ -46,17 +48,25 @@ from torchrl.objectives import (
 )
 from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.utils import (
+    _VALUE_ESTIMATOR_REGISTRY,
     _vmap_func,
+    build_value_estimator,
+    default_value_kwargs,
+    dispatch_value_estimator,
+    get_value_estimator_entry,
     HardUpdate,
     hold_out_net,
+    register_value_estimator,
     SoftUpdate,
     ValueEstimators,
 )
 from torchrl.objectives.value.advantages import (
     GAE,
+    MultiAgentGAE,
     TD0Estimator,
     TD1Estimator,
     TDLambdaEstimator,
+    VTrace,
 )
 from torchrl.objectives.value.functional import _transpose_time, reward2go
 from torchrl.objectives.value.utils import (
@@ -355,7 +365,17 @@ def test_updater(mode, value_network_update_interval, device, dtype):
         )
     )
     + [
-        ["cuda", torch.float, "cuda:0"],
+        pytest.param(
+            "cuda",
+            torch.float,
+            "cuda:0",
+            marks=[
+                pytest.mark.gpu,
+                pytest.mark.skipif(
+                    not torch.cuda.is_available(), reason="CUDA not available"
+                ),
+            ],
+        ),
         ["double", torch.double, "cpu"],
         [torch.double, torch.double, "cpu"],
         [torch.half, torch.half, "cpu"],
@@ -705,8 +725,8 @@ class TestUtils:
             ...
 
         add_random_module(MyMod)
-        import torchrl.objectives.utils
-
+        # add_random_module rebinds torchrl.objectives.utils.RANDOM_MODULE_LIST
+        # to a new tuple, so the live attribute must be read each time.
         assert MyMod in torchrl.objectives.utils.RANDOM_MODULE_LIST
 
     def test_standardization(self):
@@ -1601,6 +1621,9 @@ class TestPrepareValueEstimatorKwargs:
             (ValueEstimators.TD1, TD1Estimator),
             (ValueEstimators.GAE, GAE),
             (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.MAGAE, MultiAgentGAE),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.VTrace, VTrace),
         ],
     )
     def test_a2c_enum_dispatch(self, device, vtype, expected_cls):
@@ -1637,6 +1660,9 @@ class TestPrepareValueEstimatorKwargs:
             (ValueEstimators.TD1, TD1Estimator),
             (ValueEstimators.GAE, GAE),
             (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.MAGAE, MultiAgentGAE),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.VTrace, VTrace),
         ],
     )
     def test_ppo_enum_dispatch(self, device, vtype, expected_cls):
@@ -1892,3 +1918,130 @@ class TestDefaultForwardValueEstimatorKeys:
         loss.make_value_estimator(ValueEstimators.TD0)
         loss.set_keys(value="my_state_value")
         assert loss.value_estimator.tensor_keys.value == "my_state_value"
+class TestValueEstimatorRegistry:
+    """Tests for the dynamic value-estimator registry.
+
+    These tests are intentionally agnostic of any specific loss so they
+    exercise just the registry machinery in ``torchrl.objectives.utils``.
+    """
+
+    def test_all_builtins_registered(self):
+        """Every ValueEstimators enum member must have a registry entry."""
+        for member in ValueEstimators:
+            assert member in _VALUE_ESTIMATOR_REGISTRY, f"missing: {member}"
+            entry = get_value_estimator_entry(member)
+            assert entry.cls is not None
+            assert "gamma" in entry.default_kwargs
+
+    def test_string_alias_resolves(self):
+        assert (
+            get_value_estimator_entry("gae").cls
+            is get_value_estimator_entry(ValueEstimators.GAE).cls
+        )
+        assert (
+            get_value_estimator_entry("vtrace").cls
+            is get_value_estimator_entry(ValueEstimators.VTrace).cls
+        )
+
+    def test_unknown_alias_raises(self):
+        with pytest.raises(KeyError, match="Unknown value estimator alias"):
+            get_value_estimator_entry("not_a_real_estimator")
+
+    def test_unknown_type_raises(self):
+        with pytest.raises(TypeError, match="must be a registered enum value"):
+            get_value_estimator_entry(42)
+
+    def test_register_and_dispatch_custom_estimator(self):
+        """Adding a new estimator must not require touching any loss file."""
+
+        class _Custom(Enum):
+            FAKE = "fake"
+
+        @register_value_estimator(
+            _Custom.FAKE, default_kwargs={"gamma": 0.99, "lmbda": 0.5}
+        )
+        class _MyGAE(GAE):
+            pass
+
+        try:
+            entry = get_value_estimator_entry(_Custom.FAKE)
+            assert entry.cls is _MyGAE
+            assert entry.default_kwargs == {"gamma": 0.99, "lmbda": 0.5}
+            assert get_value_estimator_entry("fake") is entry
+            assert default_value_kwargs(_Custom.FAKE) == {
+                "gamma": 0.99,
+                "lmbda": 0.5,
+            }
+
+            class _Dummy:
+                pass
+
+            net = TensorDictModule(
+                nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+            )
+            gae = build_value_estimator(_Dummy(), _Custom.FAKE, value_network=net)
+            assert isinstance(gae, _MyGAE)
+            assert gae.value_network is net
+        finally:
+            _VALUE_ESTIMATOR_REGISTRY.pop(_Custom.FAKE, None)
+
+    def test_default_value_kwargs_reads_registry(self):
+        """Back-compat shim must agree with the registry."""
+        for member, entry in _VALUE_ESTIMATOR_REGISTRY.items():
+            assert default_value_kwargs(member) == entry.default_kwargs
+
+    def test_default_value_kwargs_builtin_fallback(self):
+        """Built-in defaults must not depend on registry import order."""
+        entry = _VALUE_ESTIMATOR_REGISTRY.pop(ValueEstimators.GAE)
+        try:
+            assert default_value_kwargs(ValueEstimators.GAE) == entry.default_kwargs
+        finally:
+            _VALUE_ESTIMATOR_REGISTRY[ValueEstimators.GAE] = entry
+
+    def test_dispatch_unsupported_raises(self):
+        """`dispatch_value_estimator` rejects estimators outside the supported set."""
+
+        class _Dummy:
+            pass
+
+        dummy = _Dummy()
+        with pytest.raises(NotImplementedError, match="Supported value types"):
+            dispatch_value_estimator(
+                dummy,
+                ValueEstimators.GAE,
+                supported=(ValueEstimators.TD0,),
+            )
+
+    def test_for_loss_respects_explicit_value_network(self):
+        """When the loss passes ``value_network=...``, the registry uses it."""
+
+        class _Dummy:
+            # neither ``critic_network`` nor ``value_network`` attributes
+            pass
+
+        net = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        gae = build_value_estimator(_Dummy(), ValueEstimators.GAE, value_network=net)
+        assert isinstance(gae, GAE)
+        assert gae.value_network is net
+
+    def test_vtrace_for_loss_respects_explicit_modules(self):
+        """Explicit VTrace modules must not be passed twice."""
+
+        class _Dummy:
+            pass
+
+        critic = TensorDictModule(
+            nn.Linear(3, 1), in_keys=["obs"], out_keys=["state_value"]
+        )
+        actor = TensorDictModule(nn.Linear(3, 1), in_keys=["obs"], out_keys=["action"])
+        vtrace = build_value_estimator(
+            _Dummy(),
+            ValueEstimators.VTrace,
+            value_network=critic,
+            actor_network=actor,
+        )
+        assert isinstance(vtrace, VTrace)
+        assert vtrace.value_network is critic
+        assert vtrace.actor_network is actor

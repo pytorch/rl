@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import random
+
 from functools import partial
 
 import numpy as np
@@ -1460,8 +1462,6 @@ class TestTokenizer(TransformBase):
         ).all()
 
     def test_transform_env(self):
-        import random
-
         random.seed(0)
         t = Tokenizer(
             in_keys=["string"],

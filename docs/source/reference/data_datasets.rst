@@ -21,8 +21,15 @@ making it efficient for sequence-based sampling and training.
     datasets.AtariDQNExperienceReplay
     datasets.D4RLExperienceReplay
     datasets.GenDGRLExperienceReplay
+    datasets.LeRobotExperienceReplay
     datasets.MinariExperienceReplay
     datasets.OpenMLExperienceReplay
     datasets.OpenXExperienceReplay
     datasets.RobosetExperienceReplay
     datasets.VD4RLExperienceReplay
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    datasets.lerobot_columns_to_tensordict

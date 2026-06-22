@@ -25,6 +25,35 @@ python setup.py develop
 ```
 in your shell.
 
+### Local development with uv
+
+For a local development environment, you can also use
+[`uv`](https://docs.astral.sh/uv/). From the root of the cloned repository, run
+tests with
+
+```shell
+uv run pytest test/test_tensordictmodules.py
+```
+
+`uv run` creates and manages a local virtual environment, installs TorchRL in
+editable mode, installs TensorDict from the PyTorch GitHub repository, and
+includes the `dev` dependency group by default. The `dev` group is intended to
+cover common low-friction development dependencies such as Gym, Gymnasium,
+Hydra, MuJoCo, pytest, TensorBoard, tqdm, and Weights & Biases.
+
+By default, the local `uv` configuration installs PyTorch nightly wheels from
+the CPU nightly index on all platforms.
+
+The PyTorch index is marked as explicit, so unrelated packages continue to
+resolve from PyPI instead of the PyTorch wheel index.
+
+On Linux machines where you want CUDA 13.0 nightly wheels, override the named
+PyTorch index used by the local configuration:
+
+```shell
+uv run --index pytorch-nightly=https://download.pytorch.org/whl/nightly/cu130 pytest test/test_tensordictmodules.py
+```
+
 If the generation of this artifact in MacOs M1 doesn't work correctly or in the execution the message
 `(mach-o file, but is an incompatible architecture (have 'x86_64', need 'arm64e'))` appears, then try
 

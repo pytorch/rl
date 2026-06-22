@@ -55,6 +55,9 @@ from torchrl.testing import (
     rollout_consistency_assertion,
 )
 
+_has_gym_super_mario_bros = importlib.util.find_spec("gym_super_mario_bros") is not None
+_has_mo_gymnasium = importlib.util.find_spec("mo_gymnasium") is not None
+
 _has_ale = importlib.util.find_spec("ale_py") is not None
 _has_atari_py = False
 if importlib.util.find_spec("atari_py") is not None:
@@ -407,8 +410,6 @@ class TestGym:
     @pytest.mark.parametrize("backend", _BACKENDS)
     @pytest.mark.parametrize("numpy", [True, False])
     def test_torchrl_to_gym(self, backend, numpy):
-        from torchrl.envs.libs.gym import gym_backend, set_gym_backend
-
         gb = gym_backend()
         try:
             EnvBase.register_gym(
@@ -908,6 +909,22 @@ class TestGym:
         check_env_specs(env)
         env = SerialEnv(2, make_env)
         check_env_specs(env)
+
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_mo_num_envs_vector_reward_spec(self, num_envs):
+        if not _has_mo:
+            pytest.skip("mo-gym not found")
+
+        env = MOGymEnv("mo-mountaincarcontinuous-v0", num_envs=num_envs, device="cpu")
+        try:
+            expected_shape = torch.Size([2])
+            if num_envs:
+                expected_shape = torch.Size([num_envs, *expected_shape])
+            assert env.reward_spec.shape == expected_shape
+            td = env.rand_step(env.reset())
+            assert td["next", "reward"].shape == expected_shape
+        finally:
+            env.close()
 
     def test_info_reader_mario(self):
         try:
@@ -1647,8 +1664,6 @@ class TestGym:
 
     def test_is_from_pixels_simple_env(self):
         """Test that _is_from_pixels correctly identifies non-pixel environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a simple environment that doesn't have pixels
         class SimpleEnv:
             def __init__(self):
@@ -1666,8 +1681,6 @@ class TestGym:
 
     def test_is_from_pixels_box_env(self):
         """Test that _is_from_pixels correctly identifies pixel Box environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a pixel-like environment
         class PixelEnv:
             def __init__(self):
@@ -1687,8 +1700,6 @@ class TestGym:
 
     def test_is_from_pixels_dict_env(self):
         """Test that _is_from_pixels correctly identifies Dict environments with pixels."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a Dict environment that has pixels
         class DictPixelEnv:
             def __init__(self):
@@ -1713,8 +1724,6 @@ class TestGym:
 
     def test_is_from_pixels_dict_env_no_pixels(self):
         """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
-        from torchrl.envs.libs.gym import _is_from_pixels
-
         # Test with a Dict environment that doesn't have pixels
         class DictNoPixelEnv:
             def __init__(self):
@@ -1818,7 +1827,9 @@ class TestGym:
 
     def test_is_from_pixels_wrapper_env(self):
         """Test that _is_from_pixels correctly identifies wrapped environments."""
-        from torchrl.envs.libs.gym import _is_from_pixels
+        import builtins
+
+        import torchrl.envs.libs.utils
 
         # Test with a mock environment that simulates being wrapped with a pixel wrapper
         class MockWrappedEnv:
@@ -1832,8 +1843,6 @@ class TestGym:
                 )
 
         # Mock the isinstance check to simulate the wrapper detection
-        import torchrl.envs.libs.utils
-
         original_isinstance = isinstance
 
         def mock_isinstance(obj, cls):
@@ -1842,8 +1851,6 @@ class TestGym:
             return original_isinstance(obj, cls)
 
         # Temporarily patch isinstance
-        import builtins
-
         builtins.isinstance = mock_isinstance
 
         try:
@@ -1857,6 +1864,31 @@ class TestGym:
         finally:
             # Restore original isinstance
             builtins.isinstance = original_isinstance
+
+    @pytest.mark.parametrize("num_envs", [0, 1, 2])
+    def test_gymnasium_num_envs(self, num_envs, request):
+        if not _has_gymnasium:
+            pytest.skip("gymnasium not found")
+
+        gym_version = version.parse(gymnasium.__version__)
+        if version.parse("1.0.0") <= gym_version < version.parse("1.1.0"):
+            pytest.skip("gymnasium 1.0 is not supported")
+
+        with set_gym_backend("gymnasium"):
+            env = GymEnv("CartPole-v1", num_envs=num_envs)
+        request.addfinalizer(env.close)
+
+        if num_envs > 0:
+            expected_batch_size = torch.Size([num_envs])
+            expected_reward_shape = torch.Size([num_envs, 1])
+        else:
+            expected_batch_size = torch.Size([])
+            expected_reward_shape = torch.Size([1])
+
+        assert env.batch_size == expected_batch_size
+        check_env_specs(env)
+        td = env.rand_step(env.reset())
+        assert td["next", "reward"].shape == expected_reward_shape
 
 
 @pytest.mark.skipif(

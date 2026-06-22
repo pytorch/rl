@@ -34,6 +34,9 @@ from torchrl.trainers.trainers import (
 class IQLTrainer(Trainer):
     """A trainer class for Implicit Q-Learning (IQL) algorithm.
 
+    See also :class:`~torchrl.trainers.algorithms.configs.IQLTrainerConfig` for the
+    Hydra configuration counterpart.
+
     This trainer implements the IQL algorithm, an off-policy actor-critic method
     that uses expectile regression for value function learning. IQL avoids querying
     out-of-distribution actions by using an implicit approach to Q-learning.
@@ -103,6 +106,7 @@ class IQLTrainer(Trainer):
         target_net_updater: TargetNetUpdater | None = None,
         async_collection: bool = False,
         log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
     ) -> None:
         warnings.warn(
             "IQLTrainer is an experimental/prototype feature. The API may change in future versions. "
@@ -127,6 +131,7 @@ class IQLTrainer(Trainer):
             save_trainer_file=save_trainer_file,
             async_collection=async_collection,
             log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
         )
         self.replay_buffer = replay_buffer
         self.async_collection = async_collection

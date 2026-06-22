@@ -13,7 +13,7 @@ from typing import Literal
 import torch
 from tensordict import lazy_stack, TensorDictBase
 
-from torchrl._utils import logger as torchrl_logger
+from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
 from torchrl.envs import AsyncEnvPool, EnvBase
 from torchrl.modules.inference_server import InferenceServer, ThreadingTransport
@@ -178,6 +178,9 @@ class AsyncBatchedCollector(BaseCollector):
             collector yields individual completed trajectories as they finish
             rather than fixed-size batches.  ``frames_per_batch`` acts as the
             *minimum* number of frames to accumulate before yielding.
+            The synchronous and multi-process collectors expose the same
+            capability through the ``trajs_per_batch`` keyword argument (a
+            trajectory count rather than a flag).
             Defaults to ``False``.
         weight_sync: an optional
             :class:`~torchrl.weight_update.WeightSyncScheme` forwarded to the
@@ -375,6 +378,7 @@ class AsyncBatchedCollector(BaseCollector):
                 "A collector worker thread raised an exception."
             ) from item
 
+    @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_frames")
     def _rollout_frames(self) -> TensorDictBase:
         """Drain ``frames_per_batch`` transitions from the workers."""
         rq = self._result_queue
@@ -402,6 +406,7 @@ class AsyncBatchedCollector(BaseCollector):
 
         return lazy_stack(transitions)
 
+    @_maybe_record_function_decorator("AsyncBatchedCollector._rollout_yield_trajs")
     def _rollout_yield_trajs(self) -> TensorDictBase:
         """Drain transitions until a complete trajectory is available."""
         rq = self._result_queue

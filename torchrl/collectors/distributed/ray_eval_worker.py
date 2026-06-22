@@ -42,11 +42,24 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
 
 _has_ray = importlib.util.find_spec("ray") is not None
+_ray = None
 
 logger = logging.getLogger(__name__)
+
+
+def _get_ray():
+    """Lazily import the optional Ray dependency."""
+    if not _has_ray:
+        raise RuntimeError(
+            "Ray is required for RayEvalWorker but could not be found. "
+            "Install it with: pip install ray"
+        )
+    global _ray
+    if _ray is None:
+        _ray = importlib.import_module("ray")
+    return _ray
 
 
 class RayEvalWorker:
@@ -103,12 +116,7 @@ class RayEvalWorker:
         name: str | None = None,
         **remote_kwargs: Any,
     ) -> None:
-        if not _has_ray:
-            raise RuntimeError(
-                "Ray is required for RayEvalWorker but could not be found. "
-                "Install it with: pip install ray"
-            )
-        import ray
+        ray = _get_ray()
 
         self._reward_keys = reward_keys
 
@@ -147,12 +155,7 @@ class RayEvalWorker:
             reward_keys: Nested key(s) used to read the reward from the
                 rollout tensordict.  Defaults to ``("next", "reward")``.
         """
-        if not _has_ray:
-            raise RuntimeError(
-                "Ray is required for RayEvalWorker but could not be found. "
-                "Install it with: pip install ray"
-            )
-        import ray
+        ray = _get_ray()
 
         worker = object.__new__(cls)
         worker._reward_keys = reward_keys
@@ -210,7 +213,7 @@ class RayEvalWorker:
         if self._pending_ref is None:
             return None
 
-        import ray
+        ray = _get_ray()
 
         ready, _ = ray.wait([self._pending_ref], timeout=timeout)
         if not ready:
@@ -221,14 +224,24 @@ class RayEvalWorker:
         return result
 
     def shutdown(self) -> None:
-        """Close the environment and kill the actor."""
-        import ray
+        """Close the environment and kill the actor.
 
+        Safe to call multiple times or after ``ray.shutdown()`` has already
+        torn down the actor (e.g. via a test fixture).
+        """
+        ray = _get_ray()
+
+        if self._actor is None:
+            return
         try:
             ray.get(self._actor.shutdown.remote())
         except Exception:
             logger.warning("RayEvalWorker: error during shutdown", exc_info=True)
-        ray.kill(self._actor)
+        try:
+            ray.kill(self._actor)
+        except Exception:
+            # The actor may already be dead (e.g. ray.shutdown() ran first).
+            logger.debug("RayEvalWorker: actor already terminated", exc_info=True)
         self._actor = None
         self._pending_ref = None
 
@@ -241,13 +254,10 @@ class RayEvalWorker:
 class _EvalActor:
     """Plain class turned into a Ray actor by :class:`RayEvalWorker`.
 
-    **Why local imports?**  Environments like Isaac Lab **require** their
-    ``AppLauncher`` to be initialised before ``import torch`` even happens.
-    The *init_fn* callback (called first in ``__init__``) takes care of that.
-    Every ``import torch`` and ``from torchrl ...`` therefore lives inside a
-    method body so that the actor process can control import order via
-    *init_fn*.  Only stdlib / pure-Python imports (``numpy``, ``logging``,
-    etc.) are safe at module level.
+    Environments like Isaac Lab require their ``AppLauncher`` to be initialised
+    before ``torch`` is imported. The torch-dependent runtime is therefore kept
+    in a private module and imported only after *init_fn* has run in the actor
+    process.
     """
 
     def __init__(
@@ -256,113 +266,32 @@ class _EvalActor:
         env_maker: Callable[[], Any],
         policy_maker: Callable[[Any], Any],
     ) -> None:
-        # --- process-level initialisation ---
-        # This MUST run before any torch import.  For Isaac Lab the init_fn
-        # calls AppLauncher which configures the GPU, the Omniverse runtime,
-        # and various environment variables that torch and CUDA rely on.
         if init_fn is not None:
             init_fn()
 
-        # --- now safe to import torch / torchrl ---
-        # (kept local: see class docstring for rationale)
-        import torch  # noqa: F401
-
-        self.env = env_maker()
-        self.policy = policy_maker(self.env)
-        # Cache device before any to_module call can replace nn.Parameter
-        # with plain tensors (which makes .parameters() empty).
-        self._device = next(self.policy.parameters()).device
+        runtime_mod = importlib.import_module(
+            "torchrl.collectors.distributed._ray_eval_runtime"
+        )
+        env = env_maker()
+        self._runtime = runtime_mod.RayEvalRuntime(env, policy_maker(env))
 
     def eval(
         self,
-        weights,
+        weights: Any,
         max_steps: int,
         reward_keys: tuple[str, ...],
         deterministic: bool,
         break_when_any_done: bool,
     ) -> dict:
         """Run an evaluation rollout with the given weights."""
-        # Local imports: torch/torchrl must not be imported before init_fn
-        # has run (see class docstring -- this is critical for Isaac Lab).
-        import torch
-
-        from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
-
-        # Load weights into the eval policy (move to policy device first)
-        weights.to(self._device).to_module(self.policy)
-
-        frames = []
-        total_reward = 0.0
-        num_steps = 0
-
-        exploration = (
-            ExplorationType.DETERMINISTIC if deterministic else ExplorationType.RANDOM
+        return self._runtime.eval(
+            weights=weights,
+            max_steps=max_steps,
+            reward_keys=reward_keys,
+            deterministic=deterministic,
+            break_when_any_done=break_when_any_done,
         )
-        with set_exploration_type(exploration), torch.no_grad():
-            td = self.env.reset()
-            for _i in range(max_steps):
-                td = self.policy(td)
-                td = self.env.step(td)
-
-                total_reward += td[reward_keys].mean().item()
-                num_steps += 1
-
-                frame = self._try_render()
-                if frame is not None:
-                    frames.append(frame)
-
-                done = td.get(("next", "done"), None)
-                if break_when_any_done and done is not None and done.any():
-                    break
-
-                td = step_mdp(td)
-
-        mean_reward = total_reward / max(1, num_steps)
-
-        # Format video: (1, T, C, H, W) uint8 CPU tensor
-        video = None
-        if frames:
-            video = torch.stack(frames, dim=0).unsqueeze(0).cpu()
-
-        return {"reward": mean_reward, "frames": video}
-
-    def _try_render(self):
-        """Render one frame from the underlying environment.
-
-        Walks the wrapper chain to find a callable ``render()`` method
-        and returns the result as a ``(C, H, W)`` uint8 tensor, or
-        ``None`` if rendering is unavailable.
-        """
-        # Local import: torch must not be imported at module level
-        # (see class docstring -- this is critical for Isaac Lab).
-        import torch
-
-        # Walk through TransformedEnv / wrapper chain to the base env.
-        env = self.env
-        while hasattr(env, "base_env"):
-            env = env.base_env
-        render_fn = getattr(env, "render", None)
-        # If the base env delegates to a gymnasium env, prefer that.
-        if hasattr(env, "_env") and hasattr(env._env, "render"):
-            render_fn = env._env.render
-        if render_fn is None:
-            return None
-
-        raw = render_fn()
-        if raw is None:
-            return None
-
-        if isinstance(raw, np.ndarray):
-            raw = torch.from_numpy(raw.copy())
-
-        # (H, W, C) -> (C, H, W)
-        if raw.ndim == 3 and raw.shape[-1] in (3, 4):
-            raw = raw[..., :3]
-            raw = raw.permute(2, 0, 1)
-
-        return raw.to(torch.uint8)
 
     def shutdown(self) -> None:
         """Shut down the environment."""
-        if hasattr(self, "env") and not self.env.is_closed:
-            self.env.close()
+        self._runtime.shutdown()

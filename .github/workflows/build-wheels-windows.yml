@@ -71,11 +71,12 @@ jobs:
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
       channel: ${{ inputs.channel || '' }}
       use-only-dl-pytorch-org: ${{ inputs.channel == 'release' && 'true' || 'false' }}
+      python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
       # For workflow_dispatch: convert boolean to enable/disable string
       # For workflow_call: use the string input directly
       # Default: disable CUDA (torchrl is CPU-only), enable CPU (Windows has no ROCm)
-      with-cuda: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable') || inputs.with-cuda || 'disable' }}
-      with-cpu: ${{ github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable') || inputs.with-cpu || 'enable' }}
+      with-cuda: ${{ inputs.with-cuda || (github.event_name == 'workflow_dispatch' && (inputs.build-cuda && 'enable' || 'disable')) || 'disable' }}
+      with-cpu: ${{ inputs.with-cpu || (github.event_name == 'workflow_dispatch' && (inputs.build-cpu && 'enable' || 'disable')) || 'enable' }}
   build:
     needs: generate-matrix
     strategy:
