@@ -32,7 +32,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
@@ -668,7 +667,9 @@ class SACLoss(LossModule):
         loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
         weights = self._maybe_get_priority_weight(tensordict)
-        loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
+        loss_alpha = self._reduce_loss(
+            loss_alpha, tensordict=tensordict, weights=weights
+        )
         tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -746,7 +747,9 @@ class SACLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
             )
         loss_actor = self._alpha * log_prob - min_q_logprob
-        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
+        loss_actor = self._reduce_loss(
+            loss_actor, tensordict=tensordict, weights=weights
+        )
         return loss_actor, {"log_prob": log_prob.detach()}
 
     def alpha_loss(self, log_prob: Tensor) -> Tensor:
@@ -818,7 +821,9 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        loss_value = _reduce(loss_value, reduction=self.reduction, weights=weights)
+        loss_value = self._reduce_loss(
+            loss_value, tensordict=tensordict, weights=weights
+        )
         metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
 
         return loss_value, metadata
@@ -923,7 +928,7 @@ class SACLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
@@ -966,7 +971,9 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function
         )
-        loss_value = _reduce(loss_value, reduction=self.reduction, weights=weights)
+        loss_value = self._reduce_loss(
+            loss_value, tensordict=tensordict, weights=weights
+        )
         return loss_value, {}
 
     def _alpha_loss(self, log_prob: Tensor) -> Tensor:
@@ -1357,7 +1364,9 @@ class DiscreteSACLoss(LossModule):
             log_prob=metadata_actor["log_prob"],
         )
         weights = self._maybe_get_priority_weight(tensordict)
-        loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
+        loss_alpha = self._reduce_loss(
+            loss_alpha, tensordict=tensordict, weights=weights
+        )
 
         tensordict.set(self.tensor_keys.priority, metadata_value["td_error"])
         if loss_actor.shape != loss_qvalue.shape:
@@ -1513,7 +1522,7 @@ class DiscreteSACLoss(LossModule):
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
 
         metadata = {
             "td_error": td_error.detach().max(0)[0],
@@ -1548,7 +1557,7 @@ class DiscreteSACLoss(LossModule):
         loss = self._alpha * log_prob - min_q
         # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
         loss = (prob * loss).sum(-1)
-        loss = _reduce(loss, reduction=self.reduction, weights=weights)
+        loss = self._reduce_loss(loss, tensordict=tensordict, weights=weights)
 
         return loss, {"log_prob": (log_prob * prob).sum(-1).detach()}
 

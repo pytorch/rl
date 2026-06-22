@@ -33,7 +33,7 @@ from torchrl._utils import logger as torchrl_logger, VERBOSE
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce, _sum_td_features, _validate_clip_epsilon
+from torchrl.objectives.utils import _sum_td_features, _validate_clip_epsilon
 
 
 class LLMLossOutput(TensorClass["nocast"]):
@@ -639,14 +639,16 @@ class GRPOLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coeff * entropy)
 
-        td_out.set("ESS", _reduce(ess / batch, self.reduction))
+        td_out.set("ESS", ess / batch)
         # Aggregate loss terms according to aggregation strategy
         for key in list(td_out.keys()):
             if isinstance(key, tuple) or not isinstance(key, str):
                 continue
             if key.startswith("loss_"):
                 val = td_out.get(key)
-                td_out.set(key, self._aggregate_loss_value(val, mask))
+                td_out.set(
+                    key, self._aggregate_loss_value(val, mask, tensordict=tensordict)
+                )
         if self.kl_to_ref_coeff is not None and self.kl_to_ref_coeff > 0:
             # FIXME: parameterize this
             loss_kl, kl_penalty = self._kl_to_ref(
@@ -691,7 +693,10 @@ class GRPOLoss(LossModule):
         return -gain, clip_fraction
 
     def _aggregate_loss_value(
-        self, value: torch.Tensor, mask: torch.Tensor
+        self,
+        value: torch.Tensor,
+        mask: torch.Tensor,
+        tensordict: TensorDictBase | None = None,
     ) -> torch.Tensor:
         """Aggregate a per-token loss tensor using the configured strategy.
 
@@ -717,7 +722,9 @@ class GRPOLoss(LossModule):
 
         # token_mean (global masked mean)
         mask_exp = expand_as_right(mask, value)
-        return _reduce(value, reduction="mean", mask=mask_exp).squeeze(-1)
+        return self._reduce_loss(
+            value, tensordict=tensordict, reduction="mean", mask=mask_exp
+        ).squeeze(-1)
 
     def _get_entropy(
         self, dist: d.Distribution, adv_shape: torch.Size
