@@ -22,7 +22,7 @@ from torch.nn import Parameter
 from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-from torchrl.objectives.utils import _reduce, default_value_kwargs, default_value_kwargs, ValueEstimators
+from torchrl.objectives.utils import _reduce, default_value_kwargs, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -97,9 +97,10 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     To utilize the ability configuring the tensordict keys via
     :meth:`~.set_keys()` a subclass must define an _AcceptedKeys dataclass.
     This dataclass should include all keys that are intended to be configurable.
-    In addition, the subclass must implement the
-    :meth:._forward_value_estimator_keys() method. This function is crucial for
-    forwarding any altered tensordict keys to the underlying value_estimator.
+    The default :meth:`~._forward_value_estimator_keys()` implementation forwards
+    common value-estimator keys when present. Subclasses should override it when
+    the loss's key names need to be remapped before being forwarded to the
+    underlying value estimator.
 
     Subclasses can declare a ``_schedulable_buffers`` frozenset to allow direct
     scalar assignment (e.g. ``loss.entropy_coeff = 0.003``) for registered
@@ -316,8 +317,8 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             raise AttributeError(
                 "To utilize `.set_keys(...)` for tensordict key configuration, the subclassed loss module "
                 "must define an _AcceptedKeys dataclass containing all keys intended for configuration. "
-                "Moreover, the subclass needs to implement `._forward_value_estimator_keys()` method to "
-                "facilitate forwarding of any modified tensordict keys to the underlying value_estimator."
+                "If the default `._forward_value_estimator_keys()` implementation is insufficient, the "
+                "subclass must override it to forward modified tensordict keys to the underlying value_estimator."
             ) from err
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:

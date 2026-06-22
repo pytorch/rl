@@ -32,17 +32,6 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
-    _reduce,
-    distance_loss,
-    ValueEstimators,
-)
-from torchrl.objectives.value import (
-    GAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    VTrace,
-)
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -615,46 +604,6 @@ class A2CLoss(LossModule):
         if value_type is None:
             return self
 
-        device = _get_default_device(self)
-        hp["device"] = device
-
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
         hp.setdefault("device", _get_default_device(self))
         dispatch_value_estimator(
             self,

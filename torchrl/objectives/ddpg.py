@@ -18,11 +18,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
-    distance_loss,
-    ValueEstimators,
-)
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -412,28 +407,6 @@ class DDPGLoss(LossModule):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
             return self
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(value_network=self.actor_critic, **hp)
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(value_network=self.actor_critic, **hp)
-        elif value_type == ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.actor_critic, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value": self.tensor_keys.state_action_value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
         dispatch_value_estimator(
             self,
             value_type,

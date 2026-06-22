@@ -689,19 +689,11 @@ class TestBase:
                 super().__init__()
 
         loss_module = MyLoss()
-        with pytest.raises(AttributeError):
-            loss_module.set_keys()
-
-        class MyLoss2(MyLoss):
-            def _forward_value_estimator_keys(self, **kwargs) -> None:
-                pass
-
-        loss_module = MyLoss2()
         assert loss_module.set_keys() is None
         with pytest.raises(ValueError):
             loss_module.set_keys(some_key="test")
 
-        class MyLoss3(MyLoss2):
+        class MyLoss3(MyLoss):
             @dataclass
             class _AcceptedKeys:
                 some_key: str = "some_value"
@@ -1620,7 +1612,6 @@ class TestPrepareValueEstimatorKwargs:
             (ValueEstimators.TD0, TD0Estimator),
             (ValueEstimators.TD1, TD1Estimator),
             (ValueEstimators.GAE, GAE),
-            (ValueEstimators.TDLambda, TDLambdaEstimator),
             (ValueEstimators.MAGAE, MultiAgentGAE),
             (ValueEstimators.TDLambda, TDLambdaEstimator),
             (ValueEstimators.VTrace, VTrace),
@@ -1659,7 +1650,6 @@ class TestPrepareValueEstimatorKwargs:
             (ValueEstimators.TD0, TD0Estimator),
             (ValueEstimators.TD1, TD1Estimator),
             (ValueEstimators.GAE, GAE),
-            (ValueEstimators.TDLambda, TDLambdaEstimator),
             (ValueEstimators.MAGAE, MultiAgentGAE),
             (ValueEstimators.TDLambda, TDLambdaEstimator),
             (ValueEstimators.VTrace, VTrace),
@@ -1918,6 +1908,8 @@ class TestDefaultForwardValueEstimatorKeys:
         loss.make_value_estimator(ValueEstimators.TD0)
         loss.set_keys(value="my_state_value")
         assert loss.value_estimator.tensor_keys.value == "my_state_value"
+
+
 class TestValueEstimatorRegistry:
     """Tests for the dynamic value-estimator registry.
 

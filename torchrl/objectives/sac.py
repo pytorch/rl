@@ -33,10 +33,6 @@ from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _vmap_func,
-    distance_loss,
-    ValueEstimators,
-)
-from torchrl.objectives.value import TD0Estimator, TD1Estimator, TDLambdaEstimator
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -589,46 +585,12 @@ class SACLoss(LossModule):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
             return self
-
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
             value_net = None
         else:
             raise NotImplementedError
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
         dispatch_value_estimator(
             self,
             value_type,
@@ -1643,39 +1605,6 @@ class DiscreteSACLoss(LossModule):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
             return self
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=None,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=None,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=None,
-                deactivate_vmap=self.deactivate_vmap,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value": self.tensor_keys.value,
-            "value_target": "value_target",
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
         dispatch_value_estimator(
             self,
             value_type,
