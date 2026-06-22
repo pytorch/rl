@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import zipfile
 from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -396,6 +397,125 @@ def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, 
 
     loss = reward_model.compute_reward_loss(batch.chosen_data, batch.rejected_data)
     assert loss.shape == torch.Size([])
+
+
+def _mock_reward_model_transformers(
+    monkeypatch,
+    *,
+    tokenizer=None,
+    tokenizer_error=None,
+    config_pad_token_id=7,
+    config_eos_token_id=8,
+):
+    from torchrl.modules.models import llm as llm_module
+
+    calls = {}
+
+    class Config:
+        n_embd = 4
+        pad_token_id = config_pad_token_id
+        eos_token_id = config_eos_token_id
+
+    class FakeModel:
+        config = Config()
+        transformer = torch.nn.Identity()
+
+    class FakeGPT2LMHeadModel:
+        config_class = Config
+
+        def __init__(self, config):
+            self.config = config
+            self.transformer = torch.nn.Identity()
+
+        @classmethod
+        def from_pretrained(cls, model_path, return_dict=False):
+            calls["model_path"] = model_path
+            calls["return_dict"] = return_dict
+            return FakeModel()
+
+    class FakeAutoTokenizer:
+        @classmethod
+        def from_pretrained(cls, model_path):
+            calls["tokenizer_path"] = model_path
+            if tokenizer_error is not None:
+                raise tokenizer_error
+            return tokenizer
+
+    fake_transformers = ModuleType("transformers")
+    fake_transformers.GPT2LMHeadModel = FakeGPT2LMHeadModel
+    fake_transformers.AutoTokenizer = FakeAutoTokenizer
+
+    monkeypatch.setattr(llm_module, "_has_transformers", True)
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    return calls
+
+
+def test_reward_model_uses_explicit_pad_token_id(monkeypatch):
+    calls = _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=123, eos_token_id=456)
+    )
+
+    reward_model = GPT2RewardModel("custom-model", pad_token_id=321)
+
+    assert reward_model.pad_id == 321
+    assert calls["model_path"] == "custom-model"
+    assert "tokenizer_path" not in calls
+
+
+def test_reward_model_uses_tokenizer_from_model_path(monkeypatch):
+    calls = _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=123, eos_token_id=456)
+    )
+
+    reward_model = GPT2RewardModel("custom-model")
+
+    assert reward_model.pad_id == 123
+    assert calls["model_path"] == "custom-model"
+    assert calls["return_dict"] is False
+    assert calls["tokenizer_path"] == "custom-model"
+
+
+def test_reward_model_falls_back_to_tokenizer_eos_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=None, eos_token_id=456)
+    )
+
+    reward_model = GPT2RewardModel("custom-model")
+
+    assert reward_model.pad_id == 456
+
+
+def test_reward_model_falls_back_to_config_pad_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch,
+        tokenizer_error=OSError("missing tokenizer"),
+        config_pad_token_id=789,
+    )
+
+    reward_model = GPT2RewardModel("custom-model")
+
+    assert reward_model.pad_id == 789
+
+
+def test_compute_reward_loss_uses_model_pad_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=0, eos_token_id=456)
+    )
+    reward_model = GPT2RewardModel("custom-model")
+
+    chosen_batch = SimpleNamespace(
+        input_ids=torch.tensor([[1, 2, 3, 0, 0]]),
+        rewards=torch.tensor([[0.0, 0.0, 0.0, 0.0, -100.0]]),
+    )
+    rejected_batch = SimpleNamespace(
+        input_ids=torch.tensor([[1, 2, 4, 5, 0]]),
+        rewards=torch.tensor([[0.0, 0.0, 0.0, 0.0, 100.0]]),
+    )
+
+    loss = reward_model.compute_reward_loss(chosen_batch, rejected_batch)
+
+    expected = -F.logsigmoid(torch.zeros(2)).mean()
+    torch.testing.assert_close(loss, expected)
 
 
 def test_compute_reward_loss_identical_sequences():

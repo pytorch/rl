@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -34,13 +35,22 @@ class GPT2RewardModel(nn.Module):
         >>> assert rewards.shape == model_inputs["input_ids"].shape
         >>> assert end_scores.shape[1] == 1
 
+    Args:
+        model_path (str, optional): path or model identifier used to initialize the
+            underlying GPT2 model.
+        pad_token_id (int, optional): padding token id used to locate the final
+            non-padding token. If ``None``, this is inferred from the tokenizer
+            associated with ``model_path`` and falls back to the model config.
+
     """
 
-    def __init__(self, model_path=None):
+    def __init__(
+        self, model_path: str | Path | None = None, pad_token_id: int | None = None
+    ) -> None:
         if not _has_transformers:
             raise ImportError("The transformers library is missing.")
 
-        from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+        from transformers import GPT2LMHeadModel
 
         super().__init__()
         if model_path is not None:
@@ -53,7 +63,42 @@ class GPT2RewardModel(nn.Module):
 
         # replace last layer with the reward layer
         self.lm_head = nn.Linear(self.config.n_embd, 1, bias=False)
-        self.pad_id = GPT2TokenizerFast.from_pretrained("gpt2").eos_token_id
+        self.pad_id = self._get_pad_token_id(model, model_path, pad_token_id)
+
+    @staticmethod
+    def _get_pad_token_id(
+        model: Any, model_path: str | Path | None, pad_token_id: int | None
+    ) -> int:
+        if pad_token_id is not None:
+            return pad_token_id
+
+        tokenizer_model_path = "gpt2" if model_path is None else model_path
+        try:
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_path)
+        except Exception:
+            tokenizer = None
+
+        if tokenizer is not None:
+            tokenizer_pad_token_id = getattr(tokenizer, "pad_token_id", None)
+            if tokenizer_pad_token_id is not None:
+                return tokenizer_pad_token_id
+            tokenizer_eos_token_id = getattr(tokenizer, "eos_token_id", None)
+            if tokenizer_eos_token_id is not None:
+                return tokenizer_eos_token_id
+
+        config_pad_token_id = getattr(model.config, "pad_token_id", None)
+        if config_pad_token_id is not None:
+            return config_pad_token_id
+        config_eos_token_id = getattr(model.config, "eos_token_id", None)
+        if config_eos_token_id is not None:
+            return config_eos_token_id
+
+        raise ValueError(
+            "Could not infer a padding token id from the tokenizer or model config. "
+            "Pass pad_token_id explicitly to GPT2RewardModel."
+        )
 
     def forward(self, input_ids, attention_mask):
         """Returns a tuple (rewards, end_scores) where `rewards` contains all rewards computed at each timestep, `end_scores` contains the reward computed at the last-non-padding token."""
@@ -78,8 +123,12 @@ class GPT2RewardModel(nn.Module):
         return torch.stack(end_scores)
 
     # TODO: move to objectives
-    @staticmethod
-    def compute_reward_loss(chosen_batch, rejected_batch, pad_token_id=50256):
+    def compute_reward_loss(
+        self=None,
+        chosen_batch: Any = None,
+        rejected_batch: Any = None,
+        pad_token_id: int | None = None,
+    ) -> torch.Tensor:
         """Compute the reward loss given a chosen and rejected batch.
 
         The loss is computed as ``loss = -log_sigmoid(chosen_reward - rejected_reward)``.
@@ -87,6 +136,14 @@ class GPT2RewardModel(nn.Module):
         the model favours the rejected data.
 
           .. note:: The loss is computed excluding the common "prefix" subsequence to effectively disregard contribution of the original prompt.
+
+        Args:
+            chosen_batch: batch containing the chosen ``input_ids`` and ``rewards``.
+            rejected_batch: batch containing the rejected ``input_ids`` and ``rewards``.
+            pad_token_id (int, optional): padding token id used to find sequence
+                ends. If ``None``, instance calls use the model's inferred padding
+                token id. Class-level calls fall back to the GPT-2 EOS token id for
+                backwards compatibility.
 
         Examples:
             >>> import torch
@@ -116,6 +173,47 @@ class GPT2RewardModel(nn.Module):
             >>> assert isinstance(loss, torch.Tensor)
             >>> assert loss.shape == torch.Size([])
         """
+        if isinstance(self, GPT2RewardModel):
+            if chosen_batch is None or rejected_batch is None:
+                raise TypeError(
+                    "compute_reward_loss missing chosen_batch or rejected_batch."
+                )
+            if pad_token_id is None:
+                pad_token_id = self.pad_id
+        else:
+            # Backwards compatibility for class-level calls:
+            # GPT2RewardModel.compute_reward_loss(chosen, rejected[, pad_token_id])
+            # and GPT2RewardModel.compute_reward_loss(
+            #     chosen_batch=chosen, rejected_batch=rejected
+            # ).
+            if self is None:
+                if chosen_batch is None or rejected_batch is None:
+                    raise TypeError(
+                        "compute_reward_loss missing chosen_batch or rejected_batch."
+                    )
+            else:
+                if chosen_batch is None:
+                    raise TypeError("compute_reward_loss missing rejected_batch.")
+                if rejected_batch is not None:
+                    if pad_token_id is not None:
+                        raise TypeError(
+                            "compute_reward_loss got multiple values for "
+                            "pad_token_id."
+                        )
+                    pad_token_id = rejected_batch
+                rejected_batch = chosen_batch
+                chosen_batch = self
+            if pad_token_id is None:
+                pad_token_id = 50256
+
+        return GPT2RewardModel._compute_reward_loss(
+            chosen_batch, rejected_batch, pad_token_id
+        )
+
+    @staticmethod
+    def _compute_reward_loss(
+        chosen_batch: Any, rejected_batch: Any, pad_token_id: int
+    ) -> torch.Tensor:
         chosen_ids = chosen_batch.input_ids
         rejected_ids = rejected_batch.input_ids
         chosen_rewards = chosen_batch.rewards
