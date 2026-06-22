@@ -4,12 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import multiprocessing as mp
 import queue
 import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future
-import multiprocessing as mp
 from multiprocessing.synchronize import Event as MPEvent
 from statistics import mean
 
@@ -383,8 +383,8 @@ class InferenceServer:
                             )
                             more_submitted_at = [None] * len(more_items)
                         else:
-                            more_items, more_cbs, more_submitted_at = (
-                                drain_with_timing(self.max_batch_size - len(items))
+                            more_items, more_cbs, more_submitted_at = drain_with_timing(
+                                self.max_batch_size - len(items)
                             )
                         items.extend(more_items)
                         callbacks.extend(more_cbs)
