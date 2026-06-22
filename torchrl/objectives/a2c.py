@@ -354,15 +354,8 @@ class A2CLoss(LossModule):
 
         device = _get_default_device(self)
 
-        self.register_buffer(
-            "entropy_coeff", torch.as_tensor(entropy_coeff, device=device)
-        )
-        if critic_coeff is not None:
-            self.register_buffer(
-                "critic_coeff", torch.as_tensor(critic_coeff, device=device)
-            )
-        else:
-            self.critic_coeff = None
+        self.register_coeff_buffer("entropy_coeff", entropy_coeff, device=device)
+        self.register_coeff_buffer("critic_coeff", critic_coeff, device=device)
 
         if gamma is not None:
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)

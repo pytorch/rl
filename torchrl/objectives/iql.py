@@ -392,16 +392,6 @@ class IQLLoss(LossModule):
         weight = torch.where(diff > 0, expectile, (1 - expectile))
         return weight * (diff**2)
 
-    def _forward_value_estimator_keys(self, **kwargs) -> None:
-        if self._value_estimator is not None:
-            self._value_estimator.set_keys(
-                value=self._tensor_keys.value,
-                reward=self.tensor_keys.reward,
-                done=self.tensor_keys.done,
-                terminated=self.tensor_keys.terminated,
-            )
-        self._set_in_keys()
-
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         loss_actor, metadata = self.actor_loss(tensordict)

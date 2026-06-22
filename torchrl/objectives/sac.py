@@ -566,16 +566,6 @@ class SACLoss(LossModule):
                 total += subspec.shape[len(container_shape) :].numel()
         return total
 
-    def _forward_value_estimator_keys(self, **kwargs) -> None:
-        if self._value_estimator is not None:
-            self._value_estimator.set_keys(
-                value=self.tensor_keys.value,
-                reward=self.tensor_keys.reward,
-                done=self.tensor_keys.done,
-                terminated=self.tensor_keys.terminated,
-            )
-        self._set_in_keys()
-
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:

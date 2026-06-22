@@ -640,6 +640,79 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         hp.update(hyperparams)
         return value_type, hp
 
+    def register_coeff_buffer(
+        self,
+        name: str,
+        value: float | torch.Tensor | None,
+        *,
+        device: torch.device | str | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> None:
+        """Register a scalar coefficient as a buffer, converting it to a tensor.
+
+        Eliminates the recurring ``if not isinstance(value, Tensor): value =
+        torch.tensor(value); self.register_buffer(name, value)`` boilerplate in
+        loss ``__init__`` methods.
+
+        If ``value`` is ``None`` the attribute is set to ``None`` instead of a
+        buffer being registered, matching the common optional-coefficient idiom
+        (e.g. ``critic_coeff`` / ``clip_value``).
+
+        Args:
+            name (str): the buffer / attribute name.
+            value (float, Tensor or None): the coefficient. ``None`` sets the
+                attribute to ``None``.
+
+        Keyword Args:
+            device (torch.device, optional): device for the buffer.
+            dtype (torch.dtype, optional): dtype for the buffer.
+        """
+        if value is None:
+            setattr(self, name, None)
+            return
+        self.register_buffer(name, torch.as_tensor(value, device=device, dtype=dtype))
+
+    # Value-estimator keys forwarded by the default
+    # :meth:`_forward_value_estimator_keys`. These six are accepted by every
+    # built-in value estimator. Keys that only some estimators accept (e.g.
+    # ``sample_log_prob``) are intentionally excluded; losses that forward them
+    # should override :meth:`_forward_value_estimator_keys`.
+    _value_estimator_default_keys = (
+        "advantage",
+        "value_target",
+        "value",
+        "reward",
+        "done",
+        "terminated",
+    )
+
+    def _forward_value_estimator_keys(self, **kwargs) -> None:
+        """Default forwarding of tensordict keys to the value estimator.
+
+        Forwards every key in :attr:`_value_estimator_default_keys` that is
+        present on this loss's ``tensor_keys`` to the underlying value
+        estimator, then refreshes the loss input keys via ``_set_in_keys`` when
+        that method exists.
+
+        Losses whose value-estimator key *names* differ from their own
+        ``tensor_keys`` names -- e.g. mapping the estimator's ``value`` to a
+        ``state_action_value`` / ``global_value`` key -- or that forward
+        estimator-specific keys such as ``sample_log_prob`` must override this
+        method.
+        """
+        value_estimator = getattr(self, "_value_estimator", None)
+        if value_estimator is not None:
+            keys = {
+                name: getattr(self.tensor_keys, name)
+                for name in self._value_estimator_default_keys
+                if hasattr(self.tensor_keys, name)
+            }
+            if keys:
+                value_estimator.set_keys(**keys)
+        set_in_keys = getattr(self, "_set_in_keys", None)
+        if callable(set_in_keys):
+            set_in_keys()
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.
 

@@ -1716,3 +1716,179 @@ class TestPrepareValueEstimatorKwargs:
         loss = TD3Loss(actor, qvalue, bounds=(-1, 1)).to(device)
         with pytest.raises(NotImplementedError):
             loss.make_value_estimator(ValueEstimators.GAE)
+
+
+# ---------------------------------------------------------------------------
+# LossModule.register_coeff_buffer
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterCoeffBuffer:
+    """Regression tests for LossModule.register_coeff_buffer."""
+
+    class _CoeffLoss(LossModule):
+        def forward(self, td):
+            return td
+
+    def test_scalar_registers_buffer(self):
+        loss = self._CoeffLoss()
+        loss.register_coeff_buffer("entropy_coeff", 0.01)
+        assert isinstance(loss.entropy_coeff, torch.Tensor)
+        assert "entropy_coeff" in dict(loss.named_buffers())
+        assert torch.isclose(loss.entropy_coeff, torch.tensor(0.01))
+
+    def test_none_sets_attribute_not_buffer(self):
+        loss = self._CoeffLoss()
+        loss.register_coeff_buffer("critic_coeff", None)
+        assert loss.critic_coeff is None
+        assert "critic_coeff" not in dict(loss.named_buffers())
+
+    def test_tensor_passthrough(self):
+        loss = self._CoeffLoss()
+        loss.register_coeff_buffer("c", torch.tensor(2.0))
+        assert "c" in dict(loss.named_buffers())
+        assert torch.isclose(loss.c, torch.tensor(2.0))
+
+    def test_dtype_is_respected(self):
+        loss = self._CoeffLoss()
+        loss.register_coeff_buffer("c", 1.0, dtype=torch.float64)
+        assert loss.c.dtype == torch.float64
+
+    def test_a2c_registers_coeff_buffers(self):
+        actor = ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(4, 4), in_keys=["observation"], out_keys=["loc", "scale"]
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            spec=Composite(action=Bounded(-1, 1, (2,))),
+        )
+        critic = ValueOperator(nn.Linear(4, 1), in_keys=["observation"])
+        loss = A2CLoss(actor, critic)
+        buffers = dict(loss.named_buffers())
+        assert "entropy_coeff" in buffers
+        assert "critic_coeff" in buffers
+
+    def test_a2c_none_critic_coeff(self):
+        actor = ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(4, 4), in_keys=["observation"], out_keys=["loc", "scale"]
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            spec=Composite(action=Bounded(-1, 1, (2,))),
+        )
+        critic = ValueOperator(nn.Linear(4, 1), in_keys=["observation"])
+        loss = A2CLoss(actor, critic, critic_coeff=None)
+        assert loss.critic_coeff is None
+        assert "critic_coeff" not in dict(loss.named_buffers())
+
+
+# ---------------------------------------------------------------------------
+# LossModule._forward_value_estimator_keys (default implementation)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingValueEstimator:
+    """Minimal value-estimator stub that records set_keys calls."""
+
+    def __init__(self):
+        self.received = None
+
+    def set_keys(self, **kwargs):
+        self.received = kwargs
+
+
+@dataclass
+class _VEAcceptedKeys:
+    value: str = "state_value"
+    reward: str = "reward"
+    done: str = "done"
+    terminated: str = "terminated"
+
+
+class _ValueKeysLoss(LossModule):
+    """Loss with value-style keys that relies on the default forwarding."""
+
+    _AcceptedKeys = _VEAcceptedKeys
+    default_keys = _VEAcceptedKeys
+    default_value_estimator = ValueEstimators.TD0
+
+    def forward(self, td):
+        return td
+
+
+class TestDefaultForwardValueEstimatorKeys:
+    """Regression tests for the default LossModule._forward_value_estimator_keys."""
+
+    def test_forwards_present_keys(self):
+        loss = _ValueKeysLoss()
+        rec = _RecordingValueEstimator()
+        loss._value_estimator = rec
+        loss._forward_value_estimator_keys()
+        assert rec.received == {
+            "value": "state_value",
+            "reward": "reward",
+            "done": "done",
+            "terminated": "terminated",
+        }
+
+    def test_absent_keys_are_not_forwarded(self):
+        loss = _ValueKeysLoss()
+        rec = _RecordingValueEstimator()
+        loss._value_estimator = rec
+        loss._forward_value_estimator_keys()
+        # advantage / value_target / sample_log_prob are not on this loss's keys
+        assert "advantage" not in rec.received
+        assert "value_target" not in rec.received
+        assert "sample_log_prob" not in rec.received
+
+    def test_set_keys_propagates_to_estimator(self):
+        loss = _ValueKeysLoss()
+        rec = _RecordingValueEstimator()
+        loss._value_estimator = rec
+        loss.set_keys(value="my_state_value")
+        assert loss.tensor_keys.value == "my_state_value"
+        assert rec.received["value"] == "my_state_value"
+
+    def test_no_value_estimator_is_noop(self):
+        loss = _ValueKeysLoss()
+        loss._value_estimator = None
+        loss._forward_value_estimator_keys()  # must not raise
+
+    def test_set_in_keys_called_when_present(self):
+        calls = []
+
+        class _L(LossModule):
+            _AcceptedKeys = _VEAcceptedKeys
+            default_keys = _VEAcceptedKeys
+
+            def forward(self, td):
+                return td
+
+            def _set_in_keys(self):
+                calls.append(True)
+
+        loss = _L()
+        loss._value_estimator = None
+        loss._forward_value_estimator_keys()
+        assert calls == [True]
+
+    def test_sac_set_keys_forwards_via_default(self):
+        actor = ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(4, 4), in_keys=["observation"], out_keys=["loc", "scale"]
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            spec=Composite(action=Bounded(-1, 1, (2,))),
+        )
+        qvalue = TensorDictModule(
+            nn.Linear(6, 1),
+            in_keys=["observation", "action"],
+            out_keys=["state_action_value"],
+        )
+        loss = SACLoss(actor, qvalue)
+        loss.make_value_estimator(ValueEstimators.TD0)
+        loss.set_keys(value="my_state_value")
+        assert loss.value_estimator.tensor_keys.value == "my_state_value"
