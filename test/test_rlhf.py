@@ -497,6 +497,27 @@ def test_reward_model_falls_back_to_config_pad_token_id(monkeypatch):
     assert reward_model.pad_id == 789
 
 
+def test_compute_reward_loss_uses_model_pad_token_id(monkeypatch):
+    _mock_reward_model_transformers(
+        monkeypatch, tokenizer=SimpleNamespace(pad_token_id=0, eos_token_id=456)
+    )
+    reward_model = GPT2RewardModel("custom-model")
+
+    chosen_batch = SimpleNamespace(
+        input_ids=torch.tensor([[1, 2, 3, 0, 0]]),
+        rewards=torch.tensor([[0.0, 0.0, 0.0, 0.0, -100.0]]),
+    )
+    rejected_batch = SimpleNamespace(
+        input_ids=torch.tensor([[1, 2, 4, 5, 0]]),
+        rewards=torch.tensor([[0.0, 0.0, 0.0, 0.0, 100.0]]),
+    )
+
+    loss = reward_model.compute_reward_loss(chosen_batch, rejected_batch)
+
+    expected = -F.logsigmoid(torch.zeros(2)).mean()
+    torch.testing.assert_close(loss, expected)
+
+
 def test_compute_reward_loss_identical_sequences():
     """Non-regression test for https://github.com/pytorch/rl/issues/3520."""
     seq_len = 6
