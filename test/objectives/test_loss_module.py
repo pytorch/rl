@@ -1740,6 +1740,8 @@ class TestPrepareValueEstimatorKwargs:
         loss = TD3Loss(actor, qvalue, bounds=(-1, 1)).to(device)
         with pytest.raises(NotImplementedError):
             loss.make_value_estimator(ValueEstimators.GAE)
+
+
 class TestValueEstimatorRegistry:
     """Tests for the dynamic value-estimator registry.
 

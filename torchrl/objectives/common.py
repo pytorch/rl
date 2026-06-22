@@ -22,7 +22,7 @@ from torch.nn import Parameter
 from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-from torchrl.objectives.utils import default_value_kwargs, ValueEstimators, _reduce
+from torchrl.objectives.utils import _reduce, default_value_kwargs, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:

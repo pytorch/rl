@@ -32,12 +32,10 @@ from torchrl.objectives.utils import (
     _clip_value_loss,
     _GAMMA_LMBDA_DEPREC_ERROR,
     _get_default_device,
-    _reduce,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class A2CLoss(LossModule):

@@ -38,7 +38,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _delezify(func):

@@ -23,7 +23,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class DDPGLoss(LossModule):
