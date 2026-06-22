@@ -60,7 +60,14 @@ from torchrl.objectives.utils import (
     SoftUpdate,
     ValueEstimators,
 )
-from torchrl.objectives.value.advantages import GAE, TD0Estimator, VTrace
+from torchrl.objectives.value.advantages import (
+    GAE,
+    MultiAgentGAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 from torchrl.objectives.value.functional import _transpose_time, reward2go
 from torchrl.objectives.value.utils import (
     _get_num_per_traj,
@@ -1613,7 +1620,9 @@ class TestPrepareValueEstimatorKwargs:
             (ValueEstimators.TD0, TD0Estimator),
             (ValueEstimators.TD1, TD1Estimator),
             (ValueEstimators.GAE, GAE),
+            (ValueEstimators.MAGAE, MultiAgentGAE),
             (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.VTrace, VTrace),
         ],
     )
     def test_a2c_enum_dispatch(self, device, vtype, expected_cls):
@@ -1649,7 +1658,9 @@ class TestPrepareValueEstimatorKwargs:
             (ValueEstimators.TD0, TD0Estimator),
             (ValueEstimators.TD1, TD1Estimator),
             (ValueEstimators.GAE, GAE),
+            (ValueEstimators.MAGAE, MultiAgentGAE),
             (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.VTrace, VTrace),
         ],
     )
     def test_ppo_enum_dispatch(self, device, vtype, expected_cls):

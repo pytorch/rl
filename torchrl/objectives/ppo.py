@@ -38,16 +38,6 @@ from torchrl.objectives.utils import (
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
-    distance_loss,
-    ValueEstimators,
-)
-from torchrl.objectives.value import (
-    GAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    VTrace,
-)
     _validate_clip_epsilon,
     dispatch_value_estimator,
     distance_loss,
@@ -1051,48 +1041,6 @@ class PPOLoss(LossModule):
         value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
             return self
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
 
         dispatch_value_estimator(
             self,
@@ -1107,7 +1055,7 @@ class PPOLoss(LossModule):
                 "terminated": self.tensor_keys.terminated,
                 "sample_log_prob": self.tensor_keys.sample_log_prob,
             },
-            **hyperparams,
+            **hp,
         )
 
     def _weighted_loss_entropy(
