@@ -240,6 +240,7 @@ class OpenSpielWrapper(_EnvWrapper):
         return env
 
     def _init_env(self):
+        self._resolve_chance_nodes()
         self._update_action_mask()
 
     def _get_game(self):
