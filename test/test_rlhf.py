@@ -444,13 +444,15 @@ def test_compute_reward_loss_normalizes_by_non_identical_sequences():
         [
             [0.0, 0.0, 10.0, 10.0, 0.0],
             [0.0, 0.0, 2.0, 2.0, 0.0],
-        ]
+        ],
+        requires_grad=True,
     )
     rejected_rewards = torch.tensor(
         [
             [0.0, 0.0, -10.0, -10.0, 0.0],
             [0.0, 0.0, 1.0, 1.0, 0.0],
-        ]
+        ],
+        requires_grad=True,
     )
     chosen_batch = SimpleNamespace(input_ids=chosen_ids, rewards=chosen_rewards)
     rejected_batch = SimpleNamespace(input_ids=rejected_ids, rewards=rejected_rewards)
@@ -460,6 +462,13 @@ def test_compute_reward_loss_normalizes_by_non_identical_sequences():
     )
     expected_loss = -F.logsigmoid(chosen_rewards[1, 2:4] - rejected_rewards[1, 2:4])
     torch.testing.assert_close(loss, expected_loss.mean())
+    loss.backward()
+    torch.testing.assert_close(
+        chosen_rewards.grad[0], torch.zeros_like(chosen_rewards[0])
+    )
+    torch.testing.assert_close(
+        rejected_rewards.grad[0], torch.zeros_like(rejected_rewards[0])
+    )
 
 
 @pytest.mark.skipif(

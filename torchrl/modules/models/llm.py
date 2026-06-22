@@ -122,7 +122,7 @@ class GPT2RewardModel(nn.Module):
         rejected_rewards = rejected_batch.rewards
 
         bs = chosen_rewards.shape[0]
-        loss = chosen_rewards.sum() * 0.0 + rejected_rewards.sum() * 0.0
+        loss = None
         valid_count = 0
 
         # TODO: this loop can likely be made more efficient
@@ -145,10 +145,11 @@ class GPT2RewardModel(nn.Module):
             c_truncated_reward = chosen_rewards[i][divergence_ind:end_ind]
             r_truncated_reward = rejected_rewards[i][divergence_ind:end_ind]
 
-            loss = loss - F.logsigmoid(c_truncated_reward - r_truncated_reward).mean()
+            sample_loss = -F.logsigmoid(c_truncated_reward - r_truncated_reward).mean()
+            loss = sample_loss if loss is None else loss + sample_loss
             valid_count += 1
-        if valid_count == 0:
-            return loss
+        if loss is None:
+            return chosen_rewards.sum() * 0.0 + rejected_rewards.sum() * 0.0
         return loss / valid_count
 
     @classmethod
