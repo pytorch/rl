@@ -291,8 +291,9 @@ class TestOpenVLAImagePreprocessor:
         tv = OpenVLAImagePreprocessor(size=32, backend="torchvision", center_crop=False)
         ref = pil(images)
         fast = tv(images)
-        assert fast.shape == ref.shape == torch.Size([2, 3, 32, 32])
-        assert fast.dtype == ref.dtype == torch.uint8
+        fast_again = tv(images)
+        assert fast.shape == fast_again.shape == ref.shape == torch.Size([2, 3, 32, 32])
+        assert fast.dtype == fast_again.dtype == ref.dtype == torch.uint8
         assert (fast.float() - ref.float()).abs().mean() < 25.0
 
     @pytest.mark.skipif(not _has_pil, reason="Pillow not found")

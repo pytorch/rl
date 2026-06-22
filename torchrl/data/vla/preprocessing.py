@@ -23,15 +23,10 @@ _CROP_AREA_SCALE = 0.9
 _CROP_LINEAR_SCALE = _CROP_AREA_SCALE**0.5
 
 
-@implement_for("torchvision")
+@implement_for("torchvision", None, "0.20")
 def _torchvision_jpeg_roundtrip(
     images: torch.Tensor, jpeg_quality: int, device: torch.device
 ) -> torch.Tensor:
-    raise ModuleNotFoundError("torchvision is required for JPEG preprocessing.")
-
-
-@_torchvision_jpeg_roundtrip.register(from_version=None, to_version="0.20")
-def _(images: torch.Tensor, jpeg_quality: int, device: torch.device) -> torch.Tensor:
     from torchvision.io import decode_jpeg, encode_jpeg, ImageReadMode
 
     encoded = [
@@ -43,8 +38,10 @@ def _(images: torch.Tensor, jpeg_quality: int, device: torch.device) -> torch.Te
     return torch.stack(decoded, 0)
 
 
-@_torchvision_jpeg_roundtrip.register(from_version="0.20")
-def _(images: torch.Tensor, jpeg_quality: int, device: torch.device) -> torch.Tensor:
+@implement_for("torchvision", "0.20")
+def _torchvision_jpeg_roundtrip(  # noqa: F811
+    images: torch.Tensor, jpeg_quality: int, device: torch.device
+) -> torch.Tensor:
     from torchvision.io import decode_jpeg, encode_jpeg, ImageReadMode
 
     encoded = encode_jpeg(list(images.unbind(0)), quality=jpeg_quality)
