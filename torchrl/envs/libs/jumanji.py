@@ -14,6 +14,7 @@ from torchrl.envs.common import _EnvPostInit
 from torchrl.envs.utils import _classproperty
 
 _has_jumanji = importlib.util.find_spec("jumanji") is not None
+_has_torchvision = importlib.util.find_spec("torchvision") is not None
 
 from torchrl.data.tensor_specs import (
     Bounded,
@@ -352,6 +353,17 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             raise ImportError("jumanji version must be >= 1.0.0")
         return jumanji
 
+    _torchvision_lib = None
+
+    @_classproperty
+    def _torchvision(cls):
+        tv = cls._torchvision_lib
+        if tv is None:
+            import torchvision
+
+            tv = cls._torchvision_lib = torchvision
+        return tv
+
     def __init__(
         self,
         env: jumanji.env.Environment = None,  # noqa: F821
@@ -579,14 +591,17 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
         import jax.numpy as jnp
         import jumanji
 
+        if not _has_torchvision:
+            raise ImportError(
+                "Rendering with Jumanji requires torchvision to be installed."
+            )
+
         try:
             import matplotlib
             import matplotlib.pyplot as plt
-            import PIL
-            import torchvision.transforms.v2.functional
         except ImportError as err:
             raise ImportError(
-                "Rendering with Jumanji requires torchvision, matplotlib and PIL to be installed."
+                "Rendering with Jumanji requires matplotlib to be installed."
             ) from err
 
         if matplotlib_backend is not None:
@@ -615,15 +630,17 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
             self._env.render(state, **kwargs)
             plt.savefig(buf, format="png")
             buf.seek(0)
-            # Load the image into a PIL object.
-            img = PIL.Image.open(buf)
-            img_array = torchvision.transforms.v2.functional.pil_to_tensor(img)
+            # Decode the PNG bytes directly into a CHW tensor.
+            img_array = self._torchvision.io.decode_image(
+                torch.frombuffer(buf.getbuffer(), dtype=torch.uint8),
+                mode=self._torchvision.io.ImageReadMode.RGB,
+            )
             if not isinteractive:
                 plt.ioff()
             plt.close()
             if not as_numpy:
-                return img_array[:3]
-            return img_array[:3].numpy().copy()
+                return img_array
+            return img_array.numpy().copy()
         finally:
             jumanji.environments.is_notebook = is_notebook
 
