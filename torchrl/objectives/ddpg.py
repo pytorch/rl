@@ -22,7 +22,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class DDPGLoss(LossModule):
@@ -405,12 +404,9 @@ class DDPGLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         dispatch_value_estimator(
             self,
             value_type,
@@ -422,7 +418,7 @@ class DDPGLoss(LossModule):
                 "terminated": self.tensor_keys.terminated,
             },
             value_network=self.actor_critic,
-            **hyperparams,
+            **hp,
         )
 
     @property

@@ -37,7 +37,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _delezify(func):
@@ -583,12 +582,9 @@ class SACLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
@@ -608,7 +604,7 @@ class SACLoss(LossModule):
             },
             value_network=value_net,
             deactivate_vmap=self.deactivate_vmap,
-            **hyperparams,
+            **hp,
         )
 
     @property
@@ -1606,12 +1602,9 @@ class DiscreteSACLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         dispatch_value_estimator(
             self,
             value_type,
@@ -1625,5 +1618,5 @@ class DiscreteSACLoss(LossModule):
             },
             value_network=None,
             deactivate_vmap=self.deactivate_vmap,
-            **hyperparams,
+            **hp,
         )
