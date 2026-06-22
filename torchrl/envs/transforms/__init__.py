@@ -9,6 +9,7 @@ from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
 from .rb_transforms import MultiStepTransform
+from .rnd import RNDTransform, RunningMeanStd
 from .transforms import (
     ActionDiscretizer,
     ActionMask,
@@ -119,10 +120,12 @@ __all__ = [
     "RemoveEmptySpecs",
     "RenameTransform",
     "Resize",
+    "RNDTransform",
     "Reward2GoTransform",
     "RewardClipping",
     "RewardScaling",
     "RewardSum",
+    "RunningMeanStd",
     "SelectTransform",
     "SignTransform",
     "SqueezeTransform",

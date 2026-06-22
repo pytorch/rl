@@ -191,6 +191,42 @@ class RNDTransform(Transform):
         if self.normalize_reward and self._reward_rms is None:
             self._reward_rms = RunningMeanStd(shape=()).to(obs.device)
 
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        local_metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ) -> None:
+        obs_mean_key = prefix + "_obs_rms.mean"
+        if self.normalize_obs and self._obs_rms is None and obs_mean_key in state_dict:
+            self._obs_rms = RunningMeanStd(
+                shape=tuple(state_dict[obs_mean_key].shape)
+            ).to(state_dict[obs_mean_key].device)
+
+        reward_mean_key = prefix + "_reward_rms.mean"
+        if (
+            self.normalize_reward
+            and self._reward_rms is None
+            and reward_mean_key in state_dict
+        ):
+            self._reward_rms = RunningMeanStd(
+                shape=tuple(state_dict[reward_mean_key].shape)
+            ).to(state_dict[reward_mean_key].device)
+
+        super()._load_from_state_dict(
+            state_dict,
+            prefix,
+            local_metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
+
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
@@ -221,10 +257,19 @@ class RNDTransform(Transform):
         return next_tensordict
 
     def transform_reward_spec(self, reward_spec):
+        shape = (*reward_spec.shape, 1)
+        device = reward_spec.device
+        if self.parent is not None:
+            for reward_key in self.parent.reward_keys:
+                if reward_key in reward_spec.keys(True, True):
+                    reference_spec = reward_spec[reward_key]
+                    shape = reference_spec.shape
+                    device = reference_spec.device
+                    break
         for out_key in self.out_keys:
             reward_spec[out_key] = Unbounded(
-                shape=reward_spec.shape,
-                device=reward_spec.device,
+                shape=shape,
+                device=device,
                 dtype=torch.float32,
             )
         return reward_spec

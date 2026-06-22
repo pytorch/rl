@@ -11,8 +11,9 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from torchrl.envs.transforms.rnd import RNDTransform, RunningMeanStd
-from torchrl.objectives.rnd import RNDLoss
+from torchrl.data.tensor_specs import Composite, Unbounded
+from torchrl.envs.transforms import RNDTransform, RunningMeanStd
+from torchrl.objectives import RNDLoss
 from torchrl.testing import get_default_devices
 
 
@@ -195,6 +196,35 @@ class TestRNDTransform:
         transform._step(TensorDict({}, batch_size=[8]), next_td)
         sd = transform.state_dict()
         assert any("obs_rms" in k for k in sd)
+
+    def test_state_dict_roundtrip_with_lazy_rms(self):
+        target, predictor = _make_networks()
+        transform = RNDTransform(target, predictor)
+        transform.train()
+        obs = torch.randn(8, 4)
+        next_td = TensorDict({"observation": obs}, batch_size=[8])
+        transform._step(TensorDict({}, batch_size=[8]), next_td)
+
+        target_copy, predictor_copy = _make_networks()
+        transform_copy = RNDTransform(target_copy, predictor_copy)
+        transform_copy.load_state_dict(transform.state_dict())
+
+        assert transform_copy.obs_rms is not None
+        assert transform_copy.reward_rms is not None
+        assert torch.allclose(transform.obs_rms.mean, transform_copy.obs_rms.mean)
+        assert torch.allclose(transform.reward_rms.var, transform_copy.reward_rms.var)
+
+    def test_transform_reward_spec_has_reward_shape(self):
+        target, predictor = _make_networks()
+        transform = RNDTransform(target, predictor)
+        reward_spec = Composite(
+            reward=Unbounded(shape=(3, 1), dtype=torch.float32),
+            shape=(3,),
+        )
+
+        reward_spec = transform.transform_reward_spec(reward_spec)
+
+        assert reward_spec["intrinsic_reward"].shape == torch.Size([3, 1])
 
 
 # ---------------------------------------------------------------------------

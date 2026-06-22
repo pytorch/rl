@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 import torch.nn as nn
@@ -97,10 +98,14 @@ class RNDLoss(LossModule):
         *,
         obs_rms: RunningMeanStd | None = None,
         obs_clip: float = 5.0,
-        reduction: str = "mean",
+        reduction: Literal["mean", "sum", "none"] = "mean",
         update_fraction: float = 0.25,
     ):
         super().__init__()
+        if not 0.0 <= update_fraction <= 1.0:
+            raise ValueError(
+                f"update_fraction must be in the [0, 1] interval, got {update_fraction}."
+            )
         self.predictor_network = predictor_network
         self.target_network = target_network
         self.target_network.requires_grad_(False)
