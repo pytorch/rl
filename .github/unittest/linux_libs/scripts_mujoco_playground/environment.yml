@@ -1,0 +1,26 @@
+channels:
+  - pytorch
+  - defaults
+dependencies:
+  - pip
+  - pip:
+    - hypothesis
+    - future
+    - cloudpickle
+    - pytest
+    - pytest-cov
+    - pytest-mock
+    - pytest-instafail
+    - pytest-rerunfailures
+    - pytest-json-report
+    - pytest-error-for-skips
+    - pytest-asyncio
+    - expecttest
+    - pybind11[global]
+    - pyyaml
+    - scipy
+    - hydra-core
+    - jax[cuda12]>=0.7.0
+    # NOTE: import name is `mujoco_playground` but the PyPI distribution is `playground`.
+    - playground
+    - psutil

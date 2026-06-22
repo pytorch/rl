@@ -11,7 +11,7 @@ import torch
 from tensordict.nn import TensorDictModule, TensorDictSequential
 from torch import nn
 from torchrl._utils import logger as torchrl_logger
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.data import TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
@@ -134,7 +134,7 @@ def train(cfg: DictConfig):  # noqa: F821
         out_keys=[("agents", "state_action_value")],
     )
 
-    collector = SyncDataCollector(
+    collector = Collector(
         env,
         policy_explore,
         device=cfg.env.device,

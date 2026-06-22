@@ -35,12 +35,14 @@ from torchrl.envs import (
     EnvBase,
     LineariseRewards,
     ParallelEnv,
+    RenameTransform,
     Reward2GoTransform,
     RewardClipping,
     RewardScaling,
     RewardSum,
     SerialEnv,
     SignTransform,
+    SuccessReward,
     TransformedEnv,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
@@ -48,6 +50,7 @@ from torchrl.envs.utils import check_env_specs
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -59,6 +62,7 @@ from torchrl.testing import (  # noqa
 from torchrl.testing.mocking_classes import (
     ContinuousActionVecMockEnv,
     CountingBatchedEnv,
+    CountingEnv,
     MultiKeyCountingEnv,
     MultiKeyCountingEnvPolicy,
     NestedCountingEnv,
@@ -548,9 +552,9 @@ class TestRewardSum(TransformBase):
             except RuntimeError:
                 pass
 
-    @pytest.mark.parametrize("has_in_keys,", [True, False])
+    @pytest.mark.parametrize("has_in_keys", [True, False])
     @pytest.mark.parametrize(
-        "reset_keys,", [[("some", "nested", "reset")], ["_reset"] * 3, None]
+        "reset_keys", [[("some", "nested", "reset")], ["_reset"] * 3, None]
     )
     def test_trans_multi_key(
         self, has_in_keys, reset_keys, n_workers=2, batch_size=(3, 2), max_steps=5
@@ -658,8 +662,6 @@ class TestRewardSum(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_rewardsum_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())), RewardSum()
         )
@@ -1724,3 +1726,176 @@ class TestSignTransform(TransformBase):
                 env.close()
             except RuntimeError:
                 pass
+
+
+class TestSuccessReward(TransformBase):
+    @staticmethod
+    def _env(scale=2.0):
+        # CountingEnv with a ``success`` signal mirroring ``done``: the
+        # SuccessReward overwrites the reward with scale * success.
+        return TransformedEnv(
+            CountingEnv(max_steps=3),
+            Compose(
+                RenameTransform(
+                    in_keys=["done"], out_keys=["success"], create_copy=True
+                ),
+                SuccessReward(scale=scale),
+            ),
+        )
+
+    def test_single_trans_env_check(self):
+        env = self._env()
+        check_env_specs(env)
+        # the reward spec advertises the {0, scale} range
+        assert env.reward_spec.space.low.item() == 0.0
+        assert env.reward_spec.space.high.item() == 2.0
+
+    def test_serial_trans_env_check(self):
+        env = SerialEnv(2, self._env)
+        check_env_specs(env)
+
+    def test_parallel_trans_env_check(self, maybe_fork_ParallelEnv):
+        env = maybe_fork_ParallelEnv(2, self._env)
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_trans_serial_env_check(self):
+        env = TransformedEnv(
+            SerialEnv(2, lambda: CountingEnv(max_steps=3)),
+            Compose(
+                RenameTransform(
+                    in_keys=["done"], out_keys=["success"], create_copy=True
+                ),
+                SuccessReward(scale=2.0),
+            ),
+        )
+        check_env_specs(env)
+
+    def test_trans_parallel_env_check(self, maybe_fork_ParallelEnv):
+        env = TransformedEnv(
+            maybe_fork_ParallelEnv(2, lambda: CountingEnv(max_steps=3)),
+            Compose(
+                RenameTransform(
+                    in_keys=["done"], out_keys=["success"], create_copy=True
+                ),
+                SuccessReward(scale=2.0),
+            ),
+        )
+        try:
+            check_env_specs(env)
+        finally:
+            try:
+                env.close()
+            except RuntimeError:
+                pass
+
+    def test_transform_no_env(self):
+        t = SuccessReward(scale=2.0)
+        td = TensorDict(
+            {"success": torch.tensor([[True], [False], [True]])}, batch_size=[3]
+        )
+        assert t(td)["reward"].squeeze(-1).tolist() == [2.0, 0.0, 2.0]
+
+    def test_transform_compose(self):
+        t = Compose(SuccessReward(scale=3.0))
+        td = t(TensorDict({"success": torch.tensor([[True], [False]])}, batch_size=[2]))
+        assert td["reward"].squeeze(-1).tolist() == [3.0, 0.0]
+
+    def test_transform_env(self):
+        env = self._env(scale=2.0)
+        td = env.reset()
+        # no reward is written at reset
+        assert "reward" not in td.keys()
+
+        def policy(td):
+            td["action"] = torch.ones_like(env.full_action_spec[env.action_key].rand())
+            return td
+
+        r = env.rollout(10, policy)
+        rew = r["next", "reward"].squeeze(-1)
+        success = r["next", "success"].squeeze(-1)
+        # the sparse reward fires exactly on the success step
+        assert success[-1] and rew[-1] == 2.0
+        assert (rew[:-1] == 0.0).all() and not success[:-1].any()
+
+    def test_transform_model(self):
+        t = SuccessReward(scale=2.0)
+        model = nn.Sequential(t)
+        td = model(
+            TensorDict({"success": torch.tensor([[True], [False]])}, batch_size=[2])
+        )
+        assert td["reward"].squeeze(-1).tolist() == [2.0, 0.0]
+
+    def test_transform_rb(self):
+        rb = TensorDictReplayBuffer(
+            storage=LazyTensorStorage(10),
+            transform=SuccessReward(scale=3.0),
+            batch_size=4,
+        )
+        rb.extend(
+            TensorDict({"success": torch.tensor([True, False] * 5)}, batch_size=[10])
+        )
+        sample = rb.sample()
+        assert torch.equal(sample["reward"], 3.0 * sample["success"].float())
+
+    def test_transform_inverse(self):
+        pytest.skip("SuccessReward has no inverse transform.")
+
+    # SuccessReward-specific tests
+    def test_sparse_reward(self):
+        t = SuccessReward(scale=2.0)
+        td = TensorDict(
+            {"success": torch.tensor([[True], [False], [True]])}, batch_size=[3]
+        )
+        assert t(td)["reward"].squeeze(-1).tolist() == [2.0, 0.0, 2.0]
+
+    def test_nested_keys(self):
+        t = SuccessReward(("next", "success"), ("next", "reward"))
+        td = TensorDict(
+            {"next": {"success": torch.tensor([True, False])}}, batch_size=[2]
+        )
+        assert t(td)["next", "reward"].tolist() == [1.0, 0.0]
+
+    def test_success_in_observation_spec(self):
+        # transform_reward_spec finds the success entry in the parent's
+        # observation spec (not only via the done-spec route)
+        class ObsSuccessEnv(CountingEnv):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.observation_spec["success"] = Categorical(
+                    2, dtype=torch.bool, shape=(*self.batch_size, 1)
+                )
+
+            def _step(self, tensordict):
+                out = super()._step(tensordict)
+                out["success"] = out["done"].clone()
+                return out
+
+            def _reset(self, tensordict=None, **kwargs):
+                out = super()._reset(tensordict, **kwargs)
+                out["success"] = out["done"].clone()
+                return out
+
+        env = TransformedEnv(ObsSuccessEnv(max_steps=3), SuccessReward(scale=2.0))
+        check_env_specs(env)
+        assert env.reward_spec.space.high.item() == 2.0
+
+    def test_reward_spec_fallback_shape(self):
+        # without a parent, the spec rewrite falls back to the existing
+        # reward leaf to size the {0, scale} bounded spec
+        t = SuccessReward(scale=3.0)
+        spec = Composite(reward=Unbounded(shape=(4, 1)), shape=(4,))
+        out = t.transform_reward_spec(spec)
+        assert out["reward"].shape == torch.Size([4, 1])
+        assert out["reward"].space.low.max().item() == 0.0
+        assert out["reward"].space.high.min().item() == 3.0
+
+    def test_reward_spec_unknown_shape_raises(self):
+        t = SuccessReward(scale=1.0)
+        with pytest.raises(RuntimeError, match="could not infer"):
+            t.transform_reward_spec(Composite(shape=()))

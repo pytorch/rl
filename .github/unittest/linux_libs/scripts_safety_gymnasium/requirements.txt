@@ -1,0 +1,18 @@
+# Core dependencies for tensordict/torchrl (installed with --no-deps)
+numpy
+pyvers
+packaging
+cloudpickle
+
+# Test dependencies
+pytest
+pytest-xdist
+pytest-instafail
+pytest-error-for-skips
+coverage
+
+# Safety-Gymnasium and friends
+safety-gymnasium
+gymnasium
+mujoco
+imageio

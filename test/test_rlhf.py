@@ -8,6 +8,7 @@ import argparse
 import zipfile
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -21,6 +22,7 @@ from tensordict import (
     TensorDictBase,
 )
 from tensordict.nn import TensorDictModule
+from torchrl._utils import print_directory_tree
 from torchrl.data.llm import TensorDictTokenizer
 from torchrl.data.llm.dataset import (
     _has_datasets,
@@ -68,8 +70,6 @@ def tldr_batch_dir(tmp_path_factory):
     with zipfile.ZipFile(dataset_path, "r") as zip_ref:
         zip_ref.extractall(dest)
         yield dest / Path(dataset_path).stem
-    from torchrl._utils import print_directory_tree
-
     print_directory_tree(dest)
 
 
@@ -400,8 +400,6 @@ def test_reward_model(tmpdir1, minidata_dir_comparison, batch_size, block_size, 
 
 def test_compute_reward_loss_identical_sequences():
     """Non-regression test for https://github.com/pytorch/rl/issues/3520."""
-    from types import SimpleNamespace
-
     seq_len = 6
     pad_token_id = 50256
     input_ids = torch.tensor([[1, 2, 3, 4, 5, pad_token_id]])

@@ -15,6 +15,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
+from inspect import getattr_static
 from multiprocessing import connection
 from multiprocessing.connection import wait as connection_wait
 from multiprocessing.synchronize import Lock as MpLock
@@ -37,12 +38,13 @@ from torchrl._utils import (
     _check_for_faulty_process,
     _get_default_mp_start_method,
     _make_ordinal_device,
+    _maybe_record_function_decorator,
     logger as torchrl_logger,
     rl_warnings,
     timeit,
     VERBOSE,
 )
-from torchrl.data.tensor_specs import Composite, NonTensor
+from torchrl.data.tensor_specs import Composite, NonTensor, Stacked
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 
@@ -713,13 +715,32 @@ class BatchedEnvBase(EnvBase):
     def _has_dynamic_specs(self):
         return not self._use_buffers
 
+    @staticmethod
+    def _validate_worker_env(env) -> None:
+        """Check that each transform on a worker env is batched-env compatible.
+
+        Walks ``env.transform`` and invokes
+        :meth:`~torchrl.envs.transforms.Transform._check_batched_worker_compat`
+        on each entry. Transforms that should not live inside a batched-env
+        worker raise here so the user gets immediate feedback rather than
+        silently-wrong runtime behavior.
+        """
+        if getattr_static(env, "transform", None) is None:
+            transform = None
+        else:
+            transform = getattr(env, "transform", None)
+        if transform is not None:
+            transform._check_batched_worker_compat()
+
     def _get_metadata(
         self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
         if self._single_task:
             # if EnvCreator, the metadata are already there
             meta_data: EnvMetaData = get_env_metadata(
-                create_env_fn[0], create_env_kwargs[0]
+                create_env_fn[0],
+                create_env_kwargs[0],
+                env_validator=self._validate_worker_env,
             )
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
@@ -739,7 +760,11 @@ class BatchedEnvBase(EnvBase):
             self.meta_data: list[EnvMetaData] = []
             for i in range(n_tasks):
                 self.meta_data.append(
-                    get_env_metadata(create_env_fn[i], create_env_kwargs[i]).clone()
+                    get_env_metadata(
+                        create_env_fn[i],
+                        create_env_kwargs[i],
+                        env_validator=self._validate_worker_env,
+                    ).clone()
                 )
             if self.share_individual_td is not True:
                 share_individual_td = not _stackable(
@@ -789,6 +814,18 @@ class BatchedEnvBase(EnvBase):
                 )
             )
         return self._cache_in_keys
+
+    @property
+    def _supports_set_state(self) -> bool:
+        # Derived from the wrapped sub-envs' metadata: a deterministic reset is
+        # only supported if every sub-env supports it (the kwarg broadcasts to
+        # all workers).
+        meta_data = getattr(self, "meta_data", None)
+        if meta_data is None:
+            return False
+        if isinstance(meta_data, (list, tuple)):
+            return all(md.supports_set_state for md in meta_data)
+        return meta_data.supports_set_state
 
     def _set_properties(self):
 
@@ -950,7 +987,14 @@ class BatchedEnvBase(EnvBase):
                 "batched environment base tensordict has the wrong shape"
             )
 
-        # Non-tensor keys
+        # Non-tensor keys. Heterogeneous workers (e.g. different language
+        # instructions) stack NonTensor leaves into a Stacked spec, so the
+        # check must look through the stack as well.
+        def _is_non_tensor(spec) -> bool:
+            if isinstance(spec, NonTensor):
+                return True
+            return isinstance(spec, Stacked) and isinstance(spec._specs[0], NonTensor)
+
         non_tensor_keys = []
         for spec in (
             self.full_action_spec,
@@ -960,9 +1004,10 @@ class BatchedEnvBase(EnvBase):
             self.full_done_spec,
         ):
             for key, _spec in spec.items(True, True):
-                if isinstance(_spec, NonTensor):
+                if _is_non_tensor(_spec):
                     non_tensor_keys.append(key)
         self._non_tensor_keys = non_tensor_keys
+        self._non_tensor_cache = None
 
         if self._single_task:
             self._env_input_keys = sorted(
@@ -1097,6 +1142,32 @@ class BatchedEnvBase(EnvBase):
         self._shared_tensordict_parent_root = self.shared_tensordict_parent.exclude(
             "next", *self.reset_keys
         )
+
+    def _update_non_tensor_cache(self, non_tensor_tds, workers_range=None):
+        if not self._non_tensor_keys:
+            return None
+        root_non_tensor = non_tensor_tds.select(*self._non_tensor_keys, strict=False)
+        if workers_range is None:
+            self._non_tensor_cache = root_non_tensor
+            return root_non_tensor
+        workers = list(workers_range)
+        if workers == list(range(self.num_workers)):
+            self._non_tensor_cache = root_non_tensor
+            return root_non_tensor
+        if self._non_tensor_cache is None:
+            raise RuntimeError(
+                "Cannot preserve NonTensor values for non-updated workers before "
+                "a full reset or step."
+            )
+        worker_to_offset = {worker: offset for offset, worker in enumerate(workers)}
+        rows = []
+        for i in range(self.num_workers):
+            if i in worker_to_offset:
+                rows.append(root_non_tensor[worker_to_offset[i]])
+            else:
+                rows.append(self._non_tensor_cache[i])
+        self._non_tensor_cache = LazyStackedTensorDict(*rows)
+        return root_non_tensor
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -1246,6 +1317,7 @@ class SerialEnv(BatchedEnvBase):
         return seed
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
         if kwargs is not list_of_kwargs[0] and kwargs:
@@ -1364,6 +1436,7 @@ class SerialEnv(BatchedEnvBase):
         return out
 
     @_check_start
+    @_maybe_record_function_decorator("SerialEnv._step")
     def _step(
         self,
         tensordict: TensorDict,
@@ -1901,6 +1974,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv.step_and_maybe_reset")
     def step_and_maybe_reset(
         self, tensordict: TensorDictBase
     ) -> tuple[TensorDictBase, TensorDictBase]:
@@ -2038,11 +2112,17 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         tensordict.set("next", next_td)
         if self._non_tensor_keys:
             non_tensor_tds = LazyStackedTensorDict(*non_tensor_tds)
+            root_non_tensor_tds = self._update_non_tensor_cache(
+                non_tensor_tds,
+                workers_range if partial_steps is not None else None,
+            )
             tensordict.update(
                 non_tensor_tds,
                 keys_to_update=[("next", key) for key in self._non_tensor_keys],
             )
-            tensordict_.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
+            tensordict_.update(
+                root_non_tensor_tds, keys_to_update=self._non_tensor_keys
+            )
 
         if partial_steps is not None:
             result = tensordict.new_zeros(tensordict_save.shape)
@@ -2249,6 +2329,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._step")
     def _step(self, tensordict: TensorDictBase) -> TensorDictBase:
         if not self._use_buffers:
             return self._step_no_buffers(tensordict)
@@ -2373,10 +2454,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             device=device,
         )
         if self._non_tensor_keys:
-            out.update(
-                LazyStackedTensorDict(*non_tensor_tds),
-                keys_to_update=self._non_tensor_keys,
+            non_tensor_tds = LazyStackedTensorDict(*non_tensor_tds)
+            self._update_non_tensor_cache(
+                non_tensor_tds,
+                workers_range if partial_steps is not None else None,
             )
+            out.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
         if next_td_passthrough is not None:
             out.update(next_td_passthrough)
 
@@ -2459,6 +2542,7 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
 
     @torch.no_grad()
     @_check_start
+    @_maybe_record_function_decorator("ParallelEnv._reset")
     def _reset(self, tensordict: TensorDictBase, **kwargs) -> TensorDictBase:
 
         list_of_kwargs = kwargs.pop("list_of_kwargs", [kwargs] * self.num_workers)
@@ -2564,9 +2648,41 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         )
         if self._non_tensor_keys:
             workers, nontensor = zip(*workers_nontensor)
-            out[torch.tensor(workers)] = LazyStackedTensorDict(*nontensor).select(
+            reset_stack = LazyStackedTensorDict(*nontensor).select(
                 *self._non_tensor_keys
             )
+            if len(workers) == self.num_workers:
+                # full reset: every worker has a freshly reset value, so the
+                # fancy-index assignment creates the (absent) NonTensor keys.
+                out[torch.tensor(workers)] = reset_stack
+                self._non_tensor_cache = reset_stack
+            else:
+                # partial reset: ``out`` has no NonTensor leaves (NonTensor is
+                # not shared-memory backed, so ``named_apply`` over the shared
+                # parent skips it), and a NonTensor key cannot be created by a
+                # *partial* fancy-index assignment. Build the full-width
+                # NonTensor explicitly -- reset workers take the fresh values,
+                # the others keep their last cached current value (correct,
+                # since they are not being reset).
+                worker_to_offset = {w: o for o, w in enumerate(workers)}
+                rows = []
+                for i in range(self.num_workers):
+                    if i in worker_to_offset:
+                        rows.append(reset_stack[worker_to_offset[i]])
+                    elif self._non_tensor_cache is not None:
+                        rows.append(self._non_tensor_cache[i])
+                    else:
+                        non_tensor = tensordict[i].select(
+                            *self._non_tensor_keys, strict=False
+                        )
+                        if non_tensor.is_empty():
+                            raise RuntimeError(
+                                "Cannot preserve NonTensor values for non-reset "
+                                "workers before a full reset or step."
+                            )
+                        rows.append(non_tensor)
+                self._non_tensor_cache = LazyStackedTensorDict(*rows)
+                out.update(self._non_tensor_cache)
         self._sync_w2m()
         return out
 

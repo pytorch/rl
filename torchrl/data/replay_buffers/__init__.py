@@ -13,6 +13,7 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .her import HERReplayBuffer, HindsightStrategy
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -31,6 +32,7 @@ from .samplers import (
     SamplerWithoutReplacement,
     SliceSampler,
     SliceSamplerWithoutReplacement,
+    StalenessAwareSampler,
 )
 from .storages import (
     CompressedListStorage,
@@ -54,6 +56,8 @@ from .writers import (
 )
 
 __all__ = [
+    "HERReplayBuffer",
+    "HindsightStrategy",
     "CompressedListStorage",
     "CompressedListStorageCheckpointer",
     "FlatStorageCheckpointer",
@@ -78,6 +82,7 @@ __all__ = [
     "SamplerWithoutReplacement",
     "SliceSampler",
     "SliceSamplerWithoutReplacement",
+    "StalenessAwareSampler",
     "LazyMemmapStorage",
     "LazyStackStorage",
     "LazyTensorStorage",

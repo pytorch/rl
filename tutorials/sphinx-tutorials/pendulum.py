@@ -116,10 +116,10 @@ DEFAULT_Y = 1.0
 # There are four things you must take care of when designing a new environment
 # class:
 #
-# * :meth:`EnvBase._reset`, which codes for the resetting of the simulator
+# * :meth:`EnvBase._reset <torchrl.envs.EnvBase._reset>`, which codes for the resetting of the simulator
 #   at a (potentially random) initial state;
-# * :meth:`EnvBase._step` which codes for the state transition dynamic;
-# * :meth:`EnvBase._set_seed` which implements the seeding mechanism;
+# * :meth:`EnvBase._step <torchrl.envs.EnvBase._step>` which codes for the state transition dynamic;
+# * :meth:`EnvBase._set_seed <torchrl.envs.EnvBase._set_seed>` which implements the seeding mechanism;
 # * the environment specs.
 #
 # Let us first describe the problem at hand: we would like to model a simple
@@ -160,7 +160,7 @@ DEFAULT_Y = 1.0
 #
 # The step method is the first thing to consider, as it will encode
 # the simulation that is of interest to us. In TorchRL, the
-# :class:`~torchrl.envs.EnvBase` class has a :meth:`EnvBase.step`
+# :class:`~torchrl.envs.EnvBase` class has a :meth:`EnvBase.step <torchrl.envs.EnvBase.step>`
 # method that receives a :class:`tensordict.TensorDict`
 # instance with an ``"action"`` entry indicating what action is to be taken.
 #
@@ -231,7 +231,7 @@ DEFAULT_Y = 1.0
 # Indeed, we want to discourage positions that are far from being "upward"
 # and/or speeds that are far from 0.
 #
-# In our example, :meth:`EnvBase._step` is encoded as a static method since our
+# In our example, :meth:`EnvBase._step <torchrl.envs.EnvBase._step>` is encoded as a static method since our
 # environment is stateless. In stateful settings, the ``self`` argument is
 # needed as the state needs to be read from the environment.
 #
@@ -291,13 +291,13 @@ def angle_normalize(x):
 # also expects a ``tensordict`` as input, albeit it may perfectly be empty or
 # ``None``.
 #
-# The parent :meth:`EnvBase.reset` does some simple checks like the
-# :meth:`EnvBase.step` does, such as making sure that a ``"done"`` state
+# The parent :meth:`EnvBase.reset <torchrl.envs.EnvBase.reset>` does some simple checks like the
+# :meth:`EnvBase.step <torchrl.envs.EnvBase.step>` does, such as making sure that a ``"done"`` state
 # is returned in the output ``tensordict`` and that the shapes match what is
 # expected from the specs.
 #
 # For us, the only important thing to consider is whether
-# :meth:`EnvBase._reset` contains all the expected observations. Once more,
+# :meth:`EnvBase._reset <torchrl.envs.EnvBase._reset>` contains all the expected observations. Once more,
 # since we are working with a stateless environment, we pass the configuration
 # of the pendulum in a nested ``tensordict`` named ``"params"``.
 #
@@ -344,6 +344,45 @@ def _reset(self, tensordict):
 
 
 ######################################################################
+# Deterministic reset: ``env.reset(td, set_state=True)``
+# ------------------------------------------------------
+#
+# Because this environment is stateless, the full state (``"th"`` and
+# ``"thdot"``) lives in the ``tensordict``. This makes it natural to reset the
+# simulator *to a chosen state* -- e.g. to branch a rollout from a saved
+# checkpoint, or to replay a fixed initial condition. The canonical way to do
+# this is the ``set_state`` keyword argument of
+# :meth:`~torchrl.envs.EnvBase.reset`:
+#
+# .. code-block:: python
+#
+#     >>> state = env.reset()                       # some state of interest
+#     >>> td = env.reset(state, set_state=True)      # reset *to* that state
+#     >>> assert (td["th"] == state["th"]).all()
+#
+# ``set_state`` is a keyword argument rather than a ``tensordict`` key on
+# purpose: a per-step entry would not stack uniformly across a rollout and
+# padding it would be costly. With ``set_state=False`` (the future default) any
+# state in the input is ignored and a fresh random state is drawn, which is what
+# you want when starting a new trajectory from the terminal ``tensordict`` of a
+# previous one. A ``_reset`` implementation honors the flag by reading it from
+# its keyword arguments, e.g.::
+#
+#     def _reset(self, tensordict, **kwargs):
+#         if kwargs.get("set_state") and tensordict is not None \
+#                 and "th" in tensordict and "thdot" in tensordict:
+#             return tensordict.copy()          # honor the provided state
+#         ...                                    # otherwise draw a fresh state
+#
+# .. note:: Until v0.15, passing a state-bearing ``tensordict`` to ``reset``
+#    *without* ``set_state`` keeps honoring that state (for backwards
+#    compatibility) but raises a ``FutureWarning``. Pass ``set_state=True`` (or
+#    ``set_state=False``) explicitly to opt into the final behavior and silence
+#    the warning.
+#
+
+
+######################################################################
 # Environment metadata: ``env.*_spec``
 # ------------------------------------
 #
@@ -358,7 +397,7 @@ def _reset(self, tensordict):
 # There are four specs that we must code in our environment:
 #
 # * :obj:`EnvBase.observation_spec`: This will be a :class:`~torchrl.data.Composite`
-#   instance where each key is an observation (a :class:`Composite` can be
+#   instance where each key is an observation (a :class:`~torchrl.data.Composite` can be
 #   viewed as a dictionary of specs).
 # * :obj:`EnvBase.action_spec`: It can be any type of spec, but it is required
 #   that it corresponds to the ``"action"`` entry in the input ``tensordict``;
@@ -547,7 +586,7 @@ class PendulumEnv(EnvBase):
 # Testing our environment
 # -----------------------
 #
-# TorchRL provides a simple function :func:`~torchrl.envs.utils.check_env_specs`
+# TorchRL provides a simple function :func:`~torchrl.envs.check_env_specs`
 # to check that a (transformed) environment has an input/output structure that
 # matches the one dictated by its specs.
 # Let us try it out:
@@ -922,7 +961,7 @@ plot()
 #   We saw how these methods and classes interact with the
 #   :class:`~tensordict.TensorDict` class;
 # * How to test that an environment is properly coded using
-#   :func:`~torchrl.envs.utils.check_env_specs`;
+#   :func:`~torchrl.envs.check_env_specs`;
 # * How to append transforms in the context of stateless environments and how
 #   to write custom transformations;
 # * How to train a policy on a fully differentiable simulator.

@@ -74,6 +74,7 @@ from torchrl.modules.utils import get_primers_from_module
 
 from torchrl.testing import (  # noqa
     BREAKOUT_VERSIONED,
+    CARTPOLE_VERSIONED,
     dtype_fixture,
     get_default_devices,
     HALFCHEETAH_VERSIONED,
@@ -112,6 +113,19 @@ def test_added_transforms_are_in_eval_mode():
     assert t.transform.training
     assert t.transform[0].training
     assert t.transform[1].training
+
+
+def test_append_compose_resets_flattened_child_parents():
+    env = TransformedEnv(ContinuousActionVecMockEnv(), StepCounter())
+    transforms = Compose(RewardScaling(0, 1), StepCounter())
+
+    env.append_transform(transforms)
+
+    assert len(env.transform) == 3
+    assert env.transform[1].__dict__["_container"]() is env.transform
+    assert env.transform[2].__dict__["_container"]() is env.transform
+    assert env.transform[1].parent is not None
+    assert env.transform[2].parent is not None
 
 
 class TestTransformedEnv:
@@ -1530,8 +1544,6 @@ class TestTensorDictPrimer(TransformBase):
     @pytest.mark.parametrize("batched_class", [ParallelEnv, SerialEnv])
     @pytest.mark.parametrize("break_when_any_done", [True, False])
     def test_tensordictprimer_batching(self, batched_class, break_when_any_done):
-        from torchrl.testing import CARTPOLE_VERSIONED
-
         env = TransformedEnv(
             batched_class(2, lambda: GymEnv(CARTPOLE_VERSIONED())),
             TensorDictPrimer(Composite({"mykey": Unbounded([2, 4])}, shape=[2])),

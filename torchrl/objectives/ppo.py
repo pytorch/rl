@@ -7,7 +7,6 @@ from __future__ import annotations
 import contextlib
 import warnings
 from collections.abc import Mapping
-from copy import deepcopy
 from dataclasses import dataclass
 
 import torch
@@ -39,18 +38,73 @@ from torchrl.objectives.utils import (
     _maybe_get_or_select,
     _reduce,
     _sum_td_features,
-    default_value_kwargs,
+    _validate_clip_epsilon,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    GAE,
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-    VTrace,
-)
+from torchrl.objectives.value import ValueEstimatorBase
+
+
+def _check_advantage_broadcast(
+    advantage: torch.Tensor, log_weight: torch.Tensor
+) -> None:
+    # A flat [B] advantage against a [B, 1] log-weight silently broadcasts to
+    # a [B, B] outer product inside the surrogate objective. The log-weight is
+    # always shaped [*advantage.shape[:-1], 1], so any broadcast producing
+    # more elements than both inputs is that bug.
+    if not isinstance(advantage, torch.Tensor) or not isinstance(
+        log_weight, torch.Tensor
+    ):
+        return
+    try:
+        broadcast = torch.broadcast_shapes(advantage.shape, log_weight.shape)
+    except RuntimeError:
+        # incompatible shapes fail with a shape error downstream
+        return
+    if broadcast.numel() > max(advantage.numel(), log_weight.numel()):
+        raise ValueError(
+            f"The advantage (shape={tuple(advantage.shape)}) and the log-weight "
+            f"(shape={tuple(log_weight.shape)}) would broadcast to "
+            f"{tuple(broadcast)}, turning the PPO objective into an outer "
+            "product over samples. This usually means the advantage is missing "
+            "its trailing value dimension: reshape it to batch shape + (1,) "
+            "(e.g. advantage.unsqueeze(-1))."
+        )
+
+
+def _broadcast_advantage_to_log_weight(
+    advantage: torch.Tensor, log_weight: torch.Tensor
+) -> torch.Tensor:
+    # Per-token objectives (e.g. token-level DAPO / GRPO on a chunked VLA head)
+    # carry one log-weight per action token: log_weight is [*B, *token_dims, 1]
+    # while the advantage is one value per decision, [*B, 1]. Broadcast the
+    # decision advantage across the token dims so the surrogate stays
+    # elementwise -- the alternative is forcing the caller to pre-expand the
+    # advantage by hand. No-op when the shapes already match (the standard
+    # one-ratio-per-sample case), so the outer-product guard still fires on a
+    # genuinely missing value dimension.
+    if not isinstance(advantage, torch.Tensor) or not isinstance(
+        log_weight, torch.Tensor
+    ):
+        return advantage
+    if (
+        advantage.shape == log_weight.shape
+        or advantage.ndim < 2
+        or advantage.shape[-1] != 1
+        or log_weight.shape[-1] != 1
+        or log_weight.ndim <= advantage.ndim
+    ):
+        return advantage
+    batch = advantage.shape[:-1]
+    # the advantage batch must be a strict prefix of the log-weight's leading
+    # dims; the extra middle dims are the per-token axes to broadcast over
+    if log_weight.shape[: len(batch)] != batch:
+        return advantage
+    token_dims = log_weight.shape[len(batch) : -1]
+    return advantage.reshape(*batch, *(1,) * len(token_dims), 1).expand(
+        *batch, *token_dims, 1
+    )
 
 
 class PPOLoss(LossModule):
@@ -677,7 +731,9 @@ class PPOLoss(LossModule):
             # assert tensordict['log_probs'].requires_grad
             # assert tensordict['logits'].requires_grad
             with (
-                self.actor_network_params.to_module(self.actor_network)
+                self.actor_network_params.to_module(
+                    self.actor_network, preserve_module_state=False
+                )
                 if self.functional
                 else contextlib.nullcontext()
             ):
@@ -762,6 +818,23 @@ class PPOLoss(LossModule):
 
         return log_weight, dist, kl_approx
 
+    def _critic_loss_inputs(
+        self,
+        target_return: torch.Tensor,
+        state_value: torch.Tensor,
+        old_state_value: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+        """Transform the critic-loss inputs before distance / clip.
+
+        Default implementation is identity. Subclasses (notably
+        :class:`~torchrl.objectives.multiagent.MAPPOLoss`) override this to
+        push the three tensors through a running
+        :class:`~torchrl.modules.ValueNorm` so the MSE / smooth-L1 distance
+        lives on a fixed scale -- and so the PPO value-clip radius stays
+        meaningful when reward scales drift.
+        """
+        return target_return, state_value, old_state_value
+
     def loss_critic(
         self, tensordict: TensorDictBase
     ) -> tuple[torch.Tensor | TensorDict, ...]:
@@ -782,6 +855,7 @@ class PPOLoss(LossModule):
                 f"can be used for the value loss."
             )
 
+        old_state_value = None
         if self.clip_value:
             old_state_value = tensordict.get(self.tensor_keys.value)
             if old_state_value is None:
@@ -792,7 +866,9 @@ class PPOLoss(LossModule):
                 )
 
         with (
-            self.critic_network_params.to_module(self.critic_network)
+            self.critic_network_params.to_module(
+                self.critic_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -804,6 +880,14 @@ class PPOLoss(LossModule):
                 f"the key {self.tensor_keys.value} was not found in the critic output tensordict. "
                 f"Make sure that the 'value_key' passed to PPO is accurate."
             )
+
+        # Subclass hook: lets e.g. MAPPOLoss inject PopArt-style value
+        # normalisation uniformly across target_return / state_value /
+        # old_state_value so the MSE and the clip radius both live in
+        # normalised space.
+        target_return, state_value, old_state_value = self._critic_loss_inputs(
+            target_return, state_value, old_state_value
+        )
 
         loss_value = distance_loss(
             target_return,
@@ -851,6 +935,32 @@ class PPOLoss(LossModule):
             return None
         return self.critic_network_params.detach()
 
+    def _standardize_advantage(
+        self, advantage: torch.Tensor, tensordict: TensorDictBase
+    ) -> torch.Tensor:
+        mask = tensordict.get("shifted_valid", default=None)
+        if mask is None:
+            return _standardize(advantage, self.normalize_advantage_exclude_dims)
+        while mask.ndim < advantage.ndim:
+            mask = mask.unsqueeze(-1)
+        mask = mask.expand_as(advantage).to(advantage.dtype)
+        exclude_dims = {
+            dim if dim >= 0 else advantage.ndim + dim
+            for dim in self.normalize_advantage_exclude_dims
+        }
+        reduce_dims = [dim for dim in range(advantage.ndim) if dim not in exclude_dims]
+        count = mask.sum(dim=reduce_dims, keepdim=True).clamp_min(1)
+        loc = (advantage * mask).sum(dim=reduce_dims, keepdim=True) / count
+        scale = (
+            (
+                ((advantage - loc).pow(2) * mask).sum(dim=reduce_dims, keepdim=True)
+                / count
+            )
+            .sqrt()
+            .clamp_min(1e-4)
+        )
+        return (advantage - loc) / scale
+
     @dispatch
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         tensordict = tensordict.clone(False)
@@ -872,11 +982,13 @@ class PPOLoss(LossModule):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
+        _check_advantage_broadcast(advantage, log_weight)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss})
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
@@ -900,8 +1012,9 @@ class PPOLoss(LossModule):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -915,58 +1028,38 @@ class PPOLoss(LossModule):
         )
         return td_out
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+        ValueEstimators.GAE,
+        ValueEstimators.MAGAE,
+        ValueEstimators.VTrace,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
 
-        self.value_type = value_type
-        hp = dict(default_value_kwargs(value_type))
-        if hasattr(self, "gamma"):
-            hp["gamma"] = self.gamma
-        hp.update(hyperparams)
-        if value_type == ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.GAE:
-            self._value_estimator = GAE(value_network=self.critic_network, **hp)
-        elif value_type == ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                value_network=self.critic_network, **hp
-            )
-        elif value_type == ValueEstimators.VTrace:
-            # VTrace currently does not support functional call on the actor
-            if self.functional:
-                actor_with_params = deepcopy(self.actor_network)
-                self.actor_network_params.to_module(actor_with_params)
-            else:
-                actor_with_params = self.actor_network
-            self._value_estimator = VTrace(
-                value_network=self.critic_network, actor_network=actor_with_params, **hp
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "advantage": self.tensor_keys.advantage,
-            "value": self.tensor_keys.value,
-            "value_target": self.tensor_keys.value_target,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-            "sample_log_prob": self.tensor_keys.sample_log_prob,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "advantage": self.tensor_keys.advantage,
+                "value": self.tensor_keys.value,
+                "value_target": self.tensor_keys.value_target,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+                "sample_log_prob": self.tensor_keys.sample_log_prob,
+            },
+            **hyperparams,
+        )
 
     def _weighted_loss_entropy(
         self, entropy: torch.Tensor | TensorDictBase
@@ -1038,8 +1131,16 @@ class ClipPPOLoss(PPOLoss):
           If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).
 
     Keyword Args:
-        clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
-            default: 0.2
+        clip_epsilon (scalar or tuple of scalars, optional): weight clipping threshold(s) in the clipped
+            PPO loss equation.
+
+            - float ``x``: symmetric clipping ``[1 - x, 1 + x]``. Default: ``0.2``.
+            - tuple ``(eps_low, eps_high)``: asymmetric clipping ``[1 - eps_low, 1 + eps_high]`` as in
+              DAPO Clip-Higher (recommended values ``(0.20, 0.28)``; see Eq. (10) of the
+              `DAPO paper <https://arxiv.org/html/2503.14476>`_). With a tuple, the thresholds are
+              exposed (and schedulable) as the ``clip_epsilon_low`` / ``clip_epsilon_high`` buffers
+              instead of ``clip_epsilon``, and ``clip_value=True`` is not allowed (pass an explicit
+              float threshold instead).
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
@@ -1090,8 +1191,9 @@ class ClipPPOLoss(PPOLoss):
             calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
             helping stabilize training and preventing large updates. However, it will have no impact if the value
             estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
-            ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
-            clipping will be performed. Defaults to ``False``.
+            ``clip_epsilon`` parameter will be used as the clipping threshold (this is only compatible with a
+            scalar ``clip_epsilon``; with an asymmetric ``(low, high)`` tuple, pass an explicit float threshold
+            instead). If not provided or ``False``, no clipping will be performed. Defaults to ``False``.
         device (torch.device, optional): device of the buffers. Defaults to ``None``.
 
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
@@ -1140,7 +1242,9 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
-    _schedulable_buffers = frozenset({"clip_epsilon"})
+    _schedulable_buffers = frozenset(
+        {"clip_epsilon", "clip_epsilon_low", "clip_epsilon_high"}
+    )
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
@@ -1154,7 +1258,7 @@ class ClipPPOLoss(PPOLoss):
         actor_network: ProbabilisticTensorDictSequential | None = None,
         critic_network: TensorDictModule | None = None,
         *,
-        clip_epsilon: float = 0.2,
+        clip_epsilon: float | tuple[float, float] = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coeff: float | Mapping[NestedKey, float] | None = None,
@@ -1171,6 +1275,12 @@ class ClipPPOLoss(PPOLoss):
     ):
         # Define clipping of the value loss
         if isinstance(clip_value, bool):
+            if clip_value and isinstance(clip_epsilon, (tuple, list)):
+                raise ValueError(
+                    "clip_value=True cannot infer the value-clip threshold from "
+                    "an asymmetric clip_epsilon tuple. Pass an explicit float "
+                    "threshold instead, e.g. clip_value=0.2."
+                )
             clip_value = clip_epsilon if clip_value else None
 
         super().__init__(
@@ -1197,10 +1307,60 @@ class ClipPPOLoss(PPOLoss):
                 device = getattr(
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
-        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon, device=device))
+        self._asymmetric_clip = isinstance(clip_epsilon, (tuple, list))
+        if self._asymmetric_clip:
+            # Asymmetric (DAPO Clip-Higher) thresholds, as in GRPOLoss
+            eps_low, eps_high = _validate_clip_epsilon(clip_epsilon)
+            self.register_buffer(
+                "clip_epsilon_low", torch.tensor(eps_low, device=device)
+            )
+            self.register_buffer(
+                "clip_epsilon_high", torch.tensor(eps_high, device=device)
+            )
+        else:
+            # the symmetric float keeps the legacy (schedulable) buffer and
+            # is deliberately not validated, for backward compatibility
+            self.register_buffer(
+                "clip_epsilon", torch.tensor(clip_epsilon, device=device)
+            )
+
+    _CLIP_EPSILON_BUFFER_NAMES = (
+        "clip_epsilon",
+        "clip_epsilon_low",
+        "clip_epsilon_high",
+    )
+
+    def __setattr__(self, name: str, value) -> None:
+        # Scheduling the wrong clip-threshold flavor (e.g. annealing
+        # `loss.clip_epsilon` on a loss built with an asymmetric tuple) would
+        # silently create a shadow attribute while clipping keeps using the
+        # registered buffers - fail loudly instead.
+        if (
+            name in self._CLIP_EPSILON_BUFFER_NAMES
+            and isinstance(value, (int, float))
+            and getattr(self, "_buffers", None) is not None
+            and name not in self._buffers
+            and any(n in self._buffers for n in self._CLIP_EPSILON_BUFFER_NAMES)
+        ):
+            if self._asymmetric_clip:
+                raise AttributeError(
+                    f"Cannot schedule {name!r}: this {type(self).__name__} was built "
+                    "with an asymmetric clip_epsilon tuple; schedule "
+                    "'clip_epsilon_low' / 'clip_epsilon_high' instead."
+                )
+            raise AttributeError(
+                f"Cannot schedule {name!r}: this {type(self).__name__} was built "
+                "with a symmetric float clip_epsilon; schedule 'clip_epsilon' instead."
+            )
+        super().__setattr__(name, value)
 
     @property
     def _clip_bounds(self):
+        if self._asymmetric_clip:
+            return (
+                (-self.clip_epsilon_low).log1p(),
+                self.clip_epsilon_high.log1p(),
+            )
         return (
             (-self.clip_epsilon).log1p(),
             self.clip_epsilon.log1p(),
@@ -1216,7 +1376,7 @@ class ClipPPOLoss(PPOLoss):
                 keys.append("loss_critic")
             if self.clip_value:
                 keys.append("value_clip_fraction")
-            keys.append("ESS")
+            keys.extend(["ESS", "kl_approx", "max_ratio", "mean_ratio"])
             self._out_keys = keys
         return self._out_keys
 
@@ -1251,11 +1411,13 @@ class ClipPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
+        _check_advantage_broadcast(advantage, log_weight)
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -1299,8 +1461,13 @@ class ClipPPOLoss(PPOLoss):
                 td_out.set("explained_variance", explained_variance)
 
         td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        with torch.no_grad():
+            ratio = log_weight.exp()
+            td_out.set("max_ratio", ratio.max())
+            td_out.set("mean_ratio", ratio.mean())
+        loss_mask = tensordict.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )
@@ -1584,15 +1751,19 @@ class KLPENPPOLoss(PPOLoss):
                     "if you want to keep any dimension independent while computing normalization statistics. "
                     "If you are working in multi-agent/multi-objective settings this is highly suggested."
                 )
-            advantage = _standardize(advantage, self.normalize_advantage_exclude_dims)
+            advantage = self._standardize_advantage(advantage, tensordict)
 
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
+        _check_advantage_broadcast(advantage, log_weight)
         neg_loss = log_weight.exp() * advantage
 
         with (
-            self.actor_network_params.to_module(self.actor_network)
+            self.actor_network_params.to_module(
+                self.actor_network, preserve_module_state=False
+            )
             if self.functional
             else contextlib.nullcontext()
         ):
@@ -1655,8 +1826,9 @@ class KLPENPPOLoss(PPOLoss):
                 td_out.set("value_clip_fraction", value_clip_fraction)
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
+        loss_mask = tensordict_copy.get("shifted_valid", default=None)
         td_out = td_out.named_apply(
-            lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+            lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1)
             if name.startswith("loss_")
             else value,
         )

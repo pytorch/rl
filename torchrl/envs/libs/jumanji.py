@@ -333,6 +333,10 @@ class JumanjiWrapper(GymLikeEnv, metaclass=_JumanjiMakeRender):
 
     git_url = "https://github.com/instadeepai/jumanji"
     libname = "jumanji"
+    # Jumanji overrides ``_step`` with a JAX implementation that does not loop
+    # over ``wrapper_frame_skip`` (unlike the ``GymLikeEnv`` base), so frame
+    # skipping is handled by an auto-appended ``FrameSkipTransform`` instead.
+    _has_frame_skip: bool = False
 
     @_classproperty
     def available_envs(cls):

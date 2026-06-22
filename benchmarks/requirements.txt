@@ -1,4 +1,6 @@
+hoptorch>=0.1.4
 pytest-benchmark
+pytest-timeout
 tenacity
 safetensors
 tqdm

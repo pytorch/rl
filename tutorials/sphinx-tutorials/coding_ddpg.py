@@ -156,8 +156,8 @@ collector_device = torch.device("cpu")  # Change the device to ``cuda`` to use C
 # network to this, and generate an action and fit the policy such that its
 # value estimate is maximized.
 #
-# The crucial step of the :meth:`LossModule.__init__` method is the call to
-# :meth:`~torchrl.LossModule.convert_to_functional`. This method will extract
+# The crucial step of the :meth:`LossModule.__init__ <torchrl.objectives.LossModule.__init__>` method is the call to
+# :meth:`~torchrl.objectives.LossModule.convert_to_functional`. This method will extract
 # the parameters from the module and convert it to a functional module.
 # Strictly speaking, this is not necessary and one may perfectly code all
 # the losses without it. However, we encourage its usage for the following
@@ -228,7 +228,7 @@ def _init(
 # intermediate estimator (TD(:math:`\lambda`)) can also be used to compromise
 # bias and variance.
 # TorchRL makes it easy to use one or the other estimator via the
-# :class:`~torchrl.objectives.utils.ValueEstimators` Enum class, which contains
+# :class:`~torchrl.objectives.ValueEstimators` Enum class, which contains
 # pointers to all the value estimators implemented. Let us define the default
 # value function here. We will take the simplest version (TD(0)), and show later
 # on how this can be changed.
@@ -475,7 +475,7 @@ def make_env(from_pixels=False):
 #
 # Now that we have a base environment, we may want to modify its representation
 # to make it more policy-friendly. In TorchRL, transforms are appended to the
-# base environment in a specialized :class:`torchr.envs.TransformedEnv` class.
+# base environment in a specialized :class:`~torchrl.envs.transforms.TransformedEnv` class.
 #
 # - It is common in DDPG to rescale the reward using some heuristic value. We
 #   will multiply the reward by 5 in this example.
@@ -486,12 +486,12 @@ def make_env(from_pixels=False):
 #   both ways: when calling :func:`env.step`, our actions will need to be
 #   represented in double precision, and the output will need to be transformed
 #   to single precision.
-#   The :class:`~torchrl.envs.DoubleToFloat` transform does exactly this: the
+#   The :class:`~torchrl.envs.transforms.DoubleToFloat` transform does exactly this: the
 #   ``in_keys`` list refers to the keys that will need to be transformed from
 #   double to float, while the ``in_keys_inv`` refers to those that need to
 #   be transformed to double before being passed to the environment.
 #
-# - We concatenate the state keys together using the :class:`~torchrl.envs.CatTensors`
+# - We concatenate the state keys together using the :class:`~torchrl.envs.transforms.CatTensors`
 #   transform.
 #
 # - Finally, we also leave the possibility of normalizing the states: we will
@@ -808,9 +808,9 @@ if device == torch.device("cpu"):
 # GPU, number of workers, and so on).
 #
 # Here we will use
-# :class:`~torchrl.collectors.SyncDataCollector`, a simple, single-process
+# :class:`~torchrl.collectors.Collector`, a simple, single-process
 # data collector. TorchRL offers other collectors, such as
-# :class:`~torchrl.collectors.MultiaSyncDataCollector`, which executed the
+# :class:`~torchrl.collectors.MultiAsyncCollector`, which executed the
 # rollouts in an asynchronous manner (for example, data will be collected while
 # the policy is being optimized, thereby decoupling the training and
 # data collection).
@@ -826,7 +826,7 @@ if device == torch.device("cpu"):
 #   .. note::
 #
 #     The ``max_frames_per_traj`` passed to the collector will have the effect
-#     of registering a new :class:`~torchrl.envs.StepCounter` transform
+#     of registering a new :class:`~torchrl.envs.transforms.StepCounter` transform
 #     with the environment used for inference. We can achieve the same result
 #     manually, as we do in this script.
 #
@@ -855,10 +855,10 @@ frames_per_batch = env_per_collector * traj_len
 init_random_frames = 5000
 num_collectors = 2
 
-from torchrl.collectors import SyncDataCollector
+from torchrl.collectors import Collector
 from torchrl.envs import ExplorationType
 
-collector = SyncDataCollector(
+collector = Collector(
     parallel_env,
     policy=actor_model_explore,
     total_frames=total_frames,

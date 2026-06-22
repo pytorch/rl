@@ -21,7 +21,6 @@ from tensordict.utils import _zip_strict
 from torch import distributions as D
 from torch.distributions import Categorical
 from torch.nn.utils.rnn import pad_sequence
-from torchrl._utils import logger as torchrl_logger
 from torchrl.data.llm import History
 from torchrl.data.tensor_specs import Unbounded
 from torchrl.modules.distributions.discrete import LLMMaskedCategorical
@@ -1303,8 +1302,6 @@ class LLMWrapperBase(TensorDictModuleBase):
         # Make the response mask using prompt tokens
         if not self.pad_output:
             # Check that the lengths of the mask is the same as the logits
-            torchrl_logger.info(f"Response mask: {response_mask}")
-            torchrl_logger.info(f"Logits: {logits}")
             for m, lg in _zip_strict(response_mask, logits):
                 if m.shape[-1] != lg.shape[-2]:
                     raise ValueError(
