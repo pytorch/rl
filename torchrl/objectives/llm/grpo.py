@@ -639,12 +639,7 @@ class GRPOLoss(LossModule):
             td_out.set("entropy", entropy.detach().mean())  # for logging
             td_out.set("loss_entropy", -self.entropy_coeff * entropy)
 
-        td_out.set(
-            "ESS",
-            self._reduce_loss(
-                ess / batch, tensordict=tensordict, reduction=self.reduction
-            ),
-        )
+        td_out.set("ESS", ess / batch)
         # Aggregate loss terms according to aggregation strategy
         for key in list(td_out.keys()):
             if isinstance(key, tuple) or not isinstance(key, str):

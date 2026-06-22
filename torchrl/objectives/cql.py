@@ -535,7 +535,9 @@ class CQLLoss(LossModule):
             metadata.update(alpha_prime_metadata)
         loss_actor_bc, bc_metadata = self.actor_bc_loss(tensordict)
         loss_actor, actor_metadata = self.actor_loss(tensordict)
-        loss_alpha, alpha_metadata = self.alpha_loss(actor_metadata)
+        loss_alpha, alpha_metadata = self.alpha_loss(
+            actor_metadata, mask_tensordict=tensordict
+        )
         metadata.update(bc_metadata)
         metadata.update(cql_metadata)
         metadata.update(actor_metadata)
@@ -939,11 +941,17 @@ class CQLLoss(LossModule):
             )
 
         alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
-        min_qf1_loss = alpha_prime * (cql_q1_loss.mean() - self.target_action_gap)
-        min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
+        cql_q1_loss = self._reduce_loss(
+            cql_q1_loss, tensordict=tensordict, reduction="mean"
+        )
+        cql_q2_loss = self._reduce_loss(
+            cql_q2_loss, tensordict=tensordict, reduction="mean"
+        )
+
+        min_qf1_loss = alpha_prime * (cql_q1_loss - self.target_action_gap)
+        min_qf2_loss = alpha_prime * (cql_q2_loss - self.target_action_gap)
 
         alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
-        alpha_prime_loss = self._reduce_loss(alpha_prime_loss, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -953,7 +961,11 @@ class CQLLoss(LossModule):
         )
         return alpha_prime_loss, {}
 
-    def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def alpha_loss(
+        self,
+        tensordict: TensorDictBase | dict[NestedKey, Tensor],
+        mask_tensordict: TensorDictBase | None = None,
+    ) -> tuple[Tensor, dict]:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
@@ -961,9 +973,9 @@ class CQLLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
-        # Note: tensordict here is actor_metadata (a plain dict), not a TensorDictBase.
-        # Pass None so _reduce_loss skips the mask lookup.
-        alpha_loss = self._reduce_loss(alpha_loss, tensordict=None)
+        if mask_tensordict is None and isinstance(tensordict, TensorDictBase):
+            mask_tensordict = tensordict
+        alpha_loss = self._reduce_loss(alpha_loss, tensordict=mask_tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",

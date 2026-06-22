@@ -1459,11 +1459,7 @@ class ClipPPOLoss(PPOLoss):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
 
-        td_out.set(
-            "ESS",
-            self._reduce_loss(ess, tensordict=tensordict, reduction=self.reduction)
-            / batch,
-        )
+        td_out.set("ESS", ess / batch)
         with torch.no_grad():
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())

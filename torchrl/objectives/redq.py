@@ -636,8 +636,11 @@ class REDQLoss(LossModule):
             }
             td_out = TensorDict(out, [])
             if self.reduction != "none":
+                loss_mask = tensordict.get("shifted_valid", default=None)
+                if loss_mask is not None:
+                    loss_mask = loss_mask.unsqueeze(0)
                 td_out = td_out.named_apply(
-                    lambda name, value: self._reduce_loss(value, tensordict=tensordict)
+                    lambda name, value: self._reduce_loss(value, mask=loss_mask)
                     if name.startswith("loss_")
                     else value,
                 )
