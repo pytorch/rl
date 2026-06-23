@@ -10,6 +10,8 @@ import pathlib
 from collections.abc import Callable
 
 from tensordict import TensorDictBase
+from tensordict.utils import NestedKey
+from torch import optim
 
 from torchrl.collectors import BaseCollector
 from torchrl.data.replay_buffers.offline_to_online import OfflineToOnlineReplayBuffer
@@ -89,10 +91,20 @@ class OfflineToOnlineReplayBufferHook(TrainerHookBase):
         return sample.to(self.device) if self.device is not None else sample
 
     def state_dict(self) -> dict:
-        return {"online_buffer": self.replay_buffer.online_buffer.state_dict()}
+        return {
+            "online_buffer": self.replay_buffer.online_buffer.state_dict(),
+            "offline_fraction": self.replay_buffer._offline_fraction,
+            "base_offline_fraction": self.replay_buffer._base_offline_fraction,
+        }
 
     def load_state_dict(self, state_dict: dict) -> None:
         self.replay_buffer.online_buffer.load_state_dict(state_dict["online_buffer"])
+        self.replay_buffer._offline_fraction = state_dict.get(
+            "offline_fraction", self.replay_buffer._offline_fraction
+        )
+        self.replay_buffer._base_offline_fraction = state_dict.get(
+            "base_offline_fraction", self.replay_buffer._base_offline_fraction
+        )
 
     def register(self, trainer, name: str = "replay_buffer") -> None:
         trainer.register_op("pre_epoch", self.extend)
@@ -136,6 +148,10 @@ class OfflineToOnlineAnnealHook(TrainerHookBase):
 class OfflineToOnlineTrainer(SACTrainer):
     """A SAC trainer for the offline-pretrain -> online-finetune transition.
 
+    See also
+    :class:`~torchrl.trainers.algorithms.configs.OfflineToOnlineTrainerConfig`
+    for the Hydra configuration counterpart.
+
     Builds on :class:`~torchrl.trainers.algorithms.SACTrainer`, swapping the
     plain replay buffer for an :class:`~torchrl.data.OfflineToOnlineReplayBuffer`.
     Each collected batch is routed to the online buffer while optimization
@@ -175,7 +191,7 @@ class OfflineToOnlineTrainer(SACTrainer):
         replay_buffer: OfflineToOnlineReplayBuffer,
         anneal_frames: int | None = None,
         batch_size: int | None = None,
-        optimizer=None,
+        optimizer: optim.Optimizer | None = None,
         logger: Logger | None = None,
         clip_grad_norm: bool = True,
         clip_norm: float | None = None,
@@ -185,12 +201,28 @@ class OfflineToOnlineTrainer(SACTrainer):
         log_interval: int = 10000,
         save_trainer_file: str | pathlib.Path | None = None,
         enable_logging: bool = True,
+        log_rewards: bool = True,
+        log_actions: bool = True,
+        log_observations: bool = False,
         target_net_updater: TargetNetUpdater | None = None,
+        async_collection: bool = False,
+        log_timings: bool = False,
+        auto_log_optim_steps: bool = True,
+        done_key: NestedKey = "done",
+        terminated_key: NestedKey = "terminated",
+        reward_key: NestedKey = "reward",
+        episode_reward_key: NestedKey = "reward_sum",
+        action_key: NestedKey = "action",
+        observation_key: NestedKey = "observation",
     ) -> None:
         if not isinstance(replay_buffer, OfflineToOnlineReplayBuffer):
             raise TypeError(
                 "OfflineToOnlineTrainer requires an OfflineToOnlineReplayBuffer, "
                 f"got {type(replay_buffer).__name__}."
+            )
+        if async_collection:
+            raise ValueError(
+                "OfflineToOnlineTrainer does not support async_collection."
             )
 
         # Let SACTrainer wire up everything except the replay buffer (its
@@ -213,8 +245,19 @@ class OfflineToOnlineTrainer(SACTrainer):
             save_trainer_file=save_trainer_file,
             replay_buffer=None,
             enable_logging=enable_logging,
+            log_rewards=log_rewards,
+            log_actions=log_actions,
+            log_observations=log_observations,
             target_net_updater=target_net_updater,
             async_collection=False,
+            log_timings=log_timings,
+            auto_log_optim_steps=auto_log_optim_steps,
+            done_key=done_key,
+            terminated_key=terminated_key,
+            reward_key=reward_key,
+            episode_reward_key=episode_reward_key,
+            action_key=action_key,
+            observation_key=observation_key,
         )
 
         self.replay_buffer = replay_buffer

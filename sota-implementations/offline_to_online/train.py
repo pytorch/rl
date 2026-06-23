@@ -118,7 +118,7 @@ def main():
 
     # Immutable offline dataset (DoubleToFloat to match the online float32 stream)
     # paired with a growing online buffer.
-    offline = load_dataset(args.dataset)
+    offline = load_dataset(args.dataset, batch_size=args.batch_size)
     offline.append_transform(DoubleToFloat())
     replay_buffer = OfflineToOnlineReplayBuffer(
         offline_dataset=offline,

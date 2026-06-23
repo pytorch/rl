@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 
 import pytest
 import torch
@@ -498,13 +499,21 @@ class TestOfflineToOnlineReplayBufferHook:
         )
         hook = OfflineToOnlineReplayBufferHook(rb)
         hook.extend(_make_online_data(20))
+        rb.anneal(step=50, total_steps=100)
 
         rb2 = OfflineToOnlineReplayBuffer(
-            offline_dataset=_make_offline_buffer(), online_capacity=500, batch_size=16
+            offline_dataset=_make_offline_buffer(),
+            online_capacity=500,
+            offline_fraction=0.8,
+            batch_size=16,
         )
         hook2 = OfflineToOnlineReplayBufferHook(rb2)
         hook2.load_state_dict(hook.state_dict())
         assert len(rb2.online_buffer) == 20
+        assert rb2.offline_fraction == pytest.approx(0.25)
+
+        rb2.anneal(step=50, total_steps=100)
+        assert rb2.offline_fraction == pytest.approx(0.25)
 
 
 class TestOfflineToOnlineAnnealHook:
@@ -554,6 +563,32 @@ class TestOfflineToOnlineTrainer:
                 loss_module=None,
                 replay_buffer=plain,
             )
+
+    def test_constructor_exposes_sac_key_and_logging_kwargs(self):
+        from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
+
+        parameters = inspect.signature(OfflineToOnlineTrainer).parameters
+        for name in (
+            "log_rewards",
+            "log_actions",
+            "log_observations",
+            "log_timings",
+            "auto_log_optim_steps",
+            "done_key",
+            "terminated_key",
+            "reward_key",
+            "episode_reward_key",
+            "action_key",
+            "observation_key",
+        ):
+            assert name in parameters
+
+    def test_config_registered(self):
+        from torchrl.trainers.algorithms.configs import OfflineToOnlineTrainerConfig
+
+        assert OfflineToOnlineTrainerConfig._target_.endswith(
+            "_make_offline_to_online_trainer"
+        )
 
     def test_hooks_drive_offline_online_flow(self):
         """The three hooks together grow the online buffer, keep the mixed batch
