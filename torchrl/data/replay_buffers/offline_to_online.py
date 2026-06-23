@@ -223,7 +223,7 @@ class OfflineToOnlineReplayBuffer:
 
 def prefill_replay_buffer(
     rb: ReplayBuffer,
-    dataset,
+    dataset: str | ReplayBuffer,
     n_samples: int | None = None,
     chunk_size: int = 1000,
 ) -> ReplayBuffer:
