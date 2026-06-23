@@ -1966,6 +1966,7 @@ class TensorDictReplayBuffer(ReplayBuffer):
                 by the sampler.
             return_info (bool): whether to return info. If True, the result
                 is a tuple (data, info). If False, the result is the data.
+            include_info (bool, optional): deprecated alias for ``return_info``.
 
         Returns:
             A tensordict containing a batch of data selected in the replay buffer.
