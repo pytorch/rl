@@ -39,3 +39,4 @@ making it efficient for sequence-based sampling and training.
     :template: rl_template_fun.rst
 
     datasets.load_dataset
+    datasets.register_dataset

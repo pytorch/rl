@@ -11,7 +11,8 @@ import torch
 from tensordict import TensorDict
 
 from torchrl.data import LazyTensorStorage, OfflineToOnlineReplayBuffer, ReplayBuffer
-from torchrl.data.datasets.utils import load_dataset
+from torchrl.data.datasets import utils as dataset_utils
+from torchrl.data.datasets.utils import load_dataset, register_dataset
 from torchrl.data.replay_buffers.offline_to_online import prefill_replay_buffer
 
 
@@ -323,6 +324,60 @@ class TestLoadDataset:
     def test_unknown_prefix_raises(self):
         with pytest.raises(ValueError, match="Unknown dataset source"):
             load_dataset("mujoco:hopper-v0")
+
+    def test_registry_includes_existing_dataset_backends(self):
+        expected = {
+            "atari",
+            "atari_dqn",
+            "d4rl",
+            "gen_dgrl",
+            "lerobot",
+            "minari",
+            "openml",
+            "openx",
+            "roboset",
+            "vd4rl",
+        }
+        assert expected.issubset(dataset_utils._DATASET_REGISTRY)
+
+    def test_register_dataset_routes_custom_factory(self):
+        captured = {}
+
+        class FakeDataset:
+            def __init__(self, dataset_id, **kwargs):
+                captured["dataset_id"] = dataset_id
+                captured["kwargs"] = kwargs
+
+        prefix = "test_backend"
+        dataset_utils._DATASET_REGISTRY.pop(prefix, None)
+        try:
+            register_dataset(prefix, FakeDataset)
+            dataset = load_dataset(f"{prefix}:demo-dataset", batch_size=11)
+        finally:
+            dataset_utils._DATASET_REGISTRY.pop(prefix, None)
+        assert isinstance(dataset, FakeDataset)
+        assert captured["dataset_id"] == "demo-dataset"
+        assert captured["kwargs"] == {"batch_size": 11}
+
+    def test_registry_routes_non_d4rl_builtin_prefix(self, monkeypatch):
+        captured = {}
+
+        class FakeOpenML:
+            def __init__(self, dataset_id, **kwargs):
+                captured["dataset_id"] = dataset_id
+                captured["kwargs"] = kwargs
+
+        class FakeModule:
+            OpenMLExperienceReplay = FakeOpenML
+
+        def import_module(name):
+            assert name == "torchrl.data.datasets.openml"
+            return FakeModule
+
+        monkeypatch.setattr(dataset_utils.importlib, "import_module", import_module)
+        load_dataset("openml:iris", batch_size=16)
+        assert captured["dataset_id"] == "iris"
+        assert captured["kwargs"] == {"batch_size": 16}
 
     def test_minari_prefix_routes_to_minari(self, monkeypatch):
         captured = {}
