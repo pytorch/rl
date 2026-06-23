@@ -46,7 +46,9 @@ class OfflineToOnlineReplayBuffer:
             Mutually exclusive with ``online_storage``.
         offline_fraction (float, optional): fraction of each batch drawn from
             the offline dataset.  Must be in ``(0, 1)``.  Default: ``0.5``.
-        batch_size (int, optional): default batch size for :meth:`sample`.
+        batch_size (int, optional): default batch size for :meth:`sample`. Required
+            when ``offline_dataset`` is a string, and forwarded to the dataset
+            constructor.
         transform (Callable, optional): applied to the concatenated sample
             batch on the read side.
         **dataset_kwargs: forwarded to the dataset constructor when
@@ -94,6 +96,13 @@ class OfflineToOnlineReplayBuffer:
         if isinstance(offline_dataset, str):
             from torchrl.data.datasets.utils import load_dataset
 
+            if "batch_size" not in dataset_kwargs:
+                if batch_size is None:
+                    raise ValueError(
+                        "batch_size must be provided when offline_dataset is a "
+                        "string, so the dataset can be constructed."
+                    )
+                dataset_kwargs["batch_size"] = batch_size
             offline_dataset = load_dataset(offline_dataset, **dataset_kwargs)
         elif dataset_kwargs:
             raise ValueError(
@@ -231,7 +240,8 @@ def prefill_replay_buffer(
         n_samples (int, optional): maximum number of samples to copy.
             Defaults to the full dataset.
         chunk_size (int, optional): number of samples copied per iteration.
-            Default: ``1000``.
+            When ``dataset`` is a string, this is also used as the dataset
+            constructor batch size. Default: ``1000``.
 
     Returns:
         ReplayBuffer: ``rb`` mutated in-place (also returned for chaining).
@@ -252,7 +262,7 @@ def prefill_replay_buffer(
     if isinstance(dataset, str):
         from torchrl.data.datasets.utils import load_dataset
 
-        dataset = load_dataset(dataset)
+        dataset = load_dataset(dataset, batch_size=chunk_size)
 
     total = min(n_samples, len(dataset)) if n_samples is not None else len(dataset)
     copied = 0

@@ -150,6 +150,13 @@ class TestOfflineToOnlineReplayBuffer:
         with pytest.raises(ValueError, match="batch_size must be provided"):
             rb.sample()
 
+    def test_string_dataset_requires_batch_size(self):
+        with pytest.raises(ValueError, match="batch_size must be provided"):
+            OfflineToOnlineReplayBuffer(
+                "d4rl:halfcheetah-medium-v2",
+                online_capacity=500,
+            )
+
     @pytest.mark.parametrize("fraction", [0.25, 0.5, 0.75])
     def test_offline_fraction_respected_exactly(self, fraction):
         # Tag offline source=0, online source=1 so we can count exactly.
@@ -282,6 +289,31 @@ class TestPrefillReplayBuffer:
         prefill_replay_buffer(target, offline, n_samples=250, chunk_size=37)
         assert len(target) == 250
 
+    def test_prefill_string_dataset_uses_chunk_size_as_dataset_batch_size(
+        self, monkeypatch
+    ):
+        offline = _make_offline_buffer(n=100)
+        captured = {}
+
+        def fake_d4rl(dataset_id, **kwargs):
+            captured["dataset_id"] = dataset_id
+            captured["kwargs"] = kwargs
+            return offline
+
+        import torchrl.data.datasets.d4rl as d4rl_mod
+
+        monkeypatch.setattr(d4rl_mod, "D4RLExperienceReplay", fake_d4rl)
+        target = ReplayBuffer(storage=LazyTensorStorage(1000))
+        prefill_replay_buffer(
+            target,
+            "d4rl:halfcheetah-medium-v2",
+            n_samples=20,
+            chunk_size=7,
+        )
+        assert captured["dataset_id"] == "halfcheetah-medium-v2"
+        assert captured["kwargs"] == {"batch_size": 7}
+        assert len(target) == 20
+
 
 class TestLoadDataset:
     def test_missing_prefix_raises(self):
@@ -337,6 +369,27 @@ class TestLoadDataset:
             batch_size=32,
         )
         assert rb.offline_buffer is offline
+
+    def test_string_construction_forwards_batch_size_to_dataset(self, monkeypatch):
+        captured = {}
+        offline = _make_offline_buffer()
+
+        def fake_d4rl(dataset_id, **kwargs):
+            captured["dataset_id"] = dataset_id
+            captured["kwargs"] = kwargs
+            return offline
+
+        import torchrl.data.datasets.d4rl as d4rl_mod
+
+        monkeypatch.setattr(d4rl_mod, "D4RLExperienceReplay", fake_d4rl)
+        rb = OfflineToOnlineReplayBuffer(
+            "d4rl:halfcheetah-medium-v2",
+            online_capacity=500,
+            batch_size=32,
+        )
+        assert rb.offline_buffer is offline
+        assert captured["dataset_id"] == "halfcheetah-medium-v2"
+        assert captured["kwargs"] == {"batch_size": 32}
 
 
 if __name__ == "__main__":

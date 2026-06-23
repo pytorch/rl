@@ -33,3 +33,9 @@ making it efficient for sequence-based sampling and training.
     :template: rl_template_noinherit.rst
 
     datasets.lerobot_columns_to_tensordict
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    datasets.load_dataset
