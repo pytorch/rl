@@ -74,6 +74,7 @@ libero_dir="${root_dir}/libero-src"
 rm -rf "${libero_dir}"
 git clone --depth 1 https://github.com/Lifelong-Robot-Learning/LIBERO.git "${libero_dir}"
 
+# robosuite 1.4.0 calls the pre-3.10 mj_fullM signature.
 uv_pip_install \
   "bddl==1.0.1" \
   easydict \
@@ -81,6 +82,7 @@ uv_pip_install \
   h5py \
   imageio \
   matplotlib \
+  "mujoco<3.10.0" \
   "numpy<2" \
   opencv-python \
   "robosuite==1.4.0" \
