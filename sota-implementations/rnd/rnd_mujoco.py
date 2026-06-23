@@ -20,31 +20,30 @@ Reference:
 from __future__ import annotations
 
 import hydra
+import torch
+import torch.optim
+import tqdm
+from omegaconf import DictConfig
+from tensordict import TensorDict
+from tensordict.nn import CudaGraphModule
+
 from torchrl._utils import compile_with_warmup, get_available_device
+from torchrl._utils import timeit
+from torchrl.collectors import Collector
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
+from torchrl.envs import ExplorationType, set_exploration_type
+from torchrl.envs.transforms import RNDTransform
+from torchrl.objectives import ClipPPOLoss, group_optimizers
+from torchrl.objectives.rnd import RNDLoss
+from torchrl.objectives.value.advantages import GAE
+from torchrl.record import VideoRecorder
+from torchrl.record.loggers import generate_exp_name, get_logger
+from utils_mujoco import eval_model, make_env, make_ppo_models, make_rnd_networks
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
-def main(cfg: DictConfig):  # noqa: F821
-    import torch
-    import torch.optim
-    import tqdm
-
-    from tensordict import TensorDict
-    from tensordict.nn import CudaGraphModule
-
-    from torchrl._utils import timeit
-    from torchrl.collectors import Collector
-    from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
-    from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-    from torchrl.envs import ExplorationType, set_exploration_type
-    from torchrl.envs.transforms import RNDTransform
-    from torchrl.objectives import ClipPPOLoss, group_optimizers
-    from torchrl.objectives.rnd import RNDLoss
-    from torchrl.objectives.value.advantages import GAE
-    from torchrl.record import VideoRecorder
-    from torchrl.record.loggers import generate_exp_name, get_logger
-    from utils_mujoco import eval_model, make_env, make_ppo_models, make_rnd_networks
-
+def main(cfg: DictConfig):
     torch.set_float32_matmul_precision("high")
 
     device = (
@@ -147,16 +146,11 @@ def main(cfg: DictConfig):  # noqa: F821
     )
 
     # ------------------------------------------------------------------
-    # RND loss — shares obs_rms with the transform so normalisation is
-    # consistent between collection time and training time.
+    # RND loss is created after the first collection step, once RNDTransform
+    # has lazily initialized its observation normalization statistics. The
+    # loss then shares the same RunningMeanStd object as the transform.
     # ------------------------------------------------------------------
-    rnd_loss = RNDLoss(
-        predictor_network=predictor_net,
-        target_network=target_net,
-        obs_rms=rnd_transform.obs_rms,  # shared, populated after first step
-        obs_clip=cfg.rnd.obs_clip,
-        update_fraction=cfg.rnd.update_fraction,
-    )
+    rnd_loss: RNDLoss | None = None
 
     # ------------------------------------------------------------------
     # Optimizers
@@ -274,6 +268,20 @@ def main(cfg: DictConfig):  # noqa: F821
 
         with timeit("collecting"):
             data = next(collector_iter)
+        if rnd_loss is None:
+            obs_rms = rnd_transform.obs_rms
+            if obs_rms is None:
+                raise RuntimeError(
+                    "RNDTransform did not initialize observation statistics during "
+                    "collection."
+                )
+            rnd_loss = RNDLoss(
+                predictor_network=predictor_net,
+                target_network=target_net,
+                obs_rms=obs_rms,
+                obs_clip=cfg.rnd.obs_clip,
+                update_fraction=cfg.rnd.update_fraction,
+            )
 
         metrics_to_log = {}
         frames_in_batch = data.numel()
