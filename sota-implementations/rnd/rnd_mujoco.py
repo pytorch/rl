@@ -27,8 +27,7 @@ from omegaconf import DictConfig
 from tensordict import TensorDict
 from tensordict.nn import CudaGraphModule
 
-from torchrl._utils import compile_with_warmup, get_available_device
-from torchrl._utils import timeit
+from torchrl._utils import compile_with_warmup, get_available_device, timeit
 from torchrl.collectors import Collector
 from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
