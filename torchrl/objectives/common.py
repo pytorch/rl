@@ -698,8 +698,6 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             name (str): the buffer / attribute name.
             value (float, Tensor or None): the coefficient. ``None`` sets the
                 attribute to ``None``.
-
-        Keyword Args:
             device (torch.device, optional): device for the buffer.
             dtype (torch.dtype, optional): dtype for the buffer.
         """
