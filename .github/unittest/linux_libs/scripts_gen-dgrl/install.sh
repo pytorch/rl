@@ -29,15 +29,19 @@ git submodule sync && git submodule update --init --recursive
 printf "Installing PyTorch with cu128"
 if [[ "$TORCH_VERSION" == "nightly" ]]; then
   if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cpu -U
+      pip3 install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cpu -U --no-deps
   else
-      pip3 install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 -U
+      pip3 install --pre torchvision --index-url https://download.pytorch.org/whl/nightly/cu128 -U --no-deps
   fi
 elif [[ "$TORCH_VERSION" == "stable" ]]; then
     if [ "${CU_VERSION:-}" == cpu ] ; then
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      pip3 install torch --index-url https://download.pytorch.org/whl/cpu
+      pip3 install torchvision --index-url https://download.pytorch.org/whl/cpu --no-deps
   else
-      pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+      pip3 install torch --index-url https://download.pytorch.org/whl/cu128
+      pip3 install torchvision --index-url https://download.pytorch.org/whl/cu128 --no-deps
   fi
 else
   printf "Failed to install pytorch"

@@ -221,8 +221,7 @@ def _make_sac_trainer(*args, **kwargs) -> SACTrainer:
 
 @dataclass
 class OfflineToOnlineTrainerConfig(SACTrainerConfig):
-    """Hydra configuration for
-    :class:`~torchrl.trainers.algorithms.OfflineToOnlineTrainer`.
+    """Hydra configuration for :class:`~torchrl.trainers.algorithms.OfflineToOnlineTrainer`.
 
     Every kwarg accepted by ``OfflineToOnlineTrainer.__init__`` is exposed as a
     field here, with SAC network-construction helper fields inherited from
@@ -267,9 +266,7 @@ def _make_offline_to_online_trainer(*args, **kwargs) -> OfflineToOnlineTrainer:
     target_net_updater = kwargs.pop("target_net_updater")
     async_collection = kwargs.pop("async_collection", False)
     if async_collection:
-        raise ValueError(
-            "OfflineToOnlineTrainer does not support async_collection."
-        )
+        raise ValueError("OfflineToOnlineTrainer does not support async_collection.")
     log_timings = kwargs.pop("log_timings", False)
     auto_log_optim_steps = kwargs.pop("auto_log_optim_steps", True)
     batch_size = kwargs.pop("batch_size", None)

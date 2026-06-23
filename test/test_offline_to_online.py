@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import inspect
 
 import pytest
@@ -16,13 +17,17 @@ from torchrl.data.datasets import utils as dataset_utils
 from torchrl.data.datasets.utils import load_dataset, register_dataset
 from torchrl.data.replay_buffers.offline_to_online import prefill_replay_buffer
 from torchrl.envs.libs.gym import _has_gym
+from torchrl.testing.gym_helpers import PENDULUM_VERSIONED
 
 # Running a SAC loss requires a tensordict new enough to support
 # ``to_module(preserve_module_state=...)``; the offline-to-online wiring itself
 # does not.
 _LOSS_RUNNABLE = (
-    "preserve_module_state"
-    in __import__("inspect").signature(TensorDict.to_module).parameters
+    "preserve_module_state" in inspect.signature(TensorDict.to_module).parameters
+)
+_CONFIGS_AVAILABLE = (
+    importlib.util.find_spec("hydra") is not None
+    and importlib.util.find_spec("omegaconf") is not None
 )
 
 
@@ -583,6 +588,10 @@ class TestOfflineToOnlineTrainer:
         ):
             assert name in parameters
 
+    @pytest.mark.skipif(
+        not _CONFIGS_AVAILABLE,
+        reason="Config system requires hydra-core and omegaconf",
+    )
     def test_config_registered(self):
         from torchrl.trainers.algorithms.configs import OfflineToOnlineTrainerConfig
 
@@ -637,7 +646,7 @@ class TestOfflineToOnlineTrainer:
         from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
 
         torch.manual_seed(0)
-        env = GymEnv("Pendulum-v1")
+        env = GymEnv(PENDULUM_VERSIONED())
         obs_dim = env.observation_spec["observation"].shape[-1]
         action_dim = env.action_spec.shape[-1]
 

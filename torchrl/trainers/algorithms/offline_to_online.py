@@ -148,8 +148,7 @@ class OfflineToOnlineAnnealHook(TrainerHookBase):
 class OfflineToOnlineTrainer(SACTrainer):
     """A SAC trainer for the offline-pretrain -> online-finetune transition.
 
-    See also
-    :class:`~torchrl.trainers.algorithms.configs.OfflineToOnlineTrainerConfig`
+    See also :class:`~torchrl.trainers.algorithms.configs.OfflineToOnlineTrainerConfig`
     for the Hydra configuration counterpart.
 
     Builds on :class:`~torchrl.trainers.algorithms.SACTrainer`, swapping the
