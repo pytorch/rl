@@ -123,6 +123,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     DDPGTrainerConfig,
     DQNTrainerConfig,
     IQLTrainerConfig,
+    OfflineToOnlineTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
     TD3TrainerConfig,
@@ -397,6 +398,7 @@ __all__ = [
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
     "IQLTrainerConfig",
+    "OfflineToOnlineTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
     "TD3TrainerConfig",
@@ -671,6 +673,11 @@ def _register_configs():
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
+    cs.store(
+        group="trainer",
+        name="offline_to_online",
+        node=OfflineToOnlineTrainerConfig,
+    )
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)
