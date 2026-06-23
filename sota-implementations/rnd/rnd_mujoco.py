@@ -64,8 +64,8 @@ def main(cfg: DictConfig):
             compile_mode = "default" if cfg.compile.cudagraphs else "reduce-overhead"
 
     # ------------------------------------------------------------------
-    # RND networks — must be created before the env so the transform can
-    # reference them and share normalisation statistics with the loss.
+    # RND networks must be created before the env so the transform can
+    # reference the same target and predictor as the loss.
     # ------------------------------------------------------------------
 
     # Build a temporary proof env to get the observation dimension.
@@ -79,12 +79,14 @@ def main(cfg: DictConfig):
         device=device,
     )
 
-    # The transform computes the intrinsic reward at each env step and
-    # maintains running statistics for obs / reward normalisation.
+    # The env already normalizes and clips observations with VecNorm and
+    # ClipTransform before RNDTransform runs, so RND observation normalization
+    # is disabled. This keeps the loss and transform inputs identical without
+    # relying on lazily initialized observation statistics.
     rnd_transform = RNDTransform(
         target_network=target_net,
         predictor_network=predictor_net,
-        obs_clip=cfg.rnd.obs_clip,
+        normalize_obs=False,
         reward_clip=cfg.rnd.reward_clip,
     )
 
@@ -146,11 +148,14 @@ def main(cfg: DictConfig):
     )
 
     # ------------------------------------------------------------------
-    # RND loss is created after the first collection step, once RNDTransform
-    # has lazily initialized its observation normalization statistics. The
-    # loss then shares the same RunningMeanStd object as the transform.
+    # RND loss trains the predictor on the same transformed observations used
+    # by RNDTransform during collection.
     # ------------------------------------------------------------------
-    rnd_loss: RNDLoss | None = None
+    rnd_loss = RNDLoss(
+        predictor_network=predictor_net,
+        target_network=target_net,
+        update_fraction=cfg.rnd.update_fraction,
+    )
 
     # ------------------------------------------------------------------
     # Optimizers
@@ -268,20 +273,6 @@ def main(cfg: DictConfig):
 
         with timeit("collecting"):
             data = next(collector_iter)
-        if rnd_loss is None:
-            obs_rms = rnd_transform.obs_rms
-            if obs_rms is None:
-                raise RuntimeError(
-                    "RNDTransform did not initialize observation statistics during "
-                    "collection."
-                )
-            rnd_loss = RNDLoss(
-                predictor_network=predictor_net,
-                target_network=target_net,
-                obs_rms=obs_rms,
-                obs_clip=cfg.rnd.obs_clip,
-                update_fraction=cfg.rnd.update_fraction,
-            )
 
         metrics_to_log = {}
         frames_in_batch = data.numel()

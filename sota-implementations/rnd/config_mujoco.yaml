@@ -41,7 +41,6 @@ rnd:
   predictor_lr: 1e-4
   intrinsic_coeff: 1.0   # weight on the intrinsic reward added to extrinsic
   update_fraction: 0.25  # fraction of each batch used to update the predictor
-  obs_clip: 5.0
   reward_clip: 5.0
 
 compile:
