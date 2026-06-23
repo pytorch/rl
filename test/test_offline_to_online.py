@@ -14,6 +14,15 @@ from torchrl.data import LazyTensorStorage, OfflineToOnlineReplayBuffer, ReplayB
 from torchrl.data.datasets import utils as dataset_utils
 from torchrl.data.datasets.utils import load_dataset, register_dataset
 from torchrl.data.replay_buffers.offline_to_online import prefill_replay_buffer
+from torchrl.envs.libs.gym import _has_gym
+
+# Running a SAC loss requires a tensordict new enough to support
+# ``to_module(preserve_module_state=...)``; the offline-to-online wiring itself
+# does not.
+_LOSS_RUNNABLE = (
+    "preserve_module_state"
+    in __import__("inspect").signature(TensorDict.to_module).parameters
+)
 
 
 def _make_offline_buffer(n: int = 1000, obs_dim: int = 4, action_dim: int = 2):
@@ -445,6 +454,233 @@ class TestLoadDataset:
         assert rb.offline_buffer is offline
         assert captured["dataset_id"] == "halfcheetah-medium-v2"
         assert captured["kwargs"] == {"batch_size": 32}
+
+
+class _StubTrainer:
+    """Minimal stand-in exposing the ``collected_frames`` the anneal hook reads."""
+
+    def __init__(self, collected_frames: int = 0):
+        self.collected_frames = collected_frames
+
+
+class TestOfflineToOnlineReplayBufferHook:
+    def test_extend_uses_collector_mask(self):
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflineToOnlineReplayBufferHook,
+        )
+
+        offline = _make_offline_buffer()
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=offline, online_capacity=500, batch_size=16
+        )
+        hook = OfflineToOnlineReplayBufferHook(rb)
+        mask = torch.ones(2, 5, dtype=torch.bool)
+        mask[0, 3:] = False  # 2 invalid rows -> 8 valid
+        data = TensorDict(
+            {
+                "observation": torch.randn(2, 5, 4),
+                ("collector", "mask"): mask,
+            },
+            batch_size=[2, 5],
+        )
+        hook.extend(data)
+        assert len(rb.online_buffer) == 8
+        # collector bookkeeping is not stored
+        assert "collector" not in rb.online_buffer.sample(4).keys()
+
+    def test_state_dict_roundtrip(self):
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflineToOnlineReplayBufferHook,
+        )
+
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=_make_offline_buffer(), online_capacity=500, batch_size=16
+        )
+        hook = OfflineToOnlineReplayBufferHook(rb)
+        hook.extend(_make_online_data(20))
+
+        rb2 = OfflineToOnlineReplayBuffer(
+            offline_dataset=_make_offline_buffer(), online_capacity=500, batch_size=16
+        )
+        hook2 = OfflineToOnlineReplayBufferHook(rb2)
+        hook2.load_state_dict(hook.state_dict())
+        assert len(rb2.online_buffer) == 20
+
+
+class TestOfflineToOnlineAnnealHook:
+    def test_anneal_decays_fraction(self):
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflineToOnlineAnnealHook,
+        )
+
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=_make_offline_buffer(),
+            online_capacity=500,
+            offline_fraction=0.8,
+            batch_size=16,
+        )
+        stub = _StubTrainer()
+        hook = OfflineToOnlineAnnealHook(stub, rb, anneal_frames=100)
+
+        stub.collected_frames = 0
+        hook()
+        assert rb.offline_fraction == pytest.approx(0.8)
+
+        stub.collected_frames = 50
+        hook()
+        assert rb.offline_fraction == pytest.approx(0.4)
+
+        stub.collected_frames = 100
+        hook()
+        assert rb.offline_fraction == pytest.approx(0.0)
+
+        # clamps at 0 past anneal_frames
+        stub.collected_frames = 200
+        hook()
+        assert rb.offline_fraction == 0.0
+
+
+class TestOfflineToOnlineTrainer:
+    def test_requires_offline_to_online_buffer(self):
+        from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
+
+        plain = ReplayBuffer(storage=LazyTensorStorage(100))
+        with pytest.raises(TypeError, match="OfflineToOnlineReplayBuffer"):
+            OfflineToOnlineTrainer(
+                collector=None,
+                total_frames=1,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=None,
+                replay_buffer=plain,
+            )
+
+    def test_hooks_drive_offline_online_flow(self):
+        """The three hooks together grow the online buffer, keep the mixed batch
+        flat, and anneal the offline fraction -- the data path the trainer runs,
+        exercised without a loss so it is independent of the SAC/tensordict
+        version."""
+        from torchrl.trainers.algorithms.offline_to_online import (
+            OfflineToOnlineAnnealHook,
+            OfflineToOnlineReplayBufferHook,
+        )
+
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=_make_offline_buffer(),
+            online_capacity=500,
+            offline_fraction=0.5,
+            batch_size=16,
+        )
+        rb_hook = OfflineToOnlineReplayBufferHook(rb, batch_size=16, device="cpu")
+        stub = _StubTrainer()
+        anneal = OfflineToOnlineAnnealHook(stub, rb, anneal_frames=100)
+
+        for step in (20, 40, 60, 80, 100):
+            rb_hook.extend(_make_online_data(20))  # pre_epoch
+            sample = rb_hook.sample(None)  # process_optim_batch
+            assert sample.batch_size == torch.Size([16])
+            stub.collected_frames = step
+            anneal()  # post_steps
+
+        assert len(rb.online_buffer) == 100
+        assert rb.offline_fraction == pytest.approx(0.0)
+
+    @pytest.mark.skipif(
+        not (_has_gym and _LOSS_RUNNABLE),
+        reason="needs gym and a tensordict supporting to_module(preserve_module_state)",
+    )
+    def test_train_grows_online_and_anneals(self, tmp_path):
+        import warnings
+
+        from tensordict.nn import NormalParamExtractor, TensorDictModule
+        from torch import nn
+
+        from torchrl.collectors import Collector
+        from torchrl.envs.libs.gym import GymEnv
+        from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
+        from torchrl.objectives import SACLoss, SoftUpdate
+        from torchrl.trainers.algorithms.offline_to_online import OfflineToOnlineTrainer
+
+        torch.manual_seed(0)
+        env = GymEnv("Pendulum-v1")
+        obs_dim = env.observation_spec["observation"].shape[-1]
+        action_dim = env.action_spec.shape[-1]
+
+        actor_net = nn.Sequential(
+            MLP(in_features=obs_dim, out_features=2 * action_dim, num_cells=[32, 32]),
+            NormalParamExtractor(),
+        )
+        actor_module = TensorDictModule(
+            actor_net, in_keys=["observation"], out_keys=["loc", "scale"]
+        )
+        actor = ProbabilisticActor(
+            module=actor_module,
+            in_keys=["loc", "scale"],
+            spec=env.action_spec,
+            distribution_class=TanhNormal,
+            distribution_kwargs={
+                "low": env.action_spec.space.low,
+                "high": env.action_spec.space.high,
+            },
+            return_log_prob=True,
+        )
+        qvalue = ValueOperator(
+            MLP(in_features=obs_dim + action_dim, out_features=1, num_cells=[32, 32]),
+            in_keys=["observation", "action"],
+            out_keys=["state_action_value"],
+        )
+
+        loss = SACLoss(actor_network=actor, qvalue_network=qvalue)
+        loss.make_value_estimator(gamma=0.99)
+        target_updater = SoftUpdate(loss, eps=0.99)
+
+        total_frames = 60
+        frames_per_batch = 20
+        collector = Collector(
+            env,
+            actor,
+            frames_per_batch=frames_per_batch,
+            total_frames=total_frames,
+            init_random_frames=0,
+        )
+
+        # Seed an offline dataset from the same env so its keys match the online
+        # transitions (no Minari/D4RL required).
+        offline = ReplayBuffer(storage=LazyTensorStorage(200))
+        offline.extend(env.rollout(50).reshape(-1).exclude("collector"))
+
+        rb = OfflineToOnlineReplayBuffer(
+            offline_dataset=offline,
+            online_capacity=200,
+            offline_fraction=0.5,
+            batch_size=16,
+        )
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            trainer = OfflineToOnlineTrainer(
+                collector=collector,
+                total_frames=total_frames,
+                frame_skip=1,
+                optim_steps_per_batch=1,
+                loss_module=loss,
+                replay_buffer=rb,
+                anneal_frames=total_frames,
+                optimizer=torch.optim.Adam(loss.parameters(), lr=1e-3),
+                target_net_updater=target_updater,
+                progress_bar=False,
+                enable_logging=False,
+            )
+            # extend (pre_epoch), sample (process_optim_batch), anneal (post_steps)
+            assert len(trainer._pre_epoch_ops) >= 1
+            assert len(trainer._process_optim_batch_ops) >= 1
+            assert len(trainer._post_steps_ops) >= 1
+
+            trainer.train()
+
+        # Online experience accumulated and the offline fraction annealed away.
+        assert len(rb.online_buffer) > 0
+        assert rb.offline_fraction < 0.5
 
 
 if __name__ == "__main__":
