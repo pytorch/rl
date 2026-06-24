@@ -49,6 +49,8 @@ from .replay_buffers import (
     ListStorageCheckpointer,
     Nested2TED,
     NestedStorageCheckpointer,
+    OfflineToOnlineReplayBuffer,
+    prefill_replay_buffer,
     PrioritizedReplayBuffer,
     PrioritizedSampler,
     PrioritizedSliceSampler,
@@ -99,8 +101,17 @@ from .tensor_specs import (
     UnboundedDiscrete,
 )
 from .utils import check_no_exclusive_keys, consolidate_spec, contains_lazy_spec
+from .video import clear_video_decoder_cache, set_video_decoder_cache_size, VideoClipRef
+from .vla import (
+    ActionTokenizerBase,
+    RobotDatasetMetadata,
+    UniformActionTokenizer,
+    validate_vla_tensordict,
+    VocabTailActionTokenizer,
+)
 
 __all__ = [
+    "ActionTokenizerBase",
     "AdaptiveKLController",
     "Binary",
     "BinaryToDecimal",
@@ -137,6 +148,7 @@ __all__ = [
     "Nested2TED",
     "NestedStorageCheckpointer",
     "NonTensor",
+    "OfflineToOnlineReplayBuffer",
     "OneHot",
     "PairwiseDataset",
     "PrioritizedReplayBuffer",
@@ -152,6 +164,7 @@ __all__ = [
     "ReplayBuffer",
     "ReplayBufferEnsemble",
     "RewardData",
+    "RobotDatasetMetadata",
     "RolloutFromModel",
     "RoundRobinWriter",
     "SamplerEnsemble",
@@ -185,11 +198,18 @@ __all__ = [
     "Unbounded",
     "UnboundedContinuous",
     "UnboundedDiscrete",
+    "UniformActionTokenizer",
+    "VocabTailActionTokenizer",
+    "VideoClipRef",
     "Writer",
     "WriterEnsemble",
     "check_no_exclusive_keys",
+    "clear_video_decoder_cache",
     "consolidate_spec",
     "contains_lazy_spec",
     "create_infinite_iterator",
     "get_dataloader",
+    "prefill_replay_buffer",
+    "set_video_decoder_cache_size",
+    "validate_vla_tensordict",
 ]

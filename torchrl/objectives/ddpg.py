@@ -18,12 +18,10 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class DDPGLoss(LossModule):
@@ -335,7 +333,9 @@ class DDPGLoss(LossModule):
             td_copy = self.value_network(td_copy)
         loss_actor = -td_copy.get(self.tensor_keys.state_action_value).squeeze(-1)
         metadata = {}
-        loss_actor = _reduce(loss_actor, self.reduction, weights=weights)
+        loss_actor = self._reduce_loss(
+            loss_actor, tensordict=tensordict, weights=weights
+        )
         self._clear_weakrefs(
             tensordict,
             loss_actor,
@@ -385,7 +385,9 @@ class DDPGLoss(LossModule):
                 "target_value_max": target_value.max(),
                 "pred_value_max": pred_val.max(),
             }
-        loss_value = _reduce(loss_value, self.reduction, weights=weights)
+        loss_value = self._reduce_loss(
+            loss_value, tensordict=tensordict, weights=weights
+        )
         self._clear_weakrefs(
             tensordict,
             "value_network_params",
@@ -402,12 +404,9 @@ class DDPGLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         dispatch_value_estimator(
             self,
             value_type,
@@ -419,7 +418,7 @@ class DDPGLoss(LossModule):
                 "terminated": self.tensor_keys.terminated,
             },
             value_network=self.actor_critic,
-            **hyperparams,
+            **hp,
         )
 
     @property

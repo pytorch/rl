@@ -17,13 +17,11 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class TD3Loss(LossModule):
@@ -407,7 +405,9 @@ class TD3Loss(LossModule):
         metadata = {
             "state_action_value_actor": state_action_value_actor.detach(),
         }
-        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
+        loss_actor = self._reduce_loss(
+            loss_actor, tensordict=tensordict, weights=weights
+        )
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -494,7 +494,7 @@ class TD3Loss(LossModule):
             "pred_value": current_qvalue.detach(),
             "target_value": target_value.detach(),
         }
-        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -538,12 +538,9 @@ class TD3Loss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         # TD3 does not need a value network — the next state value is read
         # straight from the input tensordict at forward time.
         dispatch_value_estimator(
@@ -557,5 +554,5 @@ class TD3Loss(LossModule):
                 "terminated": self.tensor_keys.terminated,
             },
             value_network=None,
-            **hyperparams,
+            **hp,
         )

@@ -9,15 +9,17 @@ import io
 import itertools
 import os
 import queue as queue_lib
+import sys
 import time
 import traceback
+import types
 from functools import partial
 
 import pytest
 import torch
 import torch.distributed as dist
 import torchrl.testing.env_helper
-from tensordict import assert_allclose_td
+from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq
 from torch import multiprocessing as mp
 
@@ -28,6 +30,8 @@ from torchrl.data import LazyMemmapStorage, RayReplayBuffer, ReplayBuffer
 from torchrl.data.replay_buffers.samplers import SliceSampler
 from torchrl.data.replay_buffers.storages import LazyTensorStorage
 from torchrl.envs import InitTracker, RewardSum, StepCounter, TransformedEnv, VecNormV2
+from torchrl.envs.libs import gym as gym_lib, isaac_lab as isaac_lab_lib
+from torchrl.envs.libs.isaac_lab import IsaacLabWrapper
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules import LSTMModule, MLP
 from torchrl.testing import get_default_devices
@@ -302,6 +306,105 @@ def _isaaclab_direct_native_autoreset(env_name: str, num_envs: int = 16):
     finally:
         queue.close()
         proc.join()
+
+
+def _install_fake_isaaclab(monkeypatch):
+    class ManagerBasedEnv:
+        pass
+
+    class DirectRLEnv:
+        pass
+
+    class DirectMARLEnv:
+        pass
+
+    fake_envs = types.ModuleType("isaaclab.envs")
+    fake_envs.ManagerBasedEnv = ManagerBasedEnv
+    fake_envs.DirectRLEnv = DirectRLEnv
+    fake_envs.DirectMARLEnv = DirectMARLEnv
+    fake_isaaclab = types.ModuleType("isaaclab")
+    fake_isaaclab.envs = fake_envs
+    monkeypatch.setitem(sys.modules, "isaaclab", fake_isaaclab)
+    monkeypatch.setitem(sys.modules, "isaaclab.envs", fake_envs)
+    return ManagerBasedEnv, DirectRLEnv, DirectMARLEnv
+
+
+def test_isaaclab_direct_env_detection_is_native_autoreset_opt_in(monkeypatch):
+    ManagerBasedEnv, DirectRLEnv, DirectMARLEnv = _install_fake_isaaclab(monkeypatch)
+    monkeypatch.setattr(gym_lib, "_has_isaaclab", True)
+    monkeypatch.setattr(isaac_lab_lib, "_has_isaaclab", True)
+
+    manager_env = ManagerBasedEnv()
+    direct_env = DirectRLEnv()
+    direct_marl_env = DirectMARLEnv()
+
+    assert IsaacLabWrapper._supports_native_autoreset(manager_env)
+    assert not IsaacLabWrapper._supports_native_autoreset(direct_env)
+    assert not IsaacLabWrapper._supports_native_autoreset(direct_marl_env)
+    assert IsaacLabWrapper._supports_native_autoreset(direct_env, native_autoreset=True)
+    assert IsaacLabWrapper._supports_native_autoreset(
+        direct_marl_env, native_autoreset=True
+    )
+
+    fake_vector = types.SimpleNamespace(VectorEnv=type("VectorEnv", (), {}))
+    monkeypatch.setattr(
+        gym_lib,
+        "gym_backend",
+        lambda name=None: fake_vector if name == "vector" else fake_vector,
+    )
+    wrapper = gym_lib.GymWrapper.__new__(gym_lib.GymWrapper)
+    wrapper._torchrl_native_autoreset_requested = False
+    wrapper._env = types.SimpleNamespace(unwrapped=manager_env)
+    assert wrapper._is_batched
+    wrapper._env = types.SimpleNamespace(unwrapped=direct_env)
+    assert not wrapper._is_batched
+    wrapper._torchrl_native_autoreset_requested = True
+    assert wrapper._is_batched
+
+    isaac_wrapper = IsaacLabWrapper.__new__(IsaacLabWrapper)
+    isaac_wrapper._env = types.SimpleNamespace(unwrapped=direct_env)
+    assert not isaac_wrapper._supports_set_state
+
+    def reset_to(*args, **kwargs):
+        return None
+
+    manager_env.reset_to = reset_to
+    isaac_wrapper._env = types.SimpleNamespace(unwrapped=manager_env)
+    assert isaac_wrapper._supports_set_state
+
+
+def test_isaaclab_observation_key_normalization_is_cached_and_non_clobbering():
+    env = IsaacLabWrapper.__new__(IsaacLabWrapper)
+    env._rename_policy_to_observation = False
+    policy = torch.ones(2, 3)
+    observations = {"policy": policy}
+    assert env._normalize_observation_keys(observations) is observations
+
+    env._rename_policy_to_observation = True
+    normalized = env._normalize_observation_keys(observations)
+    assert normalized is not observations
+    assert "policy" not in normalized
+    assert normalized["observation"] is policy
+
+    existing_observation = torch.zeros(2, 3)
+    observations = {"policy": policy, "observation": existing_observation}
+    assert env._normalize_observation_keys(observations) is observations
+    assert observations["observation"] is existing_observation
+
+
+def test_isaaclab_all_false_reset_to_state_is_no_op():
+    env = IsaacLabWrapper.__new__(IsaacLabWrapper)
+    td = TensorDict(
+        {
+            "_reset": torch.zeros(3, 1, dtype=torch.bool),
+            "policy": torch.ones(3, 2),
+        },
+        batch_size=(3,),
+    )
+    out = env._reset(td, set_state=True, scene_state=object())
+    assert "_reset" not in out.keys()
+    assert out is not td
+    assert (out["policy"] == td["policy"]).all()
 
 
 @pytest.mark.skipif(not _has_isaac, reason="IsaacGym not found")

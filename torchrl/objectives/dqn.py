@@ -24,7 +24,6 @@ from torchrl.modules.tensordict_module.common import ensure_tensordict_compatibl
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
@@ -374,7 +373,7 @@ class DQNLoss(LossModule):
             and self.tensor_keys.priority_weight in tensordict.keys()
         ):
             weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss = _reduce(loss, reduction=self.reduction, weights=weights)
+        loss = self._reduce_loss(loss, tensordict=tensordict, weights=weights)
         td_out = TensorDict(loss=loss)
 
         self._clear_weakrefs(
@@ -640,7 +639,7 @@ class DistributionalDQNLoss(LossModule):
             and self.tensor_keys.priority_weight in tensordict.keys()
         ):
             weights = tensordict.get(self.tensor_keys.priority_weight)
-        loss = _reduce(loss, reduction=self.reduction, weights=weights)
+        loss = self._reduce_loss(loss, tensordict=tensordict, weights=weights)
         td_out = TensorDict(loss=loss)
         self._clear_weakrefs(
             tensordict,
