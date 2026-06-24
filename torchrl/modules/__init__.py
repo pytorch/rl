@@ -100,6 +100,7 @@ from .tensordict_module import (
     TanhModule,
     ValueOperator,
     VmapModule,
+    WorldModel,
     WorldModelWrapper,
 )
 from .tensordict_module.exploration import (
@@ -117,6 +118,7 @@ from .mcts import (  # usort:skip
     UCB1TunedScore,
     UCBScore,
 )
+from .vla import LeRobotPolicyWrapper, TinyVLA, VLAWrapperBase  # usort:skip
 
 __all__ = [
     "Actor",
@@ -162,6 +164,7 @@ __all__ = [
     "LSTM",
     "LSTMCell",
     "LSTMModule",
+    "LeRobotPolicyWrapper",
     "MCTSScore",
     "MCTSScores",
     "MLP",
@@ -210,13 +213,16 @@ __all__ = [
     "TanhDelta",
     "TanhModule",
     "TanhNormal",
+    "TinyVLA",
     "TruncatedNormal",
     "UCB1TunedScore",
     "UCBScore",
     "VDNMixer",
+    "VLAWrapperBase",
     "ValueNorm",
     "ValueOperator",
     "VmapModule",
+    "WorldModel",
     "WorldModelWrapper",
     "distributions_maps",
     "get_env_transforms_from_module",

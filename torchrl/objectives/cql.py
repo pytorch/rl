@@ -26,7 +26,6 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
@@ -536,7 +535,9 @@ class CQLLoss(LossModule):
             metadata.update(alpha_prime_metadata)
         loss_actor_bc, bc_metadata = self.actor_bc_loss(tensordict)
         loss_actor, actor_metadata = self.actor_loss(tensordict)
-        loss_alpha, alpha_metadata = self.alpha_loss(actor_metadata)
+        loss_alpha, alpha_metadata = self.alpha_loss(
+            actor_metadata, mask_tensordict=tensordict
+        )
         metadata.update(bc_metadata)
         metadata.update(cql_metadata)
         metadata.update(actor_metadata)
@@ -595,7 +596,7 @@ class CQLLoss(LossModule):
         bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
-        bc_actor_loss = _reduce(bc_actor_loss, reduction=self.reduction)
+        bc_actor_loss = self._reduce_loss(bc_actor_loss, tensordict=tensordict)
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         self._clear_weakrefs(
             tensordict,
@@ -638,7 +639,7 @@ class CQLLoss(LossModule):
         metadata = {}
         metadata[self.tensor_keys.log_prob] = log_prob.detach()
         actor_loss = self._alpha * log_prob - min_q_logprob
-        actor_loss = _reduce(actor_loss, reduction=self.reduction)
+        actor_loss = self._reduce_loss(actor_loss, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -762,7 +763,7 @@ class CQLLoss(LossModule):
             target_value.expand_as(q_pred),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
         td_error = (q_pred - target_value).pow(2)
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
@@ -913,7 +914,7 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
 
         cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
-        cql_q_loss = _reduce(cql_q_loss, reduction=self.reduction)
+        cql_q_loss = self._reduce_loss(cql_q_loss, tensordict=tensordict)
 
         self._clear_weakrefs(
             tensordict,
@@ -940,11 +941,17 @@ class CQLLoss(LossModule):
             )
 
         alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
-        min_qf1_loss = alpha_prime * (cql_q1_loss.mean() - self.target_action_gap)
-        min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
+        cql_q1_loss = self._reduce_loss(
+            cql_q1_loss, tensordict=tensordict, reduction="mean"
+        )
+        cql_q2_loss = self._reduce_loss(
+            cql_q2_loss, tensordict=tensordict, reduction="mean"
+        )
+
+        min_qf1_loss = alpha_prime * (cql_q1_loss - self.target_action_gap)
+        min_qf2_loss = alpha_prime * (cql_q2_loss - self.target_action_gap)
 
         alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
-        alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -954,7 +961,11 @@ class CQLLoss(LossModule):
         )
         return alpha_prime_loss, {}
 
-    def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def alpha_loss(
+        self,
+        tensordict: TensorDictBase | dict[NestedKey, Tensor],
+        mask_tensordict: TensorDictBase | None = None,
+    ) -> tuple[Tensor, dict]:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
@@ -962,7 +973,9 @@ class CQLLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
-        alpha_loss = _reduce(alpha_loss, reduction=self.reduction)
+        if mask_tensordict is None and isinstance(tensordict, TensorDictBase):
+            mask_tensordict = tensordict
+        alpha_loss = self._reduce_loss(alpha_loss, tensordict=mask_tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -1279,7 +1292,7 @@ class DiscreteCQLLoss(LossModule):
             inplace=True,
         )
         loss = 0.5 * distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = _reduce(loss, reduction=self.reduction)
+        loss = self._reduce_loss(loss, tensordict=tensordict)
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
@@ -1343,5 +1356,5 @@ class DiscreteCQLLoss(LossModule):
             q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
 
         loss_cql = (logsumexp - q_a).squeeze(-1)
-        loss_cql = _reduce(loss_cql, reduction=self.reduction)
+        loss_cql = self._reduce_loss(loss_cql, tensordict=tensordict)
         return loss_cql, {}

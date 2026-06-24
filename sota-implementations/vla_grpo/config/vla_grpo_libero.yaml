@@ -1,0 +1,138 @@
+# SimpleVLA-RL (arXiv:2509.09674) on LIBERO: OpenVLA-OFT token variant (7B),
+# the paper's hyper-parameters. Parallel MuJoCo workers (one process each)
+# feed a single training device; see the README for the multi-GPU notes and
+# the LoRA fallback. Requires LIBERO (and its deps) plus transformers/timm.
+#
+# Per-iteration accounting: groups_per_iter x group_size = 512 trajectories,
+# each up to max_outer_steps = 64 chunk decisions (512 env steps / chunk 8).
+
+env:
+  backend: libero
+  task_suite: libero_spatial # libero_spatial | libero_object | libero_goal | libero_10
+  task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] # one worker per task (num_envs must cover them)
+  # Parallel MuJoCo processes (training); >= len(task_ids). For GRPO, each
+  # worker owns serial group ids, so keep num_envs <= groups_per_iter (ideally
+  # a divisor, often equal) or no worker may finish a full group per iteration.
+  num_envs: 10
+  # false: each worker replays group_size rollouts serially for one group.
+  # true: group_size workers share the same task/init state/group id and
+  # collect a GRPO group in parallel. This improves group-completion throughput
+  # but requires num_envs to be a multiple of collector.group_size and, to cover
+  # all tasks in one wave, num_envs >= len(task_ids) * collector.group_size.
+  # For lowest boundary waste, set collector.groups_per_iter to the logical
+  # worker count (num_envs / collector.group_size). Asking each logical worker
+  # to advance through multiple group ids in one collector batch creates
+  # partial groups when episodes have variable lengths. Additional collector
+  # batches can overcollect under one policy, but without a group barrier they
+  # may also drift; the LIBERO wrapper groups parallel repeats by cycled
+  # init-state id to reduce this waste.
+  parallel_group_repeats: false
+  eval_num_envs: 10 # parallel MuJoCo processes (evaluation); >= len(task_ids)
+  camera_height: 256
+  camera_width: 256
+  render_backend: egl # egl (GPU/headless) | osmesa (CPU fallback)
+  render_gpu_ids: [0] # EGL-visible ids; override to [0,1,...] to spread workers
+  eval_render_gpu_ids: null # null = reuse render_gpu_ids for eval workers
+  chunk_size: 8 # NUM_ACTIONS_CHUNK of the checkpoint
+  max_env_steps: 512 # base env steps per episode (the paper's cap)
+  max_outer_steps: 64 # = max_env_steps / chunk_size, in chunk decisions
+  train_init_state_mode: random # random | cycle | fixed; eval always cycles
+  seed: 0
+
+tokenizer:
+  vocab_size: 256 # unused for the openvla backend (codec comes from the checkpoint)
+
+policy:
+  backend: openvla
+  # the checkpoint MUST match task_suite (it fixes the SFT policy AND the
+  # action statistics unnorm_key resolves into)
+  checkpoint: Haozhan72/Openvla-oft-SFT-libero-spatial-traj1
+  unnorm_key: libero_spatial_no_noops
+  # the SimpleVLA-RL checkpoints omit their LIBERO fine-tuning stats; pull the
+  # matching official OFT release's dataset_statistics.json (same LIBERO data).
+  # Must match unnorm_key's suite (libero-object/goal/10 for the other suites).
+  dataset_statistics: moojink/openvla-7b-oft-finetuned-libero-spatial
+  dtype: bfloat16
+  temperature: 1.6 # rollout sampling temperature (greedy eval)
+  top_k: null # null = full categorical; small values keep token exploration local
+  use_wrist_image: false
+  center_crop: true # the SimpleVLA-RL checkpoints are trained with augmentations
+  image_backend: torchvision # OpenVLA image preprocessing backend: torchvision | pil
+  # the model emits a continuous gripper; LIBERO/robosuite needs a firm +/-1
+  # open/close (demo gripper is binary, -1 open / +1 close). SimpleVLA-RL
+  # applies sign(2*g - 1) then inverts, i.e. a 0.5 binarization threshold
+  # before the open/close sign flip.
+  gripper_binarize: true
+  gripper_binarize_threshold: 0.5
+  gripper_invert: true
+  lora_rank: 32 # de-risk fallback; set to 0/null for full fine-tuning (needs FSDP)
+  lora_target_modules: [q_proj, k_proj, v_proj, o_proj]
+  device: null # null = auto (cuda if available)
+
+collector:
+  group_size: 8 # n: rollouts per initial state (GRPO group)
+  candidate_group_size: null # null = group_size; e.g. 16 samples 16 and selects 8
+  # Initial states per iteration (512 trajectories). Must be >= env.num_envs;
+  # for best throughput, use a multiple of env.num_envs so no partial groups
+  # are discarded at the synchronous update boundary. If
+  # env.parallel_group_repeats=true, use env.num_envs / group_size instead.
+  groups_per_iter: 64
+  # Safety cap in target group waves. The collector writes complete
+  # trajectories directly to the replay buffer every one-outer-step internal
+  # poll; one wave is approximately max_outer_steps *
+  # ceil(groups_per_iter * group_size / num_envs) polls. Keeping MCAdvantage
+  # queues across these same-policy polls lets partial GRPO groups finish
+  # without crossing a policy update.
+  max_collect_batches_per_iter: 1
+  # If a capped wave produces too few useful replay decisions, keep the same
+  # rollout policy and queued partial groups for another capped wave instead
+  # of updating on a tiny replay batch and clearing those queues immediately.
+  max_same_policy_collect_attempts: 2
+  min_replay_decisions: null # null/0 = collect one target group wave
+  total_iters: 100 # the paper's total_epochs
+  policy_device: null # null = policy.device; set e.g. cuda:1 for rollout inference
+
+advantage:
+  trajectory_return: sum # binary success return per trajectory
+  keep_return_bounds: [0.1, 0.9] # dynamic sampling: drop all-fail / all-success groups
+  candidate_selection: balanced # first | uniform | balanced, used if candidate_group_size > group_size
+  # null = try selecting as soon as group_size candidates are available; keep
+  # queueing up to candidate_group_size only if no useful subset exists yet.
+  candidate_selection_min_size: null
+  candidate_selection_max_combinations: 100000
+
+buffer:
+  device: cpu # decisions hold raw uint8 images; keep the buffer off-GPU
+
+loss:
+  clip_epsilon: [0.2, 0.28] # asymmetric DAPO Clip-Higher (per-token, see ratio_level)
+  ratio_level: token # the paper's semantics: one clipped ratio per action token
+  ppo_epochs: 1
+  mini_batch_size: 16 # decisions per micro-batch (one forward)
+  accumulate_batches: 8 # optimizer step every N micro-batches (grad accumulation)
+
+optim:
+  lr: 5e-6
+  weight_decay: 0.0
+  warmup_updates: 10 # constant-with-warmup, in optimizer steps
+  max_grad_norm: 1.0
+
+logger:
+  backend: wandb
+  project_name: torchrl-sota-vla-grpo
+  group_name: null
+  exp_name: vla_grpo_libero
+  mode: online
+  eval_iter: 4 # evaluate every N iterations (the paper's cadence)
+  eval_episodes: 50 # greedy episodes per evaluation (cycled init states)
+  eval_process: false # true = run eval in a dedicated process
+  eval_async: false # with eval_process, submit eval and log result later
+  eval_device: null # null = policy.device/auto; set e.g. cuda:7 with eval_process
+  eval_state_dir: null # null = tempfile dir for trainable-weight snapshots
+  record_video: true # render eval rollouts via VideoRecorder (needs a logger)
+  video_episodes: 2 # greedy episodes per recorded video (one camera stream)
+  video_fps: 8 # frames per second of the logged video (one frame per decision)
+
+checkpoint:
+  save_iter: 25
+  resume: null

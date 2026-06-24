@@ -945,6 +945,34 @@ def _clip_value_loss(
     return loss_value, clip_fraction
 
 
+def _validate_clip_epsilon(
+    clip_epsilon: float | tuple[float, float]
+) -> tuple[float, float]:
+    """Normalize and validate a PPO clip threshold.
+
+    Accepts a float (symmetric clipping) or a ``(eps_low, eps_high)`` pair
+    (asymmetric, DAPO Clip-Higher style) and returns the validated
+    ``(eps_low, eps_high)`` bounds.
+    """
+    if isinstance(clip_epsilon, (tuple, list)):
+        if len(clip_epsilon) != 2:
+            raise ValueError(
+                f"clip_epsilon tuple must have length 2, got {clip_epsilon}."
+            )
+        eps_low, eps_high = (float(clip_epsilon[0]), float(clip_epsilon[1]))
+    else:
+        eps_low = eps_high = float(clip_epsilon)
+    if eps_low < 0 or eps_high < 0:
+        raise ValueError(
+            f"clip_epsilon values must be non-negative, got ({eps_low}, {eps_high})."
+        )
+    if eps_low >= 1.0:
+        raise ValueError(
+            f"clip_epsilon low must be < 1 (to keep 1 - eps_low > 0), got {eps_low}."
+        )
+    return eps_low, eps_high
+
+
 def _get_default_device(net):
     for p in net.parameters():
         return p.device
