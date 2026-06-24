@@ -23,7 +23,7 @@ from tensordict.tensorclass import is_non_tensor
 
 from torchrl._utils import logger as torchrl_logger
 from torchrl.data import Choice, Composite, NonTensor
-from torchrl.data.llm import History
+from torchrl.data.llm import History, history_default_spec
 from torchrl.envs import ConditionalSkip, GymWrapper, Transform, TransformedEnv
 
 if TYPE_CHECKING:
@@ -229,7 +229,7 @@ class ResetModule(MLGymBaseTransform):
         env.add_commands(command_files)
 
     def transform_observation_spec(self, observation_spec: Composite) -> Composite:
-        observation_spec["history"] = History.default_spec()
+        observation_spec["history"] = history_default_spec()
         return observation_spec
 
     def transform_action_spec(self, action_spec: Composite) -> Composite:
@@ -247,7 +247,7 @@ class ResetModule(MLGymBaseTransform):
         )
 
     def transform_state_spec(self, state_spec: Composite) -> Composite:
-        state_spec["history"] = History.default_spec()
+        state_spec["history"] = history_default_spec()
         return state_spec
 
 
