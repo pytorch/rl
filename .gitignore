@@ -1,3 +1,7 @@
+# Local dev environment
+.envrc
+notebooks/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -87,6 +91,7 @@ docs/source/gen_modules
 docs/source/reference/generated
 docs/source/tutorials
 docs/src
+.docs_mujoco_menagerie/
 
 # PyBuilder
 .pybuilder/
@@ -200,3 +205,10 @@ main/
 
 # Additional cache directories
 .ruff_cache/
+
+# Local agent / experiment artifacts
+.codex/
+.cursorignore
+.github/rulesets/
+TODO/
+uv.lock

@@ -211,6 +211,11 @@ class TimeMaxPool(Transform):
                     raise KeyError(f"Could not find {in_key} in the reset data.")
             return self._call(tensordict_reset, _reset=_reset)
 
+    def _reset_on_native_autoreset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._reset(tensordict, tensordict_reset)
+
     def _make_missing_buffer(self, tensordict, in_key, buffer_name):
         buffer = getattr(self, buffer_name)
         data = tensordict.get(in_key)
@@ -405,19 +410,41 @@ class VecGymEnvTransform(Transform):
             Defaults to `"final"`.
         missing_obs_value (Any, optional): default value to use as placeholder for missing
             last observations. Defaults to `np.nan`.
+        native_autoreset (bool, optional): if ``True``, leaves the native
+            auto-reset observation available to the environment wrapper so it
+            can be cloned into the next root observation, while the terminal
+            floating point ``"next"`` observation is marked with ``NaN``.
+            Defaults to ``False``.
 
     .. note:: In general, this class should not be handled directly. It is
         created whenever a vectorized environment is placed within a :class:`GymWrapper`.
 
     """
 
-    def __init__(self, final_name: str = "final", missing_obs_value: Any = np.nan):
+    def __init__(
+        self,
+        final_name: str = "final",
+        missing_obs_value: Any = np.nan,
+        *,
+        native_autoreset: bool = False,
+    ):
         self.final_name = final_name
+        self.native_autoreset = native_autoreset
         super().__init__()
         self._memo = {}
         if not isinstance(missing_obs_value, torch.Tensor):
             missing_obs_value = torch.tensor(missing_obs_value)
         self.missing_obs_value = missing_obs_value
+
+    def _missing_obs_value_for(self, obs: torch.Tensor) -> torch.Tensor:
+        missing_obs_value = self.missing_obs_value
+        if (
+            missing_obs_value.dtype.is_floating_point
+            and not obs.dtype.is_floating_point
+            and torch.isnan(missing_obs_value).any()
+        ):
+            return torch.zeros((), dtype=obs.dtype, device=obs.device)
+        return missing_obs_value.to(dtype=obs.dtype, device=obs.device)
 
     def set_container(self, container: Transform | EnvBase) -> None:
         out = super().set_container(container)
@@ -428,6 +455,8 @@ class VecGymEnvTransform(Transform):
     def _step(
         self, tensordict: TensorDictBase, next_tensordict: TensorDictBase
     ) -> TensorDictBase:
+        if self.native_autoreset:
+            return next_tensordict
         # save the final info
         done = False
         for done_key in self.done_keys:
@@ -448,7 +477,8 @@ class VecGymEnvTransform(Transform):
             else:
                 saved_next = next_tensordict.select(*self.obs_keys).clone()
                 for obs_key in self.obs_keys:
-                    next_tensordict[obs_key][done] = self.missing_obs_value
+                    obs = next_tensordict[obs_key]
+                    obs[done] = self._missing_obs_value_for(obs)
 
             self._memo["saved_next"] = saved_next
         else:
@@ -458,6 +488,9 @@ class VecGymEnvTransform(Transform):
     def _reset(
         self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
     ) -> TensorDictBase:
+        if self.native_autoreset:
+            tensordict_reset.pop(self.final_name, None)
+            return tensordict_reset
         done = self._memo.get("done", None)
         reset = tensordict.get("_reset", done)
         if done is not None:

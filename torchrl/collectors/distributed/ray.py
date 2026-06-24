@@ -16,7 +16,7 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 
 from torchrl._utils import as_remote, logger as torchrl_logger
-from torchrl.collectors._base import BaseCollector
+from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import DEFAULT_EXPLORATION_TYPE
 from torchrl.collectors._multi_async import MultiAsyncCollector
 from torchrl.collectors._multi_sync import MultiSyncCollector
@@ -246,7 +246,7 @@ class RayCollector(BaseCollector):
             This is equivalent to `max_weight_update_interval=0`.
             Defaults to ``False``, i.e. updates have to be executed manually
             through
-            :meth:`torchrl.collectors.DataCollector.update_policy_weights_`
+            :meth:`torchrl.collectors.Collector.update_policy_weights_`
         max_weight_update_interval (int, optional): the maximum number of
             batches that can be collected before the policy weights of a worker
             is updated.
@@ -274,7 +274,7 @@ class RayCollector(BaseCollector):
 
             .. note:: Weight synchronization is lazily initialized. When using ``policy_factory``
                 without a central ``policy``, weight sync is deferred until the first call to
-                :meth:`~torchrl.collectors.DataCollector.update_policy_weights_` with actual weights.
+                :meth:`~torchrl.collectors.Collector.update_policy_weights_` with actual weights.
                 This allows sub-collectors to each have their own independent policies created via
                 the factory. If you have a central policy and want to sync its weights to remote
                 collectors, call ``update_policy_weights_(policy)`` before starting iteration.
@@ -550,12 +550,35 @@ class RayCollector(BaseCollector):
         else:
             self._frames_per_batch_corrected = frames_per_batch
 
+        # When the inner collector is a Multi*Collector built from a
+        # policy_factory (no policy instance), the inner collector's
+        # auto-scheme branch in MultiCollector only handles
+        # isinstance(policy, nn.Module); a remote update_policy_weights_(weights)
+        # would otherwise propagate to the remote node's main process but
+        # never reach its worker subprocesses. Inject a default
+        # SharedMemWeightSyncScheme on the inner collector so the broadcast
+        # actually lands. Only when the user hasn't already supplied one.
+        needs_inner_shared_mem_scheme = (
+            policy is None
+            and any(policy_factory)
+            and collector_class in (MultiSyncCollector, MultiAsyncCollector)
+        )
+
         # update collector kwargs
         for i, collector_kwarg in enumerate(self.collector_kwargs):
             # Don't pass policy_factory if we have a policy - remote collectors need the policy object
             # to be able to apply weight updates
             if policy is None:
                 collector_kwarg["policy_factory"] = policy_factory[i]
+            if (
+                needs_inner_shared_mem_scheme
+                and "weight_sync_schemes" not in collector_kwarg
+            ):
+                from torchrl.weight_update import SharedMemWeightSyncScheme
+
+                collector_kwarg["weight_sync_schemes"] = {
+                    "policy": SharedMemWeightSyncScheme()
+                }
             collector_kwarg["max_frames_per_traj"] = max_frames_per_traj
             collector_kwarg["init_random_frames"] = (
                 init_random_frames // self.num_collectors
@@ -920,6 +943,46 @@ class RayCollector(BaseCollector):
             [
                 collector.get_distant_attr.remote(attr)
                 for collector in self.remote_collectors
+            ]
+        )
+
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install per-actor :class:`_ProfilerHook` on each selected remote actor.
+
+        Each actor receives its own ``_ProfilerHook(config, worker_idx=idx)``
+        through ``set_post_collect_hook`` (a regular method on
+        :class:`BaseCollector`) — Ray actor handles can call methods but not
+        property setters directly. Actors not in ``config.workers`` are left
+        untouched.
+        """
+        targeted = [idx for idx in config.workers if idx < len(self.remote_collectors)]
+        futures = [
+            self.remote_collectors[idx].set_post_collect_hook.remote(
+                _ProfilerHook(config, worker_idx=idx)
+            )
+            for idx in targeted
+        ]
+        ray.get(futures)
+
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Stop the per-actor profiler hooks and clear ``post_collect_hook``."""
+        targeted = [idx for idx in config.workers if idx < len(self.remote_collectors)]
+        # Best-effort stop — early-stop is harmless if it already auto-stopped.
+        try:
+            ray.get(
+                [
+                    self.remote_collectors[idx].cascade_execute.remote(
+                        "post_collect_hook.stop"
+                    )
+                    for idx in targeted
+                ]
+            )
+        except Exception:
+            pass
+        ray.get(
+            [
+                self.remote_collectors[idx].set_post_collect_hook.remote(None)
+                for idx in targeted
             ]
         )
 

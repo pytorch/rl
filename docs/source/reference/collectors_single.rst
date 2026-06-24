@@ -47,6 +47,7 @@ internally; it does **not** determine the output batch size when
         frames_per_batch=200,  # controls internal polling frequency
         total_frames=10000,
         trajs_per_batch=4,
+        traj_format="padded",
     )
 
     for batch in collector:
@@ -55,28 +56,37 @@ internally; it does **not** determine the output batch size when
         loss = compute_loss(batch, valid)
         collector.update_policy_weights_()
 
+**Unpadded batches**: with ``traj_format="cat"`` the *N* trajectories are
+concatenated along time instead of stacked and padded.  Each yield is then a
+flat ``[sum_i T_i]`` batch with no mask: trajectories are contiguous, in
+completion order, with ``("next", "done")`` ``True`` at the last step of each
+and ``("collector", "traj_ids")`` identifying them.  Prefer it when episode
+lengths vary widely or frames are large — the padded layout materializes
+``N * max_traj_len`` frames, the flat one only the steps actually collected.
+
+.. note::
+    The current default layout is ``"padded"``, but it will change to
+    ``"cat"`` in torchrl v0.16.  Omitting ``traj_format`` while yielding
+    ``trajs_per_batch`` batches emits a :class:`FutureWarning`; pass the
+    layout explicitly.
+
 **Replay buffer integration**: when a ``replay_buffer`` is also provided,
 complete trajectories are written to the buffer as **flat 1-D sequences** (no
 padding) instead of being yielded.  This is the recommended pattern for
-off-policy training with :class:`~torchrl.data.SliceSampler`, especially
+off-policy training with :class:`~torchrl.data.replay_buffers.SliceSampler`, especially
 with multi-process collectors where fixed-frame batches can silently mix
 episodes.  See :ref:`collectors_replay_trajs` for full details and examples.
 
 .. note::
-    The following legacy names are also available for backward compatibility:
-
-    - ``DataCollectorBase`` → ``BaseCollector``
-    - ``SyncDataCollector`` → ``Collector``
-    - ``aSyncDataCollector`` → ``AsyncCollector``
-    - ``_MultiDataCollector`` → ``MultiCollector``
-    - ``MultiSyncDataCollector`` → ``MultiSyncCollector``
-    - ``MultiaSyncDataCollector`` → ``MultiAsyncCollector``
+    The deprecated collector aliases were removed in v0.13. Use the canonical
+    classes directly: ``BaseCollector``, ``Collector``, ``AsyncCollector``,
+    ``MultiCollector``, ``MultiSyncCollector``, and ``MultiAsyncCollector``.
 
 Using AsyncBatchedCollector
 ---------------------------
 
 The :class:`AsyncBatchedCollector` pairs an :class:`~torchrl.envs.AsyncEnvPool`
-with an :class:`~torchrl.modules.InferenceServer` to pipeline environment
+with an :class:`~torchrl.modules.inference_server.InferenceServer` to pipeline environment
 stepping and batched GPU inference.  You only need to supply **env factories**
 and a **policy** -- all internal wiring is handled automatically:
 
@@ -197,7 +207,7 @@ Data collectors that have been started with `start()` should be shut down using
 
     For maximum throughput with trajectory-based training (e.g. recurrent
     policies, decision transformers), combine ``start()`` with
-    ``trajs_per_batch`` and a :class:`~torchrl.data.SliceSampler`:
+    ``trajs_per_batch`` and a :class:`~torchrl.data.replay_buffers.SliceSampler`:
 
     .. code-block:: python
 

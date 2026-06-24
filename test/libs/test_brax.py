@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import gc
+import importlib.util
 import os
 
 import numpy as np
@@ -14,9 +15,18 @@ from tensordict import assert_allclose_td, TensorDict
 from tensordict.nn import TensorDictModule
 
 from torchrl.envs import SerialEnv
+from torchrl.envs.batched_envs import ParallelEnv
 from torchrl.envs.libs.brax import _has_brax, BraxEnv, BraxWrapper
+from torchrl.envs.libs.jax_utils import (
+    _ndarray_to_tensor,
+    _tensor_to_ndarray,
+    _tree_flatten,
+)
 from torchrl.envs.utils import check_env_specs
 from torchrl.testing import get_available_devices
+
+_has_jax = importlib.util.find_spec("jax") is not None
+_has_psutil = importlib.util.find_spec("psutil") is not None
 
 
 @pytest.mark.skipif(not _has_brax, reason="brax not installed")
@@ -26,8 +36,6 @@ class TestBrax:
     @pytest.fixture(autouse=True)
     def _setup_jax(self):
         """Configure JAX for proper GPU initialization."""
-        import os
-
         import jax
 
         # Set JAX environment variables for better GPU handling
@@ -116,11 +124,6 @@ class TestBrax:
     def test_brax_consistency(self, envname, batch_size, requires_grad, device):
         import jax
         import jax.numpy as jnp
-        from torchrl.envs.libs.jax_utils import (
-            _ndarray_to_tensor,
-            _tensor_to_ndarray,
-            _tree_flatten,
-        )
 
         env = BraxEnv(
             envname, batch_size=batch_size, requires_grad=requires_grad, device=device
@@ -224,8 +227,6 @@ class TestBrax:
 
     def test_num_workers_returns_lazy_parallel_env(self, envname, device):
         """Ensure BraxEnv with num_workers > 1 returns a lazy ParallelEnv."""
-        from torchrl.envs.batched_envs import ParallelEnv
-
         env = BraxEnv(envname, num_workers=3, device=device)
         try:
             assert isinstance(env, ParallelEnv)

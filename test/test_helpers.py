@@ -75,8 +75,6 @@ else:
 def dreamer_constructor_fixture():
 
     # we hack the env constructor
-    import sys
-
     sys.path.append(
         str(pathlib.Path(__file__).parent.parent / "sota-implementations" / "dreamer")
     )

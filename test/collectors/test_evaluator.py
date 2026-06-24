@@ -17,7 +17,7 @@ from torchrl.collectors import Evaluator
 from torchrl.collectors._evaluator import _freeze_vecnorm, _wrap_env_factory_frozen
 from torchrl.envs import SerialEnv, TransformedEnv
 from torchrl.envs.env_creator import EnvCreator
-from torchrl.envs.transforms import RewardSum, StepCounter, VecNormV2
+from torchrl.envs.transforms import Compose, RewardSum, StepCounter, VecNormV2
 from torchrl.testing.mocking_classes import ContinuousActionVecMockEnv
 from torchrl.weight_update import WeightStrategy
 
@@ -61,6 +61,22 @@ class TestEvaluatorSync:
             weights = Evaluator.extract_weights(train_policy)
             metrics = evaluator.evaluate(weights=weights, step=0)
             assert "eval/reward" in metrics
+        finally:
+            evaluator.shutdown()
+
+    def test_evaluate_plain_tensordict_weights_preserves_state_dict(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=5)
+        try:
+            weights = TensorDict.from_module(policy).data.detach().clone().cpu()
+            state_dict_keys = set(policy.state_dict())
+            assert state_dict_keys
+
+            evaluator.evaluate(weights=weights, step=0)
+            evaluator.evaluate(weights=weights, step=1)
+
+            assert set(policy.state_dict()) == state_dict_keys
         finally:
             evaluator.shutdown()
 
@@ -201,11 +217,25 @@ class TestEvaluatorAsync:
     def test_busy_policy_error(self):
         env = _make_env()
         policy = _make_policy(env)
-        evaluator = Evaluator(env, policy, max_steps=200)
+        evaluator = Evaluator(env, policy, max_steps=200, busy_policy="error")
         try:
-            evaluator.trigger_eval(step=0)
+            assert evaluator.trigger_eval(step=0)
             with pytest.raises(RuntimeError, match="busy_policy='queue'"):
                 evaluator.trigger_eval(step=1)
+        finally:
+            evaluator.shutdown()
+
+    def test_busy_policy_skip(self):
+        env = _make_env()
+        policy = _make_policy(env)
+        evaluator = Evaluator(env, policy, max_steps=200)
+        try:
+            assert evaluator.trigger_eval(step=0)
+            assert not evaluator.trigger_eval(step=1)
+            result = evaluator.wait(timeout=30)
+            assert result is not None
+            assert result["eval/step"] == 0
+            assert evaluator.trigger_eval(step=2)
         finally:
             evaluator.shutdown()
 
@@ -214,8 +244,8 @@ class TestEvaluatorAsync:
         policy = _make_policy(env)
         evaluator = Evaluator(env, policy, max_steps=200, busy_policy="queue")
         try:
-            evaluator.trigger_eval(step=0)
-            evaluator.trigger_eval(step=1)
+            assert evaluator.trigger_eval(step=0)
+            assert evaluator.trigger_eval(step=1)
             result0 = evaluator.wait(timeout=30)
             result1 = evaluator.wait(timeout=30)
             assert result0 is not None
@@ -306,6 +336,7 @@ class TestEvaluatorAsync:
         assert elapsed < 10.0, f"Shutdown took {elapsed:.1f}s, expected < 10s"
 
 
+@pytest.mark.gpu
 @pytest.mark.skipif(
     not torch.cuda.is_available() or torch.cuda.device_count() < 2,
     reason="Requires 2+ CUDA devices",
@@ -864,6 +895,40 @@ class TestWeightStrategyExtraState:
         assert torch.allclose(dst.running_var, torch.tensor(2.0).expand(4))
         assert dst.count.item() == 50
 
+    def test_apply_extra_state_is_idempotent(self):
+        """apply_weights does not consume __extra_state__ from the input weights."""
+        src = _ModuleWithExtraState(dim=4)
+        src.running_mean.fill_(11.0)
+        src.count.fill_(9)
+        dst = _ModuleWithExtraState(dim=4)
+
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = strategy.extract_weights(src)
+
+        strategy.apply_weights(dst, weights, inplace=True)
+        dst.running_mean.zero_()
+        dst.count.zero_()
+        strategy.apply_weights(dst, weights, inplace=True)
+
+        assert "__extra_state__" in weights.keys()
+        assert torch.allclose(dst.running_mean, torch.tensor(11.0).expand(4))
+        assert dst.count.item() == 9
+
+    def test_apply_plain_tensor_weights_outofplace_preserves_state_dict(self):
+        """Out-of-place application casts plain tensors back to parameters."""
+        src = nn.Linear(4, 4)
+        dst = nn.Linear(4, 4)
+        strategy = WeightStrategy(extract_as="tensordict")
+        weights = TensorDict.from_module(src).data.detach().clone()
+        state_dict_keys = set(dst.state_dict())
+
+        strategy.apply_weights(dst, weights, inplace=False)
+        strategy.apply_weights(dst, weights, inplace=False)
+
+        assert set(dst.state_dict()) == state_dict_keys
+        assert torch.allclose(dst.weight, src.weight)
+        assert torch.allclose(dst.bias, src.bias)
+
     def test_apply_extra_state_outofplace(self):
         """apply_weights out-of-place also restores extra_state."""
         src = _ModuleWithExtraState(dim=4)
@@ -1012,8 +1077,6 @@ class TestEvaluatorVecNormFreeze:
 
     def test_freeze_vecnorm_nested(self):
         """_freeze_vecnorm handles nested Compose transforms."""
-        from torchrl.envs.transforms import Compose
-
         base = ContinuousActionVecMockEnv()
         vecnorm = VecNormV2(in_keys=["observation"], out_keys=["observation"])
         env = TransformedEnv(base, Compose(StepCounter(), vecnorm))

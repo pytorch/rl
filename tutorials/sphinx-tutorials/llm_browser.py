@@ -193,8 +193,8 @@ env = env.append_transform(RewardTransform())
 # that simulates LLM responses and executes tool actions.
 #
 # In a real scenario, this would be handled by an LLM policy (like
-# :class:`~torchrl.modules.llm.policies.TransformersWrapper` or
-# :class:`~torchrl.modules.llm.policies.vLLMWrapper`). Here we simulate the
+# :class:`~torchrl.modules.llm.TransformersWrapper` or
+# :class:`~torchrl.modules.llm.vLLMWrapper`). Here we simulate the
 # LLM's output manually to demonstrate the environment flow.
 #
 # The key insight is that the ChatEnv works with a :class:`~torchrl.data.llm.History`
@@ -347,7 +347,7 @@ env.close()
 #
 # 1. **ChatEnv**: The base environment that manages conversation state using
 #    :class:`~torchrl.data.llm.History` objects
-# 2. **Tool Transforms**: Like :class:`~torchrl.envs.llm.BrowserTransform` that
+# 2. **Tool Transforms**: Like :class:`~torchrl.envs.llm.transforms.BrowserTransform` that
 #    execute tools and inject results back into the conversation
 # 3. **Reward Transforms**: Custom transforms that assign rewards based on
 #    conversation content
@@ -356,5 +356,5 @@ env.close()
 #
 # In a real application, you would replace the `simulate_llm_response` helper
 # with an actual LLM policy. See the :ref:`ref_llms` documentation for examples
-# of using :class:`~torchrl.modules.llm.policies.TransformersWrapper` and
-# :class:`~torchrl.modules.llm.policies.vLLMWrapper` with these environments.
+# of using :class:`~torchrl.modules.llm.TransformersWrapper` and
+# :class:`~torchrl.modules.llm.vLLMWrapper` with these environments.

@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import functools
+
+import importlib.util
 import os
 import random
 import sys
@@ -16,6 +18,11 @@ import numpy as np
 
 import pytest
 import torch
+
+# Note: torchrl is imported lazily inside fixtures because this conftest must
+# load even when torchrl is not installed (see test/test_setup.py and the
+# test-setup-minimal CI job).
+_has_transformers = importlib.util.find_spec("transformers") is not None
 
 CALL_TIMES = defaultdict(float)
 IS_OSX = sys.platform == "darwin"

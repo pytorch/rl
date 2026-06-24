@@ -15,7 +15,7 @@ from tensordict.utils import NestedKey
 from torch import distributions as d
 
 from torchrl.objectives.common import LossModule
-from torchrl.objectives.utils import _reduce, distance_loss
+from torchrl.objectives.utils import distance_loss
 
 
 class OnlineDTLoss(LossModule):
@@ -238,7 +238,9 @@ class OnlineDTLoss(LossModule):
         if target_actions.requires_grad:
             raise RuntimeError("target action cannot be part of a graph.")
 
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             action_dist = self.actor_network.get_dist(tensordict)
 
         log_likelihood = action_dist.log_prob(target_actions)
@@ -265,7 +267,9 @@ class OnlineDTLoss(LossModule):
             out["alpha"] = self.alpha.detach()
             td_out = TensorDict(out, [])
             td_out = td_out.named_apply(
-                lambda name, value: _reduce(value, reduction=self.reduction).squeeze(-1)
+                lambda name, value: self._reduce_loss(
+                    value, tensordict=tensordict
+                ).squeeze(-1)
                 if name.startswith("loss_")
                 else value,
             )
@@ -381,7 +385,9 @@ class DTLoss(LossModule):
         tensordict = tensordict.copy()
         target_actions = tensordict.get(self.tensor_keys.action_target).detach()
 
-        with self.actor_network_params.to_module(self.actor_network):
+        with self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             pred_actions = self.actor_network(tensordict).get(
                 self.tensor_keys.action_pred
             )
@@ -390,7 +396,7 @@ class DTLoss(LossModule):
             target_actions,
             loss_function=self.loss_function,
         )
-        loss = _reduce(loss, reduction=self.reduction)
+        loss = self._reduce_loss(loss, tensordict=tensordict)
         td_out = TensorDict(loss=loss)
         self._clear_weakrefs(
             tensordict,

@@ -8,6 +8,9 @@ import importlib.util
 
 import pytest
 import torch
+from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
+from torchrl.modules.llm.backends import AsyncVLLM
+from torchrl.modules.llm.policies.transformers_wrapper import TransformersWrapper
 
 _has_vllm = importlib.util.find_spec("vllm") is not None
 _has_ray = importlib.util.find_spec("ray") is not None
@@ -41,8 +44,6 @@ class TestAsyncVLLMIntegration:
     @pytest.mark.slow
     def test_vllm_api_compatibility(self, sampling_params):
         """Test that AsyncVLLM supports the same inputs as vLLM.LLM.generate()."""
-        from torchrl.modules.llm.backends import AsyncVLLM
-
         # Create AsyncVLLM service
         service = AsyncVLLM.from_pretrained(
             MODEL_NAME,
@@ -114,12 +115,6 @@ class TestAsyncVLLMIntegration:
     @pytest.mark.slow
     def test_weight_updates_with_transformer(self, sampling_params):
         """Test weight updates using vLLMUpdater with a real transformer model."""
-        from torchrl.collectors.llm.weight_update.vllm import vLLMUpdater
-        from torchrl.modules.llm.backends import AsyncVLLM
-        from torchrl.modules.llm.policies.transformers_wrapper import (
-            TransformersWrapper,
-        )
-
         # Create a transformer policy with the same model
         policy = TransformersWrapper(
             model=MODEL_NAME,

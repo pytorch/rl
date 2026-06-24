@@ -8,7 +8,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -25,17 +25,20 @@ from torchrl._utils import (
     _set_mp_start_method_if_unset,
     RL_WARNINGS,
 )
-from torchrl.collectors._base import BaseCollector
+from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
-    _InterruptorManager,
-    _is_osx,
+    _Interruptor,
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
     INSTANTIATE_TIMEOUT,
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _make_meta_policy_cm, _TrajectoryPool
+from torchrl.collectors.utils import (
+    _make_meta_policy_cm,
+    _TrajectoryPool,
+    _validate_traj_format,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -221,7 +224,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
-            that will be allowed to finished collecting their rollout before the rest are forced to end early.
+            that will be allowed to finish collecting their rollout before the rest are forced to end early.
+            Frames that were not collected by the preempted workers are marked invalid: their
+            ``("collector", "traj_ids")`` entry is ``-1`` and, with ``cat_results="stack"``, a
+            ``("collector", "mask")`` entry flags the valid frames (with ``cat_results=-1`` the
+            invalid frames are dropped from the batch instead).
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
         num_sub_threads (int, optional): number of threads of the subprocesses.
@@ -257,10 +264,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             last step has ``("next", "done") == True``) to the shared replay
             buffer as flat 1-D sequences — no padding, no accumulation.
 
-            When set *without* ``replay_buffer``, each worker assembles
-            trajectories and the multi-collector yields zero-padded batches
-            of shape ``(trajs_per_batch, max_traj_len)`` with a
-            ``("collector", "mask")`` boolean field.
+            When set *without* ``replay_buffer``, the multi-collector
+            assembles trajectories from the worker batches and yields
+            zero-padded batches of shape ``(trajs_per_batch, max_traj_len)``
+            with a ``("collector", "mask")`` boolean field, or flat unpadded
+            concatenations with ``traj_format="cat"``.
 
             Both the iteration pattern (``for data in collector``) and the
             async ``start()`` pattern are supported.
@@ -270,6 +278,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and replay-buffer
             storage contract.
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set without a ``replay_buffer``:
+            ``"padded"`` for zero-padded
+            ``(trajs_per_batch, max_traj_len)`` stacks with a
+            ``("collector", "mask")`` entry, ``"cat"`` for flat unpadded
+            concatenations along time (trajectories delimited by
+            ``("next", "done")`` and ``("collector", "traj_ids")``).
+            Replay-buffer writes are always flat. Raises if set without
+            ``trajs_per_batch``. Defaults to ``None``, which currently
+            resolves to ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -291,6 +311,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             or `ManiSkills <https://github.com/haosulab/ManiSkill/>`_) cuda synchronization may cause unexpected
             crashes.
             Defaults to ``False``.
+        auto_register_policy_transforms (bool, optional): forwarded to each
+            worker :class:`~torchrl.collectors.Collector`. When ``True``,
+            workers append :class:`~torchrl.envs.transforms.InitTracker` and
+            recurrent-state :class:`~torchrl.envs.transforms.TensorDictPrimer`
+            transforms to their envs if the env specs don't already provide
+            them. ``False`` disables it; ``None`` (default through v0.14)
+            preserves pre-v0.15 behavior and emits a
+            :class:`FutureWarning` when wrapping would have been needed.
+            Default flips to ``True`` in v0.15.
         weight_updater (WeightUpdaterBase or constructor, optional): An instance of :class:`~torchrl.collectors.WeightUpdaterBase`
             or its subclass, responsible for updating the policy weights on remote inference workers.
             If not provided, a :class:`~torchrl.collectors.MultiProcessedWeightUpdater` will be used by default,
@@ -304,14 +333,48 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         weight_recv_schemes (dict[str, WeightSyncScheme], optional): Dictionary of weight sync schemes for
             RECEIVING weights from parent collectors. Keys are model identifiers (e.g., "policy")
             and values are WeightSyncScheme instances configured to receive weights.
-            This enables cascading in hierarchies like: RPCDataCollector -> MultiSyncCollector -> Collector.
+            This enables cascading in hierarchies like: RPCCollector -> MultiSyncCollector -> Collector.
             Received weights are automatically propagated to sub-collectors if matching model_ids exist.
             Defaults to ``None``.
         track_policy_version (bool or PolicyVersion, optional): if ``True``, the collector will track the version of the policy.
-            This will be mediated by the :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform, which will be added to the environment.
-            Alternatively, a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` instance can be passed, which will be used to track
-            the policy version.
-            Defaults to `False`.
+            A :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion` transform is
+            installed on each worker's environment, tagging every collected frame with the
+            current version under the ``"policy_version"`` key. Each worker's transform is
+            bumped after the new weights have actually been applied in that worker, so
+            per-frame tagging tracks real weight updates rather than rollout iterations.
+
+            Note that in asynchronous mode a batch that was already in flight when
+            :meth:`update_policy_weights_` is called may straddle the bump (some frames
+            tagged with the old version, the remainder with the new). Treat the value as
+            the version under which each individual frame was produced, not as a batch-level
+            label.
+
+            For multi-process collectors, the ``"policy_version"`` entries in the
+            collected tensordict are produced by worker-local transforms and are the
+            source of truth for data provenance. The parent collector's
+            :attr:`policy_version` property exposes only the parent-side tracker state
+            and should not be used as a label for a returned batch.
+
+            The recommended path is ``track_policy_version=True``: let the collector own
+            the transform. Passing a :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+            instance directly is reserved for advanced use cases that wire up a
+            ``PolicyVersion`` **without** going through a collector. With multi-process
+            collectors that pre-built tracker lives in the *parent* and is not propagated
+            into workers, so per-frame tagging will still be driven by per-worker
+            transforms — favor ``True``.
+
+            Defaults to ``False``.
+        compact_obs (bool, optional): if ``True``, each worker drops the
+            observation and state keys from the ``("next", ...)`` sub-tensordict
+            before stacking. See
+            :class:`~torchrl.collectors.Collector` for the full
+            explanation and tradeoffs (most notably:
+            :class:`~torchrl.envs.transforms.MultiStepTransform` cannot be used
+            in compact mode), plus the pairing with
+            :class:`~torchrl.envs.transforms.NextStateReconstructor` at
+            sampling time, the boundary-preserving lossy alternative
+            :class:`~torchrl.envs.transforms.NextObservationDelta`, and the
+            *Memory-efficient RL training* tutorial. Defaults to ``False``.
         worker_idx (int, optional): the index of the worker.
 
     Examples:
@@ -393,13 +456,22 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         track_policy_version: bool = False,
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
+        trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
         init_fn: Callable[[], None] | None = None,
+        auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
         post_collect_hook: Callable[[TensorDictBase], None] | None = None,
+        compact_obs: bool = False,
     ):
         self.closed = True
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
+        self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
+        self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
             post_collect_hook=post_collect_hook,
@@ -453,7 +525,6 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         # Set up replay buffer
         self._use_buffers = use_buffers
         self.replay_buffer = replay_buffer
-        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up policy and weights
         if trust_policy is None:
@@ -469,39 +540,21 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise TypeError(
                 "Cannot specify both weight_sync_schemes and weight_updater."
             )
-        # Check if policy_factory entries are all the same (replicated from single factory)
-        # vs different factories per worker.
-        has_uniform_policy_factory = any(policy_factory) and all(
-            f is policy_factory[0] for f in policy_factory
-        )
-        has_distinct_policy_factory = (
-            any(policy_factory) and not has_uniform_policy_factory
-        )
         if (
             weight_sync_schemes is not None
             and not weight_sync_schemes
             and weight_updater is None
+            and isinstance(policy, nn.Module)
         ):
-            if isinstance(policy, nn.Module):
-                weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
-            elif has_uniform_policy_factory:
-                _probe = policy_factory[0]()
-                if isinstance(_probe, nn.Module):
-                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
-                del _probe
-            elif has_distinct_policy_factory:
-                _probe = next(f() for f in policy_factory if f is not None)
-                if isinstance(_probe, nn.Module):
-                    weight_sync_schemes["policy"] = SharedMemWeightSyncScheme(
-                        per_worker_weights=True
-                    )
-                del _probe
+            weight_sync_schemes["policy"] = SharedMemWeightSyncScheme()
 
         self._setup_multi_weight_sync(weight_updater, weight_sync_schemes)
 
         # Store policy and policy_factory - temporary set to make them visible to the receiver
         self.policy = policy
         self.policy_factory = policy_factory
+
+        self._setup_multi_replay_buffer(replay_buffer, extend_buffer)
 
         # Set up weight receivers if provided
         if weight_recv_schemes is not None:
@@ -523,6 +576,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
         self.reset_at_each_iter = reset_at_each_iter
         self.postproc = postproc
+        self.compact_obs = bool(compact_obs)
         self.max_frames_per_traj = (
             int(max_frames_per_traj) if max_frames_per_traj is not None else 0
         )
@@ -851,19 +905,33 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             raise RuntimeError(
                 "Cannot split trajectories when reset_when_done is False."
             )
+        elif split_trajs:
+            warnings.warn(
+                "split_trajs=True produces a (N_traj, T_max) zero-padded "
+                "tensordict with a 'mask' key. For sequence training, prefer "
+                "the contiguous-trajectory layout: pass a replay_buffer to "
+                "the collector and sample with "
+                ":class:`~torchrl.data.SliceSampler` (variable-length slices, "
+                "no padding, no mask). See "
+                ":ref:`Data layout: contiguous trajectories <data-layout>` "
+                "in the docs. This advisory will become a "
+                "DeprecationWarning in a future release.",
+                stacklevel=3,
+            )
         self.split_trajs = split_trajs
 
     def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
         """Set up preemptive threshold for early stopping."""
         if preemptive_threshold is not None:
-            if _is_osx:
-                raise NotImplementedError(
-                    "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
+            preemptive_threshold = float(preemptive_threshold)
+            if not 0.0 <= preemptive_threshold <= 1.0:
+                raise ValueError(
+                    f"preemptive_threshold must be between 0.0 and 1.0, got {preemptive_threshold}."
                 )
-            self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
-            manager = _InterruptorManager()
-            manager.start()
-            self.interruptor = manager._Interruptor()
+            self.preemptive_threshold = preemptive_threshold
+            # A threshold of 1.0 waits for every worker, so preemption can never
+            # fire: skip the interruptor and its per-step polling in the workers.
+            self.interruptor = _Interruptor() if preemptive_threshold < 1.0 else None
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None
@@ -948,6 +1016,10 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         )
         if not is_init:
             storage = self.replay_buffer._storage
+            if self._should_init_replay_buffer_from_worker(storage):
+                self._enable_replay_buffer_worker_init(storage)
+                self.replay_buffer.share()
+                return
             if self.local_init_rb and getattr(storage, "shared_init", False):
                 # New behavior: storage handles all coordination itself
                 # Nothing to do here - the storage will coordinate during first write
@@ -963,6 +1035,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 fake_td = self.create_env_fn[0](
                     **self.create_env_kwargs[0]
                 ).fake_tensordict()
+            fake_td = self._add_policy_outputs_to_fake_td(fake_td)
             if getattr(self, "_worker_trajs_per_batch", None) is not None:
                 # With trajs_per_batch, workers write flat 1-D timesteps to
                 # the buffer.  Initialise the storage as 1-D so that the
@@ -979,6 +1052,62 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                 # Use extend to avoid time-related transforms to fail
                 self.replay_buffer.extend(fake_td.unsqueeze(-1))
             self.replay_buffer.empty()
+
+    def _should_init_replay_buffer_from_worker(self, storage):
+        return (
+            self.local_init_rb
+            and self.policy is None
+            and any(self.policy_factory)
+            and hasattr(storage, "shared_init")
+            and hasattr(storage, "_make_init_directory")
+        )
+
+    @staticmethod
+    def _enable_replay_buffer_worker_init(storage):
+        if getattr(storage, "_compilable", False):
+            raise RuntimeError(
+                "Cannot initialize a compilable replay-buffer storage from "
+                "multi-collector workers."
+            )
+        if getattr(storage, "shared_init", False):
+            return
+        storage.shared_init = True
+        storage._init_lock = mp.Lock()
+        storage._init_event = mp.Event()
+        storage._make_init_directory()
+
+    def _add_policy_outputs_to_fake_td(self, fake_td):
+        policy = getattr(self, "policy", None)
+        out_keys = getattr(policy, "out_keys", None)
+        if not out_keys:
+            return fake_td
+        with torch.no_grad():
+            policy_output = policy(fake_td.copy())
+        policy_output_keys = policy_output.keys(True, True)
+        for key in out_keys:
+            if key in fake_td.keys(True, True) or key not in policy_output_keys:
+                continue
+            fake_td.set(key, policy_output.get(key))
+        return fake_td
+
+    def fake_tensordict(self) -> TensorDictBase:
+        """Not implemented for multi-process collectors.
+
+        Honoring the multi-collector contract here would require either
+        creating an env in the main process (which defeats the purpose of
+        a multi-process collector — Isaac Lab / mujoco-mjx etc. can only
+        run in workers) or routing a request to a worker over the pipe
+        (which requires workers to be alive and adds protocol surface).
+        Neither is implemented; call :meth:`~torchrl.collectors.Collector.fake_tensordict`
+        on a single :class:`~torchrl.collectors.Collector` instead, or
+        build the template directly from the env spec.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__}.fake_tensordict() is not implemented. "
+            "Use Collector.fake_tensordict() on a single-process collector "
+            "for storage / cudagraph warmup, or build the template from the "
+            "env spec directly."
+        )
 
     @classmethod
     def _total_workers_from_env(cls, env_creators):
@@ -1257,11 +1386,14 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
                     "weight_sync_schemes": self._weight_sync_schemes,
                     "worker_idx": i,  # Worker index for queue-based weight distribution
                     "init_random_frames": self.init_random_frames,
-                    "profile_config": self._profile_config,
                     "trajs_per_batch": self._worker_trajs_per_batch,
+                    "trajs_per_write": self.trajs_per_write,
                     "init_fn": self._worker_init_fn,
+                    "auto_register_policy_transforms": self._auto_register_policy_transforms,
+                    "track_policy_version": self.policy_version_tracker is not None,
                     "pre_collect_hook": self._worker_pre_collect_hook,
                     "post_collect_hook": self._worker_post_collect_hook,
+                    "compact_obs": self.compact_obs,
                 }
                 proc = _ProcessNoWarnCtx(
                     target=_main_async_collector,
@@ -1538,36 +1670,58 @@ also that the state dict is synchronised across processes if needed."""
         else:
             raise RuntimeError("Collector cannot be paused.")
 
-    def enable_profile(self, **kwargs) -> None:
-        """Enable profiling for collector worker rollouts.
+    def _install_profile_hooks(self, config: ProfileConfig) -> None:
+        """Install per-worker :class:`_ProfilerHook` on each selected worker.
 
-        For multi-process collectors, this sends the profile configuration
-        to the specified workers. Must be called before iteration starts.
-
-        See :meth:`BaseCollector.enable_profile` for full documentation.
+        Each worker gets its own ``_ProfilerHook(config, worker_idx=idx)``
+        wrapped in :class:`CloudpickleWrapper` and pushed via the existing
+        ``"setattr"`` pipe message. Workers not in ``config.workers`` are left
+        untouched.
         """
-        # First, call parent to validate and set _profile_config
-        super().enable_profile(**kwargs)
+        if not hasattr(self, "pipes") or getattr(self, "closed", True):
+            raise RuntimeError(
+                "MultiCollector workers are not running; call enable_profile() "
+                "before close()/shutdown()."
+            )
+        _check_for_faulty_process(self.procs)
+        targeted = [idx for idx in config.workers if idx < self.num_workers]
+        for idx in targeted:
+            hook = CloudpickleWrapper(_ProfilerHook(config, worker_idx=idx))
+            self.pipes[idx].send((("post_collect_hook", hook), "setattr"))
+        for idx in targeted:
+            result, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
+            if msg != "setattr":
+                raise RuntimeError(f"Worker {idx}: Expected 'setattr' ack, got {msg}")
+            if isinstance(result, Exception):
+                raise result
 
-        # Send profile config to workers that should be profiled
-        if self._profile_config is not None:
-            for idx in self._profile_config.workers:
-                if idx < self.num_workers:
-                    self.pipes[idx].send((self._profile_config, "enable_profile"))
-
-            # Wait for confirmation from workers
-            for idx in self._profile_config.workers:
-                if idx < self.num_workers:
-                    if self.pipes[idx].poll(INSTANTIATE_TIMEOUT):
-                        _, msg = self.pipes[idx].recv()
-                        if msg != "profile_enabled":
-                            raise RuntimeError(
-                                f"Worker {idx}: Expected 'profile_enabled' message, got {msg}"
-                            )
-                    else:
-                        raise TimeoutError(
-                            f"Worker {idx}: Timed out waiting for profile confirmation."
-                        )
+    def _uninstall_profile_hooks(self, config: ProfileConfig) -> None:
+        """Stop the per-worker profiler hooks and clear ``post_collect_hook``."""
+        if not hasattr(self, "pipes") or getattr(self, "closed", True):
+            return
+        targeted = [idx for idx in config.workers if idx < self.num_workers]
+        # Stop the inner profiler — early-stop is harmless if it already auto-stopped.
+        for idx in targeted:
+            self.pipes[idx].send(
+                (("post_collect_hook.fn.stop", (), {}), "cascade_execute")
+            )
+        for idx in targeted:
+            try:
+                result, msg = self._recv_and_check(self.pipes[idx], worker_idx=idx)
+                if msg != "cascade_execute":
+                    raise RuntimeError(
+                        f"Worker {idx}: Expected 'cascade_execute' ack, got {msg}"
+                    )
+                if isinstance(result, Exception):
+                    raise result
+            except Exception:
+                # Swallow per-worker stop errors — we still want to clear the hook below.
+                pass
+        # Clear the hook on each targeted worker.
+        for idx in targeted:
+            self.pipes[idx].send((("post_collect_hook", None), "setattr"))
+        for idx in targeted:
+            self._recv_and_check(self.pipes[idx], worker_idx=idx)
 
     def _set_worker_attr(self, attr_name: str, value: Any) -> None:
         if not hasattr(self, "pipes") or getattr(self, "closed", True):
@@ -1808,6 +1962,9 @@ also that the state dict is synchronised across processes if needed."""
 
         """
         _check_for_faulty_process(self.procs)
+        # drop parent-level trajectory-assembly state (trajs_per_batch
+        # without a replay buffer assembles trajectories on this process)
+        self._flush_trajectory_assembly()
 
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]
@@ -1866,19 +2023,28 @@ also that the state dict is synchronised across processes if needed."""
 
     @property
     def policy_version(self) -> str | int | None:
-        """The current policy version."""
+        """The parent-side policy version.
+
+        For multi-process collectors, worker-local
+        :class:`~torchrl.envs.llm.transforms.policy_version.PolicyVersion`
+        transforms write the per-frame ``"policy_version"`` values in returned
+        batches. Those tensor entries are the source of truth for collected
+        data; this property is only the parent-side tracker state.
+        """
         if not hasattr(self.policy_version_tracker, "version"):
             return None
         return self.policy_version_tracker.version
 
     def get_policy_version(self) -> str | int | None:
-        """Get the current policy version.
+        """Get the parent-side policy version.
 
         This method exists to support remote calls in Ray actors, since properties
         cannot be accessed directly through Ray's RPC mechanism.
 
         Returns:
-            The current version number (int) or UUID (str), or None if version tracking is disabled.
+            The parent-side version number (int) or UUID (str), or ``None`` if
+            version tracking is disabled. For collected data, prefer the
+            per-frame ``"policy_version"`` tensor in returned batches.
         """
         return self.policy_version
 

@@ -22,7 +22,7 @@ from torch.nn import Parameter
 from torchrl._utils import rl_warnings
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules.tensordict_module.rnn import set_recurrent_mode
-from torchrl.objectives.utils import ValueEstimators
+from torchrl.objectives.utils import _reduce, default_value_kwargs, ValueEstimators
 from torchrl.objectives.value import ValueEstimatorBase
 
 try:
@@ -225,7 +225,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if copy:
             net = deepcopy(net)
         params = getattr(self, network_name + "_params")
-        params.to_module(net)
+        params.to_module(net, preserve_module_state=False)
         return net
 
     def from_stateful_net(self, network_name: str, stateful_net: nn.Module):
@@ -261,6 +261,35 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                     f"Setting '{key}' via the constructor is deprecated, use .set_keys(<key>='some_key') instead.",
                 )
 
+    @staticmethod
+    def _expand_loss_mask(mask: torch.Tensor, loss: torch.Tensor) -> torch.Tensor:
+        if mask.ndim < loss.ndim:
+            mask = mask.reshape(mask.shape + (1,) * (loss.ndim - mask.ndim))
+        return mask.expand_as(loss)
+
+    def _reduce_loss(
+        self,
+        loss: torch.Tensor,
+        tensordict: TensorDictBase | None = None,
+        *,
+        mask: torch.Tensor | None = None,
+        reduction: str | None = None,
+        weights: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if reduction is None:
+            reduction = self.reduction
+        if mask is None and tensordict is not None:
+            mask = tensordict.get("shifted_valid", default=None)
+        if mask is not None:
+            mask = self._expand_loss_mask(mask, loss)
+            if weights is not None and weights.shape != loss.shape:
+                weights = self._expand_loss_mask(weights, loss)
+            if weights is None and reduction == "mean":
+                return (loss * mask.to(loss.dtype)).sum() / mask.sum().clamp_min(1)
+            if weights is None and reduction == "sum":
+                return (loss * mask.to(loss.dtype)).sum()
+        return _reduce(loss, reduction=reduction, mask=mask, weights=weights)
+
     def set_keys(self, **kwargs) -> None:
         """Set tensordict key names.
 
@@ -279,7 +308,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             if value is not None:
                 setattr(self.tensor_keys, key, value)
             else:
-                setattr(self.tensor_keys, key, self.default_keys().key)
+                setattr(self.tensor_keys, key, getattr(self.default_keys(), key))
 
         try:
             self._forward_value_estimator_keys(**kwargs)
@@ -356,14 +385,20 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
                 will carry gradients as expected.
 
         """
+        # Walk the MRO so subclasses don't have to redeclare annotations
+        # introduced by their parents — ``cls.__annotations__`` is *not*
+        # inherited automatically in Python.
+        inherited_annotations: set[str] = set()
+        for base in type(self).__mro__:
+            inherited_annotations.update(getattr(base, "__annotations__", {}).keys())
         for name in (
             module_name,
             module_name + "_params",
             "target_" + module_name + "_params",
         ):
-            if name not in self.__class__.__annotations__.keys():
+            if name not in inherited_annotations:
                 warnings.warn(
-                    f"The name {name} wasn't part of the annotations ({self.__class__.__annotations__.keys()}). Make sure it is present in the definition class."
+                    f"The name {name} wasn't part of the annotations ({sorted(inherited_annotations)}). Make sure it is present in the definition class."
                 )
 
         if kwargs:
@@ -554,13 +589,13 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         target = self._modules.get(target_name, None)
 
         if params is not None:
-            with params.to_module(module):
+            with params.to_module(module, preserve_module_state=False):
                 module.reset_parameters_recursive()
         else:
             module.reset_parameters_recursive()
 
         if target is not None:
-            with target.to_module(module):
+            with target.to_module(module, preserve_module_state=False):
                 module.reset_parameters_recursive()
 
     def reset_parameters_recursive(
@@ -607,6 +642,38 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
         if len(devices) == 1:
             return list(devices)[0]
         return None
+
+    def _prepare_value_estimator_kwargs(self, value_type, **hyperparams):
+        """Common preamble for make_value_estimator overrides.
+
+        Handles three boilerplate steps that every subclass repeats:
+        defaulting ``value_type``, delegating the instance/subclass path to
+        the base-class handler, and building the ``hp`` dict from
+        :func:`~torchrl.objectives.utils.default_value_kwargs` merged with
+        any caller-supplied overrides.
+
+        Returns:
+            ``(resolved_value_type, hp)`` — the caller should continue with
+            its own if/elif value-type dispatch.
+
+            ``(None, None)`` — the call was fully handled (instance or
+            subclass path); the caller should ``return self``.
+        """
+        if value_type is None:
+            value_type = self.default_value_estimator
+
+        if isinstance(value_type, ValueEstimatorBase) or (
+            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
+        ):
+            LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return None, None
+
+        self.value_type = value_type
+        hp = dict(default_value_kwargs(value_type))
+        if hasattr(self, "gamma"):
+            hp["gamma"] = self.gamma
+        hp.update(hyperparams)
+        return value_type, hp
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         """Value-function constructor.

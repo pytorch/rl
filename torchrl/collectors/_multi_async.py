@@ -12,12 +12,12 @@ from tensordict import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from torchrl._utils import (
     _check_for_faulty_process,
+    _maybe_record_function_decorator,
     accept_remote_rref_udf_invocation,
     logger as torchrl_logger,
 )
-from torchrl.collectors._base import _make_legacy_metaclass
 from torchrl.collectors._constants import _MAX_IDLE_COUNT, _TIMEOUT
-from torchrl.collectors._multi_base import _MultiCollectorMeta, MultiCollector
+from torchrl.collectors._multi_base import MultiCollector
 from torchrl.collectors.utils import split_trajectories
 
 
@@ -170,6 +170,7 @@ class MultiAsyncCollector(MultiCollector):
         return super().load_state_dict(state_dict)
 
     # for RPC
+    @_maybe_record_function_decorator("MultiAsyncCollector.update_policy_weights_")
     def update_policy_weights_(
         self,
         policy_or_weights: TensorDictBase | TensorDictModuleBase | dict | None = None,
@@ -312,12 +313,3 @@ class MultiAsyncCollector(MultiCollector):
     # for RPC
     def receive_weights(self, policy_or_weights: TensorDictBase | None = None):
         return super().receive_weights(policy_or_weights)
-
-
-_LegacyMultiAsyncMeta = _make_legacy_metaclass(_MultiCollectorMeta)
-
-
-class MultiaSyncDataCollector(MultiAsyncCollector, metaclass=_LegacyMultiAsyncMeta):
-    """Deprecated version of :class:`~torchrl.collectors.MultiAsyncCollector`."""
-
-    ...

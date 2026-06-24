@@ -4,13 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import importlib.util
+
 import numpy as np
+import numpy as onp
 import pytest
 import torch
 from tensordict import assert_allclose_td, TensorDict
+from torchrl.envs.libs.jax_utils import _tree_flatten
 
 from torchrl.envs.libs.jumanji import _has_jumanji, JumanjiEnv
 from torchrl.envs.utils import check_env_specs
+
+_has_jax = importlib.util.find_spec("jax") is not None
 
 
 def _jumanji_envs():
@@ -62,8 +68,6 @@ class TestJumanji:
     def test_jumanji_consistency(self, envname, batch_size):
         import jax
         import jax.numpy as jnp
-        import numpy as onp
-        from torchrl.envs.libs.jax_utils import _tree_flatten
 
         env = JumanjiEnv(envname, batch_size=batch_size, jit=True)
         obs_keys = list(env.observation_spec.keys(True))

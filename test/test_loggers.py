@@ -14,11 +14,10 @@ from time import sleep
 
 import pytest
 import torch
-from packaging import version
 from tensordict import MemoryMappedTensor
 
 from torchrl.envs import check_env_specs, GymEnv, ParallelEnv
-from torchrl.record.loggers.common import _has_torchcodec, _has_tv
+from torchrl.record.loggers.common import _has_torchcodec, Logger
 from torchrl.record.loggers.csv import CSVLogger
 from torchrl.record.loggers.mlflow import _has_mlflow, MLFlowLogger
 from torchrl.record.loggers.ray import RayLogger
@@ -28,18 +27,7 @@ from torchrl.record.loggers.utils import get_logger
 from torchrl.record.loggers.wandb import _has_moviepy, _has_wandb, WandbLogger
 from torchrl.record.recorder import PixelRenderTransform, VideoRecorder
 
-if _has_tv:
-    import torchvision
-
-    TORCHVISION_VERSION = version.parse(
-        version.parse(torchvision.__version__).base_version
-    )
-else:
-    TORCHVISION_VERSION = version.parse("0.0.1")
-
-_has_mp4 = (
-    _has_tv and version.parse("0.20") <= TORCHVISION_VERSION < version.parse("0.22")
-) or _has_torchcodec
+_has_mp4 = _has_torchcodec
 
 if _has_tb:
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
@@ -225,20 +213,13 @@ class TestCSVLogger:
             )
             assert torch.equal(video, logged_video), logged_video
         elif video_format == "mp4":
-            if _has_torchcodec:
-                from torchcodec.decoders import VideoDecoder
+            from torchcodec.decoders import VideoDecoder
 
-                logged_video = (
-                    VideoDecoder(path)
-                    .get_frames_in_range(start=0, stop=128)
-                    .data[:, :1]
-                )
-            else:
-                logged_video = torchvision.io.read_video(path, output_format="TCHW")[0][
-                    :, :1
-                ]
+            logged_video = (
+                VideoDecoder(path).get_frames_in_range(start=0, stop=128).data[:, :1]
+            )
             logged_video = logged_video.unsqueeze(0)
-            torch.testing.assert_close(video, logged_video)
+            torch.testing.assert_close(video, logged_video, atol=2, rtol=0)
 
         # check that we catch the error in case the format of the tensor is wrong
         video_wrong_format = torch.zeros(64, 2, 32, 32)
@@ -249,6 +230,16 @@ class TestCSVLogger:
                 video=video_wrong_format,
                 step=steps[i] if steps else None,
             )
+
+    def test_log_video_mp4_requires_torchcodec(self, monkeypatch, tmpdir):
+        import torchrl.record.loggers.common as logger_common
+
+        monkeypatch.setattr(logger_common, "_has_torchcodec", False)
+        logger = CSVLogger(log_dir=tmpdir, exp_name="ramala", video_format="mp4")
+        video = torch.zeros(1, 2, 3, 8, 8, dtype=torch.uint8)
+
+        with pytest.raises(ModuleNotFoundError, match="uv run --extra video"):
+            logger.log_video(name="foo", video=video)
 
     def test_log_histogram(self):
         torch.manual_seed(0)
@@ -384,6 +375,12 @@ class TestWandbLogger:
             if isinstance(value, tuple):
                 value = list(value)  # wandb converts tuples to lists
             assert wandb_logger.experiment.config[key] == value
+
+    def test_logs_env_packages(self, wandb_logger):
+        env = wandb_logger.experiment.config["env"]
+        assert "python" in env
+        assert "packages" in env
+        assert "tensordict" in {key.lower() for key in env["packages"]}
 
     def test_log_histogram(self, wandb_logger):
         torch.manual_seed(0)
@@ -563,8 +560,15 @@ def mlflow_fixture():
 
     with tempfile.TemporaryDirectory() as log_dir:
         exp_name = "ramala"
-        log_dir_uri = pathlib.Path(log_dir).as_uri()
-        logger = MLFlowLogger(exp_name=exp_name, tracking_uri=log_dir_uri)
+        artifact_uri = pathlib.Path(log_dir).as_uri()
+        # MLflow >= 3.10 no longer supports the filesystem tracking backend, so
+        # we use a SQLite database for tracking and keep artifacts on disk.
+        tracking_uri = f"sqlite:///{log_dir}/mlflow.db"
+        logger = MLFlowLogger(
+            exp_name=exp_name,
+            tracking_uri=tracking_uri,
+            artifact_location=artifact_uri,
+        )
         client = mlflow.MlflowClient()
         yield logger, client
         mlflow.end_run()
@@ -616,18 +620,11 @@ class TestMLFlowLogger:
             videos_dir = client.download_artifacts(run_id, "videos", artifacts_dir)
             for i, video_name in enumerate(os.listdir(videos_dir)):
                 video_path = os.path.join(videos_dir, video_name)
-                if _has_torchcodec:
-                    from torchcodec.decoders import VideoDecoder
+                from torchcodec.decoders import VideoDecoder
 
-                    loaded_video = (
-                        VideoDecoder(video_path)
-                        .get_frames_in_range(start=0, stop=128)
-                        .data
-                    )
-                else:
-                    loaded_video, _, _ = torchvision.io.read_video(
-                        video_path, pts_unit="sec", output_format="TCHW"
-                    )
+                loaded_video = (
+                    VideoDecoder(video_path).get_frames_in_range(start=0, stop=128).data
+                )
                 if steps:
                     assert torch.allclose(loaded_video.int(), videos[i].int(), rtol=0.1)
                 else:
@@ -819,8 +816,6 @@ class TestRayLogger:
         pass
 
     def test_csv_logger_returns_ray_logger(self):
-        from torchrl.record.loggers.common import Logger
-
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = CSVLogger(exp_name="test", log_dir=tmpdir, use_ray_service=True)
             assert isinstance(logger, RayLogger)

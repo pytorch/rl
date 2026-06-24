@@ -23,13 +23,10 @@ except ImportError as e:
 from torchrl.trainers.algorithms.configs.collectors import (
     # New canonical config names
     AsyncCollectorConfig,
-    # Legacy config names (aliases)
-    AsyncDataCollectorConfig,
     BaseCollectorConfig,
     CollectorConfig,
     MultiAsyncCollectorConfig,
     MultiSyncCollectorConfig,
-    SyncDataCollectorConfig,
 )
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
@@ -65,6 +62,7 @@ from torchrl.trainers.algorithms.configs.envs_libs import (
     JumanjiEnvConfig,
     MeltingpotEnvConfig,
     MOGymEnvConfig,
+    MujocoPlaygroundEnvConfig,
     MultiThreadedEnvConfig,
     OpenEnvEnvConfig,
     OpenMLEnvConfig,
@@ -126,6 +124,7 @@ from torchrl.trainers.algorithms.configs.trainers import (
     DDPGTrainerConfig,
     DQNTrainerConfig,
     IQLTrainerConfig,
+    OfflineToOnlineTrainerConfig,
     PPOTrainerConfig,
     SACTrainerConfig,
     TD3TrainerConfig,
@@ -263,11 +262,6 @@ __all__ = [
     "BaseCollectorConfig",
     "MultiAsyncCollectorConfig",
     "MultiSyncCollectorConfig",
-    # Collectors (legacy aliases)
-    "AsyncDataCollectorConfig",
-    "MultiSyncCollectorConfig",
-    "MultiAsyncCollectorConfig",
-    "SyncDataCollectorConfig",
     # Environments
     "BatchedEnvConfig",
     "EnvConfig",
@@ -282,6 +276,7 @@ __all__ = [
     "JumanjiEnvConfig",
     "MeltingpotEnvConfig",
     "MOGymEnvConfig",
+    "MujocoPlaygroundEnvConfig",
     "MultiThreadedEnvConfig",
     "OpenEnvEnvConfig",
     "OpenMLEnvConfig",
@@ -405,6 +400,7 @@ __all__ = [
     "DDPGTrainerConfig",
     "DQNTrainerConfig",
     "IQLTrainerConfig",
+    "OfflineToOnlineTrainerConfig",
     "PPOTrainerConfig",
     "SACTrainerConfig",
     "TD3TrainerConfig",
@@ -680,6 +676,11 @@ def _register_configs():
     cs.store(group="trainer", name="ddpg", node=DDPGTrainerConfig)
     cs.store(group="trainer", name="dqn", node=DQNTrainerConfig)
     cs.store(group="trainer", name="iql", node=IQLTrainerConfig)
+    cs.store(
+        group="trainer",
+        name="offline_to_online",
+        node=OfflineToOnlineTrainerConfig,
+    )
     cs.store(group="trainer", name="ppo", node=PPOTrainerConfig)
     cs.store(group="trainer", name="sac", node=SACTrainerConfig)
     cs.store(group="trainer", name="td3", node=TD3TrainerConfig)

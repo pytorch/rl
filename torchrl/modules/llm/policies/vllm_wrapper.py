@@ -28,7 +28,6 @@ from torch.nn.utils.rnn import pad_sequence
 from torchrl.envs.utils import _classproperty
 from torchrl.modules.llm.policies.common import (
     _batching,
-    _extract_responses_from_full_histories,
     ChatHistory,
     LLMWrapperBase,
     LogProbs,
@@ -1096,33 +1095,48 @@ class vLLMWrapper(LLMWrapperBase):
             for r in result.unbind(1):
                 r[self.text_key, "prompt"] = text_prompt
         with result.view(-1) as result_flat:
-            if self.pad_output:
-                tokens_full_padded = result_flat.get(
-                    (self.tokens_key, "full"),
-                    as_padded_tensor=True,
-                    padding_side="right",
-                    padding_value=self.padding_value,
+            tokens_full_padded = result_flat.get(
+                (self.tokens_key, "full"),
+                as_padded_tensor=True,
+                padding_side="right",
+                padding_value=self.padding_value,
+            )
+            attention_mask_padded = result_flat.get(
+                (self.masks_key, "all_attention_mask"),
+                as_padded_tensor=True,
+                padding_side="right",
+                padding_value=0,
+            )
+            assistant_mask_padded = result_flat.get(
+                (self.masks_key, "all_assistant_mask"),
+                as_padded_tensor=True,
+                padding_side="right",
+                padding_value=0,
+            )
+            if tokens_full_padded is None:
+                raise ValueError("tokens_full_padded is None")
+            if attention_mask_padded is None:
+                raise ValueError("attention_mask_padded is None")
+            if assistant_mask_padded is None:
+                raise ValueError("assistant_mask_padded is None")
+            text_full_tokens = [
+                tokens[mask.bool()].long()
+                for tokens, mask in _zip_strict(
+                    tokens_full_padded, attention_mask_padded
                 )
-                if tokens_full_padded is None:
-                    raise ValueError("tokens_full_padded is None")
-                text_full = self.tokenizer.batch_decode(
-                    tokens_full_padded, skip_special_tokens=False
-                )
-            else:
-                tokens_full_unpadded = result_flat.get(
-                    (self.tokens_key, "full"), as_list=True
-                )
-                # print("shapes of assistant masks", [t.shape for t in result_flat.get(("masks", "all_assistant_mask"), as_list=True)])
-                if tokens_full_unpadded is None:
-                    raise ValueError("tokens_full_unpadded is None")
-                text_full = self.tokenizer.batch_decode(
-                    tokens_full_unpadded, skip_special_tokens=False
-                )
-            text_prompt = result_flat[self.text_key, "prompt"]
-            text_response = [
-                txt[len(prompt) :]
-                for txt, prompt in _zip_strict(text_full, text_prompt)
             ]
+            text_response_tokens = [
+                tokens[mask.bool()].long()
+                for tokens, mask in _zip_strict(
+                    tokens_full_padded, assistant_mask_padded
+                )
+            ]
+            text_full = self.tokenizer.batch_decode(
+                text_full_tokens, skip_special_tokens=False
+            )
+            text_response = self.tokenizer.batch_decode(
+                text_response_tokens, skip_special_tokens=False
+            )
             result_flat.set((self.text_key, "full"), text_full)
             result_flat.set((self.text_key, "response"), text_response)
 
@@ -1136,14 +1150,19 @@ class vLLMWrapper(LLMWrapperBase):
                 h.prompt = history
         with history_chat.view(-1) as history_chat_flat:
             prompt_histories = history_chat_flat.prompt
-            # Extract response histories from full text
-            h_responses = _extract_responses_from_full_histories(
-                text_full, prompt_histories, self.chat_template_name, self.tokenizer
-            )
+            response_histories = [
+                History(role="assistant", content=response_text)
+                for response_text in text_response
+            ]
+            h_responses = lazy_stack(response_histories)
             history_chat_flat.response = h_responses
-            history_chat_flat.full = history_chat_flat.prompt.extend(
-                h_responses, inplace=False, dim=-1
-            )
+            full_histories = [
+                prompt_history.append(response_history, inplace=False, dim=-1)
+                for prompt_history, response_history in _zip_strict(
+                    prompt_histories.unbind(0), response_histories
+                )
+            ]
+            history_chat_flat.full = lazy_stack(full_histories)
         result.set(self.history_key, history_chat)
         return result
 
@@ -1736,21 +1755,61 @@ class vLLMWrapper(LLMWrapperBase):
 
         masks_obj = Masks._from_tensordict(out.empty())
         # self.return_tokens must be True
-        if self.pad_output:
-            # Get "real" attention masks
-            full_attention_mask_padded = tokens_obj.get("full") != self.padding_value
-            masks_obj.all_attention_mask = full_attention_mask_padded.bool()
-        else:
-            # Get "real" attention masks
-            # We can use select to avoid batch-size problems
-            _td = torch.ones_like(
-                out.select(("tokens", "full"))
-                .copy()
-                .rename_key_(("tokens", "full"), "all_attention_mask")
-            ).bool()
-            del _td["tokens"]
-            masks_obj.update(_td)
-        masks_obj.all_assistant_mask = None
+        with masks_obj.view(-1) as masks_obj_flat, out.view(-1) as out_flat:
+            if self.pad_output:
+                # Get "real" attention masks
+                if empirical_attention_mask is not None:
+                    prompt_mask = empirical_attention_mask.bool()
+                    if self.num_samples is not None:
+                        prompt_mask = (
+                            prompt_mask.unsqueeze(1)
+                            .expand(-1, self.num_samples, -1)
+                            .reshape(-1, prompt_mask.shape[-1])
+                        )
+                else:
+                    prompt_mask = tokens_obj_flat.prompt != self.padding_value
+                response_lengths = torch.tensor(
+                    [response.numel() for response in tokens_response_unpadded],
+                    device=tokens_response_padded.device,
+                )
+                response_mask = torch.arange(
+                    tokens_response_padded.shape[-1],
+                    device=tokens_response_padded.device,
+                ).expand(response_lengths.shape[0], -1) < response_lengths.unsqueeze(-1)
+                full_attention_mask_padded = torch.cat(
+                    [prompt_mask.bool(), response_mask.bool()], dim=-1
+                )
+                masks_obj_flat.all_attention_mask = full_attention_mask_padded
+                masks_obj_flat.all_assistant_mask = torch.cat(
+                    [
+                        torch.zeros_like(prompt_mask, dtype=torch.bool),
+                        response_mask.bool(),
+                    ],
+                    dim=-1,
+                )
+            else:
+                # Get "real" attention masks
+                # We can use select to avoid batch-size problems
+                _td = torch.ones_like(
+                    out_flat.select(("tokens", "full"))
+                    .copy()
+                    .rename_key_(("tokens", "full"), "all_attention_mask")
+                ).bool()
+                del _td["tokens"]
+                masks_obj_flat.update(_td)
+                prompt_list = tokens_obj_flat.get("prompt", as_list=True)
+                masks_obj_flat.all_assistant_mask = [
+                    torch.cat(
+                        [
+                            torch.zeros_like(prompt, dtype=torch.bool),
+                            torch.ones_like(response, dtype=torch.bool),
+                        ],
+                        dim=-1,
+                    )
+                    for prompt, response in _zip_strict(
+                        prompt_list, tokens_response_unpadded
+                    )
+                ]
         masks_obj.padded = MetaData(self.pad_output)
         out.set(self.masks_key, masks_obj)
 
@@ -1927,6 +1986,9 @@ class vLLMWrapper(LLMWrapperBase):
                 padding_value=False,
                 padding_side="left",
             ).bool()
+            tokens_full_unpadded = _unpad_tensors(
+                tokens_full_padded, attention_mask_full_padded, as_nested=False
+            )
             attention_mask_full_unpadded = _unpad_tensors(
                 attention_mask_full_padded, attention_mask_full_padded, as_nested=False
             )

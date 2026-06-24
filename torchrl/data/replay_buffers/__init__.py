@@ -13,6 +13,8 @@ from .checkpointers import (
     StorageEnsembleCheckpointer,
     TensorStorageCheckpointer,
 )
+from .her import HERReplayBuffer, HindsightStrategy
+from .offline_to_online import OfflineToOnlineReplayBuffer, prefill_replay_buffer
 from .ray_buffer import RayReplayBuffer
 from .replay_buffers import (
     PrioritizedReplayBuffer,
@@ -55,6 +57,8 @@ from .writers import (
 )
 
 __all__ = [
+    "HERReplayBuffer",
+    "HindsightStrategy",
     "CompressedListStorage",
     "CompressedListStorageCheckpointer",
     "FlatStorageCheckpointer",
@@ -95,6 +99,8 @@ __all__ = [
     "TED2Flat",
     "TED2Nested",
     "ImmutableDatasetWriter",
+    "OfflineToOnlineReplayBuffer",
+    "prefill_replay_buffer",
     "RoundRobinWriter",
     "TensorDictMaxValueWriter",
     "TensorDictRoundRobinWriter",

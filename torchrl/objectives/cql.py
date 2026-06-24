@@ -26,18 +26,12 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
-    default_value_kwargs,
+    dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import (
-    TD0Estimator,
-    TD1Estimator,
-    TDLambdaEstimator,
-    ValueEstimatorBase,
-)
+from torchrl.objectives.value import ValueEstimatorBase
 
 
 class CQLLoss(LossModule):
@@ -469,53 +463,33 @@ class CQLLoss(LossModule):
                 terminated=self.tensor_keys.terminated,
             )
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-
-        # we will take care of computing the next value inside this module
-        value_net = None
-
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value_target": "value_target",
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=None,
+            **hyperparams,
+        )
 
     @property
     def in_keys(self):
@@ -561,7 +535,9 @@ class CQLLoss(LossModule):
             metadata.update(alpha_prime_metadata)
         loss_actor_bc, bc_metadata = self.actor_bc_loss(tensordict)
         loss_actor, actor_metadata = self.actor_loss(tensordict)
-        loss_alpha, alpha_metadata = self.alpha_loss(actor_metadata)
+        loss_alpha, alpha_metadata = self.alpha_loss(
+            actor_metadata, mask_tensordict=tensordict
+        )
         metadata.update(bc_metadata)
         metadata.update(cql_metadata)
         metadata.update(actor_metadata)
@@ -609,7 +585,9 @@ class CQLLoss(LossModule):
     def actor_bc_loss(self, tensordict: TensorDictBase) -> Tensor:
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
@@ -618,7 +596,7 @@ class CQLLoss(LossModule):
         bc_log_prob = dist.log_prob(tensordict.get(self.tensor_keys.action))
 
         bc_actor_loss = self._alpha * log_prob - bc_log_prob
-        bc_actor_loss = _reduce(bc_actor_loss, reduction=self.reduction)
+        bc_actor_loss = self._reduce_loss(bc_actor_loss, tensordict=tensordict)
         metadata = {"bc_log_prob": bc_log_prob.mean().detach()}
         self._clear_weakrefs(
             tensordict,
@@ -632,7 +610,9 @@ class CQLLoss(LossModule):
     def actor_loss(self, tensordict: TensorDictBase) -> tuple[Tensor, dict]:
         with set_exploration_type(
             ExplorationType.RANDOM
-        ), self.actor_network_params.to_module(self.actor_network):
+        ), self.actor_network_params.to_module(
+            self.actor_network, preserve_module_state=False
+        ):
             dist = self.actor_network.get_dist(
                 tensordict,
             )
@@ -659,7 +639,7 @@ class CQLLoss(LossModule):
         metadata = {}
         metadata[self.tensor_keys.log_prob] = log_prob.detach()
         actor_loss = self._alpha * log_prob - min_q_logprob
-        actor_loss = _reduce(actor_loss, reduction=self.reduction)
+        actor_loss = self._reduce_loss(actor_loss, tensordict=tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -682,7 +662,7 @@ class CQLLoss(LossModule):
             filter_and_repeat, batch_size=batch_size, filter_empty=True
         )
         with set_exploration_type(ExplorationType.RANDOM), actor_params.data.to_module(
-            self.actor_network
+            self.actor_network, preserve_module_state=False
         ):
             dist = self.actor_network.get_dist(tensordict)
             action = dist.rsample()
@@ -700,14 +680,18 @@ class CQLLoss(LossModule):
         tensordict = tensordict.clone(False)
         # get actions and log-probs
         # TODO: wait for compile to handle this properly
-        actor_data = actor_params.data.to_module(self.actor_network)
+        actor_data = actor_params.data.to_module(
+            self.actor_network, preserve_module_state=False
+        )
         with set_exploration_type(ExplorationType.RANDOM):
             next_tensordict = tensordict.get("next").clone(False)
             next_dist = self.actor_network.get_dist(next_tensordict)
             next_action = next_dist.rsample()
             next_tensordict.set(self.tensor_keys.action, next_action)
             next_sample_log_prob = next_dist.log_prob(next_action)
-        actor_data.to_module(self.actor_network, return_swap=False)
+        actor_data.to_module(
+            self.actor_network, return_swap=False, preserve_module_state=False
+        )
 
         # get q-values
         if not self.max_q_backup:
@@ -779,7 +763,7 @@ class CQLLoss(LossModule):
             target_value.expand_as(q_pred),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict)
         td_error = (q_pred - target_value).pow(2)
         metadata = {"td_error": td_error.detach()}
         self._clear_weakrefs(
@@ -930,7 +914,7 @@ class CQLLoss(LossModule):
         tensordict.set(self.tensor_keys.cql_q2_loss, cql_q2_loss)
 
         cql_q_loss = (cql_q1_loss + cql_q2_loss).mean(-1)
-        cql_q_loss = _reduce(cql_q_loss, reduction=self.reduction)
+        cql_q_loss = self._reduce_loss(cql_q_loss, tensordict=tensordict)
 
         self._clear_weakrefs(
             tensordict,
@@ -957,11 +941,17 @@ class CQLLoss(LossModule):
             )
 
         alpha_prime = torch.clamp_max(self.log_alpha_prime.exp(), max=1000000.0)
-        min_qf1_loss = alpha_prime * (cql_q1_loss.mean() - self.target_action_gap)
-        min_qf2_loss = alpha_prime * (cql_q2_loss.mean() - self.target_action_gap)
+        cql_q1_loss = self._reduce_loss(
+            cql_q1_loss, tensordict=tensordict, reduction="mean"
+        )
+        cql_q2_loss = self._reduce_loss(
+            cql_q2_loss, tensordict=tensordict, reduction="mean"
+        )
+
+        min_qf1_loss = alpha_prime * (cql_q1_loss - self.target_action_gap)
+        min_qf2_loss = alpha_prime * (cql_q2_loss - self.target_action_gap)
 
         alpha_prime_loss = (-min_qf1_loss - min_qf2_loss) * 0.5
-        alpha_prime_loss = _reduce(alpha_prime_loss, reduction=self.reduction)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -971,7 +961,11 @@ class CQLLoss(LossModule):
         )
         return alpha_prime_loss, {}
 
-    def alpha_loss(self, tensordict: TensorDictBase) -> Tensor:
+    def alpha_loss(
+        self,
+        tensordict: TensorDictBase | dict[NestedKey, Tensor],
+        mask_tensordict: TensorDictBase | None = None,
+    ) -> tuple[Tensor, dict]:
         log_pi = tensordict.get(self.tensor_keys.log_prob)
         if self.target_entropy is not None:
             # we can compute this loss even if log_alpha is not a parameter
@@ -979,7 +973,9 @@ class CQLLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_pi)
-        alpha_loss = _reduce(alpha_loss, reduction=self.reduction)
+        if mask_tensordict is None and isinstance(tensordict, TensorDictBase):
+            mask_tensordict = tensordict
+        alpha_loss = self._reduce_loss(alpha_loss, tensordict=mask_tensordict)
         self._clear_weakrefs(
             tensordict,
             "actor_network_params",
@@ -1210,54 +1206,39 @@ class DiscreteCQLLoss(LossModule):
         }
         self._in_keys = sorted(in_keys, key=str)
 
+    SUPPORTED_VALUE_ESTIMATORS = (
+        ValueEstimators.TD0,
+        ValueEstimators.TD1,
+        ValueEstimators.TDLambda,
+    )
+
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
         if value_type is None:
             value_type = self.default_value_estimator
-
-        # Handle ValueEstimatorBase instance or class
         if isinstance(value_type, ValueEstimatorBase) or (
             isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
         ):
             return LossModule.make_value_estimator(self, value_type, **hyperparams)
-
-        self.value_type = value_type
-
-        # we will take care of computing the next value inside this module
+        # DiscreteCQL needs a stateful copy of the value network so the
+        # estimator can be called without re-attaching params.
         value_net = deepcopy(self.value_network)
-        self.value_network_params.to_module(value_net, return_swap=False)
-
-        hp = dict(default_value_kwargs(value_type))
-        hp.update(hyperparams)
-        if value_type is ValueEstimators.TD1:
-            self._value_estimator = TD1Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.TD0:
-            self._value_estimator = TD0Estimator(
-                **hp,
-                value_network=value_net,
-            )
-        elif value_type is ValueEstimators.GAE:
-            raise NotImplementedError(
-                f"Value type {value_type} it not implemented for loss {type(self)}."
-            )
-        elif value_type is ValueEstimators.TDLambda:
-            self._value_estimator = TDLambdaEstimator(
-                **hp,
-                value_network=value_net,
-            )
-        else:
-            raise NotImplementedError(f"Unknown value type {value_type}")
-
-        tensor_keys = {
-            "value_target": "value_target",
-            "value": self.tensor_keys.value,
-            "reward": self.tensor_keys.reward,
-            "done": self.tensor_keys.done,
-            "terminated": self.tensor_keys.terminated,
-        }
-        self._value_estimator.set_keys(**tensor_keys)
+        self.value_network_params.to_module(
+            value_net, return_swap=False, preserve_module_state=False
+        )
+        dispatch_value_estimator(
+            self,
+            value_type,
+            supported=self.SUPPORTED_VALUE_ESTIMATORS,
+            tensor_keys={
+                "value_target": "value_target",
+                "value": self.tensor_keys.value,
+                "reward": self.tensor_keys.reward,
+                "done": self.tensor_keys.done,
+                "terminated": self.tensor_keys.terminated,
+            },
+            value_network=value_net,
+            **hyperparams,
+        )
 
     @property
     def in_keys(self):
@@ -1275,7 +1256,9 @@ class DiscreteCQLLoss(LossModule):
         tensordict: TensorDictBase,
     ) -> tuple[torch.Tensor, dict]:
         td_copy = tensordict.clone(False)
-        with self.value_network_params.to_module(self.value_network):
+        with self.value_network_params.to_module(
+            self.value_network, preserve_module_state=False
+        ):
             self.value_network(td_copy)
 
         action = tensordict.get(self.tensor_keys.action)
@@ -1309,7 +1292,7 @@ class DiscreteCQLLoss(LossModule):
             inplace=True,
         )
         loss = 0.5 * distance_loss(pred_val_index, target_value, self.loss_function)
-        loss = _reduce(loss, reduction=self.reduction)
+        loss = self._reduce_loss(loss, tensordict=tensordict)
 
         metadata = {
             "td_error": td_error.mean(0).detach(),
@@ -1373,5 +1356,5 @@ class DiscreteCQLLoss(LossModule):
             q_a = (qvalues * current_action).sum(dim=-1, keepdim=True)
 
         loss_cql = (logsumexp - q_a).squeeze(-1)
-        loss_cql = _reduce(loss_cql, reduction=self.reduction)
+        loss_cql = self._reduce_loss(loss_cql, tensordict=tensordict)
         return loss_cql, {}

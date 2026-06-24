@@ -548,7 +548,7 @@ Common patterns:
    * - ``"env.transform[0]"``
      - First transform on the env
    * - ``"env.transform[0].module"``
-     - The ``module`` attribute of a :class:`ModuleTransform`
+     - The ``module`` attribute of a :class:`~torchrl.envs.transforms.ModuleTransform`
    * - ``"replay_buffer.transform[0].module"``
      - Module inside a replay-buffer transform
 

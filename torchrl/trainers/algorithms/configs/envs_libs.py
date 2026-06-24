@@ -129,6 +129,27 @@ class BraxEnvConfig(EnvLibsConfig):
 
 
 @dataclass
+class MujocoPlaygroundEnvConfig(EnvLibsConfig):
+    """Configuration for MujocoPlaygroundEnv environment."""
+
+    env_name: str = MISSING
+    config: object = None
+    config_overrides: dict | None = None
+    agent_mapping: Any = None
+    from_pixels: bool = False
+    frame_skip: int = 1
+    device: str = "cpu"
+    batch_size: list[int] | None = None
+    allow_done_after_reset: bool = False
+    num_workers: int = 1
+    _target_: str = "torchrl.envs.libs.mujoco_playground.MujocoPlaygroundEnv"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for MujocoPlaygroundEnv configuration."""
+        super().__post_init__()
+
+
+@dataclass
 class DMControlEnvConfig(EnvLibsConfig):
     """Configuration for DMControlEnv environment."""
 

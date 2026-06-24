@@ -68,6 +68,7 @@ scripts=(
     run_td3bc.sh
     run_dt.sh
     run_dt_online.sh
+    run_vla_grpo.sh
 )
 
 mkdir -p "slurm_errors"

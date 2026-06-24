@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import multiprocessing as mp
 import threading
 import time
 
@@ -354,8 +355,6 @@ class TestMPTransport:
     @pytest.mark.slow
     def test_single_request_in_process(self):
         """MPTransport client works from the parent process."""
-        import multiprocessing as mp
-
         ctx = mp.get_context("spawn")
         transport = MPTransport(ctx=ctx)
         client = transport.client()
@@ -369,8 +368,6 @@ class TestMPTransport:
     @pytest.mark.slow
     def test_cross_process_actors(self):
         """Actors in separate processes get correct results."""
-        import multiprocessing as mp
-
         ctx = mp.get_context("spawn")
         transport = MPTransport(ctx=ctx)
         policy = _make_policy()
@@ -402,7 +399,6 @@ class TestMPTransport:
     @pytest.mark.slow
     def test_mp_exception_propagates(self):
         """Model exceptions propagate through MPTransport."""
-        import multiprocessing as mp
 
         def bad_model(td):
             raise ValueError("mp model error")
