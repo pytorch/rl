@@ -35,6 +35,7 @@ from torchrl.objectives.pilco import ExponentialQuadraticCost
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
+from torchrl.objectives.rnd import RNDLoss
 from torchrl.objectives.sac import DiscreteSACLoss, SACLoss
 from torchrl.objectives.td3 import TD3Loss
 from torchrl.objectives.td3_bc import TD3BCLoss
@@ -50,6 +51,7 @@ from torchrl.objectives.utils import (
     TargetNetUpdater,
     ValueEstimators,
 )
+from torchrl.objectives.world_model_loss import WorldModelLoss
 
 __all__ = [
     "A2CLoss",
@@ -85,12 +87,14 @@ __all__ = [
     "QMixerLoss",
     "REDQLoss",
     "ReinforceLoss",
+    "RNDLoss",
     "SACLoss",
     "SoftUpdate",
     "TD3BCLoss",
     "TD3Loss",
     "TargetNetUpdater",
     "ValueEstimators",
+    "WorldModelLoss",
     "add_random_module",
     "categorical_kl_balanced",
     "default_value_kwargs",

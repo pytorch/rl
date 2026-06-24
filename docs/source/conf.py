@@ -139,6 +139,11 @@ sphinx_gallery_conf = {
     "gallery_dirs": "tutorials",  # path to where to save gallery generated output
     "backreferences_dir": "gen_modules/backreferences",
     "doc_module": ("torchrl",),
+    # resolve torchrl identifiers in example code blocks against this build
+    # (None = local docs); without it, code links fall back to the first
+    # documented base class found via intersphinx (e.g. a TensorDictModule
+    # subclass links to tensordict.nn.TensorDictModuleBase)
+    "reference_url": {"torchrl": None},
     "filename_pattern": "reference/generated/tutorials/",  # files to parse
     "notebook_images": "reference/generated/tutorials/media/",  # images to parse
     "download_all_examples": True,

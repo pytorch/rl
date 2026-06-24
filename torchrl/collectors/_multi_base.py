@@ -8,7 +8,7 @@ import sys
 import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -27,15 +27,18 @@ from torchrl._utils import (
 )
 from torchrl.collectors._base import _ProfilerHook, BaseCollector, ProfileConfig
 from torchrl.collectors._constants import (
-    _InterruptorManager,
-    _is_osx,
+    _Interruptor,
     DEFAULT_EXPLORATION_TYPE,
     ExplorationType,
     INSTANTIATE_TIMEOUT,
 )
 from torchrl.collectors._runner import _main_async_collector
 from torchrl.collectors._single import Collector
-from torchrl.collectors.utils import _make_meta_policy_cm, _TrajectoryPool
+from torchrl.collectors.utils import (
+    _make_meta_policy_cm,
+    _TrajectoryPool,
+    _validate_traj_format,
+)
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.data import ReplayBuffer
 from torchrl.data.utils import CloudpickleWrapper, DEVICE_TYPING
@@ -221,7 +224,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             will be called before (sync) or after (async) each data collection.
             Defaults to ``False``.
         preemptive_threshold (:obj:`float`, optional): a value between 0.0 and 1.0 that specifies the ratio of workers
-            that will be allowed to finished collecting their rollout before the rest are forced to end early.
+            that will be allowed to finish collecting their rollout before the rest are forced to end early.
+            Frames that were not collected by the preempted workers are marked invalid: their
+            ``("collector", "traj_ids")`` entry is ``-1`` and, with ``cat_results="stack"``, a
+            ``("collector", "mask")`` entry flags the valid frames (with ``cat_results=-1`` the
+            invalid frames are dropped from the batch instead).
         num_threads (int, optional): number of threads for this process.
             Defaults to the number of workers.
         num_sub_threads (int, optional): number of threads of the subprocesses.
@@ -257,10 +264,11 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             last step has ``("next", "done") == True``) to the shared replay
             buffer as flat 1-D sequences — no padding, no accumulation.
 
-            When set *without* ``replay_buffer``, each worker assembles
-            trajectories and the multi-collector yields zero-padded batches
-            of shape ``(trajs_per_batch, max_traj_len)`` with a
-            ``("collector", "mask")`` boolean field.
+            When set *without* ``replay_buffer``, the multi-collector
+            assembles trajectories from the worker batches and yields
+            zero-padded batches of shape ``(trajs_per_batch, max_traj_len)``
+            with a ``("collector", "mask")`` boolean field, or flat unpadded
+            concatenations with ``traj_format="cat"``.
 
             Both the iteration pattern (``for data in collector``) and the
             async ``start()`` pattern are supported.
@@ -270,6 +278,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             See :class:`~torchrl.collectors.BaseCollector` for the full
             description of the completeness guarantee and replay-buffer
             storage contract.
+        traj_format (str, optional): layout of the batches yielded when
+            ``trajs_per_batch`` is set without a ``replay_buffer``:
+            ``"padded"`` for zero-padded
+            ``(trajs_per_batch, max_traj_len)`` stacks with a
+            ``("collector", "mask")`` entry, ``"cat"`` for flat unpadded
+            concatenations along time (trajectories delimited by
+            ``("next", "done")`` and ``("collector", "traj_ids")``).
+            Replay-buffer writes are always flat. Raises if set without
+            ``trajs_per_batch``. Defaults to ``None``, which currently
+            resolves to ``"padded"`` and emits a :class:`FutureWarning` when
+            ``trajs_per_batch`` batches are yielded without an explicit
+            choice: the default will change to ``"cat"`` in torchrl v0.16.
         use_buffers (bool, optional): if ``True``, a buffer will be used to stack the data.
             This isn't compatible with environments with dynamic specs. Defaults to ``True``
             for envs without dynamic specs, ``False`` for others.
@@ -437,6 +457,7 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         worker_idx: int | None = None,
         trajs_per_batch: int | None = None,
         trajs_per_write: int | None = None,
+        traj_format: Literal["padded", "cat"] | None = None,
         init_fn: Callable[[], None] | None = None,
         auto_register_policy_transforms: bool | None = None,
         pre_collect_hook: Callable[[], None] | None = None,
@@ -447,6 +468,9 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
         self.worker_idx = worker_idx
         self.trajs_per_batch = trajs_per_batch
         self.trajs_per_write = trajs_per_write
+        self.traj_format = _validate_traj_format(
+            traj_format, trajs_per_batch, has_replay_buffer=replay_buffer is not None
+        )
         self._auto_register_policy_transforms = auto_register_policy_transforms
         super().__init__(
             pre_collect_hook=pre_collect_hook,
@@ -899,14 +923,15 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
     def _setup_preemptive_threshold(self, preemptive_threshold: float | None) -> None:
         """Set up preemptive threshold for early stopping."""
         if preemptive_threshold is not None:
-            if _is_osx:
-                raise NotImplementedError(
-                    "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
+            preemptive_threshold = float(preemptive_threshold)
+            if not 0.0 <= preemptive_threshold <= 1.0:
+                raise ValueError(
+                    f"preemptive_threshold must be between 0.0 and 1.0, got {preemptive_threshold}."
                 )
-            self.preemptive_threshold = np.clip(preemptive_threshold, 0.0, 1.0)
-            manager = _InterruptorManager()
-            manager.start()
-            self.interruptor = manager._Interruptor()
+            self.preemptive_threshold = preemptive_threshold
+            # A threshold of 1.0 waits for every worker, so preemption can never
+            # fire: skip the interruptor and its per-step polling in the workers.
+            self.interruptor = _Interruptor() if preemptive_threshold < 1.0 else None
         else:
             self.preemptive_threshold = 1.0
             self.interruptor = None
@@ -1937,6 +1962,9 @@ also that the state dict is synchronised across processes if needed."""
 
         """
         _check_for_faulty_process(self.procs)
+        # drop parent-level trajectory-assembly state (trajs_per_batch
+        # without a replay buffer assembles trajectories on this process)
+        self._flush_trajectory_assembly()
 
         if reset_idx is None:
             reset_idx = [True for _ in range(self.num_workers)]

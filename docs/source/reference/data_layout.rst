@@ -453,6 +453,11 @@ Pair with :class:`~torchrl.cuda_memory_profile` to verify the win:
 See also
 --------
 
+* :ref:`Recurrent training on sequence batches <recurrent_sequence_tuto>` —
+  a runnable tutorial that samples ragged trajectory slices with
+  :class:`~torchrl.data.replay_buffers.SliceSampler` and feeds them straight
+  into a recurrent policy, the contiguous-batch pattern described on this
+  page.
 * :doc:`collectors_replay` — concrete ``ndim`` patterns and the full
   ``trajs_per_batch`` API.
 * :ref:`Auto-wrapping recurrent transforms <Environment-policy-arg>` —
