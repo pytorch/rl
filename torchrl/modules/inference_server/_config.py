@@ -34,10 +34,27 @@ class InferenceDeviceConfig:
             collected transitions yielded by the collector.
 
     Examples:
-        >>> from torchrl.modules.inference_server import InferenceDeviceConfig
-        >>> config = InferenceDeviceConfig(policy_device="cpu", env_device="cpu")
-        >>> config.policy_device
-        device(type='cpu')
+        >>> import torch
+        >>> import torch.nn as nn
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.inference_server import (
+        ...     InferenceDeviceConfig,
+        ...     InferenceServer,
+        ...     ThreadingTransport,
+        ... )
+        >>> policy = TensorDictModule(
+        ...     nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
+        ... )
+        >>> transport = ThreadingTransport()
+        >>> device_config = InferenceDeviceConfig(
+        ...     policy_device="cpu", output_device="cpu"
+        ... )
+        >>> with InferenceServer(policy, transport, device_config=device_config):
+        ...     client = transport.client()
+        ...     result = client(TensorDict({"observation": torch.randn(4)}))
+        >>> result["action"].device.type
+        'cpu'
     """
 
     policy_device: torch.device | str | None = None
