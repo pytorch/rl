@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
+import torch
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
 from tensordict.utils import NestedKey
@@ -44,6 +45,13 @@ class PolicyClientModule(TensorDictModuleBase):
             module. The full input TensorDict is still sent to the server.
         out_keys (sequence of NestedKey, optional): output keys advertised by
             the module.
+        target_policy_version (int, optional): expected latest policy version
+            used for bounded-staleness checks.
+        max_policy_lag (int, optional): maximum allowed
+            ``target_policy_version - returned_policy_version``.
+        policy_version_key (NestedKey, optional): key that contains the
+            behavior policy version returned by the server. Defaults to
+            ``"policy_version"``.
 
     Examples:
         >>> import torch
@@ -75,6 +83,9 @@ class PolicyClientModule(TensorDictModuleBase):
         *,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
+        target_policy_version: int | None = None,
+        max_policy_lag: int | None = None,
+        policy_version_key: NestedKey = "policy_version",
     ) -> None:
         super().__init__()
         if isinstance(client, InferenceTransport):
@@ -82,6 +93,27 @@ class PolicyClientModule(TensorDictModuleBase):
         self.client = client
         self.in_keys = list(in_keys or [])
         self.out_keys = list(out_keys or [])
+        self.target_policy_version = target_policy_version
+        self.max_policy_lag = max_policy_lag
+        self.policy_version_key = policy_version_key
+
+    def _check_policy_lag(self, tensordict: TensorDictBase) -> None:
+        if self.target_policy_version is None or self.max_policy_lag is None:
+            return
+        version = tensordict.get(self.policy_version_key, default=None)
+        if version is None:
+            return
+        if isinstance(version, torch.Tensor):
+            version = int(version.max().item())
+        else:
+            version = int(version)
+        lag = self.target_policy_version - version
+        if lag > self.max_policy_lag:
+            raise RuntimeError(
+                f"Remote policy result is too stale: version={version}, "
+                f"target_policy_version={self.target_policy_version}, "
+                f"max_policy_lag={self.max_policy_lag}."
+            )
 
     def submit(self, tensordict: TensorDictBase):
         """Submit a TensorDict request and return a future-like object.
@@ -103,7 +135,9 @@ class PolicyClientModule(TensorDictModuleBase):
         return submit(tensordict)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
-        return self.submit(tensordict).result()
+        result = self.submit(tensordict).result()
+        self._check_policy_lag(result)
+        return result
 
 
 RemotePolicy = PolicyClientModule
