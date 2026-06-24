@@ -255,7 +255,11 @@ class PendulumEnv(EnvBase):
         new_thdot = new_thdot.clamp(
             -tensordict["params", "max_speed"], tensordict["params", "max_speed"]
         )
-        new_th = th + new_thdot * dt
+        # wrap the angle so that the state stays within the bounds promised by
+        # the ``th`` spec, ``Bounded(-pi, pi)``. The dynamics only depend on
+        # ``th`` through ``sin`` and ``angle_normalize``, both 2*pi-periodic,
+        # so this does not change the trajectory.
+        new_th = cls.angle_normalize(th + new_thdot * dt)
         reward = -costs.view(*tensordict.shape, 1)
         done = torch.zeros_like(reward, dtype=torch.bool)
         out = TensorDict(

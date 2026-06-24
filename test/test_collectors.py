@@ -29,6 +29,7 @@ from tensordict import (
     assert_allclose_td,
     LazyStackedTensorDict,
     NonTensorData,
+    NonTensorStack,
     TensorDict,
     TensorDictBase,
 )
@@ -2242,17 +2243,24 @@ if __name__ == "__main__":
             env_id: int,
             max_steps: int = 10,
             sleep_odd_only: bool = False,
+            step_sleep: float = 0.0,
             **kwargs,
         ):
             """
             Args:
                 env_id: The ID to return as observation. This will be returned as a tensor.
                 max_steps: Maximum number of steps before the environment terminates.
+                sleep_odd_only: If ``True``, only odd ``env_id`` workers sleep (used
+                    to test preemption).
+                step_sleep: If ``> 0``, every worker sleeps this many seconds on each
+                    step regardless of ``env_id`` (used to make a rollout slower than
+                    ``_TIMEOUT``).
             """
             super().__init__(device="cpu", batch_size=torch.Size([]))
             self.env_id = env_id
             self.max_steps = max_steps
             self.sleep_odd_only = sleep_odd_only
+            self.step_sleep = step_sleep
             self._step_count = 0
 
             # Define specs
@@ -2279,7 +2287,10 @@ if __name__ == "__main__":
                 # Random sleep up to 10ms
                 time.sleep(torch.rand(1).item() * 0.01)
             elif self.env_id % 2 == 1:
-                time.sleep(0.1)
+                # Long enough that the preemption stop flag lands well before
+                # the slow envs can complete a full rollout, even on loaded CI
+                # runners (#3798)
+                time.sleep(0.3)
 
             self._step_count = 0
             return TensorDict(
@@ -2300,7 +2311,9 @@ if __name__ == "__main__":
             done = self._step_count >= self.max_steps
 
             if self.sleep_odd_only and self.env_id % 2 == 1:
-                time.sleep(0.1)
+                time.sleep(0.3)
+            if self.step_sleep:
+                time.sleep(self.step_sleep)
 
             return TensorDict(
                 {
@@ -2333,11 +2346,6 @@ if __name__ == "__main__":
         We create num_envs environments, each returning its env_id as the observation.
         After collection, we verify that the observations correspond to the correct env_ids in order
         """
-        if with_preempt and IS_OSX:
-            pytest.skip(
-                "Cannot use preemption on OSX due to Queue.qsize() not being implemented on this platform."
-            )
-
         # Create environment factories using partial - one for each env_id
         # This pattern mirrors CrossPlayEvaluator._rollout usage
         env_factories = [
@@ -2385,16 +2393,30 @@ if __name__ == "__main__":
 
                 #
                 for env_idx in range(num_envs):
+                    traj_ids = batch["collector", "traj_ids"][env_idx]
                     if with_preempt and env_idx % 2 == 1:
-                        # This is a slow env, should have been preempted after first step
-                        assert (batch["collector", "traj_ids"][env_idx, 1:] == -1).all()
-                        continue
-                    # This is a fast env, no preemption happened
-                    assert (batch["collector", "traj_ids"][env_idx] != -1).all()
+                        # This is a slow env: it must have been preempted before
+                        # completing its rollout. The stop flag is only raised
+                        # once the fastest workers have reported and is polled
+                        # by the worker once per step, so on a loaded machine
+                        # the slow env can log a couple of valid steps before
+                        # stopping; requiring exactly one step made this test
+                        # flaky (#3798).
+                        n_valid = (traj_ids != -1).sum().item()
+                        assert 1 <= n_valid < n_steps, traj_ids
+                        # the valid steps form a contiguous prefix, padding
+                        # closes the row
+                        assert (traj_ids[:n_valid] != -1).all(), traj_ids
+                        assert (traj_ids[n_valid:] == -1).all(), traj_ids
+                    else:
+                        # This is a fast env, no preemption happened
+                        assert (traj_ids != -1).all()
+                        n_valid = traj_ids.numel()
 
                     env_data = batch[env_idx]
-                    observations = env_data["observation"]
-                    # All observations from this environment should equal its env_id
+                    # All valid observations from this environment should equal
+                    # its env_id (padded rows are excluded for preempted envs)
+                    observations = env_data["observation"][:n_valid]
                     expected_id = float(env_idx)
                     actual_ids = observations.flatten().unique()
 
@@ -2407,6 +2429,60 @@ if __name__ == "__main__":
                     ), f"Environment {env_idx} should produce observation {expected_id}, but got {actual_ids[0].item()}"
         finally:
             collector.shutdown()
+
+    def test_multi_sync_no_idle_after_all_outputs(self, monkeypatch):
+        """Regression test for https://github.com/pytorch/rl/issues/3840.
+
+        Without preemption, the worker-output gathering loop used to run a
+        fixed-length inner ``for _ in range(self.num_workers)`` that kept calling
+        ``queue_out.get(timeout=_TIMEOUT)`` even after every worker had already
+        reported. When an earlier ``get`` timed out (i.e. the first rollout takes
+        longer than ``_TIMEOUT``), ``len(recv)`` reached ``num_workers`` partway
+        through a later inner loop, leaving its remaining iterations to each waste
+        a full ``_TIMEOUT`` -- a total idle penalty of ``num_workers * _TIMEOUT``.
+
+        We shrink ``_TIMEOUT`` and make each worker's single step sleep longer than
+        it (so the first ``get`` is guaranteed to time out, which is the trigger),
+        then assert the batch is gathered well within ``num_workers * _TIMEOUT``.
+        """
+        timeout = 0.3
+        # The gather loop in the main process reads ``_TIMEOUT`` as a module global.
+        monkeypatch.setattr("torchrl.collectors._multi_sync._TIMEOUT", timeout)
+
+        num_workers = 8
+        # Each worker collects a single frame whose step sleeps > timeout, so the
+        # first ``queue_out.get(timeout=timeout)`` necessarily times out before any
+        # worker reports -- the precondition that used to shift the inner loop.
+        step_sleep = timeout * 1.5
+        env_factories = [
+            functools.partial(
+                self.FixedIDEnv, env_id=i, max_steps=10, step_sleep=step_sleep
+            )
+            for i in range(num_workers)
+        ]
+        collector = MultiSyncCollector(
+            create_env_fn=env_factories,
+            frames_per_batch=num_workers,
+            total_frames=num_workers,
+            device="cpu",
+            init_random_frames=num_workers,  # random actions, no policy needed
+            use_buffers=True,
+        )
+        try:
+            t0 = time.time()
+            next(iter(collector))
+            elapsed = time.time() - t0
+        finally:
+            collector.shutdown()
+
+        # Buggy path: ~num_workers * timeout (1 initial + num_workers - 1 trailing
+        # timeouts). Fixed path: ~step_sleep plus a little worker overhead. Half of
+        # the buggy budget is a comfortable separator that tolerates scheduling jitter.
+        max_elapsed = num_workers * timeout / 2
+        assert elapsed < max_elapsed, (
+            f"gathering took {elapsed:.3f}s, expected well under {max_elapsed:.3f}s; "
+            f"redundant get(timeout=_TIMEOUT) calls likely regressed (issue #3840)"
+        )
 
     def test_collector_next_method(self):
         """Non-regression test: next() should work correctly after __iter__.
@@ -3446,8 +3522,62 @@ def weight_reset(m):
         m.reset_parameters()
 
 
-@pytest.mark.skipif(IS_OSX, reason="Queue.qsize does not work on osx.")
+def _stop_interruptor(interruptor):
+    interruptor.stop_collection()
+
+
 class TestPreemptiveThreshold:
+    def test_interruptor_shared_memory(self):
+        """_Interruptor is a shared-memory flag: no manager process, no proxies.
+
+        The flag must hold its start/stop semantics in-process and be visible
+        from a child process when inherited at process-creation time.
+        """
+        interruptor = _Interruptor()
+        assert not interruptor.collection_stopped()
+        interruptor.stop_collection()
+        assert interruptor.collection_stopped()
+        interruptor.start_collection()
+        assert not interruptor.collection_stopped()
+
+        ctx = torch.multiprocessing.get_context("spawn")
+        proc = ctx.Process(target=_stop_interruptor, args=(interruptor,))
+        proc.start()
+        proc.join(timeout=100)
+        assert proc.exitcode == 0
+        assert interruptor.collection_stopped()
+
+    def test_preemptive_threshold_validation(self):
+        """Out-of-range thresholds raise; 1.0 disables the interruptor machinery."""
+        env_fn = make_make_env("vec")
+        for bad_threshold in (-0.1, 1.5):
+            with pytest.raises(ValueError, match="preemptive_threshold"):
+                MultiSyncCollector(
+                    create_env_fn=[env_fn] * 2,
+                    policy=make_policy("vec"),
+                    frames_per_batch=20,
+                    total_frames=20,
+                    preemptive_threshold=bad_threshold,
+                )
+
+        collector = MultiSyncCollector(
+            create_env_fn=[env_fn] * 2,
+            policy=make_policy("vec"),
+            frames_per_batch=20,
+            total_frames=20,
+            preemptive_threshold=1.0,
+            cat_results="stack",
+        )
+        try:
+            # Preemption can never fire at 1.0: no interruptor should be built
+            # and every collected frame should be valid.
+            assert collector.interruptor is None
+            assert collector.preemptive_threshold == 1.0
+            for batch in collector:
+                assert (batch["collector", "traj_ids"] != -1).all()
+        finally:
+            collector.shutdown()
+
     @pytest.mark.parametrize("env_name", ["conv", "vec"])
     def test_sync_collector_interruptor_mechanism(self, env_name, seed=100):
         def env_fn(seed):
@@ -6359,6 +6489,20 @@ class TestCollectorProfiling:
         assert (tmp_path / "trace_1.json").exists()
 
 
+class _VersionStampModule(nn.Module):
+    """Emits a constant unit action and stamps the module's current version."""
+
+    def __init__(self, action_spec):
+        super().__init__()
+        self.action_spec = action_spec
+        self.version = 0
+
+    def forward(self, obs):
+        action = torch.ones_like(self.action_spec.zero())
+        version = torch.full_like(obs, self.version)
+        return action, version
+
+
 class TestTrajsPerBatch:
     """Tests for the ``trajs_per_batch`` kwarg on collectors."""
 
@@ -6381,6 +6525,184 @@ class TestTrajsPerBatch:
     # ------------------------------------------------------------------
     # Unit tests for the private helpers
     # ------------------------------------------------------------------
+
+    def test_emit_preserves_non_tensor_entries(self):
+        """_traj_emit pads NonTensor leaves by hand (tensordict.pad drops them).
+
+        Regression: language-instruction-style NonTensorStack entries came
+        out of the padded trajectory batch as empty TensorDicts, valid steps
+        included. Padded slots repeat the last element; the mask marks
+        validity.
+        """
+
+        def make_traj(length, instruction):
+            return TensorDict(
+                {
+                    "obs": torch.zeros(length, 1),
+                    "instr": NonTensorStack(*[instruction] * length),
+                },
+                batch_size=[length],
+            )
+
+        out = _traj_emit([make_traj(4, "pick"), make_traj(2, "place")], 2)
+        assert out.batch_size == torch.Size([2, 4])
+        instr = out.get("instr")
+        assert isinstance(instr, NonTensorStack)
+        assert [item.data for item in instr[0]] == ["pick"] * 4
+        assert [item.data for item in instr[1]] == ["place"] * 4
+        assert out["collector", "mask"].tolist() == [
+            [True, True, True, True],
+            [True, True, False, False],
+        ]
+
+    def test_emit_cat_format(self):
+        """traj_format="cat" concatenates trajectories: flat, unpadded, no mask.
+
+        NonTensor entries survive untouched (no padding is involved), and the
+        trajectories stay contiguous in completion order with done flags at
+        their last steps.
+        """
+
+        def make_traj(length, instruction, done_last=True):
+            return TensorDict(
+                {
+                    "obs": torch.arange(length, dtype=torch.float).unsqueeze(-1),
+                    "instr": NonTensorStack(*[instruction] * length),
+                    ("next", "done"): torch.tensor(
+                        [False] * (length - 1) + [done_last]
+                    ),
+                },
+                batch_size=[length],
+            )
+
+        out = _traj_emit(
+            [make_traj(4, "pick"), make_traj(2, "place")], 2, traj_format="cat"
+        )
+        assert out.batch_size == torch.Size([6])
+        assert ("collector", "mask") not in out.keys(True)
+        assert out["next", "done"].tolist() == [
+            False,
+            False,
+            False,
+            True,
+            False,
+            True,
+        ]
+        assert [item.data for item in out.get("instr")] == ["pick"] * 4 + ["place"] * 2
+        assert out["obs"].squeeze(-1).tolist() == [0.0, 1.0, 2.0, 3.0, 0.0, 1.0]
+
+    def test_traj_format_default_future_warning(self):
+        """Omitting traj_format under trajs_per_batch warns about the v0.16 flip.
+
+        The default currently resolves to "padded". The warning only fires
+        when the layout choice matters: explicit formats, fixed-frame
+        collection and replay-buffer writes stay silent.
+        """
+        env = CountingEnv(max_steps=4)
+        policy = RandomPolicy(env.action_spec)
+        try:
+            with pytest.warns(
+                FutureWarning, match="will change to 'cat' in torchrl v0.16"
+            ):
+                collector = Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    trajs_per_batch=2,
+                )
+            assert collector.traj_format == "padded"
+            collector.shutdown(close_env=False)
+            for kwargs in (
+                {"trajs_per_batch": 2, "traj_format": "cat"},
+                {"trajs_per_batch": 2, "traj_format": "padded"},
+                {},
+                {
+                    "trajs_per_batch": 2,
+                    "replay_buffer": ReplayBuffer(storage=LazyTensorStorage(100)),
+                },
+            ):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always")
+                    collector = Collector(
+                        env,
+                        policy,
+                        frames_per_batch=8,
+                        total_frames=16,
+                        **kwargs,
+                    )
+                collector.shutdown(close_env=False)
+                assert not any("traj_format" in str(w.message) for w in caught), kwargs
+        finally:
+            env.close(raise_if_closed=False)
+
+    def test_reset_flushes_assembly_state(self):
+        """collector.reset() drops in-flight and queued-but-unyielded episodes.
+
+        Regression: the assembly queues survived reset(), so post-reset
+        batches led with pre-reset episodes (stale data straddling a policy
+        update), partial chunks of killed episodes leaked, and a stale
+        partial could merge with a later episode reusing a rebased traj id.
+        """
+        env = CountingEnv(max_steps=2)
+        inner = _VersionStampModule(env.full_action_spec[env.action_key].clone())
+        policy = TensorDictModule(
+            inner,
+            in_keys=["observation"],
+            out_keys=["action", "policy_version"],
+        )
+        # 3-step episodes, 10-frame polls: the first poll completes 3
+        # episodes (one yielded batch of 2, one queued surplus) and leaves a
+        # fourth in flight
+        collector = Collector(
+            env,
+            policy,
+            frames_per_batch=10,
+            total_frames=-1,
+            trajs_per_batch=2,
+            traj_format="padded",
+        )
+        try:
+            it = iter(collector)
+            b1 = next(it)
+            assert (b1["policy_version"] == 0).all()
+            partial, complete = collector._traj_assembly
+            # the fixture genuinely exercises both queues
+            assert len(complete) == 1
+            assert len(partial) == 1
+            inner.version = 1
+            collector.reset()
+            assert not partial and not complete
+            b2 = next(it)
+            assert (b2["policy_version"] == 1).all()
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+    def test_traj_format_validation(self):
+        """traj_format is validated eagerly: bad value or missing trajs_per_batch."""
+        env = CountingEnv(max_steps=4)
+        try:
+            policy = RandomPolicy(env.action_spec)
+            with pytest.raises(ValueError, match="must be 'padded' or 'cat'"):
+                Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    trajs_per_batch=2,
+                    traj_format="flat",
+                )
+            with pytest.raises(ValueError, match="trajs_per_batch"):
+                Collector(
+                    env,
+                    policy,
+                    frames_per_batch=8,
+                    total_frames=16,
+                    traj_format="cat",
+                )
+        finally:
+            env.close(raise_if_closed=False)
 
     def test_ingest_single_batch_complete(self):
         """_traj_ingest routes completed trajectories into complete_trajs."""
@@ -6502,6 +6824,7 @@ class TestTrajsPerBatch:
                 frames_per_batch=max_steps * 4,
                 total_frames=max_steps * 16,
                 trajs_per_batch=2,
+                traj_format="padded",
             )
         else:
             env = env_fn()
@@ -6511,6 +6834,7 @@ class TestTrajsPerBatch:
                 frames_per_batch=max_steps * 3,
                 total_frames=max_steps * 9,
                 trajs_per_batch=2,
+                traj_format="padded",
             )
 
         try:
@@ -6527,6 +6851,78 @@ class TestTrajsPerBatch:
                     last_valid = mask[i].sum().item() - 1
                     done = b[i, last_valid][("next", "done")]
                     assert done.any(), f"traj {i} last valid step is not done"
+        finally:
+            collector.shutdown()
+            if not multi:
+                env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize(
+        "collector_cls,multi",
+        [
+            (Collector, False),
+            (functools.partial(MultiSyncCollector, cat_results="stack"), True),
+            (MultiAsyncCollector, True),
+        ],
+    )
+    def test_traj_format_cat_integration(self, collector_cls, multi):
+        """traj_format="cat" yields flat batches of whole trajectories.
+
+        Each batch is 1-D, holds exactly trajs_per_batch done flags, carries
+        no ("collector", "mask"), and its trajectories are contiguous: within
+        a traj_ids segment the step counter increases by one and the segment
+        ends with done=True.
+        """
+        max_steps = 4
+        trajs_per_batch = 2
+        env_fn = lambda: TransformedEnv(  # noqa: E731
+            CountingEnv(max_steps=max_steps), StepCounter(max_steps)
+        )
+        probe_env = env_fn()
+        try:
+            policy = RandomPolicy(probe_env.action_spec)
+        finally:
+            probe_env.close(raise_if_closed=False)
+
+        if multi:
+            collector = collector_cls(
+                [env_fn, env_fn],
+                policy,
+                frames_per_batch=max_steps * 4,
+                total_frames=max_steps * 16,
+                trajs_per_batch=trajs_per_batch,
+                traj_format="cat",
+            )
+        else:
+            env = env_fn()
+            collector = collector_cls(
+                env,
+                policy,
+                frames_per_batch=max_steps * 3,
+                total_frames=max_steps * 9,
+                trajs_per_batch=trajs_per_batch,
+                traj_format="cat",
+            )
+
+        try:
+            batches = list(collector)
+            assert len(batches) > 0
+            for b in batches:
+                assert b.ndim == 1
+                assert ("collector", "mask") not in b.keys(True)
+                done = b["next", "done"].reshape(-1)
+                assert done.sum().item() == trajs_per_batch
+                # trajectories are contiguous segments delimited by traj_ids
+                traj_ids = b["collector", "traj_ids"]
+                segment_ends = done.nonzero().reshape(-1).tolist()
+                start = 0
+                for end in segment_ends:
+                    segment = b[start : end + 1]
+                    assert (traj_ids[start : end + 1] == traj_ids[start]).all()
+                    steps = segment["step_count"].reshape(-1)
+                    assert (steps[1:] - steps[:-1] == 1).all()
+                    start = end + 1
+                # the batch holds nothing past the last trajectory
+                assert start == b.shape[0]
         finally:
             collector.shutdown()
             if not multi:

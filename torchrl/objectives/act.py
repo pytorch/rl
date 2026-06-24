@@ -12,6 +12,7 @@ from tensordict import TensorDict, TensorDictBase, TensorDictParams
 from tensordict.nn import TensorDictModule
 from tensordict.utils import NestedKey
 
+from torchrl.data.vla import ACTION_CHUNK_KEY
 from torchrl.objectives.common import LossModule
 
 
@@ -32,10 +33,12 @@ class ACTLoss(LossModule):
         \underbrace{D_{\mathrm{KL}}\!\left(q(z|o,a)\,\|\,
         \mathcal{N}(0,I)\right)}_{\text{KL}}
 
-    The ``actor_network`` must read ``"observation"`` and ``"action_chunk"``
-    and write ``"action_pred"``, ``"mu"``, and ``"log_var"``.  This matches
-    the contract of :class:`~torchrl.modules.models.ACTModel` when wrapped
-    with a :class:`~tensordict.nn.TensorDictModule`.
+    The input tensordict stores expert chunks under
+    ``("vla_action", "chunk")`` by default. The ``actor_network`` itself must
+    read ``"observation"`` and ``"action_chunk"`` and write
+    ``"action_pred"``, ``"mu"``, and ``"log_var"``. This matches the contract
+    of :class:`~torchrl.modules.models.ACTModel` when wrapped with a
+    :class:`~tensordict.nn.TensorDictModule`.
 
     Three values are returned in the output TensorDict:
 
@@ -45,9 +48,9 @@ class ACTLoss(LossModule):
     * ``"loss_kl"`` — detached KL term (for logging).
 
     Args:
-        actor_network (TensorDictModule): ACT policy.  Must expose
-            ``in_keys`` containing ``"observation"`` and ``"action_chunk"``
-            and write ``"action_pred"``, ``"mu"``, ``"log_var"``.
+        actor_network (TensorDictModule): ACT policy. Must expose ``in_keys``
+            containing ``"observation"`` and ``"action_chunk"`` and write
+            ``"action_pred"``, ``"mu"``, ``"log_var"``.
 
     Keyword Args:
         kl_weight (float, optional): β — weight on the KL divergence term.
@@ -71,7 +74,7 @@ class ACTLoss(LossModule):
         >>> td = TensorDict(
         ...     {
         ...         "observation": torch.randn(4, 14),
-        ...         "action_chunk": torch.randn(4, 10, 7),
+        ...         ("vla_action", "chunk"): torch.randn(4, 10, 7),
         ...     },
         ...     batch_size=[4],
         ... )
@@ -86,7 +89,8 @@ class ACTLoss(LossModule):
         Attributes:
             observation (NestedKey): Observation key. Default ``"observation"``.
             action_chunk (NestedKey): Expert action chunk
-                ``(..., T, action_dim)``. Default ``"action_chunk"``.
+                ``(..., T, action_dim)``. Default
+                ``("vla_action", "chunk")``.
             action_pred (NestedKey): Predicted chunk written by the policy.
                 Default ``"action_pred"``.
             mu (NestedKey): CVAE encoder mean. Default ``"mu"``.
@@ -95,7 +99,7 @@ class ACTLoss(LossModule):
         """
 
         observation: NestedKey = "observation"
-        action_chunk: NestedKey = "action_chunk"
+        action_chunk: NestedKey = ACTION_CHUNK_KEY
         action_pred: NestedKey = "action_pred"
         mu: NestedKey = "mu"
         log_var: NestedKey = "log_var"
@@ -151,7 +155,7 @@ class ACTLoss(LossModule):
 
         Args:
             tensordict (TensorDictBase): Input data containing
-                ``"observation"`` and ``"action_chunk"``.
+                ``"observation"`` and ``("vla_action", "chunk")`` by default.
 
         Returns:
             TensorDict with keys ``"loss_act"``, ``"loss_reconstruction"``,
