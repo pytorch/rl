@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import importlib.util
 import pathlib
 import sys
 from time import sleep
@@ -44,11 +45,11 @@ from torchrl.trainers.helpers.models import (
     make_dqn_actor,
 )
 
-try:
+_has_hydra = importlib.util.find_spec("hydra") is not None
+
+if _has_hydra:
     from hydra import compose, initialize
     from hydra.core.config_store import ConfigStore
-
-    _has_hydra = True
 
     @pytest.fixture(autouse=True, scope="module")
     def clear_hydra():
@@ -56,8 +57,6 @@ try:
 
         GlobalHydra.instance().clear()
 
-except ImportError:
-    _has_hydra = False
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 if TORCH_VERSION < version.parse("1.12.0"):
@@ -73,7 +72,6 @@ else:
 
 @pytest.fixture
 def dreamer_constructor_fixture():
-
     # we hack the env constructor
     sys.path.append(
         str(pathlib.Path(__file__).parent.parent / "sota-implementations" / "dreamer")
@@ -220,7 +218,6 @@ def test_timeit():
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 def test_transformed_env_constructor_with_state_dict(from_pixels):
-
     config_fields = [
         (config_field.name, config_field.type, config_field)
         for config_cls in (

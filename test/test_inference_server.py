@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import importlib.util
 import multiprocessing as mp
 import threading
 import time
@@ -28,17 +29,8 @@ from torchrl.modules.inference_server import (
 )
 from torchrl.modules.inference_server._monarch import MonarchTransport
 
-_has_ray = True
-try:
-    import ray
-except ImportError:
-    _has_ray = False
-
-_has_monarch = True
-try:
-    import monarch  # noqa: F401
-except ImportError:
-    _has_monarch = False
+_has_ray = importlib.util.find_spec("ray") is not None
+_has_monarch = importlib.util.find_spec("monarch") is not None
 
 
 # =============================================================================

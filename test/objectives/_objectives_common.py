@@ -24,16 +24,10 @@ from torch import nn
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import EnvBase
 
-_has_functorch = True
-try:
-    import functorch as ft  # noqa
-
-    make_functional_with_buffers = ft.make_functional_with_buffers
-    FUNCTORCH_ERR = ""
-except ImportError as err:
-    _has_functorch = False
-    FUNCTORCH_ERR = str(err)
-    make_functional_with_buffers = None
+_has_functorch = (
+    hasattr(torch, "vmap") or importlib.util.find_spec("functorch") is not None
+)
+FUNCTORCH_ERR = ""
 
 _has_transformers = bool(importlib.util.find_spec("transformers"))
 _has_botorch = bool(importlib.util.find_spec("botorch"))
@@ -129,14 +123,11 @@ class MARLEnv(EnvBase):
     def _step(
         self,
         tensordict: TensorDictBase,
-    ) -> TensorDictBase:
-        ...
+    ) -> TensorDictBase: ...
 
-    def _reset(self, tensordic):
-        ...
+    def _reset(self, tensordic): ...
 
-    def _set_seed(self, seed: int | None) -> None:
-        ...
+    def _set_seed(self, seed: int | None) -> None: ...
 
 
 class LossModuleTestBase:
@@ -149,9 +140,9 @@ class LossModuleTestBase:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        assert hasattr(
-            cls, "test_reset_parameters_recursive"
-        ), "Please add a test_reset_parameters_recursive test for this class"
+        assert hasattr(cls, "test_reset_parameters_recursive"), (
+            "Please add a test_reset_parameters_recursive test for this class"
+        )
 
     def _flatten_in_keys(self, in_keys):
         return [

@@ -18,13 +18,7 @@ import pytest
 import torch
 from torch import nn
 
-try:
-    from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.record.loggers.tensorboard import TensorboardLogger
-
-    _has_tb = True
-except ImportError:
-    _has_tb = False
+_has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
 from torchrl.data import (
@@ -488,9 +482,7 @@ class TestRB:
             if re_init:
                 assert load_state_dict_has_been_called_td[0]
             if backend != "torch":
-                td1 = (
-                    storage._storage
-                )  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
+                td1 = storage._storage  # trainer.app_state["state"]["replay_buffer.replay_buffer._storage._storage"]
                 td2 = trainer2._modules["replay_buffer"].replay_buffer._storage._storage
                 if storage_type == "list":
                     assert all((_td1 == _td2).all() for _td1, _td2 in zip(td1, td2))
@@ -901,6 +893,9 @@ class TestRecorder:
         return args
 
     def test_recorder(self, N=8):
+        from tensorboard.backend.event_processing import event_accumulator
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         args = self._get_args()
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
@@ -926,7 +921,7 @@ class TestRecorder:
             for _ in range(N):
                 recorder(None)
 
-            for (_, _, filenames) in walk(folder):
+            for _, _, filenames in walk(folder):
                 filename = filenames[0]
                 break
 
@@ -954,6 +949,8 @@ class TestRecorder:
         ],
     )
     def test_recorder_load(self, backend, N=8):
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
 
@@ -963,7 +960,10 @@ class TestRecorder:
         LogValidationReward.state_dict, Recorder_state_dict = _fun_checker(
             LogValidationReward.state_dict, state_dict_has_been_called
         )
-        (LogValidationReward.load_state_dict, Recorder_load_state_dict,) = _fun_checker(
+        (
+            LogValidationReward.load_state_dict,
+            Recorder_load_state_dict,
+        ) = _fun_checker(
             LogValidationReward.load_state_dict, load_state_dict_has_been_called
         )
 
@@ -1089,7 +1089,10 @@ class TestCountFrames:
 
         frame_skip = 3
         batch = 10
-        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+        with (
+            tempfile.TemporaryDirectory() as tmpdirname,
+            tempfile.TemporaryDirectory() as tmpdirname2,
+        ):
             trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
             td = TensorDict(
                 {
@@ -1298,9 +1301,9 @@ class TestPostOptimCompleteLog:
     def test_subclass_exposes_auto_log_optim_steps(self, trainer_cls):
         """Every Trainer subclass must surface auto_log_optim_steps in its __init__."""
         sig = inspect.signature(trainer_cls.__init__)
-        assert (
-            "auto_log_optim_steps" in sig.parameters
-        ), f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
+        assert "auto_log_optim_steps" in sig.parameters, (
+            f"{trainer_cls.__name__}.__init__ must accept auto_log_optim_steps"
+        )
         assert sig.parameters["auto_log_optim_steps"].default is True
 
 
