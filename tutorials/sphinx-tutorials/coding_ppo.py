@@ -590,7 +590,17 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 #
 # * Repeat
 #
+# .. note::
+#     It is highly recommended to keep your policy and value networks in
+#     ``eval`` mode during RL training to ensure deterministic behavior. This
+#     prevents unintended interactions with dropout or batch normalization
+#     layers. If you need to use dropout during training, use
+#     :class:`~torchrl.modules.ConsistentDropoutModule` instead.
+#
 
+# Put the policy and value modules in eval mode
+policy_module.eval()
+value_module.eval()
 
 logs = defaultdict(list)
 pbar = tqdm(total=total_frames)
@@ -640,20 +650,21 @@ for i, tensordict_data in enumerate(collector):
         # number of steps (1000, which is our ``env`` horizon).
         # The ``rollout`` method of the ``env`` can take a policy as argument:
         # it will then execute this policy at each step.
+        # It is highly recommended to keep the model in eval mode during RL
+        # training to ensure deterministic behavior (e.g., no dropout or
+        # batch norm randomness). See the ClipPPOLoss documentation for details.
         with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
-            logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
-            logs["eval reward (sum)"].append(
-                eval_rollout["next", "reward"].sum().item()
-            )
-            logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-            eval_str = (
-                f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
-                f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
-                f"eval step-count: {logs['eval step_count'][-1]}"
-            )
-            del eval_rollout
+        logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
+        logs["eval reward (sum)"].append(eval_rollout["next", "reward"].sum().item())
+        logs["eval step_count"].append(eval_rollout["step_count"].max().item())
+        eval_str = (
+            f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
+            f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
+            f"eval step-count: {logs['eval step_count'][-1]}"
+        )
+        del eval_rollout
     pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
 
     # We're also using a learning rate scheduler. Like the gradient clipping,

@@ -143,6 +143,40 @@ optim.step()
 optim.zero_grad()
 
 ###################################
+# Model mode (train/eval)
+# ------------------------
+#
+# In RL, it is important to be mindful of the model's training mode
+# (``.train()`` / ``.eval()``). Unlike in supervised learning where models are
+# typically set to ``.train()`` during training and ``.eval()`` during
+# evaluation, in RL it is often recommended to keep the **entire model in eval
+# mode** throughout the training process. This recommendation is explicitly
+# mentioned in the :class:`~torchrl.objectives.ClipPPOLoss` documentation:
+#
+#   "While this loss module does not enforce any specific model mode
+#   (train/eval), it is highly recommended to keep your model in eval mode
+#   during RL training to ensure deterministic behavior."
+#
+# The reason is that stochastic modules like :class:`~torch.nn.Dropout` or
+# :class:`~torch.nn.BatchNorm` behave differently in train and eval modes.
+# In train mode, dropout randomly zeroes out activations and batch norm uses
+# mini-batch statistics, which can introduce randomness during data
+# collection and lead to instability in the policy gradient estimates.
+#
+# If you need exploration via dropout during data collection (e.g., for
+# Bayesian RL), TorchRL provides
+# :class:`~torchrl.modules.ConsistentDropoutModule` which applies a
+# *consistent* dropout mask across all steps of a trajectory, ensuring
+# reproducibility while still benefiting from the regularizing effects of
+# dropout.
+#
+# .. note::
+#   TorchRL's data collectors perform rollouts in ``torch.no_grad()`` mode
+#   but **not** in ``eval`` mode, so it is the user's responsibility to set
+#   the policy to eval mode before passing it to a collector or calling
+#   ``env.rollout(policy=...)``.
+
+###################################
 # Further considerations: Target parameters
 # -----------------------------------------
 #
