@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
-
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -456,8 +456,11 @@ def _process_server_entry(
     server_kwargs: dict,
     shutdown_event: MPEvent,
     ready_queue,
+    control_queue,
+    control_response_queue,
 ) -> None:
     """Run an :class:`InferenceServer` loop inside a child process."""
+    server = None
     try:
         model = policy_factory()
         server = InferenceServer(
@@ -466,11 +469,36 @@ def _process_server_entry(
             shutdown_event=shutdown_event,
             **server_kwargs,
         )
+        server.start()
         ready_queue.put((True, None))
-        server._run()
+        while not shutdown_event.is_set():
+            try:
+                request_id, command, kwargs = control_queue.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            try:
+                if command == "stats":
+                    payload = server.stats(**kwargs)
+                elif command == "health":
+                    payload = {
+                        "alive": server.is_alive,
+                        "policy_version": server.policy_version,
+                    }
+                elif command == "shutdown":
+                    shutdown_event.set()
+                    payload = {"accepted": True}
+                else:
+                    raise RuntimeError(f"Unknown process-server command: {command}")
+            except BaseException as exc:
+                control_response_queue.put((request_id, False, repr(exc)))
+            else:
+                control_response_queue.put((request_id, True, payload))
     except BaseException as exc:
         ready_queue.put((False, repr(exc)))
         raise
+    finally:
+        if server is not None:
+            server.shutdown(timeout=1.0)
 
 
 class ProcessInferenceServer:
@@ -596,6 +624,9 @@ class ProcessInferenceServer:
             self._ctx = mp_context
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
+        self._control_queue = self._ctx.Queue()
+        self._control_response_queue = self._ctx.Queue()
+        self._next_control_request_id = 0
         self._process: mp.Process | None = None
         self._server_kwargs = {
             "max_batch_size": max_batch_size,
@@ -626,6 +657,8 @@ class ProcessInferenceServer:
                 "server_kwargs": self._server_kwargs,
                 "shutdown_event": self._shutdown_event,
                 "ready_queue": self._ready_queue,
+                "control_queue": self._control_queue,
+                "control_response_queue": self._control_response_queue,
             },
             daemon=True,
             name="ProcessInferenceServer",
@@ -637,8 +670,44 @@ class ProcessInferenceServer:
             raise RuntimeError(f"ProcessInferenceServer failed to start: {payload}")
         return self
 
+    def _request_control(
+        self, command: str, kwargs: dict | None = None, timeout: float = 5.0
+    ):
+        if self._process is None:
+            raise RuntimeError("ProcessInferenceServer is not running.")
+        if not self._process.is_alive():
+            raise RuntimeError(
+                "ProcessInferenceServer process is not alive "
+                f"(exitcode={self._process.exitcode})."
+            )
+        request_id = self._next_control_request_id
+        self._next_control_request_id += 1
+        self._control_queue.put((request_id, command, kwargs or {}))
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Timed out waiting for ProcessInferenceServer {command!r}."
+                )
+            response_id, ok, payload = self._control_response_queue.get(
+                timeout=remaining
+            )
+            if response_id != request_id:
+                continue
+            if not ok:
+                raise RuntimeError(
+                    f"ProcessInferenceServer {command!r} failed: {payload}"
+                )
+            return payload
+
     def shutdown(self, timeout: float | None = 5.0) -> None:
         """Signal the child process to stop and wait for it to exit."""
+        if self.is_alive:
+            try:
+                self._request_control("shutdown", timeout=timeout or 5.0)
+            except Exception:
+                pass
         self._shutdown_event.set()
         process = self._process
         if process is None:
@@ -655,12 +724,25 @@ class ProcessInferenceServer:
         return self._process is not None and self._process.is_alive()
 
     def stats(self, *, reset: bool = False) -> dict[str, float | int]:
-        """Return process-server stats.
+        """Return process-server stats from the child process.
 
-        Live stats are not shared across processes yet, so this currently
-        returns an empty dictionary.
+        Args:
+            reset (bool, optional): if ``True``, reset counters in the child
+                process after taking the snapshot.
         """
-        return {}
+        return self._request_control("stats", {"reset": reset})
+
+    def health(self) -> dict[str, int | bool | None]:
+        """Return a lightweight child-process health snapshot."""
+        process = self._process
+        result = {
+            "process_alive": process.is_alive() if process is not None else False,
+            "pid": process.pid if process is not None else None,
+            "exitcode": process.exitcode if process is not None else None,
+        }
+        if process is not None and process.is_alive():
+            result.update(self._request_control("health"))
+        return result
 
     def __enter__(self) -> ProcessInferenceServer:
         return self.start()

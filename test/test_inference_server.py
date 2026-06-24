@@ -870,10 +870,14 @@ class TestProcessInferenceServer:
             mp_context=ctx,
         ) as server:
             assert server.is_alive
-            assert server.stats() == {}
             result = client(TensorDict({"observation": torch.ones(1)}))
+            stats = server.stats()
+            health = server.health()
         assert "action" in result.keys()
         assert result["action"].shape == (1,)
+        assert stats["requests"] == 1
+        assert stats["avg_batch_size"] == 1
+        assert health["process_alive"]
         assert not server.is_alive
 
     def test_process_server_exception_propagates(self):
