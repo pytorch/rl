@@ -452,7 +452,7 @@ jobs:
       matrix:
         python_version: ["3.10"]
         cuda_arch_version: ["12.8"]
-    if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/openenv') }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'Environments') || contains(github.event.pull_request.labels.*.name, 'Environments/openenv') || contains(github.event.pull_request.labels.*.name, 'llm/') }}
     uses: pytorch/test-infra/.github/workflows/linux_job_v2.yml@main
     with:
       repository: pytorch/rl
@@ -479,8 +479,12 @@ jobs:
         export BATCHED_PIPE_TIMEOUT=60
         export TD_GET_DEFAULTS_TO_NONE=1
 
+        nvidia-smi
+
         bash .github/unittest/linux_libs/scripts_openenv/setup_env.sh
         bash .github/unittest/linux_libs/scripts_openenv/install.sh
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_version.sh "$TORCH_VERSION"
+        PYTHON=./env/bin/python bash .github/unittest/helpers/assert_torch_tensordict_versions.sh "$TORCH_VERSION"
         bash .github/unittest/linux_libs/scripts_openenv/run_test.sh
         bash .github/unittest/linux_libs/scripts_openenv/post_process.sh
 

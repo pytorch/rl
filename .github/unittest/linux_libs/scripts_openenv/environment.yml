@@ -18,4 +18,5 @@ dependencies:
     - pyyaml
     - scipy
     - hydra-core
-    - openenv-core
+    - transformers
+    - openenv-core>=0.3.0,<0.4.0

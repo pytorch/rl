@@ -46,9 +46,10 @@ This approach:
 
 ## Configuration
 
-The training configuration is managed through Hydra. There are two main configuration files:
+The training configuration is managed through Hydra. Main configuration files include:
 - `config/grpo_gsm8k.yaml`: Default configuration for GSM8K tasks (default)
 - `config/grpo_ifeval.yaml`: Configuration optimized for IFEval tasks
+- `config/grpo_openenv.yaml`: Configuration template for OpenEnv tasks
 
 ## Usage
 
@@ -187,6 +188,30 @@ In summary, GRPO's approach of adding the KL to reference directly to the loss p
 
 ```bash
 python grpo-sync.py mode=sync --config-name grpo_ifeval
+```
+
+### Run with OpenEnv Config
+
+OpenEnv tasks use TorchRL's `OpenEnvChatEnv` adapter. Install the optional
+dependency and point the config to an installed OpenEnv package name or Hub
+repository ID:
+
+```bash
+pip install "torchrl[grpo,openenv]"
+python grpo-sync.py mode=sync --config-name grpo_openenv env.openenv.name=echo-env
+```
+
+For offline development and CI, mock `openenv.AutoEnv.from_env` or pass a local
+OpenEnv client to `OpenEnvChatEnv` directly; the TorchRL tests use this path to
+avoid network or service dependencies. For real OpenEnv validation, override
+`env.openenv.env_kwargs` with the connection options required by the target
+server:
+
+```bash
+python grpo-async.py mode=async --config-name grpo_openenv \
+  env.openenv.name=my-org/my-openenv \
+  env.openenv.max_steps=8 \
+  env.openenv.env_kwargs.trust_remote_code=true
 ```
 
 ### Override Config Values
