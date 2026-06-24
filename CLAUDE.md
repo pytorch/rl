@@ -129,7 +129,9 @@ correctness fixes don't need one.
 ## 11. SOTA implementations
 
 New algorithm needs: a runnable script under `sota-implementations/<algo>/`
-with a Hydra config, plus an entry in `sota-check/`.
+with a Hydra config, plus entries in `sota-check/` and in the
+`test-linux-sota` CI smoke list at
+`.github/unittest/linux_sota/scripts/test_sota.py`.
 
 ## 12. Backwards compatibility & deprecations
 
