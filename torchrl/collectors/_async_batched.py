@@ -196,6 +196,8 @@ class AsyncBatchedCollector(BaseCollector):
         policy_version_key (NestedKey or None, optional): TensorDict key used
             for behavior-policy version annotations. ``None`` disables
             annotations. Defaults to ``"policy_version"``.
+        max_inflight_per_env (int, optional): maximum unresolved remote-policy
+            requests per environment coordinator. Defaults to ``1``.
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -294,6 +296,7 @@ class AsyncBatchedCollector(BaseCollector):
         device_config: InferenceDeviceConfig | None = None,
         policy_version: int = 0,
         policy_version_key: NestedKey | None = "policy_version",
+        max_inflight_per_env: int | None = 1,
         server_backend: Literal["thread", "process"] = "thread",
     ):
         if policy is not None and policy_factory is not None:
@@ -423,6 +426,7 @@ class AsyncBatchedCollector(BaseCollector):
                 policy_version_key=policy_version_key,
             )
         self._policy_version_key = policy_version_key
+        self._max_inflight_per_env = max_inflight_per_env
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -472,6 +476,7 @@ class AsyncBatchedCollector(BaseCollector):
             self._clients = [
                 PolicyClientModule(
                     self._transport.client(),
+                    max_inflight=self._max_inflight_per_env,
                     policy_version_key=self._policy_version_key or "policy_version",
                 )
                 for _ in range(self._num_envs)

@@ -4,7 +4,9 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Sequence
+from typing import Any
 
 import torch
 from tensordict.base import TensorDictBase
@@ -27,6 +29,32 @@ class _ImmediateFuture:
         return self._result
 
 
+class _ReleaseOnResultFuture:
+    def __init__(self, future, release: Callable[[], None]):
+        self._future = future
+        self._release = release
+        self._released = False
+        self._lock = threading.Lock()
+
+    def _release_once(self) -> None:
+        with self._lock:
+            if not self._released:
+                self._released = True
+                self._release()
+
+    def done(self) -> bool:
+        return self._future.done()
+
+    def result(self, timeout: float | None = None) -> TensorDictBase:
+        try:
+            return self._future.result(timeout=timeout)
+        finally:
+            self._release_once()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._future, name)
+
+
 class PolicyClientModule(TensorDictModuleBase):
     """TensorDict policy wrapper for remote inference-server clients.
 
@@ -45,6 +73,8 @@ class PolicyClientModule(TensorDictModuleBase):
             module. The full input TensorDict is still sent to the server.
         out_keys (sequence of NestedKey, optional): output keys advertised by
             the module.
+        max_inflight (int, optional): maximum number of unresolved asynchronous
+            requests submitted through this module. ``None`` means unbounded.
         target_policy_version (int, optional): expected latest policy version
             used for bounded-staleness checks.
         max_policy_lag (int, optional): maximum allowed
@@ -83,6 +113,7 @@ class PolicyClientModule(TensorDictModuleBase):
         *,
         in_keys: Sequence[NestedKey] | None = None,
         out_keys: Sequence[NestedKey] | None = None,
+        max_inflight: int | None = None,
         target_policy_version: int | None = None,
         max_policy_lag: int | None = None,
         policy_version_key: NestedKey = "policy_version",
@@ -93,9 +124,21 @@ class PolicyClientModule(TensorDictModuleBase):
         self.client = client
         self.in_keys = list(in_keys or [])
         self.out_keys = list(out_keys or [])
+        self.max_inflight = max_inflight
         self.target_policy_version = target_policy_version
         self.max_policy_lag = max_policy_lag
         self.policy_version_key = policy_version_key
+        self._inflight_sem = (
+            threading.BoundedSemaphore(max_inflight)
+            if max_inflight is not None
+            else None
+        )
+
+    def _acquire_inflight(self) -> Callable[[], None]:
+        if self._inflight_sem is None:
+            return lambda: None
+        self._inflight_sem.acquire()
+        return self._inflight_sem.release
 
     def _check_policy_lag(self, tensordict: TensorDictBase) -> None:
         if self.target_policy_version is None or self.max_policy_lag is None:
@@ -125,14 +168,20 @@ class PolicyClientModule(TensorDictModuleBase):
         Returns:
             Future-like object whose ``result()`` method returns a TensorDict.
         """
+        release = self._acquire_inflight()
         submit = getattr(self.client, "submit", None)
         if submit is None:
             try:
                 result = self.client(tensordict)
-                return _ImmediateFuture(result)
+                return _ReleaseOnResultFuture(_ImmediateFuture(result), release)
             except BaseException as exc:
-                return _ImmediateFuture(exc)
-        return submit(tensordict)
+                return _ReleaseOnResultFuture(_ImmediateFuture(exc), release)
+        try:
+            future = submit(tensordict)
+        except BaseException:
+            release()
+            raise
+        return _ReleaseOnResultFuture(future, release)
 
     def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
         result = self.submit(tensordict).result()
