@@ -267,6 +267,12 @@ def get_extensions():
                     "-DWITH_CUDA",
                 ]
             extra_link_args = ["-O0", "-g"]
+        else:
+            # setuptools appends Python's sysconfig CFLAGS (which include -g)
+            # to the compile command, leaving ~20 MB of debug info in the
+            # extension. Strip symbols at link time in release builds; the
+            # dynamic symbol table (needed by dlopen) is unaffected.
+            extra_link_args = ["-Wl,-x"] if sys.platform == "darwin" else ["-Wl,-s"]
 
     extensions_dir = "torchrl/csrc"
 

@@ -257,9 +257,10 @@ def _check_optional_env(factory: EnvFactory) -> tuple[bool, str, int]:
     if factory.env == "fake-pixels":
         return True, "", factory.action_dim
     if factory.env == "gym-mujoco":
-        if importlib.util.find_spec("gymnasium") is None and importlib.util.find_spec(
-            "gym"
-        ) is None:
+        if (
+            importlib.util.find_spec("gymnasium") is None
+            and importlib.util.find_spec("gym") is None
+        ):
             return False, "gymnasium/gym is not installed", factory.action_dim
         if importlib.util.find_spec("mujoco") is None:
             return False, "mujoco is not installed", factory.action_dim
@@ -413,8 +414,11 @@ def _resolve_batching_rule(rule: str, num_envs: int) -> tuple[int, int, float, s
         return num_envs, 1, 0.001, f"max_bs={num_envs}, min_bs=1"
     if rule == "min4":
         min_batch_size = min(4, num_envs)
-        return num_envs, min_batch_size, 0.01, (
-            f"max_bs={num_envs}, min_bs={min_batch_size}"
+        return (
+            num_envs,
+            min_batch_size,
+            0.01,
+            (f"max_bs={num_envs}, min_bs={min_batch_size}"),
         )
     if rule == "full":
         return num_envs, num_envs, 0.01, f"max_bs={num_envs}, min_bs={num_envs}"
@@ -519,7 +523,7 @@ def main() -> None:
                         name="Collector + ParallelEnv",
                         backend=backend,
                         batch_rule="sync barrier",
-                        factory=lambda: Collector(
+                        factory=lambda num_envs=num_envs: Collector(
                             create_env_fn=ParallelEnv(num_envs, env_factory),
                             policy=policy_factory(),
                             frames_per_batch=args.frames_per_batch,
@@ -544,15 +548,18 @@ def main() -> None:
                 )
             elif backend == "async-thread":
                 for rule in batching_rules:
-                    max_batch_size, min_batch_size, timeout, label = (
-                        _resolve_batching_rule(rule, num_envs)
-                    )
+                    (
+                        max_batch_size,
+                        min_batch_size,
+                        timeout,
+                        label,
+                    ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
                             name="AsyncBatched thread env",
                             backend=backend,
                             batch_rule=label,
-                            factory=lambda: AsyncBatchedCollector(
+                            factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,
                                 policy=policy_factory(),
                                 frames_per_batch=args.frames_per_batch,
@@ -578,15 +585,18 @@ def main() -> None:
                     )
             elif backend == "async-env-mp":
                 for rule in batching_rules:
-                    max_batch_size, min_batch_size, timeout, label = (
-                        _resolve_batching_rule(rule, num_envs)
-                    )
+                    (
+                        max_batch_size,
+                        min_batch_size,
+                        timeout,
+                        label,
+                    ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
                             name="AsyncBatched mp env",
                             backend=backend,
                             batch_rule=label,
-                            factory=lambda: AsyncBatchedCollector(
+                            factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,
                                 policy=policy_factory(),
                                 frames_per_batch=args.frames_per_batch,
@@ -612,15 +622,18 @@ def main() -> None:
                     )
             elif backend == "async-process":
                 for rule in batching_rules:
-                    max_batch_size, min_batch_size, timeout, label = (
-                        _resolve_batching_rule(rule, num_envs)
-                    )
+                    (
+                        max_batch_size,
+                        min_batch_size,
+                        timeout,
+                        label,
+                    ) = _resolve_batching_rule(rule, num_envs)
                     results.append(
                         bench(
                             name="AsyncBatched process server",
                             backend=backend,
                             batch_rule=label,
-                            factory=lambda: AsyncBatchedCollector(
+                            factory=lambda num_envs=num_envs, max_batch_size=max_batch_size, min_batch_size=min_batch_size, timeout=timeout: AsyncBatchedCollector(
                                 create_env_fn=[env_factory] * num_envs,
                                 policy_factory=policy_factory,
                                 frames_per_batch=args.frames_per_batch,
