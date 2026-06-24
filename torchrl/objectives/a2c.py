@@ -353,23 +353,7 @@ class A2CLoss(LossModule):
             raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR)
         self.loss_critic_type = loss_critic_type
 
-        if clip_value is not None:
-            if isinstance(clip_value, float):
-                clip_value = torch.tensor(clip_value)
-            elif isinstance(clip_value, torch.Tensor):
-                if clip_value.numel() != 1:
-                    raise ValueError(
-                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
-                    )
-            else:
-                raise ValueError(
-                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
-                )
-            self.register_buffer(
-                "clip_value", torch.as_tensor(clip_value, device=device)
-            )
-        else:
-            self.clip_value = None
+        self.register_coeff_buffer("clip_value", clip_value, device=device)
 
         log_prob_keys = self.actor_network.log_prob_keys
         action_keys = self.actor_network.dist_sample_keys

@@ -1770,6 +1770,16 @@ class TestRegisterCoeffBuffer:
         loss.register_coeff_buffer("c", 1.0, dtype=torch.float64)
         assert loss.c.dtype == torch.float64
 
+    def test_non_scalar_rejected(self):
+        loss = self._CoeffLoss()
+        with pytest.raises(ValueError, match="c must be a float or a scalar tensor"):
+            loss.register_coeff_buffer("c", torch.ones(2))
+
+    def test_bool_rejected(self):
+        loss = self._CoeffLoss()
+        with pytest.raises(ValueError, match="c must be a float or a scalar tensor"):
+            loss.register_coeff_buffer("c", True)
+
     def test_a2c_registers_coeff_buffers(self):
         actor = ProbabilisticActor(
             module=TensorDictModule(

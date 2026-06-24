@@ -679,7 +679,7 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
     def register_coeff_buffer(
         self,
         name: str,
-        value: float | torch.Tensor | None,
+        value: float | int | torch.Tensor | None,
         *,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
@@ -696,15 +696,24 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
 
         Args:
             name (str): the buffer / attribute name.
-            value (float, Tensor or None): the coefficient. ``None`` sets the
-                attribute to ``None``.
+            value (float, int, Tensor or None): the coefficient. ``None`` sets
+                the attribute to ``None``.
             device (torch.device, optional): device for the buffer.
             dtype (torch.dtype, optional): dtype for the buffer.
         """
         if value is None:
             setattr(self, name, None)
             return
-        self.register_buffer(name, torch.as_tensor(value, device=device, dtype=dtype))
+        if isinstance(value, bool) or not isinstance(value, (float, int, torch.Tensor)):
+            raise ValueError(
+                f"{name} must be a float or a scalar tensor, got {value}."
+            )
+        value = torch.as_tensor(value, device=device, dtype=dtype)
+        if value.numel() != 1:
+            raise ValueError(
+                f"{name} must be a float or a scalar tensor, got {value}."
+            )
+        self.register_buffer(name, value)
 
     # Value-estimator keys forwarded by the default
     # :meth:`_forward_value_estimator_keys`. These six are accepted by every
