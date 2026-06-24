@@ -19,11 +19,15 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.modules.inference_server import (
     InferenceClient,
+    InferenceDeviceConfig,
     InferenceServer,
+    InferenceServerConfig,
     InferenceTransport,
     MPTransport,
+    PolicyClientModule,
     ProcessInferenceServer,
     RayTransport,
+    RemotePolicy,
     SlotTransport,
     ThreadingTransport,
 )
@@ -256,6 +260,37 @@ class TestInferenceServerCore:
         assert stats["batches"] >= 1
         assert stats["avg_batch_size"] > 0
         assert stats["p95_forward_ms"] >= 0
+        assert stats["policy_version"] == 0
+
+    def test_structured_config(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server_config = InferenceServerConfig(max_batch_size=2, timeout=0.001)
+        device_config = InferenceDeviceConfig(policy_device="cpu", output_device="cpu")
+        with InferenceServer(
+            policy,
+            transport,
+            server_config=server_config,
+            device_config=device_config,
+        ) as server:
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+            stats = server.stats()
+        assert result["action"].device.type == "cpu"
+        assert stats["requests"] == 1
+
+    def test_policy_version_is_returned(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy,
+            transport,
+            policy_version=12,
+            policy_version_key=("meta", "policy_version"),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+        assert result["meta", "policy_version"].item() == 12
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -295,6 +330,48 @@ class TestInferenceClient:
             assert isinstance(fut, concurrent.futures.Future)
             result = fut.result(timeout=5.0)
             assert "action" in result.keys()
+
+
+class TestPolicyClientModule:
+    def test_remote_policy_alias(self):
+        assert RemotePolicy is PolicyClientModule
+
+    def test_forward_as_tensordict_module(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(
+                transport,
+                in_keys=["observation"],
+                out_keys=["action"],
+                max_inflight=1,
+            )
+            td = TensorDict({"observation": torch.randn(4)})
+            result = remote_policy(td)
+        assert result["action"].shape == (2,)
+        assert remote_policy.in_keys == ["observation"]
+        assert remote_policy.out_keys == ["action"]
+
+    def test_submit(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(transport)
+            future = remote_policy.submit(TensorDict({"observation": torch.randn(4)}))
+            result = future.result(timeout=5.0)
+        assert "action" in result.keys()
+
+    def test_bounded_staleness_raises(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, policy_version=1):
+            remote_policy = PolicyClientModule(
+                transport,
+                target_policy_version=3,
+                max_policy_lag=1,
+            )
+            with pytest.raises(RuntimeError, match="too stale"):
+                remote_policy(TensorDict({"observation": torch.randn(4)}))
 
 
 # =============================================================================
@@ -698,6 +775,8 @@ class TestWeightSyncIntegration:
             result_after = client(td)
             # With zero weights the linear output should be zero (bias=0 too)
             assert torch.allclose(result_after["action"], torch.zeros(2), atol=1e-6)
+            assert result_after["policy_version"].item() == 1
+            assert server.stats()["weight_updates"] == 1
 
     def test_inference_continues_after_weight_update(self):
         """The server keeps serving after a weight update."""
@@ -792,10 +871,14 @@ class TestProcessInferenceServer:
             mp_context=ctx,
         ) as server:
             assert server.is_alive
-            assert server.stats() == {}
             result = client(TensorDict({"observation": torch.ones(1)}))
+            stats = server.stats()
+            health = server.health()
         assert "action" in result.keys()
         assert result["action"].shape == (1,)
+        assert stats["requests"] == 1
+        assert stats["avg_batch_size"] == 1
+        assert health["process_alive"]
         assert not server.is_alive
 
     def test_process_server_exception_propagates(self):
@@ -1003,6 +1086,30 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    def test_device_config_and_server_config(self):
+        """Collector accepts structured device and server config objects."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            server_config=InferenceServerConfig(max_batch_size=2),
+            device_config=InferenceDeviceConfig(
+                policy_device="cpu",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+        )
+        total = 0
+        for batch in collector:
+            assert batch.device is None or batch.device.type == "cpu"
+            total += batch.numel()
+        stats = collector.server_stats()
+        collector.shutdown()
+        assert total >= 20
+        assert stats["requests"] > 0
 
 
 # =============================================================================
