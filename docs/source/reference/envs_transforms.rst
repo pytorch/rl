@@ -245,9 +245,11 @@ Available Transforms
 
     Transform
     TransformedEnv
+    ActionChunkTransform
     ActionDiscretizer
     ActionMask
     ActionScaling
+    ActionTokenizerTransform
     AutoResetEnv
     AutoResetTransform
     BatchSizeTransform
@@ -262,6 +264,7 @@ Available Transforms
     ConditionalSkip
     Crop
     DTypeCastTransform
+    DecodeVideoTransform
     DeviceCastTransform
     DiscreteActionProjection
     DoubleToFloat
@@ -302,15 +305,18 @@ Available Transforms
     RemoveEmptySpecs
     RenameTransform
     Resize
+    RNDTransform
     Reward2GoTransform
     RewardClipping
     RewardScaling
     RewardSum
+    RunningMeanStd
     SelectTransform
     SignTransform
     SqueezeTransform
     Stack
     StepCounter
+    SuccessReward
     TargetReturn
     TensorDictPrimer
     TerminateTransform
@@ -329,6 +335,24 @@ Available Transforms
     VecNorm
     VecNormV2
     gSDENoise
+
+Functional transforms
+---------------------
+
+Some transforms expose a pure, stateless functional core (the PyTorch
+``torch.nn.functional`` / ``torch.nn.Module`` split) that can be reused directly
+on plain tensors, outside the transform machinery. The stateful transform
+delegates to the functional so that the two stay equivalent.
+
+.. currentmodule:: torchrl.envs.transforms.functional
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_noinherit.rst
+
+    cat_frames
+
+.. currentmodule:: torchrl.envs.transforms
 
 Environments with masked actions
 --------------------------------
