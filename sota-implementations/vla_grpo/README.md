@@ -204,6 +204,32 @@ throughput split into collection and optimization:
 - `throughput/train_decisions_per_s`
 - `throughput/optim_steps_per_s`
 
+The collector can also be switched between synchronous and async execution
+paths for throughput experiments:
+
+```bash
+# fully synchronous baseline
+python sota-implementations/vla_grpo/vla-grpo.py \
+  collector.async_env=false collector.async_policy=false
+
+# asynchronous env slots, but no policy auto-batching
+python sota-implementations/vla_grpo/vla-grpo.py \
+  collector.async_env=true collector.async_policy=false env.num_envs=8
+
+# asynchronous env slots plus auto-batched policy inference
+python sota-implementations/vla_grpo/vla-grpo.py \
+  collector.async_env=true collector.async_policy=true env.num_envs=8 \
+  collector.server_max_batch_size=8 collector.server_timeout=0.01
+```
+
+`collector.async_env=true` uses `AsyncBatchedCollector` so faster environment
+slots do not wait at a global step barrier. `collector.async_policy=true` routes
+policy calls through an inference server; with multiple async env slots this
+enables auto-batching and logs `policy_server/*` counters such as average batch
+size, request rate, and queue/forward latency. The `false/true` combination is
+available as a policy-server plumbing ablation, but policy auto-batching is most
+meaningful when several env slots submit requests concurrently.
+
 Eval rollouts can also be rendered to video (`logger.record_video=true`, on by
 default). A dedicated single-environment recorder is built with
 `from_pixels=True`: `ToyVLAEnv` renders the tracking scene, while `LiberoEnv`
