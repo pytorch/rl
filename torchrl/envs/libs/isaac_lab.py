@@ -131,11 +131,6 @@ class IsaacLabWrapper(GymWrapper):
 
     """
 
-    # Supports deterministic resets via ``reset(td, set_state=True,
-    # scene_state=...)`` (manager-based envs). The snapshot is honored through
-    # Isaac's ``reset_to`` rather than from tensordict state entries.
-    _supports_set_state = True
-
     def __init__(
         self,
         env: isaaclab.envs.ManagerBasedRLEnv,  # noqa: F821
@@ -289,25 +284,30 @@ class IsaacLabWrapper(GymWrapper):
 
     def _make_specs(self, env, batch_size=None) -> None:
         super()._make_specs(env, batch_size=batch_size)
-        if not self.from_tiled_camera:
-            return
-        camera = self._get_tiled_camera()
-        cfg = camera.cfg
-        channels = self.pixels_channels
-        if channels is None:
-            if self.tiled_camera_data_type == "rgb":
-                channels = 3
+        if self.from_tiled_camera:
+            camera = self._get_tiled_camera()
+            cfg = camera.cfg
+            channels = self.pixels_channels
+            if channels is None:
+                if self.tiled_camera_data_type == "rgb":
+                    channels = 3
+                else:
+                    channels = camera.data.output[self.tiled_camera_data_type].shape[-1]
+            dtype = self.pixels_dtype
+            if dtype is None:
+                dtype = camera.data.output[self.tiled_camera_data_type].dtype
+            shape = (*self.batch_size, cfg.height, cfg.width, channels)
+            if dtype == torch.uint8:
+                pixels_spec = Bounded(
+                    0, 255, shape=shape, dtype=dtype, device=self.device
+                )
             else:
-                channels = camera.data.output[self.tiled_camera_data_type].shape[-1]
-        dtype = self.pixels_dtype
-        if dtype is None:
-            dtype = camera.data.output[self.tiled_camera_data_type].dtype
-        shape = (*self.batch_size, cfg.height, cfg.width, channels)
-        if dtype == torch.uint8:
-            pixels_spec = Bounded(0, 255, shape=shape, dtype=dtype, device=self.device)
-        else:
-            pixels_spec = Unbounded(shape=shape, dtype=dtype, device=self.device)
-        self.observation_spec[self.pixels_key] = pixels_spec
+                pixels_spec = Unbounded(shape=shape, dtype=dtype, device=self.device)
+            self.observation_spec[self.pixels_key] = pixels_spec
+        obs_keys = frozenset(self.observation_spec.keys(True, True))
+        self._rename_policy_to_observation = (
+            "policy" not in obs_keys and "observation" in obs_keys
+        )
 
     def _get_tiled_camera(self):
         env = self._env.unwrapped
@@ -344,13 +344,15 @@ class IsaacLabWrapper(GymWrapper):
         return self._normalize_observation_keys(observations)
 
     def _normalize_observation_keys(self, observations):
-        if not isinstance(observations, Mapping):
+        if (
+            not self.__dict__.get("_rename_policy_to_observation", False)
+            or not isinstance(observations, Mapping)
+            or "policy" not in observations
+            or "observation" in observations
+        ):
             return observations
-        spec_keys = set(self.observation_spec.keys(True, True))
-        if "policy" in observations and "policy" not in spec_keys:
-            if "observation" in spec_keys:
-                observations = dict(observations)
-                observations["observation"] = observations.pop("policy")
+        observations = dict(observations)
+        observations["observation"] = observations.pop("policy")
         return observations
 
     def _reset_output_transform(self, reset_data):  # noqa: F811
@@ -379,7 +381,9 @@ class IsaacLabWrapper(GymWrapper):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _supported_isaac_env_classes() -> tuple[type, ...]:
+    def _supported_isaac_env_classes(
+        *, include_direct: bool = True
+    ) -> tuple[type, ...]:
         """Returns the tuple of Isaac Lab env classes this wrapper can bridge.
 
         ``ManagerBasedEnv`` and ``ManagerBasedRLEnv`` (subclass) expose
@@ -389,11 +393,15 @@ class IsaacLabWrapper(GymWrapper):
         """
         from isaaclab.envs import DirectMARLEnv, DirectRLEnv, ManagerBasedEnv
 
-        return (ManagerBasedEnv, DirectRLEnv, DirectMARLEnv)
+        if include_direct:
+            return (ManagerBasedEnv, DirectRLEnv, DirectMARLEnv)
+        return (ManagerBasedEnv,)
 
     @classmethod
-    def _supports_native_autoreset(cls, env: Any) -> bool:
-        """Return ``True`` iff ``env`` (assumed already unwrapped) is a batched Isaac Lab env.
+    def _supports_native_autoreset(
+        cls, env: Any, *, native_autoreset: bool = False
+    ) -> bool:
+        """Return whether ``env`` should receive TorchRL native-autoreset wiring.
 
         This is the single source of truth used by
         :class:`~torchrl.envs.libs.gym._GymAsyncMeta` to decide whether to
@@ -401,14 +409,28 @@ class IsaacLabWrapper(GymWrapper):
         adapter and register the ``_torchrl_native_autoreset`` flag for an
         Isaac Lab env (regardless of whether the env was wrapped via
         :class:`IsaacLabWrapper` or the generic :class:`GymWrapper`).
+        Direct envs are included only when ``native_autoreset=True`` to avoid
+        changing their default reset semantics.
         """
         if not _has_isaaclab:
             return False
-        return isinstance(env, cls._supported_isaac_env_classes())
+        return isinstance(
+            env, cls._supported_isaac_env_classes(include_direct=native_autoreset)
+        )
 
     @property
     def _isaac_unwrapped(self):
         return self._env.unwrapped
+
+    @property
+    def _supports_set_state(self) -> bool:
+        # Supports deterministic resets via ``reset(td, set_state=True,
+        # scene_state=...)`` on manager-based envs. The snapshot is honored
+        # through Isaac's ``reset_to`` rather than from tensordict state entries.
+        env = getattr(self, "_env", None)
+        if env is None:
+            return False
+        return hasattr(env.unwrapped, "reset_to")
 
     # ------------------------------------------------------------------
     # Per-index reset bridge
@@ -448,6 +470,8 @@ class IsaacLabWrapper(GymWrapper):
                     "reset(set_state=True) on an Isaac Lab env requires a "
                     "`scene_state` snapshot (obtained from `env.get_state()`)."
                 )
+            if reset is not None and not reset.any():
+                return tensordict.exclude("_reset")
             return self._reset_to_state_at(
                 scene_state, reset=reset, is_relative=is_relative, **kwargs
             )
@@ -461,12 +485,6 @@ class IsaacLabWrapper(GymWrapper):
                 tensordict = tensordict.exclude("_reset")
             return super()._reset(tensordict, **kwargs)
 
-        if not reset.any():
-            # Nothing to reset: return a sentinel reset tensordict so the
-            # surrounding _reset_proc_data / _update_during_reset machinery
-            # preserves the incoming state on every sub-env.
-            return tensordict.exclude("_reset")
-
         # Per-index reset path. Gated on native_autoreset=True: with
         # native_autoreset=False, partial-mask reset calls are issued by
         # EnvBase.maybe_reset on every step that has any "done" row, and
@@ -476,6 +494,12 @@ class IsaacLabWrapper(GymWrapper):
         # no-op semantics in that case so explicit partial resets
         # remain a feature you opt into via native_autoreset=True.
         if not self._native_autoreset_enabled:
+            return tensordict.exclude("_reset")
+
+        if not reset.any():
+            # Nothing to reset: return a sentinel reset tensordict so the
+            # surrounding _reset_proc_data / _update_during_reset machinery
+            # preserves the incoming state on every sub-env.
             return tensordict.exclude("_reset")
 
         env_ids = self._reset_mask_to_env_ids(reset)

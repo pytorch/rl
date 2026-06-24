@@ -220,6 +220,9 @@ class AsyncBatchedCollector(BaseCollector):
             collector yields individual completed trajectories as they finish
             rather than fixed-size batches.  ``frames_per_batch`` acts as the
             *minimum* number of frames to accumulate before yielding.
+            The synchronous and multi-process collectors expose the same
+            capability through the ``trajs_per_batch`` keyword argument (a
+            trajectory count rather than a flag).
             Defaults to ``False``.
         weight_sync: an optional
             :class:`~torchrl.weight_update.WeightSyncScheme` forwarded to the

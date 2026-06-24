@@ -14,6 +14,7 @@ API Reference
     services
     trainers
     utils
+    vla
     config
     profiling
     glossary

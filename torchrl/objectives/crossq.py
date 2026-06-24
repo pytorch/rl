@@ -20,7 +20,6 @@ from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
@@ -541,7 +540,9 @@ class CrossQLoss(LossModule):
         """
         loss_qvalue, value_metadata = self.qvalue_loss(tensordict)
         loss_actor, metadata_actor = self.actor_loss(tensordict)
-        loss_alpha = self.alpha_loss(log_prob=metadata_actor["log_prob"])
+        loss_alpha = self.alpha_loss(
+            log_prob=metadata_actor["log_prob"], tensordict=tensordict
+        )
         tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if loss_actor.shape != loss_qvalue.shape:
             raise RuntimeError(
@@ -622,7 +623,7 @@ class CrossQLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q.shape}"
             )
         actor_loss = self._alpha * log_prob - min_q
-        return _reduce(actor_loss, reduction=self.reduction), {
+        return self._reduce_loss(actor_loss, tensordict=tensordict), {
             "log_prob": log_prob.detach()
         }
 
@@ -693,15 +694,18 @@ class CrossQLoss(LossModule):
             loss_function=self.loss_function,
         ).sum(0)
         metadata = {"td_error": td_error.detach().max(0)[0]}
-        return _reduce(loss_qval, reduction=self.reduction), metadata
+        return self._reduce_loss(loss_qval, tensordict=tensordict), metadata
 
-    def alpha_loss(self, log_prob: Tensor) -> Tensor:
+    def alpha_loss(
+        self, log_prob: Tensor, tensordict: TensorDictBase | None = None
+    ) -> Tensor:
         """Compute the entropy loss.
 
         The entropy loss should be computed last.
 
         Args:
             log_prob (torch.Tensor): a log-probability as computed by the :meth:`~.actor_loss` and returned in the `metadata`.
+            tensordict (TensorDictBase, optional): the input tensordict.
 
         Returns: a differentiable tensor with the entropy loss.
         """
@@ -711,7 +715,7 @@ class CrossQLoss(LossModule):
         else:
             # placeholder
             alpha_loss = torch.zeros_like(log_prob)
-        return _reduce(alpha_loss, reduction=self.reduction)
+        return self._reduce_loss(alpha_loss, tensordict=tensordict)
 
     @property
     def _alpha(self):
