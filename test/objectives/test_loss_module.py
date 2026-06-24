@@ -37,7 +37,15 @@ from torchrl.modules.tensordict_module.actors import (
     ProbabilisticActor,
     ValueOperator,
 )
-from torchrl.objectives import ClipPPOLoss, DQNLoss, PPOLoss, SACLoss
+from torchrl.objectives import (
+    A2CLoss,
+    ClipPPOLoss,
+    DDPGLoss,
+    DQNLoss,
+    PPOLoss,
+    SACLoss,
+    TD3Loss,
+)
 from torchrl.objectives.common import add_random_module, LossModule
 from torchrl.objectives.utils import (
     _VALUE_ESTIMATOR_REGISTRY,
@@ -52,7 +60,14 @@ from torchrl.objectives.utils import (
     SoftUpdate,
     ValueEstimators,
 )
-from torchrl.objectives.value.advantages import GAE, TD0Estimator, VTrace
+from torchrl.objectives.value.advantages import (
+    GAE,
+    MultiAgentGAE,
+    TD0Estimator,
+    TD1Estimator,
+    TDLambdaEstimator,
+    VTrace,
+)
 from torchrl.objectives.value.functional import _transpose_time, reward2go
 from torchrl.objectives.value.utils import (
     _get_num_per_traj,
@@ -1444,6 +1459,287 @@ class TestSchedulableBuffers:
         loss2.load_state_dict(sd)
         assert loss2.entropy_coeff.item() == pytest.approx(0.042)
         assert loss2.clip_epsilon.item() == pytest.approx(0.15)
+
+
+# ---------------------------------------------------------------------------
+# Stub used by TestPrepareValueEstimatorKwargs to test the helper in isolation
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _StubAcceptedKeys:
+    pass
+
+
+class _MinimalLoss(LossModule):
+    """Bare-minimum LossModule for testing _prepare_value_estimator_kwargs."""
+
+    _AcceptedKeys = _StubAcceptedKeys
+    default_keys = _StubAcceptedKeys
+    default_value_estimator = ValueEstimators.TD0
+
+    def forward(self, td):
+        return td
+
+    def _forward_value_estimator_keys(self, **kwargs):
+        pass
+
+
+@pytest.mark.parametrize("device", get_default_devices())
+class TestPrepareValueEstimatorKwargs:
+    """Regression tests for LossModule._prepare_value_estimator_kwargs.
+
+    Covers the helper in isolation (via ``_MinimalLoss``) and then verifies
+    that the five refactored loss classes — A2CLoss, PPOLoss, SACLoss,
+    DDPGLoss, TD3Loss — still dispatch ``make_value_estimator`` to the
+    correct estimator class for every supported ``ValueEstimators`` value.
+    """
+
+    # ------------------------------------------------------------------ #
+    #  Network factory helpers                                             #
+    # ------------------------------------------------------------------ #
+
+    def _make_prob_actor(self, obs_dim=4, action_dim=2, device="cpu"):
+        return ProbabilisticActor(
+            module=TensorDictModule(
+                nn.Linear(obs_dim, 2 * action_dim),
+                in_keys=["observation"],
+                out_keys=["loc", "scale"],
+            ),
+            in_keys=["loc", "scale"],
+            distribution_class=TanhNormal,
+            return_log_prob=True,
+            spec=Composite(action=Bounded(-1, 1, (action_dim,))),
+        ).to(device)
+
+    def _make_value_net(self, obs_dim=4, device="cpu"):
+        return TensorDictModule(
+            nn.Linear(obs_dim, 1),
+            in_keys=["observation"],
+            out_keys=["state_value"],
+        ).to(device)
+
+    def _make_det_actor(self, obs_dim=4, action_dim=2, device="cpu"):
+        return TensorDictModule(
+            nn.Linear(obs_dim, action_dim),
+            in_keys=["observation"],
+            out_keys=["action"],
+        ).to(device)
+
+    def _make_qvalue_net(self, obs_dim=4, action_dim=2, device="cpu"):
+        return TensorDictModule(
+            nn.Linear(obs_dim + action_dim, 1),
+            in_keys=["observation", "action"],
+            out_keys=["state_action_value"],
+        ).to(device)
+
+    # ------------------------------------------------------------------ #
+    #  Helper tests: _prepare_value_estimator_kwargs in isolation          #
+    # ------------------------------------------------------------------ #
+
+    def test_defaults_none_value_type(self, device):
+        """None value_type is resolved to loss.default_value_estimator."""
+        loss = _MinimalLoss().to(device)
+        vtype, _ = loss._prepare_value_estimator_kwargs(None)
+        assert vtype == ValueEstimators.TD0
+
+    def test_instance_path_returns_sentinel_and_sets_estimator(self, device):
+        """Passing a ValueEstimatorBase *instance* → (None, None); estimator is assigned."""
+        loss = _MinimalLoss().to(device)
+        value_net = TensorDictModule(
+            nn.Linear(4, 1).to(device), ["observation"], ["state_value"]
+        )
+        estimator = TD0Estimator(gamma=0.99, value_network=value_net)
+
+        vtype, hp = loss._prepare_value_estimator_kwargs(estimator)
+
+        assert vtype is None and hp is None
+        assert loss._value_estimator is estimator
+
+    def test_subclass_path_returns_sentinel_and_sets_estimator(self, device):
+        """Passing a ValueEstimatorBase *subclass* → (None, None); estimator is instantiated."""
+        loss = _MinimalLoss().to(device)
+        value_net = TensorDictModule(
+            nn.Linear(4, 1).to(device), ["observation"], ["state_value"]
+        )
+
+        vtype, hp = loss._prepare_value_estimator_kwargs(
+            TD0Estimator, gamma=0.42, value_network=value_net
+        )
+
+        assert vtype is None and hp is None
+        assert isinstance(loss._value_estimator, TD0Estimator)
+        assert loss._value_estimator.gamma.item() == pytest.approx(0.42)
+
+    def test_enum_path_returns_type_and_hp_with_defaults(self, device):
+        """Enum value → (resolved_type, hp) populated from default_value_kwargs."""
+        loss = _MinimalLoss().to(device)
+        vtype, hp = loss._prepare_value_estimator_kwargs(ValueEstimators.GAE)
+
+        assert vtype == ValueEstimators.GAE
+        assert "gamma" in hp
+        assert "lmbda" in hp  # GAE default includes lmbda; TD0 does not
+
+    def test_user_kwargs_override_defaults(self, device):
+        """Caller-supplied kwargs win over defaults from default_value_kwargs."""
+        loss = _MinimalLoss().to(device)
+        _, hp = loss._prepare_value_estimator_kwargs(
+            ValueEstimators.GAE, gamma=0.1, lmbda=0.2
+        )
+        assert hp["gamma"] == pytest.approx(0.1)
+        assert hp["lmbda"] == pytest.approx(0.2)
+
+    def test_gamma_attr_injected_into_hp(self, device):
+        """self.gamma on the loss module is written into hp before user kwargs."""
+        loss = _MinimalLoss().to(device)
+        loss.gamma = 0.77
+        _, hp = loss._prepare_value_estimator_kwargs(ValueEstimators.TD0)
+        assert hp["gamma"] == pytest.approx(0.77)
+
+    def test_user_kwargs_override_gamma_attr(self, device):
+        """Explicit gamma kwarg in the call wins over self.gamma."""
+        loss = _MinimalLoss().to(device)
+        loss.gamma = 0.77
+        _, hp = loss._prepare_value_estimator_kwargs(ValueEstimators.TD0, gamma=0.5)
+        assert hp["gamma"] == pytest.approx(0.5)
+
+    def test_sets_value_type_on_loss(self, device):
+        """loss.value_type is updated to the resolved enum even before dispatch."""
+        loss = _MinimalLoss().to(device)
+        loss._prepare_value_estimator_kwargs(ValueEstimators.TDLambda)
+        assert loss.value_type == ValueEstimators.TDLambda
+
+    # ------------------------------------------------------------------ #
+    #  Per-loss regression: enum dispatch still routes to the right class  #
+    # ------------------------------------------------------------------ #
+
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize(
+        "vtype,expected_cls",
+        [
+            (ValueEstimators.TD0, TD0Estimator),
+            (ValueEstimators.TD1, TD1Estimator),
+            (ValueEstimators.GAE, GAE),
+            (ValueEstimators.MAGAE, MultiAgentGAE),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.VTrace, VTrace),
+        ],
+    )
+    def test_a2c_enum_dispatch(self, device, vtype, expected_cls):
+        actor = self._make_prob_actor(device=device)
+        critic = self._make_value_net(device=device)
+        loss = A2CLoss(actor, critic).to(device)
+        loss.make_value_estimator(vtype)
+        assert isinstance(loss.value_estimator, expected_cls)
+
+    @set_composite_lp_aggregate(False)
+    def test_a2c_hyperparams_forwarded(self, device):
+        """User-supplied gamma/lmbda reach the constructed GAE instance."""
+        actor = self._make_prob_actor(device=device)
+        critic = self._make_value_net(device=device)
+        loss = A2CLoss(actor, critic).to(device)
+        loss.make_value_estimator(ValueEstimators.GAE, gamma=0.88, lmbda=0.77)
+        assert loss.value_estimator.gamma.item() == pytest.approx(0.88)
+        assert loss.value_estimator.lmbda.item() == pytest.approx(0.77)
+
+    @set_composite_lp_aggregate(False)
+    def test_a2c_returns_self_for_instance_path(self, device):
+        """A2CLoss.make_value_estimator returns self when given an estimator instance."""
+        actor = self._make_prob_actor(device=device)
+        critic = self._make_value_net(device=device)
+        loss = A2CLoss(actor, critic).to(device)
+        estimator = GAE(gamma=0.99, lmbda=0.95, value_network=critic)
+        assert loss.make_value_estimator(estimator) is loss
+
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize(
+        "vtype,expected_cls",
+        [
+            (ValueEstimators.TD0, TD0Estimator),
+            (ValueEstimators.TD1, TD1Estimator),
+            (ValueEstimators.GAE, GAE),
+            (ValueEstimators.MAGAE, MultiAgentGAE),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+            (ValueEstimators.VTrace, VTrace),
+        ],
+    )
+    def test_ppo_enum_dispatch(self, device, vtype, expected_cls):
+        actor = self._make_prob_actor(device=device)
+        critic = self._make_value_net(device=device)
+        loss = PPOLoss(actor, critic).to(device)
+        loss.make_value_estimator(vtype)
+        assert isinstance(loss.value_estimator, expected_cls)
+
+    @set_composite_lp_aggregate(False)
+    @pytest.mark.parametrize(
+        "vtype,expected_cls",
+        [
+            (ValueEstimators.TD0, TD0Estimator),
+            (ValueEstimators.TD1, TD1Estimator),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+        ],
+    )
+    def test_sac_enum_dispatch(self, device, vtype, expected_cls):
+        actor = self._make_prob_actor(device=device)
+        qvalue = self._make_qvalue_net(device=device)
+        loss = SACLoss(actor, qvalue).to(device)
+        loss.make_value_estimator(vtype)
+        assert isinstance(loss.value_estimator, expected_cls)
+
+    @set_composite_lp_aggregate(False)
+    def test_sac_gae_raises(self, device):
+        """SACLoss (off-policy Q-learning) does not support GAE."""
+        actor = self._make_prob_actor(device=device)
+        qvalue = self._make_qvalue_net(device=device)
+        loss = SACLoss(actor, qvalue).to(device)
+        with pytest.raises(NotImplementedError):
+            loss.make_value_estimator(ValueEstimators.GAE)
+
+    @pytest.mark.parametrize(
+        "vtype,expected_cls",
+        [
+            (ValueEstimators.TD0, TD0Estimator),
+            (ValueEstimators.TD1, TD1Estimator),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+        ],
+    )
+    def test_ddpg_enum_dispatch(self, device, vtype, expected_cls):
+        actor = self._make_det_actor(device=device)
+        value = self._make_qvalue_net(device=device)
+        loss = DDPGLoss(actor, value).to(device)
+        loss.make_value_estimator(vtype)
+        assert isinstance(loss.value_estimator, expected_cls)
+
+    def test_ddpg_gae_raises(self, device):
+        """DDPGLoss (deterministic policy) does not support GAE."""
+        actor = self._make_det_actor(device=device)
+        value = self._make_qvalue_net(device=device)
+        loss = DDPGLoss(actor, value).to(device)
+        with pytest.raises(NotImplementedError):
+            loss.make_value_estimator(ValueEstimators.GAE)
+
+    @pytest.mark.parametrize(
+        "vtype,expected_cls",
+        [
+            (ValueEstimators.TD0, TD0Estimator),
+            (ValueEstimators.TD1, TD1Estimator),
+            (ValueEstimators.TDLambda, TDLambdaEstimator),
+        ],
+    )
+    def test_td3_enum_dispatch(self, device, vtype, expected_cls):
+        actor = self._make_det_actor(device=device)
+        qvalue = self._make_qvalue_net(device=device)
+        loss = TD3Loss(actor, qvalue, bounds=(-1, 1)).to(device)
+        loss.make_value_estimator(vtype)
+        assert isinstance(loss.value_estimator, expected_cls)
+
+    def test_td3_gae_raises(self, device):
+        """TD3Loss (deterministic policy) does not support GAE."""
+        actor = self._make_det_actor(device=device)
+        qvalue = self._make_qvalue_net(device=device)
+        loss = TD3Loss(actor, qvalue, bounds=(-1, 1)).to(device)
+        with pytest.raises(NotImplementedError):
+            loss.make_value_estimator(ValueEstimators.GAE)
 
 
 class TestValueEstimatorRegistry:

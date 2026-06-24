@@ -25,7 +25,7 @@ from torch import nn
 from torchrl.data.tensor_specs import Binary, Composite, NonTensor, Unbounded
 from torchrl.envs import EnvBase, ParallelEnv, SerialEnv
 from torchrl.envs.libs.gym import gym_backend, GymEnv
-from torchrl.envs.transforms import StepCounter, TransformedEnv
+from torchrl.envs.transforms import StepCounter, Transform, TransformedEnv
 from torchrl.envs.utils import check_env_specs, make_composite_from_td, step_mdp
 from torchrl.modules import Actor
 from torchrl.testing import (
@@ -969,6 +969,51 @@ class _NestedStatelessEnv(EnvBase):
         ...
 
 
+class _KwargOnlySetStateEnv(EnvBase):
+    _supports_set_state = True
+
+    def __init__(self, **kwargs):
+        super().__init__(batch_size=(), **kwargs)
+        self.observation_spec = Composite(observation=Unbounded(shape=(1,)))
+        self.action_spec = Unbounded(shape=(1,))
+        self.reward_spec = Unbounded(shape=(1,))
+        self.done_spec = Binary(n=1, shape=(1,), dtype=torch.bool)
+
+    def _input_td_has_state(self, tensordict):
+        return False
+
+    def _reset(self, tensordict, **kwargs):
+        if kwargs.get("set_state"):
+            raise RuntimeError("unexpected implicit set_state")
+        return TensorDict(
+            {
+                "observation": torch.zeros(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=(),
+        )
+
+    def _step(self, tensordict):
+        return TensorDict(
+            {
+                "observation": tensordict["observation"] + tensordict["action"],
+                "reward": torch.zeros(1),
+                "done": torch.zeros(1, dtype=torch.bool),
+            },
+            batch_size=(),
+        )
+
+    def _set_seed(self, *args, **kwargs):
+        ...
+
+
+class _OuterStateTransform(Transform):
+    def transform_state_spec(self, state_spec):
+        state_spec = state_spec.clone()
+        state_spec["outer_state"] = Unbounded(shape=(1,))
+        return state_spec
+
+
 class TestResetSetState:
     """Tests for the explicit ``reset(td, set_state=True)`` deterministic-reset kwarg."""
 
@@ -1028,6 +1073,14 @@ class TestResetSetState:
             assert (out["nested", "x"] == 5.0).all()
         finally:
             env.close()
+
+    def test_transformed_env_delegates_implicit_state_detection(self):
+        env = TransformedEnv(_KwargOnlySetStateEnv(), _OuterStateTransform())
+        td = TensorDict({"outer_state": torch.ones(1)}, batch_size=())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            out = env.reset(td)
+        assert (out["observation"] == 0).all()
 
 
 if __name__ == "__main__":

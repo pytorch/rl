@@ -359,6 +359,14 @@ What to check, in order
 See also
 --------
 
+- :ref:`Recurrent training on sequence batches <recurrent_sequence_tuto>` —
+  a runnable tutorial that walks through this lifecycle end to end:
+  collection, :class:`~torchrl.data.replay_buffers.SliceSampler` replay, and
+  a full-sequence ``set_recurrent_mode(True)`` forward.
+- ``examples/replay-buffers/recurrent_slice_sampler_pipeline.py`` — a
+  minimal, runnable script version (GRU policy, the collector writing
+  directly into the buffer, ``SliceSampler`` auto-detecting the trajectory
+  key).
 - :class:`~torchrl.modules.LSTMModule` — the module that consumes
   ``is_init`` and gates hidden-state resets.
 - :class:`~torchrl.modules.GRUModule` — same lifecycle, single hidden
