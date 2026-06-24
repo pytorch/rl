@@ -4,6 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import argparse
+
 import pytest
 
 import tensordict.tensordict
@@ -42,6 +44,7 @@ from torchrl.envs import (
     UnsqueezeTransform,
 )
 from torchrl.envs.libs.gym import _has_gym, GymEnv
+from torchrl.envs.transforms import functional as F
 from torchrl.envs.transforms.transforms import _has_tv
 from torchrl.envs.utils import check_env_specs, step_mdp
 
@@ -663,6 +666,142 @@ class TestCatFrames(TransformBase):
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 3
         cat_td = cat_frames._call(cat_td)
         assert (cat_td.get("cat_first_key") == padding_value).sum() == N - 4
+
+    @staticmethod
+    def _unfold_done(done, N, ndim):
+        # Mirror of ``CatFrames.unfolding.unfold_done`` (window-padding mask)
+        # used to drive the ``cat_frames`` functional in multi-trajectory
+        # tests with an explicit ``done_mask``.
+        prefix = (slice(None),) * (ndim - 1)
+        reset = torch.cat(
+            [
+                torch.zeros_like(done[prefix + (slice(N - 1),)]),
+                torch.ones_like(done[prefix + (slice(1),)]),
+                done[prefix + (slice(None, -1),)],
+            ],
+            ndim - 1,
+        )
+        reset_unfold = reset.unfold(ndim - 1, N, 1)
+        reset_unfold_list = [torch.zeros_like(reset_unfold[..., -1])]
+        for r in reversed(reset_unfold.unbind(-1)):
+            reset_unfold_list.append(r | reset_unfold_list[-1])
+        return torch.stack(list(reversed(reset_unfold_list))[1:], -1)
+
+    def test_cat_frames_functional_basic(self):
+        # documented example: a single trajectory of 4 frames stacked over a
+        # window of N=3 along the feature dim.
+        frames = torch.arange(8.0).view(4, 2)
+        out = F.cat_frames(frames, N=3, dim=-1, time_dim=-2, padding="constant")
+        assert out.shape == torch.Size([4, 6])
+        expected = torch.tensor(
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0, 2.0, 3.0],
+                [0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                [2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+            ]
+        )
+        torch.testing.assert_close(out, expected)
+
+    def test_cat_frames_functional_validation(self):
+        x = torch.randn(1, 5, 2)
+        with pytest.raises(ValueError, match="dim must be < 0"):
+            F.cat_frames(x, N=2, dim=0, time_dim=-2)
+        with pytest.raises(ValueError, match="time_dim must be < 0"):
+            F.cat_frames(x, N=2, dim=-1, time_dim=1)
+        with pytest.raises(ValueError, match="padding must be one of"):
+            F.cat_frames(x, N=2, dim=-1, time_dim=-2, padding="zeros")
+
+    @pytest.mark.parametrize("device", get_default_devices())
+    def test_cat_frames_functional_dtype_device(self, device):
+        # dtype and device are preserved, and padding_value is honored.
+        x = torch.arange(24, dtype=torch.int64, device=device).view(1, 12, 2)
+        out = F.cat_frames(
+            x, N=3, dim=-1, time_dim=-2, padding="constant", padding_value=7
+        )
+        assert out.dtype == torch.int64
+        assert out.device == x.device
+        # the first frame has N-1 padded frames of value 7 + the real frame.
+        assert (out[0, 0, :4] == 7).all()
+        assert (out[0, 0, 4:] == x[0, 0]).all()
+
+    @pytest.mark.parametrize("padding", ["same", "constant"])
+    @pytest.mark.parametrize("padding_value", [0, 2, -1.5])
+    @pytest.mark.parametrize("dim", [-1, -2, -3])
+    @pytest.mark.parametrize("N", [2, 3, 5])
+    @pytest.mark.parametrize("batch_size", [(1,), (2,), (2, 3)])
+    def test_cat_frames_functional_matches_unfolding(
+        self, padding, padding_value, dim, N, batch_size
+    ):
+        # The functional reproduces CatFrames' offline (unfolding) output
+        # byte-for-byte on a single contiguous trajectory.
+        torch.manual_seed(0)
+        time_len = 12
+        extra = (4,) * (-dim - 1)
+        x = torch.randn(*batch_size, time_len, 3, *extra)
+        done = torch.zeros(*batch_size, time_len, 1, dtype=torch.bool)
+        td = TensorDict({"obs": x, ("next", "done"): done}, [*batch_size, time_len])
+        td.names = [None] * len(batch_size) + ["time"]
+        cf = CatFrames(
+            N=N,
+            dim=dim,
+            in_keys=["obs"],
+            out_keys=["out"],
+            padding=padding,
+            padding_value=padding_value,
+        )
+        out_td = cf.unfolding(td.clone())["out"]
+        time_dim = len(batch_size) - x.ndim
+        out_f = F.cat_frames(
+            x,
+            N=N,
+            dim=dim,
+            padding=padding,
+            padding_value=padding_value,
+            time_dim=time_dim,
+        )
+        torch.testing.assert_close(out_td, out_f)
+
+    @pytest.mark.parametrize("padding", ["same", "constant"])
+    def test_cat_frames_functional_matches_unfolding_multitraj(self, padding):
+        # With an explicit done_mask the functional also reproduces the
+        # multi-trajectory (mid-sequence reset) offline output.
+        torch.manual_seed(1)
+        N = 4
+        time_len = 15
+        x = torch.randn(2, time_len, 3)
+        done = torch.zeros(2, time_len, 1, dtype=torch.bool)
+        done[0, 5, 0] = True
+        done[1, 9, 0] = True
+        td = TensorDict({"obs": x, ("next", "done"): done}, [2, time_len])
+        td.names = [None, "time"]
+        cf = CatFrames(N=N, dim=-1, in_keys=["obs"], out_keys=["out"], padding=padding)
+        out_td = cf.unfolding(td.clone())["out"]
+        done_mask = self._unfold_done(done, N, 2)
+        out_f = F.cat_frames(
+            x, N=N, dim=-1, time_dim=-2, padding=padding, done_mask=done_mask
+        )
+        torch.testing.assert_close(out_td, out_f)
+
+    @pytest.mark.parametrize("padding", ["same", "constant"])
+    @pytest.mark.parametrize("dim", [-1, -2])
+    def test_catframes_delegates_to_functional(self, padding, dim):
+        # CatFrames.unfolding stays equivalent to a direct cat_frames call on
+        # the offline path (drop-in / no behavior change check).
+        torch.manual_seed(2)
+        N = 3
+        time_len = 8
+        extra = (4,) * (-dim - 1)
+        x = torch.randn(2, time_len, 3, *extra)
+        done = torch.zeros(2, time_len, 1, dtype=torch.bool)
+        td = TensorDict({"obs": x, ("next", "done"): done}, [2, time_len])
+        td.names = [None, "time"]
+        cf = CatFrames(N=N, dim=dim, in_keys=["obs"], out_keys=["out"], padding=padding)
+        out_td = cf.unfolding(td.clone())["out"]
+        out_f = F.cat_frames(
+            x, N=N, dim=dim, padding=padding, time_dim=len(x.shape[:1]) - x.ndim
+        )
+        torch.testing.assert_close(out_td, out_f)
 
 
 @pytest.mark.skipif(not _has_tv, reason="no torchvision")
@@ -3183,3 +3322,8 @@ class TestNextObservationDeltaForward:
         out = NextObservationDelta(in_keys=["observation"])(td)
         assert "some_other_key" in out.keys(True, True)
         assert ("next", "observation") not in out.keys(True, True)
+
+
+if __name__ == "__main__":
+    args, unknown = argparse.ArgumentParser().parse_known_args()
+    pytest.main([__file__, "--capture", "no", "--exitfirst"] + unknown)

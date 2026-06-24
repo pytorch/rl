@@ -163,6 +163,7 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
     batch_locked = True
+    _has_frame_skip = True
     # ``_reset`` can honor ``qpos``/``qvel`` passed through the reset tensordict
     # (deterministic snapshot/branch), so this env supports
     # ``reset(td, set_state=True)``. This is purely additive: by default the env

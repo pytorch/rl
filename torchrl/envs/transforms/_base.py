@@ -1409,6 +1409,16 @@ but got an object of type {type(transform)}."""
         tensordict_reset = self.transform._reset(tensordict, tensordict_reset)
         return tensordict_reset
 
+    def _input_td_has_state(self, tensordict: TensorDictBase | None) -> bool:
+        if tensordict is None:
+            return False
+        state_keys = list(self.state_spec.keys(True, True))
+        if not state_keys:
+            return False
+        tensordict = tensordict.select(*self.reset_keys, *state_keys, strict=False)
+        tensordict = self.transform._reset_env_preprocess(tensordict)
+        return self.base_env._input_td_has_state(tensordict)
+
     def _reset_proc_data(self, tensordict, tensordict_reset):
         # self._complete_done(self.full_done_spec, reset)
         self._reset_check_done(tensordict, tensordict_reset)

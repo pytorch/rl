@@ -94,10 +94,16 @@ Available wrappers
     IsaacLabWrapper
     JumanjiEnv
     JumanjiWrapper
+    LiberoEnv
+    LiberoWrapper
     MeltingpotEnv
     MeltingpotWrapper
     MOGymEnv
     MOGymWrapper
+    MujocoPlaygroundEnv
+    MujocoPlaygroundWrapper
+    MujocoPlaygroundAgentMapping
+    MujocoPlaygroundAgentSpec
     MultiThreadedEnv
     MultiThreadedEnvWrapper
     OpenMLEnv
