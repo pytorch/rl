@@ -32,13 +32,11 @@ from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import (
     _cache_values,
     _GAMMA_LMBDA_DEPREC_ERROR,
-    _reduce,
     _vmap_func,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 def _delezify(func):
@@ -584,12 +582,9 @@ class SACLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         if self._version == 1:
             value_net = self.actor_critic
         elif self._version == 2:
@@ -609,7 +604,7 @@ class SACLoss(LossModule):
             },
             value_network=value_net,
             deactivate_vmap=self.deactivate_vmap,
-            **hyperparams,
+            **hp,
         )
 
     @property
@@ -668,7 +663,9 @@ class SACLoss(LossModule):
         loss_actor, metadata_actor = self.actor_loss(tensordict)
         loss_alpha = self._alpha_loss(log_prob=metadata_actor["log_prob"])
         weights = self._maybe_get_priority_weight(tensordict)
-        loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
+        loss_alpha = self._reduce_loss(
+            loss_alpha, tensordict=tensordict, weights=weights
+        )
         tensordict.set(self.tensor_keys.priority, value_metadata["td_error"])
         if (loss_actor.shape != loss_qvalue.shape) or (
             loss_value is not None and loss_actor.shape != loss_value.shape
@@ -746,7 +743,9 @@ class SACLoss(LossModule):
                 f"Losses shape mismatch: {log_prob.shape} and {min_q_logprob.shape}"
             )
         loss_actor = self._alpha * log_prob - min_q_logprob
-        loss_actor = _reduce(loss_actor, reduction=self.reduction, weights=weights)
+        loss_actor = self._reduce_loss(
+            loss_actor, tensordict=tensordict, weights=weights
+        )
         return loss_actor, {"log_prob": log_prob.detach()}
 
     def alpha_loss(self, log_prob: Tensor) -> Tensor:
@@ -818,7 +817,9 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_chunks, loss_function=self.loss_function
         ).view(*shape)
-        loss_value = _reduce(loss_value, reduction=self.reduction, weights=weights)
+        loss_value = self._reduce_loss(
+            loss_value, tensordict=tensordict, weights=weights
+        )
         metadata = {"td_error": (pred_val - target_chunks).pow(2).flatten(0, 1)}
 
         return loss_value, metadata
@@ -923,7 +924,7 @@ class SACLoss(LossModule):
             target_value.expand_as(pred_val),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
         metadata = {"td_error": td_error.detach().max(0)[0]}
         return loss_qval, metadata
 
@@ -966,7 +967,9 @@ class SACLoss(LossModule):
         loss_value = distance_loss(
             pred_val, target_val, loss_function=self.loss_function
         )
-        loss_value = _reduce(loss_value, reduction=self.reduction, weights=weights)
+        loss_value = self._reduce_loss(
+            loss_value, tensordict=tensordict, weights=weights
+        )
         return loss_value, {}
 
     def _alpha_loss(self, log_prob: Tensor) -> Tensor:
@@ -1357,7 +1360,9 @@ class DiscreteSACLoss(LossModule):
             log_prob=metadata_actor["log_prob"],
         )
         weights = self._maybe_get_priority_weight(tensordict)
-        loss_alpha = _reduce(loss_alpha, reduction=self.reduction, weights=weights)
+        loss_alpha = self._reduce_loss(
+            loss_alpha, tensordict=tensordict, weights=weights
+        )
 
         tensordict.set(self.tensor_keys.priority, metadata_value["td_error"])
         if loss_actor.shape != loss_qvalue.shape:
@@ -1513,7 +1518,7 @@ class DiscreteSACLoss(LossModule):
             target_value.expand_as(chosen_action_value),
             loss_function=self.loss_function,
         ).sum(0)
-        loss_qval = _reduce(loss_qval, reduction=self.reduction, weights=weights)
+        loss_qval = self._reduce_loss(loss_qval, tensordict=tensordict, weights=weights)
 
         metadata = {
             "td_error": td_error.detach().max(0)[0],
@@ -1548,7 +1553,7 @@ class DiscreteSACLoss(LossModule):
         loss = self._alpha * log_prob - min_q
         # unlike in continuous SAC, we can compute the exact expectation over all discrete actions
         loss = (prob * loss).sum(-1)
-        loss = _reduce(loss, reduction=self.reduction, weights=weights)
+        loss = self._reduce_loss(loss, tensordict=tensordict, weights=weights)
 
         return loss, {"log_prob": (log_prob * prob).sum(-1).detach()}
 
@@ -1597,12 +1602,9 @@ class DiscreteSACLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
         dispatch_value_estimator(
             self,
             value_type,
@@ -1616,5 +1618,5 @@ class DiscreteSACLoss(LossModule):
             },
             value_network=None,
             deactivate_vmap=self.deactivate_vmap,
-            **hyperparams,
+            **hp,
         )

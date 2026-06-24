@@ -9,6 +9,10 @@
   - changed-files:
     - any-glob-to-any-file: ['torchrl/envs/libs/brax.py']
 
+"Environments/mujoco_playground":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/mujoco_playground.py']
+
 "Environments/dm_control":
   - changed-files:
     - any-glob-to-any-file: ['torchrl/envs/libs/dm_control.py']
@@ -32,6 +36,10 @@
 "Environments/jumanji":
   - changed-files:
     - any-glob-to-any-file: ['torchrl/envs/libs/jumanji.py']
+
+"Environments/libero":
+  - changed-files:
+    - any-glob-to-any-file: ['torchrl/envs/libs/libero.py', 'test/libs/test_libero.py']
 
 "Environments/meltingpot":
   - changed-files:

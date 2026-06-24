@@ -312,6 +312,7 @@ TorchRL offers a series of custom built-in environments.
     LLMHashingEnv
     PendulumEnv
     TicTacToeEnv
+    ToyVLAEnv
 
 MuJoCo custom environments
 --------------------------
@@ -358,6 +359,7 @@ Domain-specific
     model_based.dreamer.DreamerEnv
     model_based.dreamer.DreamerDecoder
     model_based.imagined.ImaginedEnv
+    model_based.world_model_env.WorldModelEnv
 
 Helpers
 -------

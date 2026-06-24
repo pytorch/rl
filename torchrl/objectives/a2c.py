@@ -36,7 +36,6 @@ from torchrl.objectives.utils import (
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
 
 
 class A2CLoss(LossModule):
@@ -608,14 +607,11 @@ class A2CLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
 
-        hyperparams.setdefault("device", _get_default_device(self))
+        hp.setdefault("device", _get_default_device(self))
         dispatch_value_estimator(
             self,
             value_type,
@@ -629,5 +625,5 @@ class A2CLoss(LossModule):
                 "terminated": self.tensor_keys.terminated,
                 "sample_log_prob": self.tensor_keys.sample_log_prob,
             },
-            **hyperparams,
+            **hp,
         )
