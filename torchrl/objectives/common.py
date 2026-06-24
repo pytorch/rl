@@ -705,14 +705,10 @@ class LossModule(TensorDictModuleBase, metaclass=_LossMeta):
             setattr(self, name, None)
             return
         if isinstance(value, bool) or not isinstance(value, (float, int, torch.Tensor)):
-            raise ValueError(
-                f"{name} must be a float or a scalar tensor, got {value}."
-            )
+            raise ValueError(f"{name} must be a float or a scalar tensor, got {value}.")
         value = torch.as_tensor(value, device=device, dtype=dtype)
         if value.numel() != 1:
-            raise ValueError(
-                f"{name} must be a float or a scalar tensor, got {value}."
-            )
+            raise ValueError(f"{name} must be a float or a scalar tensor, got {value}.")
         self.register_buffer(name, value)
 
     # Value-estimator keys forwarded by the default
