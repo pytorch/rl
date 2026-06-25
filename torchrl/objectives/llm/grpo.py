@@ -619,7 +619,9 @@ class GRPOLoss(LossModule):
             batch = mask.sum()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
 
-        if advantage.ndim != log_weight.ndim:
+        if advantage.ndim == log_weight.ndim - 1:
+            advantage = advantage.unsqueeze(-2).expand_as(log_weight)
+        elif advantage.ndim != log_weight.ndim:
             raise ValueError(
                 f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
