@@ -112,7 +112,9 @@ def train(
         else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        masking_strategy="rlhf" if cfg.env.reasoning else "sft",
+        masking_strategy="rlhf"
+        if (cfg.env.reasoning or cfg.env.dataset == "openenv")
+        else "sft",
         device=train_device,
     )
     if cfg.env.reasoning:
