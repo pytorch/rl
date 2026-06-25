@@ -63,11 +63,13 @@ scripts=(
     run_multiagent_sac.sh
     run_ppo_atari.sh
     run_ppo_mujoco.sh
+    run_rnd_mujoco.sh
     run_sac.sh
     run_td3.sh
     run_td3bc.sh
     run_dt.sh
     run_dt_online.sh
+    run_vla_grpo.sh
 )
 
 mkdir -p "slurm_errors"

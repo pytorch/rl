@@ -35,6 +35,7 @@ from torchrl.objectives.pilco import ExponentialQuadraticCost
 from torchrl.objectives.ppo import ClipPPOLoss, KLPENPPOLoss, PPOLoss
 from torchrl.objectives.redq import REDQLoss
 from torchrl.objectives.reinforce import ReinforceLoss
+from torchrl.objectives.rnd import RNDLoss
 from torchrl.objectives.sac import DiscreteSACLoss, SACLoss
 from torchrl.objectives.td3 import TD3Loss
 from torchrl.objectives.td3_bc import TD3BCLoss
@@ -86,6 +87,7 @@ __all__ = [
     "QMixerLoss",
     "REDQLoss",
     "ReinforceLoss",
+    "RNDLoss",
     "SACLoss",
     "SoftUpdate",
     "TD3BCLoss",

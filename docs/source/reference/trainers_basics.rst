@@ -26,6 +26,7 @@ Algorithm-specific trainers
 
     PPOTrainer
     SACTrainer
+    OfflineToOnlineTrainer
     DQNTrainer
     DDPGTrainer
     IQLTrainer

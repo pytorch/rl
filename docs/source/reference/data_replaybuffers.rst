@@ -14,12 +14,23 @@ Core Replay Buffer Classes
     :template: rl_template.rst
 
     ReplayBuffer
+    OfflineToOnlineReplayBuffer
     ReplayBufferEnsemble
     PrioritizedReplayBuffer
     TensorDictReplayBuffer
     TensorDictPrioritizedReplayBuffer
     RayReplayBuffer
     RemoteTensorDictReplayBuffer
+
+
+Offline-to-online helpers
+-------------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template_fun.rst
+
+    prefill_replay_buffer
 
 Composable Replay Buffers
 -------------------------

@@ -49,6 +49,8 @@ from .replay_buffers import (
     ListStorageCheckpointer,
     Nested2TED,
     NestedStorageCheckpointer,
+    OfflineToOnlineReplayBuffer,
+    prefill_replay_buffer,
     PrioritizedReplayBuffer,
     PrioritizedSampler,
     PrioritizedSliceSampler,
@@ -105,6 +107,7 @@ from .vla import (
     RobotDatasetMetadata,
     UniformActionTokenizer,
     validate_vla_tensordict,
+    VocabTailActionTokenizer,
 )
 
 __all__ = [
@@ -145,6 +148,7 @@ __all__ = [
     "Nested2TED",
     "NestedStorageCheckpointer",
     "NonTensor",
+    "OfflineToOnlineReplayBuffer",
     "OneHot",
     "PairwiseDataset",
     "PrioritizedReplayBuffer",
@@ -195,6 +199,7 @@ __all__ = [
     "UnboundedContinuous",
     "UnboundedDiscrete",
     "UniformActionTokenizer",
+    "VocabTailActionTokenizer",
     "VideoClipRef",
     "Writer",
     "WriterEnsemble",
@@ -204,6 +209,7 @@ __all__ = [
     "contains_lazy_spec",
     "create_infinite_iterator",
     "get_dataloader",
+    "prefill_replay_buffer",
     "set_video_decoder_cache_size",
     "validate_vla_tensordict",
 ]

@@ -54,6 +54,7 @@ dev = [
     "hydra-core>=1.1",
     "hydra-submitit-launcher",
     "imageio",
+    "moviepy",
     "mujoco",
     "mujoco-torch",
     "pre-commit",
@@ -74,6 +75,7 @@ explicit = true
 [tool.uv.sources]
 tensordict = { git = "https://github.com/pytorch/tensordict" }
 torch = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
+torchvision = { index = "pytorch-nightly", marker = "sys_platform == 'darwin' and python_version != '3.12'" }
 
 [[tool.uv.dependency-metadata]]
 name = "lerobot"
@@ -89,7 +91,7 @@ video = ["torchcodec>=0.10.0"]
 notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
-vla = ["lerobot>=0.5.0; python_version >= '3.12'"]
+vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
 rendering = ["moviepy", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
@@ -134,6 +136,7 @@ offline-data = [
 marl = ["vmas>=1.2.10", "pettingzoo>=1.24.1", "dm-meltingpot; python_version>='3.11'"]
 open_spiel = ["open_spiel>=1.5"]
 brax = ["jax>=0.7.0; python_version>='3.11'", "brax; python_version>='3.11'"]
+mujoco_playground = ["jax>=0.7.0; python_version>='3.11'", "playground; python_version>='3.11'"]
 genesis = ["genesis-world"]
 procgen = ["procgen; python_version<'3.10'"]
 pilco = [

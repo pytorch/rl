@@ -36,13 +36,73 @@ from torchrl.objectives.utils import (
     _GAMMA_LMBDA_DEPREC_ERROR,
     _maybe_add_or_extend_key,
     _maybe_get_or_select,
-    _reduce,
     _sum_td_features,
+    _validate_clip_epsilon,
     dispatch_value_estimator,
     distance_loss,
     ValueEstimators,
 )
-from torchrl.objectives.value import ValueEstimatorBase
+
+
+def _check_advantage_broadcast(
+    advantage: torch.Tensor, log_weight: torch.Tensor
+) -> None:
+    # A flat [B] advantage against a [B, 1] log-weight silently broadcasts to
+    # a [B, B] outer product inside the surrogate objective. The log-weight is
+    # always shaped [*advantage.shape[:-1], 1], so any broadcast producing
+    # more elements than both inputs is that bug.
+    if not isinstance(advantage, torch.Tensor) or not isinstance(
+        log_weight, torch.Tensor
+    ):
+        return
+    try:
+        broadcast = torch.broadcast_shapes(advantage.shape, log_weight.shape)
+    except RuntimeError:
+        # incompatible shapes fail with a shape error downstream
+        return
+    if broadcast.numel() > max(advantage.numel(), log_weight.numel()):
+        raise ValueError(
+            f"The advantage (shape={tuple(advantage.shape)}) and the log-weight "
+            f"(shape={tuple(log_weight.shape)}) would broadcast to "
+            f"{tuple(broadcast)}, turning the PPO objective into an outer "
+            "product over samples. This usually means the advantage is missing "
+            "its trailing value dimension: reshape it to batch shape + (1,) "
+            "(e.g. advantage.unsqueeze(-1))."
+        )
+
+
+def _broadcast_advantage_to_log_weight(
+    advantage: torch.Tensor, log_weight: torch.Tensor
+) -> torch.Tensor:
+    # Per-token objectives (e.g. token-level DAPO / GRPO on a chunked VLA head)
+    # carry one log-weight per action token: log_weight is [*B, *token_dims, 1]
+    # while the advantage is one value per decision, [*B, 1]. Broadcast the
+    # decision advantage across the token dims so the surrogate stays
+    # elementwise -- the alternative is forcing the caller to pre-expand the
+    # advantage by hand. No-op when the shapes already match (the standard
+    # one-ratio-per-sample case), so the outer-product guard still fires on a
+    # genuinely missing value dimension.
+    if not isinstance(advantage, torch.Tensor) or not isinstance(
+        log_weight, torch.Tensor
+    ):
+        return advantage
+    if (
+        advantage.shape == log_weight.shape
+        or advantage.ndim < 2
+        or advantage.shape[-1] != 1
+        or log_weight.shape[-1] != 1
+        or log_weight.ndim <= advantage.ndim
+    ):
+        return advantage
+    batch = advantage.shape[:-1]
+    # the advantage batch must be a strict prefix of the log-weight's leading
+    # dims; the extra middle dims are the per-token axes to broadcast over
+    if log_weight.shape[: len(batch)] != batch:
+        return advantage
+    token_dims = log_weight.shape[len(batch) : -1]
+    return advantage.reshape(*batch, *(1,) * len(token_dims), 1).expand(
+        *batch, *token_dims, 1
+    )
 
 
 class PPOLoss(LossModule):
@@ -506,24 +566,13 @@ class PPOLoss(LossModule):
             # Store the mapping for per-head coefficients
             self._entropy_coeff_map = {k: float(v) for k, v in entropy_coeff.items()}
             # Register an empty buffer for compatibility
-            self.register_buffer("entropy_coeff", torch.tensor(0.0))
+            self.register_coeff_buffer("entropy_coeff", 0.0, device=device)
         elif isinstance(entropy_coeff, (float, int, torch.Tensor)):
-            # Register the scalar entropy coefficient
-            coeff = (
-                float(entropy_coeff)
-                if not torch.is_tensor(entropy_coeff)
-                else float(entropy_coeff.item())
-            )
-            self.register_buffer("entropy_coeff", torch.tensor(coeff))
+            self.register_coeff_buffer("entropy_coeff", entropy_coeff, device=device)
             self._entropy_coeff_map = None
         else:
             raise TypeError("entropy_coeff must be a float or a Mapping[str, float]")
-        if critic_coeff is not None:
-            self.register_buffer(
-                "critic_coeff", torch.tensor(critic_coeff, device=device)
-            )
-        else:
-            self.critic_coeff = None
+        self.register_coeff_buffer("critic_coeff", critic_coeff, device=device)
         self._has_critic = bool(self.critic_coeff is not None and self.critic_coeff > 0)
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
@@ -537,21 +586,7 @@ class PPOLoss(LossModule):
             value=value_key,
         )
 
-        if clip_value is not None:
-            if isinstance(clip_value, float):
-                clip_value = torch.tensor(clip_value, device=device)
-            elif isinstance(clip_value, torch.Tensor):
-                if clip_value.numel() != 1:
-                    raise ValueError(
-                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
-                    )
-            else:
-                raise ValueError(
-                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
-                )
-            self.register_buffer("clip_value", clip_value.to(device))
-        else:
-            self.clip_value = None
+        self.register_coeff_buffer("clip_value", clip_value, device=device)
         try:
             log_prob_keys = self.actor_network.log_prob_keys
             action_keys = self.actor_network.dist_sample_keys
@@ -925,6 +960,8 @@ class PPOLoss(LossModule):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
+        _check_advantage_broadcast(advantage, log_weight)
         neg_loss = log_weight.exp() * advantage
         td_out = TensorDict({"loss_objective": -neg_loss})
         td_out.set("kl_approx", kl_approx.detach().mean())  # for logging
@@ -974,12 +1011,9 @@ class PPOLoss(LossModule):
     )
 
     def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams):
+        value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams)
         if value_type is None:
-            value_type = self.default_value_estimator
-        if isinstance(value_type, ValueEstimatorBase) or (
-            isinstance(value_type, type) and issubclass(value_type, ValueEstimatorBase)
-        ):
-            return LossModule.make_value_estimator(self, value_type, **hyperparams)
+            return self
 
         dispatch_value_estimator(
             self,
@@ -994,7 +1028,7 @@ class PPOLoss(LossModule):
                 "terminated": self.tensor_keys.terminated,
                 "sample_log_prob": self.tensor_keys.sample_log_prob,
             },
-            **hyperparams,
+            **hp,
         )
 
     def _weighted_loss_entropy(
@@ -1067,8 +1101,16 @@ class ClipPPOLoss(PPOLoss):
           If the value drops or increases significantly, it often indicates issues with the model configuration (such as a train/eval mode mismatch, or a large policy update).
 
     Keyword Args:
-        clip_epsilon (scalar, optional): weight clipping threshold in the clipped PPO loss equation.
-            default: 0.2
+        clip_epsilon (scalar or tuple of scalars, optional): weight clipping threshold(s) in the clipped
+            PPO loss equation.
+
+            - float ``x``: symmetric clipping ``[1 - x, 1 + x]``. Default: ``0.2``.
+            - tuple ``(eps_low, eps_high)``: asymmetric clipping ``[1 - eps_low, 1 + eps_high]`` as in
+              DAPO Clip-Higher (recommended values ``(0.20, 0.28)``; see Eq. (10) of the
+              `DAPO paper <https://arxiv.org/html/2503.14476>`_). With a tuple, the thresholds are
+              exposed (and schedulable) as the ``clip_epsilon_low`` / ``clip_epsilon_high`` buffers
+              instead of ``clip_epsilon``, and ``clip_value=True`` is not allowed (pass an explicit
+              float threshold instead).
         entropy_bonus (bool, optional): if ``True``, an entropy bonus will be added to the
             loss to favour exploratory policies.
         samples_mc_entropy (int, optional): if the distribution retrieved from the policy
@@ -1119,8 +1161,9 @@ class ClipPPOLoss(PPOLoss):
             calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions,
             helping stabilize training and preventing large updates. However, it will have no impact if the value
             estimate was done by the current version of the value estimator. If instead ``True`` is provided, the
-            ``clip_epsilon`` parameter will be used as the clipping threshold. If not provided or ``False``, no
-            clipping will be performed. Defaults to ``False``.
+            ``clip_epsilon`` parameter will be used as the clipping threshold (this is only compatible with a
+            scalar ``clip_epsilon``; with an asymmetric ``(low, high)`` tuple, pass an explicit float threshold
+            instead). If not provided or ``False``, no clipping will be performed. Defaults to ``False``.
         device (torch.device, optional): device of the buffers. Defaults to ``None``.
 
             .. note:: Parameters and buffers from the policy / critic will not be cast to that device to ensure that
@@ -1169,7 +1212,9 @@ class ClipPPOLoss(PPOLoss):
 
     """
 
-    _schedulable_buffers = frozenset({"clip_epsilon"})
+    _schedulable_buffers = frozenset(
+        {"clip_epsilon", "clip_epsilon_low", "clip_epsilon_high"}
+    )
 
     actor_network: TensorDictModule
     critic_network: TensorDictModule
@@ -1183,7 +1228,7 @@ class ClipPPOLoss(PPOLoss):
         actor_network: ProbabilisticTensorDictSequential | None = None,
         critic_network: TensorDictModule | None = None,
         *,
-        clip_epsilon: float = 0.2,
+        clip_epsilon: float | tuple[float, float] = 0.2,
         entropy_bonus: bool = True,
         samples_mc_entropy: int = 1,
         entropy_coeff: float | Mapping[NestedKey, float] | None = None,
@@ -1200,6 +1245,12 @@ class ClipPPOLoss(PPOLoss):
     ):
         # Define clipping of the value loss
         if isinstance(clip_value, bool):
+            if clip_value and isinstance(clip_epsilon, (tuple, list)):
+                raise ValueError(
+                    "clip_value=True cannot infer the value-clip threshold from "
+                    "an asymmetric clip_epsilon tuple. Pass an explicit float "
+                    "threshold instead, e.g. clip_value=0.2."
+                )
             clip_value = clip_epsilon if clip_value else None
 
         super().__init__(
@@ -1226,10 +1277,60 @@ class ClipPPOLoss(PPOLoss):
                 device = getattr(
                     torch, "get_default_device", lambda: torch.device("cpu")
                 )()
-        self.register_buffer("clip_epsilon", torch.tensor(clip_epsilon, device=device))
+        self._asymmetric_clip = isinstance(clip_epsilon, (tuple, list))
+        if self._asymmetric_clip:
+            # Asymmetric (DAPO Clip-Higher) thresholds, as in GRPOLoss
+            eps_low, eps_high = _validate_clip_epsilon(clip_epsilon)
+            self.register_buffer(
+                "clip_epsilon_low", torch.tensor(eps_low, device=device)
+            )
+            self.register_buffer(
+                "clip_epsilon_high", torch.tensor(eps_high, device=device)
+            )
+        else:
+            # the symmetric float keeps the legacy (schedulable) buffer and
+            # is deliberately not validated, for backward compatibility
+            self.register_buffer(
+                "clip_epsilon", torch.tensor(clip_epsilon, device=device)
+            )
+
+    _CLIP_EPSILON_BUFFER_NAMES = (
+        "clip_epsilon",
+        "clip_epsilon_low",
+        "clip_epsilon_high",
+    )
+
+    def __setattr__(self, name: str, value) -> None:
+        # Scheduling the wrong clip-threshold flavor (e.g. annealing
+        # `loss.clip_epsilon` on a loss built with an asymmetric tuple) would
+        # silently create a shadow attribute while clipping keeps using the
+        # registered buffers - fail loudly instead.
+        if (
+            name in self._CLIP_EPSILON_BUFFER_NAMES
+            and isinstance(value, (int, float))
+            and getattr(self, "_buffers", None) is not None
+            and name not in self._buffers
+            and any(n in self._buffers for n in self._CLIP_EPSILON_BUFFER_NAMES)
+        ):
+            if self._asymmetric_clip:
+                raise AttributeError(
+                    f"Cannot schedule {name!r}: this {type(self).__name__} was built "
+                    "with an asymmetric clip_epsilon tuple; schedule "
+                    "'clip_epsilon_low' / 'clip_epsilon_high' instead."
+                )
+            raise AttributeError(
+                f"Cannot schedule {name!r}: this {type(self).__name__} was built "
+                "with a symmetric float clip_epsilon; schedule 'clip_epsilon' instead."
+            )
+        super().__setattr__(name, value)
 
     @property
     def _clip_bounds(self):
+        if self._asymmetric_clip:
+            return (
+                (-self.clip_epsilon_low).log1p(),
+                self.clip_epsilon_high.log1p(),
+            )
         return (
             (-self.clip_epsilon).log1p(),
             self.clip_epsilon.log1p(),
@@ -1285,6 +1386,8 @@ class ClipPPOLoss(PPOLoss):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
+        _check_advantage_broadcast(advantage, log_weight)
         # ESS for logging
         with torch.no_grad():
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
@@ -1327,7 +1430,7 @@ class ClipPPOLoss(PPOLoss):
             if explained_variance is not None:
                 td_out.set("explained_variance", explained_variance)
 
-        td_out.set("ESS", _reduce(ess, self.reduction) / batch)
+        td_out.set("ESS", ess / batch)
         with torch.no_grad():
             ratio = log_weight.exp()
             td_out.set("max_ratio", ratio.max())
@@ -1623,6 +1726,8 @@ class KLPENPPOLoss(PPOLoss):
         log_weight, dist, kl_approx = self._log_weight(
             tensordict_copy, adv_shape=advantage.shape[:-1]
         )
+        advantage = _broadcast_advantage_to_log_weight(advantage, log_weight)
+        _check_advantage_broadcast(advantage, log_weight)
         neg_loss = log_weight.exp() * advantage
 
         with (

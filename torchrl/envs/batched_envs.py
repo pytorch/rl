@@ -44,7 +44,7 @@ from torchrl._utils import (
     timeit,
     VERBOSE,
 )
-from torchrl.data.tensor_specs import Composite, NonTensor
+from torchrl.data.tensor_specs import Composite, NonTensor, Stacked
 from torchrl.data.utils import CloudpickleWrapper, contains_lazy_spec, DEVICE_TYPING
 from torchrl.envs.common import _do_nothing, _EnvPostInit, EnvBase, EnvMetaData
 
@@ -1029,7 +1029,14 @@ class BatchedEnvBase(EnvBase):
                 "batched environment base tensordict has the wrong shape"
             )
 
-        # Non-tensor keys
+        # Non-tensor keys. Heterogeneous workers (e.g. different language
+        # instructions) stack NonTensor leaves into a Stacked spec, so the
+        # check must look through the stack as well.
+        def _is_non_tensor(spec) -> bool:
+            if isinstance(spec, NonTensor):
+                return True
+            return isinstance(spec, Stacked) and isinstance(spec._specs[0], NonTensor)
+
         non_tensor_keys = []
         for spec in (
             self.full_action_spec,
@@ -1039,9 +1046,10 @@ class BatchedEnvBase(EnvBase):
             self.full_done_spec,
         ):
             for key, _spec in spec.items(True, True):
-                if isinstance(_spec, NonTensor):
+                if _is_non_tensor(_spec):
                     non_tensor_keys.append(key)
         self._non_tensor_keys = non_tensor_keys
+        self._non_tensor_cache = None
 
         if self._single_task:
             self._env_input_keys = sorted(
@@ -1176,6 +1184,32 @@ class BatchedEnvBase(EnvBase):
         self._shared_tensordict_parent_root = self.shared_tensordict_parent.exclude(
             "next", *self.reset_keys
         )
+
+    def _update_non_tensor_cache(self, non_tensor_tds, workers_range=None):
+        if not self._non_tensor_keys:
+            return None
+        root_non_tensor = non_tensor_tds.select(*self._non_tensor_keys, strict=False)
+        if workers_range is None:
+            self._non_tensor_cache = root_non_tensor
+            return root_non_tensor
+        workers = list(workers_range)
+        if workers == list(range(self.num_workers)):
+            self._non_tensor_cache = root_non_tensor
+            return root_non_tensor
+        if self._non_tensor_cache is None:
+            raise RuntimeError(
+                "Cannot preserve NonTensor values for non-updated workers before "
+                "a full reset or step."
+            )
+        worker_to_offset = {worker: offset for offset, worker in enumerate(workers)}
+        rows = []
+        for i in range(self.num_workers):
+            if i in worker_to_offset:
+                rows.append(root_non_tensor[worker_to_offset[i]])
+            else:
+                rows.append(self._non_tensor_cache[i])
+        self._non_tensor_cache = LazyStackedTensorDict(*rows)
+        return root_non_tensor
 
     def _start_workers(self) -> None:
         """Starts the various envs."""
@@ -2124,11 +2158,17 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         tensordict.set("next", next_td)
         if self._non_tensor_keys:
             non_tensor_tds = LazyStackedTensorDict(*non_tensor_tds)
+            root_non_tensor_tds = self._update_non_tensor_cache(
+                non_tensor_tds,
+                workers_range if partial_steps is not None else None,
+            )
             tensordict.update(
                 non_tensor_tds,
                 keys_to_update=[("next", key) for key in self._non_tensor_keys],
             )
-            tensordict_.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
+            tensordict_.update(
+                root_non_tensor_tds, keys_to_update=self._non_tensor_keys
+            )
 
         if partial_steps is not None:
             result = tensordict.new_zeros(tensordict_save.shape)
@@ -2480,10 +2520,12 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
             device=device,
         )
         if self._non_tensor_keys:
-            out.update(
-                LazyStackedTensorDict(*non_tensor_tds),
-                keys_to_update=self._non_tensor_keys,
+            non_tensor_tds = LazyStackedTensorDict(*non_tensor_tds)
+            self._update_non_tensor_cache(
+                non_tensor_tds,
+                workers_range if partial_steps is not None else None,
             )
+            out.update(non_tensor_tds, keys_to_update=self._non_tensor_keys)
         if next_td_passthrough is not None:
             out.update(next_td_passthrough)
 
@@ -2676,9 +2718,41 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         )
         if self._non_tensor_keys:
             workers, nontensor = zip(*workers_nontensor)
-            out[torch.tensor(workers)] = LazyStackedTensorDict(*nontensor).select(
+            reset_stack = LazyStackedTensorDict(*nontensor).select(
                 *self._non_tensor_keys
             )
+            if len(workers) == self.num_workers:
+                # full reset: every worker has a freshly reset value, so the
+                # fancy-index assignment creates the (absent) NonTensor keys.
+                out[torch.tensor(workers)] = reset_stack
+                self._non_tensor_cache = reset_stack
+            else:
+                # partial reset: ``out`` has no NonTensor leaves (NonTensor is
+                # not shared-memory backed, so ``named_apply`` over the shared
+                # parent skips it), and a NonTensor key cannot be created by a
+                # *partial* fancy-index assignment. Build the full-width
+                # NonTensor explicitly -- reset workers take the fresh values,
+                # the others keep their last cached current value (correct,
+                # since they are not being reset).
+                worker_to_offset = {w: o for o, w in enumerate(workers)}
+                rows = []
+                for i in range(self.num_workers):
+                    if i in worker_to_offset:
+                        rows.append(reset_stack[worker_to_offset[i]])
+                    elif self._non_tensor_cache is not None:
+                        rows.append(self._non_tensor_cache[i])
+                    else:
+                        non_tensor = tensordict[i].select(
+                            *self._non_tensor_keys, strict=False
+                        )
+                        if non_tensor.is_empty():
+                            raise RuntimeError(
+                                "Cannot preserve NonTensor values for non-reset "
+                                "workers before a full reset or step."
+                            )
+                        rows.append(non_tensor)
+                self._non_tensor_cache = LazyStackedTensorDict(*rows)
+                out.update(self._non_tensor_cache)
         self._sync_w2m()
         return out
 

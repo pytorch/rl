@@ -14,7 +14,7 @@ from tensordict import TensorDictBase
 from tensordict.utils import NestedKey
 
 from torchrl.data.vla.schema import IMAGE_KEY, INSTRUCTION_KEY, STATE_KEY
-from torchrl.modules.vla.common import VLAWrapperBase
+from torchrl.modules.vla.common import InputMode, OutputMode, VLAWrapperBase
 
 _has_lerobot = importlib.util.find_spec("lerobot") is not None
 
@@ -31,7 +31,8 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
     TorchRL stack. On :meth:`forward` it builds a LeRobot-style batch dict from
     the canonical observation keys (``observation.state``,
     ``observation.images.<camera>``, ``task``), calls the wrapped policy, and
-    writes the returned continuous action chunk under ``action_chunk``.
+    writes the returned continuous action chunk under
+    ``("vla_action", "chunk")``.
 
     The wrapped object can be any callable / module that maps a LeRobot batch
     dict to an action chunk of shape ``[B, chunk_size, action_dim]``; by default
@@ -60,8 +61,8 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         integration are tested with a stand-in policy.
 
     .. note::
-        Only the continuous (``action_chunk``) head is supported -- external
-        policies emit continuous chunks, not TorchRL action-token logits.
+        Only the continuous chunk head is supported -- external policies emit
+        continuous chunks, not TorchRL action-token logits.
 
     Examples:
         >>> import torch
@@ -82,7 +83,7 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         ...     },
         ...     batch_size=[2],
         ... )
-        >>> policy(td)["action_chunk"].shape
+        >>> policy(td)["vla_action", "chunk"].shape
         torch.Size([2, 4, 7])
     """
 
@@ -98,12 +99,18 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         image_key: NestedKey = IMAGE_KEY,
         state_key: NestedKey = STATE_KEY,
         instruction_key: NestedKey = INSTRUCTION_KEY,
+        input_mode: InputMode = "canonical",
+        output_mode: OutputMode | None = None,
+        inplace: bool | str | None = True,
     ) -> None:
         super().__init__(
             action_dim=action_dim,
             chunk_size=chunk_size,
             action_head="continuous",
             use_state=use_state,
+            input_mode=input_mode,
+            output_mode=output_mode,
+            inplace=inplace,
         )
         self.set_keys(image=image_key, state=state_key, instruction=instruction_key)
         self.policy = policy
@@ -111,14 +118,10 @@ class LeRobotPolicyWrapper(VLAWrapperBase):
         self.camera_name = camera_name
 
     def _to_lerobot_batch(self, tensordict: TensorDictBase) -> dict:
-        batch = {
-            f"observation.images.{self.camera_name}": tensordict.get(
-                self.tensor_keys.image
-            )
-        }
+        batch = {f"observation.images.{self.camera_name}": self._get_image(tensordict)}
         if self.use_state:
-            batch["observation.state"] = tensordict.get(self.tensor_keys.state)
-        instruction = tensordict.get(self.tensor_keys.instruction)
+            batch["observation.state"] = self._get_state(tensordict)
+        instruction = self._get_instruction(tensordict)
         batch["task"] = getattr(instruction, "tolist", lambda: instruction)()
         return batch
 
