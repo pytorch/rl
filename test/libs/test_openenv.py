@@ -12,12 +12,11 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from omegaconf import DictConfig
-from tensordict import TensorDict
-from tensordict.tensorclass import NonTensorData
 
 import torchrl.envs.libs.openenv as openenv_mod
 import torchrl.envs.llm.libs.openenv as openenv_chat_mod
+from tensordict import TensorDict
+from tensordict.tensorclass import NonTensorData
 from torchrl.data import LazyStackStorage, ReplayBuffer
 from torchrl.data.llm import History
 from torchrl.envs.libs.openenv import OpenEnvEnv, OpenEnvWrapper
@@ -25,6 +24,8 @@ from torchrl.envs.llm import OpenEnvChatEnv
 from torchrl.envs.utils import check_env_specs
 from torchrl.modules.llm.policies.common import ChatHistory
 from torchrl.objectives.llm.grpo import MCAdvantage
+
+_has_omegaconf = importlib.util.find_spec("omegaconf") is not None
 
 
 @dataclass
@@ -44,6 +45,23 @@ class _TextAction:
 class _ObservationModel:
     def model_dump(self):
         return {"prompt": ["nested", {"value": 1}], "reward": 2.0, "done": True}
+
+
+class _Config(dict):
+    def __init__(self, data):
+        super().__init__((key, self._convert(value)) for key, value in data.items())
+
+    @classmethod
+    def _convert(cls, value):
+        if isinstance(value, dict):
+            return cls(value)
+        return value
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as err:
+            raise AttributeError(name) from err
 
 
 class _SyncOpenEnv:
@@ -226,6 +244,8 @@ class TestOpenEnvChat:
 
 class TestOpenEnvGRPO:
     def test_make_env_openenv_with_local_fixture(self, monkeypatch):
+        if not _has_omegaconf:
+            pytest.skip("omegaconf is required to import the GRPO recipe helpers")
         pytest.importorskip("transformers")
         pytest.importorskip("openenv")
         spec = importlib.util.spec_from_file_location(
@@ -246,7 +266,7 @@ class TestOpenEnvGRPO:
             "from_env",
             staticmethod(lambda name: _TextAction),
         )
-        cfg = DictConfig(
+        cfg = _Config(
             {
                 "env": {
                     "dataset": "openenv",

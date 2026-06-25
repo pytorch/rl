@@ -276,7 +276,9 @@ class OpenEnvChatEnv(ChatEnv):
         )
 
     def _wrap_observation(self, observation: Any) -> NonTensorData:
-        return NonTensorData(observation, batch_size=self.batch_size, device=self.device)
+        return NonTensorData(
+            observation, batch_size=self.batch_size, device=self.device
+        )
 
     def _make_history_message(self, role: str, content: Any) -> History:
         return History(
