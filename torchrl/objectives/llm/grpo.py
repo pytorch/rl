@@ -825,6 +825,28 @@ class GRPOLoss(LossModule):
             )
 
         # Check for shape mismatches and provide helpful error messages
+        if cur_log_prob.shape != prev_log_prob.shape and (
+            cur_log_prob.shape[:-1] == prev_log_prob.shape[:-1]
+        ):
+            # History-mode rollouts may be re-tokenized by the training model with
+            # a slightly different prompt prefix than the inference engine used
+            # to generate the sample log-probs. Align on the right so response
+            # tokens remain matched and any prompt-only gap receives zero
+            # log-prob. Prompt positions are masked out below.
+            length_diff = cur_log_prob.shape[-1] - prev_log_prob.shape[-1]
+            if length_diff > 0:
+                prev_log_prob = torch.cat(
+                    [
+                        prev_log_prob.new_zeros(
+                            *prev_log_prob.shape[:-1], length_diff
+                        ),
+                        prev_log_prob,
+                    ],
+                    dim=-1,
+                )
+            else:
+                prev_log_prob = prev_log_prob[..., -cur_log_prob.shape[-1] :]
+
         if cur_log_prob.shape != prev_log_prob.shape:
             # Try to provide helpful debugging information
             error_msg = (
