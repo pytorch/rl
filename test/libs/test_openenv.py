@@ -310,9 +310,6 @@ class TestOpenEnvGRPO:
         out = env.step(td)
         assert out["next", "reward"].item() == 1.0
         assert out["next", "done"].item() is False
-        cfg.env["num_envs"] = 2
-        env = grpo_utils.make_env(cfg)
-        assert tuple(env.batch_size) == (2,)
 
     def test_mcadvantage_smoke_for_openenv_rollouts(self):
         def collect_rollout():

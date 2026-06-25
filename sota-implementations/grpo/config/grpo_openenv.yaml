@@ -7,7 +7,7 @@ defaults:
 
 env:
   dataset: openenv
-  num_envs: 8
+  num_envs: 1
   repeats: 8
   reasoning: true
   max_steps: 4
