@@ -12,7 +12,7 @@ import pytest
 import torch
 from packaging import version
 
-from torchrl.envs.libs.gym import _has_gym, gym_backend, set_gym_backend
+from torchrl.envs.libs.gym import gym_backend, set_gym_backend
 
 pytestmark = [
     pytest.mark.filterwarnings("error"),

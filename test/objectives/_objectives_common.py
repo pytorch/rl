@@ -123,11 +123,14 @@ class MARLEnv(EnvBase):
     def _step(
         self,
         tensordict: TensorDictBase,
-    ) -> TensorDictBase: ...
+    ) -> TensorDictBase:
+        ...
 
-    def _reset(self, tensordic): ...
+    def _reset(self, tensordic):
+        ...
 
-    def _set_seed(self, seed: int | None) -> None: ...
+    def _set_seed(self, seed: int | None) -> None:
+        ...
 
 
 class LossModuleTestBase:
@@ -140,9 +143,9 @@ class LossModuleTestBase:
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        assert hasattr(cls, "test_reset_parameters_recursive"), (
-            "Please add a test_reset_parameters_recursive test for this class"
-        )
+        assert hasattr(
+            cls, "test_reset_parameters_recursive"
+        ), "Please add a test_reset_parameters_recursive test for this class"
 
     def _flatten_in_keys(self, in_keys):
         return [

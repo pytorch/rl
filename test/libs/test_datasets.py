@@ -712,9 +712,9 @@ class TestMinari:
                 torchrl_logger.info(
                     f"[Local Minari] Sampling time {1000 * (t1 - t0):4.4f} ms"
                 )
-                assert data.metadata["action_space"].is_in(sample["action"]), (
-                    "Invalid action sample"
-                )
+                assert data.metadata["action_space"].is_in(
+                    sample["action"]
+                ), "Invalid action sample"
                 assert data.metadata["observation_space"].is_in(
                     sample["observation"]
                 ), "Invalid observation sample"
@@ -1040,9 +1040,9 @@ class TestOpenX:
                 sample = dataset.sample()
                 assert sample.shape == (batch_size,)
         if slice_len is not None:
-            assert sample.get(("next", "done")).sum() == int(batch_size // slice_len), (
-                sample.get(("next", "done"))
-            )
+            assert sample.get(("next", "done")).sum() == int(
+                batch_size // slice_len
+            ), sample.get(("next", "done"))
         elif num_slices is not None:
             assert sample.get(("next", "done")).sum() == num_slices
 

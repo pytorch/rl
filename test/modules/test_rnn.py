@@ -102,9 +102,9 @@ def test_python_lstm_cell(device, bias):
         lstm_cell1.named_parameters(), lstm_cell2.named_parameters()
     ):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
-        assert v1.shape == v2.shape, (
-            f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
-        )
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
     # Run loop
     input = torch.randn(2, 3, 10, device=device)
@@ -138,9 +138,9 @@ def test_python_gru_cell(device, bias):
     ):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
         assert (v1 == v2).all()
-        assert v1.shape == v2.shape, (
-            f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
-        )
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
     # Run loop
     input = torch.randn(2, 3, 10, device=device)
@@ -186,9 +186,9 @@ def test_python_lstm(device, bias, dropout, batch_first, num_layers):
     # Make sure parameters match
     for (k1, v1), (k2, v2) in zip(lstm1.named_parameters(), lstm2.named_parameters()):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
-        assert v1.shape == v2.shape, (
-            f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
-        )
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
     if batch_first:
         input = torch.randn(B, T, 10, device=device)
@@ -255,9 +255,9 @@ def test_python_gru(device, bias, dropout, batch_first, num_layers):
     for (k1, v1), (k2, v2) in zip(gru1.named_parameters(), gru2.named_parameters()):
         assert k1 == k2, f"Parameter names do not match: {k1} != {k2}"
         torch.testing.assert_close(v1, v2)
-        assert v1.shape == v2.shape, (
-            f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
-        )
+        assert (
+            v1.shape == v2.shape
+        ), f"Parameter shapes do not match: {k1} shape {v1.shape} != {k2} shape {v2.shape}"
 
     if batch_first:
         input = torch.randn(B, T, 10, device=device)
@@ -3871,9 +3871,9 @@ class TestRecurrentMatmulPrecision:
 
         atol = 5e-3
         for k in grads_pad:
-            assert torch.isfinite(grads_triton[k]).all(), (
-                f"precision={precision} produced non-finite grad for {k}"
-            )
+            assert torch.isfinite(
+                grads_triton[k]
+            ).all(), f"precision={precision} produced non-finite grad for {k}"
             torch.testing.assert_close(
                 grads_pad[k], grads_triton[k], atol=atol, rtol=atol
             )
@@ -3936,9 +3936,9 @@ class TestRecurrentMatmulPrecision:
 
         atol = 5e-3
         for k in grads_pad:
-            assert torch.isfinite(grads_triton[k]).all(), (
-                f"precision={precision} produced non-finite grad for {k}"
-            )
+            assert torch.isfinite(
+                grads_triton[k]
+            ).all(), f"precision={precision} produced non-finite grad for {k}"
             torch.testing.assert_close(
                 grads_pad[k], grads_triton[k], atol=atol, rtol=atol
             )

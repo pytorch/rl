@@ -192,7 +192,8 @@ class TestGym:
                 batch_size=[],
             )
 
-        def _set_seed(self, seed: int | None) -> None: ...
+        def _set_seed(self, seed: int | None) -> None:
+            ...
 
     @implement_for("gym", None, "0.18")
     def _make_spec(self, batch_size, cat, cat_shape, multicat, multicat_shape):
@@ -277,11 +278,13 @@ class TestGym:
     def test_gym_new_spec_reg(self):
         Space = gym_backend("spaces").Space
 
-        class MySpaceParent(Space): ...
+        class MySpaceParent(Space):
+            ...
 
         s_parent = MySpaceParent()
 
-        class MySpaceChild(MySpaceParent): ...
+        class MySpaceChild(MySpaceParent):
+            ...
 
         # We intentionally register first the child then the parent
         @register_gym_spec_conversion(MySpaceChild)
@@ -296,7 +299,8 @@ class TestGym:
         assert _gym_to_torchrl_spec_transform(s_parent).example_data == "parent"
         assert _gym_to_torchrl_spec_transform(s_child).example_data == "child"
 
-        class NoConversionSpace(Space): ...
+        class NoConversionSpace(Space):
+            ...
 
         s_no_conv = NoConversionSpace()
         with pytest.raises(
@@ -1714,9 +1718,9 @@ class TestGym:
 
         # This should return True since it has a "pixels" key
         result = _is_from_pixels(dict_pixel_env)
-        assert result is True, (
-            f"Expected True for Dict environment with pixels, got {result}"
-        )
+        assert (
+            result is True
+        ), f"Expected True for Dict environment with pixels, got {result}"
 
     def test_is_from_pixels_dict_env_no_pixels(self):
         """Test that _is_from_pixels correctly identifies Dict environments without pixels."""
@@ -1739,9 +1743,9 @@ class TestGym:
 
         # This should return False since it doesn't have a "pixels" key
         result = _is_from_pixels(dict_no_pixel_env)
-        assert result is False, (
-            f"Expected False for Dict environment without pixels, got {result}"
-        )
+        assert (
+            result is False
+        ), f"Expected False for Dict environment without pixels, got {result}"
 
     def test_num_workers_returns_parallel_env(self):
         """Ensure explicit TorchRL `num_workers` returns a lazy ParallelEnv, while gym's
@@ -1855,9 +1859,9 @@ class TestGym:
 
             # This should return True since it's detected as a pixel wrapper
             result = _is_from_pixels(wrapped_env)
-            assert result is True, (
-                f"Expected True for wrapped environment, got {result}"
-            )
+            assert (
+                result is True
+            ), f"Expected True for wrapped environment, got {result}"
         finally:
             # Restore original isinstance
             builtins.isinstance = original_isinstance
