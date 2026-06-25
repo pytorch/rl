@@ -789,6 +789,20 @@ class GRPOLoss(LossModule):
             ref_log_prob = ref_log_prob.squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
+        if cur_log_prob.shape != ref_log_prob.shape and (
+            cur_log_prob.shape[:-1] == ref_log_prob.shape[:-1]
+        ):
+            length_diff = cur_log_prob.shape[-1] - ref_log_prob.shape[-1]
+            if length_diff > 0:
+                ref_log_prob = torch.cat(
+                    [
+                        ref_log_prob.new_zeros(*ref_log_prob.shape[:-1], length_diff),
+                        ref_log_prob,
+                    ],
+                    dim=-1,
+                )
+            else:
+                ref_log_prob = ref_log_prob[..., -cur_log_prob.shape[-1] :]
         if cur_log_prob.shape != ref_log_prob.shape:
             raise ValueError(
                 f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
