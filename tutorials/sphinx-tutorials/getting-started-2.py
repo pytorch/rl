@@ -143,38 +143,61 @@ optim.step()
 optim.zero_grad()
 
 ###################################
-# Model mode (train/eval)
-# ------------------------
+# .. _rl_execution_modes:
 #
-# In RL, it is important to be mindful of the model's training mode
-# (``.train()`` / ``.eval()``). Unlike in supervised learning where models are
-# typically set to ``.train()`` during training and ``.eval()`` during
-# evaluation, in RL it is often recommended to keep the **entire model in eval
-# mode** throughout the training process. This recommendation is explicitly
-# mentioned in the :class:`~torchrl.objectives.ClipPPOLoss` documentation:
+# Execution modes and context managers
+# ------------------------------------
 #
-#   "While this loss module does not enforce any specific model mode
-#   (train/eval), it is highly recommended to keep your model in eval mode
-#   during RL training to ensure deterministic behavior."
+# RL training loops often combine several independent controls. Keeping them
+# separate helps avoid subtle bugs:
 #
-# The reason is that stochastic modules like :class:`~torch.nn.Dropout` or
-# :class:`~torch.nn.BatchNorm` behave differently in train and eval modes.
-# In train mode, dropout randomly zeroes out activations and batch norm uses
-# mini-batch statistics, which can introduce randomness during data
-# collection and lead to instability in the policy gradient estimates.
+# * ``module.train()`` and ``module.eval()`` are regular PyTorch module modes.
+#   They control modules such as :class:`~torch.nn.Dropout`,
+#   :class:`~torch.nn.BatchNorm`, and
+#   :class:`~torchrl.modules.ConsistentDropoutModule`. They do **not** enable or
+#   disable gradients, and they do not decide whether a probabilistic policy
+#   samples randomly or deterministically. For PPO-style losses, it is usually
+#   recommended to keep the policy and value networks in ``eval`` mode during
+#   both data collection and optimization so that replayed log-probabilities are
+#   computed under the same module behavior as the rollout.
 #
-# If you need exploration via dropout during data collection (e.g., for
-# Bayesian RL), TorchRL provides
-# :class:`~torchrl.modules.ConsistentDropoutModule` which applies a
-# *consistent* dropout mask across all steps of a trajectory, ensuring
-# reproducibility while still benefiting from the regularizing effects of
-# dropout.
+# * :class:`~torchrl.envs.utils.ExplorationType` and
+#   :func:`~torchrl.envs.utils.set_exploration_type` control the *interaction*
+#   mode of TorchRL probabilistic and exploration modules. ``RANDOM`` samples
+#   from the policy or adds exploration noise, while ``MODE``, ``MEAN`` or
+#   ``DETERMINISTIC`` select deterministic actions when available. TorchRL's
+#   ``ExplorationType`` is an alias of TensorDict's ``InteractionType``: this
+#   switch is about action selection, not about PyTorch train/eval mode or
+#   autograd. Collectors use this mode during data collection, and loss modules
+#   use their ``deterministic_sampling_mode`` when re-evaluating policies for
+#   objective computation.
 #
-# .. note::
-#   TorchRL's data collectors perform rollouts in ``torch.no_grad()`` mode
-#   but **not** in ``eval`` mode, so it is the user's responsibility to set
-#   the policy to eval mode before passing it to a collector or calling
-#   ``env.rollout(policy=...)``.
+# * :func:`~torch.no_grad` and :func:`~torch.inference_mode` control autograd
+#   bookkeeping. They reduce memory usage and prevent graph construction during
+#   rollouts or evaluation, but they do **not** call ``eval()`` and they do not
+#   change the exploration/interaction mode. ``inference_mode`` is more
+#   restrictive than ``no_grad`` and is best reserved for pure inference where
+#   tensors produced in the block will not later be used in autograd-aware code.
+#
+# * :class:`~torchrl.modules.set_recurrent_mode` controls how TorchRL recurrent
+#   modules process data: step-by-step sequential execution during collection or
+#   full time-batched execution during losses and advantage computation. It does
+#   not affect dropout, batch normalization, gradients, or action sampling.
+#   TorchRL loss modules enter recurrent mode by default when replaying batches.
+#   See :ref:`Recurrent training on sequence batches <recurrent_sequence_tuto>`
+#   for a worked example of the collector/loss interaction.
+#
+# TorchRL collectors set an exploration/interaction mode for collection and run
+# the policy under ``torch.no_grad()``, but they do **not** switch the policy to
+# ``eval`` mode. Set the policy mode before passing it to a collector, especially
+# when the collector may wrap, move, or copy the policy.
+#
+# There is one important exception to the blanket "keep it in ``eval``" rule:
+# if you intentionally use dropout as the exploration mechanism, prefer
+# :class:`~torchrl.modules.ConsistentDropoutModule` and manage its train/eval
+# mode deliberately. This module stores and reuses trajectory-level dropout masks
+# in train mode; putting the whole policy in ``eval`` mode disables that
+# dropout, just like regular PyTorch dropout.
 
 ###################################
 # Further considerations: Target parameters
