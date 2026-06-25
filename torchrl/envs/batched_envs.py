@@ -325,6 +325,12 @@ class BatchedEnvBase(EnvBase):
             one of the environment has dynamic specs.
 
               .. note:: Learn more about dynamic specs and environments :ref:`here <dynamic_envs>`.
+
+              .. note:: MPS tensors cannot be placed in shared memory. If the environment
+                specs have leaves on an MPS device, :class:`~torchrl.envs.ParallelEnv`
+                defaults to ``use_buffers=False`` (with a warning) and the data exchanged
+                between processes is staged on CPU. Passing ``use_buffers=True`` in that
+                case raises a ``RuntimeError``.
         daemon (bool, optional): whether the processes should be daemonized.
             This is only applicable to parallel environments such as :class:`~torchrl.envs.ParallelEnv`.
             Defaults to ``False``.
@@ -580,6 +586,7 @@ class BatchedEnvBase(EnvBase):
             )
         if use_buffers is not None:
             self._use_buffers = use_buffers
+            self._check_mps_use_buffers()
         if shared_memory is not None:
             self._share_memory = shared_memory
         if memmap is not None:
@@ -732,6 +739,30 @@ class BatchedEnvBase(EnvBase):
         if transform is not None:
             transform._check_batched_worker_compat()
 
+    def _check_mps_use_buffers(self) -> None:
+        """Prevents the use of shared buffers when the sub-env data lives on MPS.
+
+        MPS storages cannot be placed in shared memory nor pickled through
+        multiprocessing pipes, so :class:`~torchrl.envs.ParallelEnv` must run
+        with ``use_buffers=False`` and stage the inter-process data on CPU.
+        """
+        if not self._has_mps_leaves or not isinstance(self, ParallelEnv):
+            return
+        if self._use_buffers:
+            raise RuntimeError(
+                "use_buffers=True is incompatible with environments whose specs have "
+                "leaves on an MPS device, because MPS tensors cannot be placed in shared "
+                "memory. Pass use_buffers=False or move the environments to CPU."
+            )
+        if self._use_buffers is None:
+            warn(
+                "The environment specs have leaves on an MPS device, which cannot be placed "
+                "in shared memory. use_buffers will default to False and the data will be "
+                "passed between processes through CPU memory. To silence this warning, pass "
+                "use_buffers=False to the ParallelEnv constructor."
+            )
+            self._use_buffers = False
+
     def _get_metadata(
         self, create_env_fn: list[Callable], create_env_kwargs: list[dict]
     ):
@@ -745,6 +776,10 @@ class BatchedEnvBase(EnvBase):
             self.meta_data = meta_data.expand(
                 *(self.num_workers, *meta_data.batch_size)
             )
+            self._has_mps_leaves = any(
+                device.type == "mps" for device in meta_data.device_map.values()
+            )
+            self._check_mps_use_buffers()
             if self._use_buffers is not False:
                 _use_buffers = not self.meta_data.has_dynamic_specs
                 if self._use_buffers and not _use_buffers:
@@ -776,15 +811,22 @@ class BatchedEnvBase(EnvBase):
                         "be True to accommodate non-stackable tensors."
                     )
                 self.share_individual_td = share_individual_td
-            _use_buffers = all(
-                not metadata.has_dynamic_specs for metadata in self.meta_data
+            self._has_mps_leaves = any(
+                device.type == "mps"
+                for metadata in self.meta_data
+                for device in metadata.device_map.values()
             )
-            if self._use_buffers and not _use_buffers:
-                warn(
-                    "A value of use_buffers=True was passed but this is incompatible "
-                    "with the list of environments provided. Turning use_buffers to False."
+            self._check_mps_use_buffers()
+            if self._use_buffers is not False:
+                _use_buffers = all(
+                    not metadata.has_dynamic_specs for metadata in self.meta_data
                 )
-            self._use_buffers = _use_buffers
+                if self._use_buffers and not _use_buffers:
+                    warn(
+                        "A value of use_buffers=True was passed but this is incompatible "
+                        "with the list of environments provided. Turning use_buffers to False."
+                    )
+                self._use_buffers = _use_buffers
 
         self._set_properties()
 
@@ -1912,6 +1954,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             workers_range = range(self.num_workers)
 
+        if self._has_mps_leaves:
+            # MPS storages cannot be pickled through mp pipes: stage the data
+            # on CPU before sending it (the workers cast it back to their device)
+            tensordict = tensordict.to("cpu")
         if self.consolidate:
             try:
                 td = tensordict.consolidate(
@@ -2259,6 +2305,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         else:
             workers_range = range(self.num_workers)
 
+        if self._has_mps_leaves:
+            # MPS storages cannot be pickled through mp pipes: stage the data
+            # on CPU before sending it (the workers cast it back to their device)
+            tensordict = tensordict.to("cpu")
         if self.consolidate:
             try:
                 data = tensordict.consolidate(
@@ -2268,20 +2318,36 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     inplace=False,
                     num_threads=1,
                 )
+            except RuntimeError as err:
+                if "self.stride(-1) must be 1" not in str(err):
+                    raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
+                data = [
+                    local_data.contiguous().consolidate(
+                        share_memory=False,
+                        inplace=False,
+                        num_threads=1,
+                    )
+                    for local_data in tensordict.unbind(0)
+                ]
             except Exception as err:
                 raise RuntimeError(_CONSOLIDATE_ERR_CAPTURE) from err
         else:
             data = tensordict
 
-        for i, local_data in zip(workers_range, data.unbind(0)):
+        data_iter = data if isinstance(data, list) else data.unbind(0)
+        for i, local_data in zip(workers_range, data_iter):
             env_device = (
                 self.meta_data[i].device
                 if isinstance(self.meta_data, list)
                 else self.meta_data.device
             )
-            if data.device != env_device:
+            if local_data.device != env_device:
                 if env_device is None:
                     local_data.clear_device_()
+                elif env_device.type == "mps":
+                    # MPS data cannot be sent through the pipe: the worker casts
+                    # the data back to the env device upon reception.
+                    pass
                 else:
                     local_data = local_data.to(env_device)
             self.parent_channels[i].send(("step", local_data))
@@ -2498,6 +2564,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         needs_resetting,
     ) -> tuple[TensorDictBase, TensorDictBase]:
         if is_tensor_collection(tensordict):
+            if self._has_mps_leaves:
+                # MPS storages cannot be pickled through mp pipes: stage the data
+                # on CPU before sending it (the workers cast it back to their device)
+                tensordict = tensordict.to("cpu")
             if self.consolidate:
                 try:
                     tensordict = tensordict.consolidate(
@@ -3182,6 +3252,20 @@ def _run_worker_pipe_direct(
         event = torch.cuda.Event()
     else:
         event = None
+    # MPS storages cannot be pickled through pipes, so when the env specs have
+    # leaves on MPS the data sent to the parent is staged on CPU and the data
+    # received from the parent is cast back to the env device.
+    for spec in env.output_spec.values(True, True):
+        if spec.device is not None and spec.device.type == "mps":
+            has_mps = True
+            break
+    else:
+        for spec in env.input_spec.values(True, True):
+            if spec.device is not None and spec.device.type == "mps":
+                has_mps = True
+                break
+        else:
+            has_mps = False
 
     i = -1
     import torchrl
@@ -3232,6 +3316,9 @@ def _run_worker_pipe_direct(
                 data._fast_apply(
                     lambda x: x.clone() if x.device.type == "cuda" else x, out=data
                 )
+                if has_mps and env.device is not None and data.device != env.device:
+                    # the parent sent CPU-staged data: cast it back to the env device
+                    data = _td_to_device_mps_safe(data, env.device)
             cur_td = env.reset(
                 tensordict=data,
                 **reset_kwargs,
@@ -3239,6 +3326,10 @@ def _run_worker_pipe_direct(
             if event is not None:
                 event.record()
                 event.synchronize()
+            if has_mps:
+                # MPS storages cannot be pickled through mp pipes: stage the data
+                # on CPU before sending it (the parent casts it back to its device)
+                cur_td = cur_td.to("cpu")
             if consolidate:
                 try:
                     cur_td = cur_td.consolidate(
@@ -3261,10 +3352,17 @@ def _run_worker_pipe_direct(
             if not initialized:
                 raise RuntimeError("called 'init' before step")
             i += 1
+            if has_mps and env.device is not None and data.device != env.device:
+                # the parent sent CPU-staged data: cast it back to the env device
+                data = _td_to_device_mps_safe(data, env.device)
             next_td = env._step(data)
             if event is not None:
                 event.record()
                 event.synchronize()
+            if has_mps:
+                # MPS storages cannot be pickled through mp pipes: stage the data
+                # on CPU before sending it (the parent casts it back to its device)
+                next_td = next_td.to("cpu")
             if consolidate:
                 try:
                     next_td = next_td.consolidate(
@@ -3292,11 +3390,17 @@ def _run_worker_pipe_direct(
             data._fast_apply(
                 lambda x: x.clone() if x.device.type == "cuda" else x, out=data
             )
+            if has_mps and env.device is not None and data.device != env.device:
+                # the parent sent CPU-staged data: cast it back to the env device
+                data = _td_to_device_mps_safe(data, env.device)
             td, root_next_td = env.step_and_maybe_reset(data)
 
             if event is not None:
                 event.record()
                 event.synchronize()
+            if has_mps:
+                td = td.to("cpu")
+                root_next_td = root_next_td.to("cpu")
             child_pipe.send((td, root_next_td))
             mp_event.set()
             del td, root_next_td
