@@ -188,6 +188,15 @@ def train(
     global_step = 0
     start_time = time.time()
     for data in pbar:
+        if (
+            cfg.train.total_dialog_turns is not None
+            and replay_buffer.write_count >= cfg.train.total_dialog_turns
+            and not len(replay_buffer)
+        ):
+            torchrl_logger.info(
+                "Replay buffer drained after reaching total_dialog_turns; stopping training loop."
+            )
+            break
         # Wait for the replay buffer to be filled - when reasoning, we collect trajectories
         #  so the buffer may not be filled straight away
         if not len(replay_buffer):
