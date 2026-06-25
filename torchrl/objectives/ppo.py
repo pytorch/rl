@@ -566,24 +566,13 @@ class PPOLoss(LossModule):
             # Store the mapping for per-head coefficients
             self._entropy_coeff_map = {k: float(v) for k, v in entropy_coeff.items()}
             # Register an empty buffer for compatibility
-            self.register_buffer("entropy_coeff", torch.tensor(0.0))
+            self.register_coeff_buffer("entropy_coeff", 0.0, device=device)
         elif isinstance(entropy_coeff, (float, int, torch.Tensor)):
-            # Register the scalar entropy coefficient
-            coeff = (
-                float(entropy_coeff)
-                if not torch.is_tensor(entropy_coeff)
-                else float(entropy_coeff.item())
-            )
-            self.register_buffer("entropy_coeff", torch.tensor(coeff))
+            self.register_coeff_buffer("entropy_coeff", entropy_coeff, device=device)
             self._entropy_coeff_map = None
         else:
             raise TypeError("entropy_coeff must be a float or a Mapping[str, float]")
-        if critic_coeff is not None:
-            self.register_buffer(
-                "critic_coeff", torch.tensor(critic_coeff, device=device)
-            )
-        else:
-            self.critic_coeff = None
+        self.register_coeff_buffer("critic_coeff", critic_coeff, device=device)
         self._has_critic = bool(self.critic_coeff is not None and self.critic_coeff > 0)
         self.loss_critic_type = loss_critic_type
         self.normalize_advantage = normalize_advantage
@@ -597,21 +586,7 @@ class PPOLoss(LossModule):
             value=value_key,
         )
 
-        if clip_value is not None:
-            if isinstance(clip_value, float):
-                clip_value = torch.tensor(clip_value, device=device)
-            elif isinstance(clip_value, torch.Tensor):
-                if clip_value.numel() != 1:
-                    raise ValueError(
-                        f"clip_value must be a float or a scalar tensor, got {clip_value}."
-                    )
-            else:
-                raise ValueError(
-                    f"clip_value must be a float or a scalar tensor, got {clip_value}."
-                )
-            self.register_buffer("clip_value", clip_value.to(device))
-        else:
-            self.clip_value = None
+        self.register_coeff_buffer("clip_value", clip_value, device=device)
         try:
             log_prob_keys = self.actor_network.log_prob_keys
             action_keys = self.actor_network.dist_sample_keys

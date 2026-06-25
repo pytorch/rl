@@ -347,6 +347,8 @@ class LLMEnv(EnvBase):
 
             primers (Composite | None, optional): The primers to use for each key in the dataloader.
                 Defaults to ``None`` (inferred automatically from the first batch of data).
+            example_data (Any, optional): example batch used to infer primer specs.
+                Defaults to ``None``.
             stack_method (Callable[[Any], Any] | Literal["as_nested_tensor", "as_padded_tensor"], optional): The
                 method to use for stacking the data. Defaults to ``None``.
             repeats (int, optional): How many times the same sample needs to appear successively. This can be useful in
