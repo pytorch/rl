@@ -74,6 +74,19 @@ from torchrl.testing.mocking_classes import (
 )
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
+_vmap = None
+
+
+def _get_vmap():
+    global _vmap
+    if _vmap is None:
+        if hasattr(torch, "vmap"):
+            _vmap = torch.vmap
+        else:
+            from functorch import vmap
+
+            _vmap = vmap
+    return _vmap
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -647,7 +660,7 @@ class TestLSTMModule:
         not _has_functorch, reason="vmap can only be used with functorch"
     )
     def test_lstm_vmap_complex_model(self):
-        from torch import vmap
+        vmap = _get_vmap()
 
         # Tests that all ops in GRU are compatible with VMAP (when build using
         # the PT backend).
@@ -2507,7 +2520,7 @@ class TestGRUModule:
         not _has_functorch, reason="vmap can only be used with functorch"
     )
     def test_gru_vmap_complex_model(self):
-        from torch import vmap
+        vmap = _get_vmap()
 
         # Tests that all ops in GRU are compatible with VMAP (when build using
         # the PT backend).

@@ -46,16 +46,24 @@ from torchrl.trainers.helpers.models import (
 )
 
 _has_hydra = importlib.util.find_spec("hydra") is not None
+_hydra_deps = None
 
-if _has_hydra:
-    from hydra import compose, initialize
-    from hydra.core.config_store import ConfigStore
 
-    @pytest.fixture(autouse=True, scope="module")
-    def clear_hydra():
+def _get_hydra_deps():
+    global _hydra_deps
+    if _hydra_deps is None:
+        from hydra import compose, initialize
+        from hydra.core.config_store import ConfigStore
         from hydra.core.global_hydra import GlobalHydra
 
-        GlobalHydra.instance().clear()
+        _hydra_deps = compose, initialize, ConfigStore, GlobalHydra
+    return _hydra_deps
+
+
+@pytest.fixture(scope="module")
+def clear_hydra():
+    *_, GlobalHydra = _get_hydra_deps()
+    GlobalHydra.instance().clear()
 
 
 TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
@@ -86,6 +94,7 @@ def dreamer_constructor_fixture():
 @pytest.mark.skipif(not _has_gym, reason="No gym library found")
 @pytest.mark.skipif(not _has_tv, reason="No torchvision library found")
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.usefixtures("clear_hydra")
 @pytest.mark.parametrize("device", get_default_devices())
 @pytest.mark.parametrize("noisy", [(), ("noisy=True",)])
 @pytest.mark.parametrize("distributional", [(), ("distributional=True",)])
@@ -97,6 +106,7 @@ def dreamer_constructor_fixture():
 def test_dqn_maker(
     device, noisy, distributional, from_pixels, categorical_action_encoding
 ):
+    compose, initialize, ConfigStore, _ = _get_hydra_deps()
     flags = list(noisy + distributional + from_pixels + categorical_action_encoding) + [
         "env_name=CartPole-v1"
     ]
@@ -216,8 +226,10 @@ def test_timeit():
 
 
 @pytest.mark.skipif(not _has_hydra, reason="No hydra library found")
+@pytest.mark.usefixtures("clear_hydra")
 @pytest.mark.parametrize("from_pixels", [(), ("from_pixels=True", "catframes=4")])
 def test_transformed_env_constructor_with_state_dict(from_pixels):
+    compose, initialize, ConfigStore, _ = _get_hydra_deps()
     config_fields = [
         (config_field.name, config_field.type, config_field)
         for config_cls in (
