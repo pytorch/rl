@@ -20,6 +20,12 @@ env:
     observation_adapter: null
     history_content_adapter: null
     system_prompt: null
+    # MCAdvantage groups repeated completions by this key. OpenEnvChatEnv
+    # exposes the initial prompt content as "query" for GRPO compatibility.
+    prompt_key: query
+    # OpenEnv rewards are often sparse trajectory-level signals. Use "sum" by
+    # default so each completed trajectory receives one group-relative advantage.
+    trajectory_return: sum
     reward_threshold: 0.1
     max_steps: 4
     return_observation_dict: true

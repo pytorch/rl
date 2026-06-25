@@ -58,7 +58,9 @@ class OpenEnvChatEnv(ChatEnv):
     ``OpenEnvChatEnv`` maps OpenEnv observations to ``history.prompt`` and maps
     LLM assistant responses back to OpenEnv actions. It is intended for LLM
     collectors and GRPO-style training while preserving the regular ChatEnv
-    history contract.
+    history contract. The initial rendered OpenEnv prompt is also exposed under
+    ``data_key`` (``"query"`` by default), which lets GRPO group repeated
+    completions for Monte-Carlo advantage estimation.
 
     Args:
         env: OpenEnv client instance to wrap. Mutually exclusive with
@@ -170,6 +172,7 @@ class OpenEnvChatEnv(ChatEnv):
         self._history_content_adapter = history_content_adapter or _to_history_content
         self._return_observation_dict = return_observation_dict
         self._current_prompt: History | None = None
+        self._current_query: str | None = None
         self._action_example = _example_from_cls(action_cls)
         self._constructor_kwargs = kwargs
         self.is_closed = False
@@ -216,6 +219,13 @@ class OpenEnvChatEnv(ChatEnv):
                 self.device
             ),
             observation=NonTensor(shape=self.batch_size, device=self.device),
+            **{
+                self.data_key: NonTensor(
+                    example_data="a string",
+                    shape=self.batch_size,
+                    device=self.device,
+                )
+            },
             shape=self.batch_size,
             device=self.device,
         )
@@ -290,8 +300,17 @@ class OpenEnvChatEnv(ChatEnv):
             device=self.device,
         )
 
-    def _build_prompt_history(self, observation: Any) -> History:
+    def _history_content(self, observation: Any) -> str:
         content = self._history_content_adapter(observation)
+        if isinstance(content, str):
+            return content
+        return str(content)
+
+    def _build_prompt_history(
+        self, observation: Any, content: str | None = None
+    ) -> History:
+        if content is None:
+            content = self._history_content(observation)
         user_history = self._make_history_message(self.user_role, content)
         if self.system_prompt is not None:
             system_history = self._make_history_message(
@@ -381,17 +400,25 @@ class OpenEnvChatEnv(ChatEnv):
     def _reset(self, tensordict: TensorDictBase | None = None, **kwargs: Any):
         result = _ensure_sync_result(self._env.reset(), "reset")
         data, observation, *_ = self._result_to_data(result, include_reward_done=False)
-        prompt = self._build_prompt_history(observation)
+        query = self._history_content(observation)
+        prompt = self._build_prompt_history(observation, content=query)
         self._current_prompt = prompt
+        self._current_query = query
         chat_history = ChatHistory._from_tensordict(
             TensorDict({}, batch_size=self.batch_size, device=self.device)
         )
         chat_history.prompt = prompt
         data["history"] = chat_history
+        data[self.data_key] = NonTensorData(
+            query, batch_size=self.batch_size, device=self.device
+        )
         return TensorDict(data, batch_size=self.batch_size, device=self.device)
 
     def _step(self, tensordict: TensorDictBase, **kwargs: Any) -> TensorDict:
         chat_history = tensordict.get("history", None)
+        query = _squeeze_singleton(tensordict.get(self.data_key, None))
+        if query is None:
+            query = self._current_query
         prompt, response = self._extract_history_parts(chat_history)
         action_from_history = self._history_to_action(response)
         action = action_from_history
@@ -404,8 +431,10 @@ class OpenEnvChatEnv(ChatEnv):
         data, observation, *_ = self._result_to_data(result)
         if prompt is None:
             prompt = self._current_prompt
+        if query is None:
+            query = self._history_content(observation)
         if prompt is None:
-            prompt = self._build_prompt_history(observation)
+            prompt = self._build_prompt_history(observation, content=query)
         else:
             if (
                 response is not None
@@ -418,13 +447,17 @@ class OpenEnvChatEnv(ChatEnv):
                 assistant = self._make_history_message(role, action_from_history)
                 prompt = self._merge_history(prompt, assistant)
             obs_msg = self._make_history_message(
-                self.user_role, self._history_content_adapter(observation)
+                self.user_role, self._history_content(observation)
             )
             prompt = self._merge_history(prompt, obs_msg)
         self._current_prompt = prompt
+        self._current_query = query
         chat_out = ChatHistory._from_tensordict(
             TensorDict({}, batch_size=self.batch_size, device=self.device)
         )
         chat_out.prompt = prompt
         data["history"] = chat_out
+        data[self.data_key] = NonTensorData(
+            query, batch_size=self.batch_size, device=self.device
+        )
         return TensorDict(data, batch_size=self.batch_size, device=self.device)

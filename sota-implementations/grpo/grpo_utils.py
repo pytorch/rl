@@ -11,11 +11,12 @@ import warnings
 from typing import Any, Literal
 
 import torch
+from tensordict import TensorDictBase
 from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger, timeit
-from torchrl.envs import SerialEnv, StepCounter
+from torchrl.envs import BatchSizeTransform, SerialEnv, StepCounter
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
@@ -43,6 +44,22 @@ def _resolve_callable(path_or_callable: Any) -> Any:
         )
     module = importlib.import_module(module_name)
     return getattr(module, attr_name)
+
+
+def _flatten_openenv_batch(data: TensorDictBase) -> TensorDictBase:
+    return data.reshape(-1)
+
+
+def make_mcadvantage_kwargs(cfg: DictConfig) -> dict[str, Any]:
+    """Build MCAdvantage keyword arguments for the configured GRPO environment."""
+    kwargs: dict[str, Any] = {"grpo_size": cfg.env.repeats}
+    if cfg.env.dataset == "openenv":
+        openenv_cfg = cfg.env.get("openenv", {})
+        kwargs["prompt_key"] = openenv_cfg.get("prompt_key", "query")
+        trajectory_return = openenv_cfg.get("trajectory_return", "sum")
+        if trajectory_return is not None:
+            kwargs["trajectory_return"] = trajectory_return
+    return kwargs
 
 
 def check_grpo_dependencies(backend: str = "vllm") -> None:
@@ -885,7 +902,9 @@ def make_env(cfg: DictConfig, single_env: bool = False):
         if num_envs == 1:
             env = make_openenv()
         else:
-            env = SerialEnv(num_envs, make_openenv)
+            env = SerialEnv(num_envs, make_openenv).append_transform(
+                BatchSizeTransform(reshape_fn=_flatten_openenv_batch)
+            )
         env = env.append_transform(StepCounter(max_steps=max_steps))
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")

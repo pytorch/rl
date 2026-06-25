@@ -11,7 +11,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import torch
 
 import torchrl.envs.libs.openenv as openenv_mod
 import torchrl.envs.llm.libs.openenv as openenv_chat_mod
@@ -220,9 +219,11 @@ class TestOpenEnvChat:
         )
         td = env.reset()
         assert td["history"].prompt.content[0][0] == "say hello"
+        assert td["query"] == "say hello"
         out = env.step(_make_chat_policy('{"text": "hello"}', use_full=use_full)(td))
         assert isinstance(raw_env.last_action, _TextAction)
         assert raw_env.last_action.text == "hello"
+        assert out["next", "query"] == "say hello"
         assert out["next", "history"].prompt.role[0][-1] == "user"
         assert out["next", "history"].prompt.content[0][-1] == "turn 1"
 
@@ -239,6 +240,7 @@ class TestOpenEnvChat:
             return_contiguous=False,
         )
         assert ("next", "history") in rollout.keys(True)
+        assert "query" in rollout.keys()
         assert ("next", "reward") in rollout.keys(True)
 
 
@@ -292,6 +294,7 @@ class TestOpenEnvGRPO:
         env = grpo_utils.make_env(cfg, single_env=True)
         td = env.reset()
         assert "history" in td.keys()
+        assert "query" in td.keys()
         response = History(
             role=["assistant"],
             content=['{"text": "hello"}'],
@@ -307,6 +310,9 @@ class TestOpenEnvGRPO:
         out = env.step(td)
         assert out["next", "reward"].item() == 1.0
         assert out["next", "done"].item() is False
+        cfg.env["num_envs"] = 2
+        env = grpo_utils.make_env(cfg)
+        assert tuple(env.batch_size) == (2,)
 
     def test_mcadvantage_smoke_for_openenv_rollouts(self):
         def collect_rollout():
@@ -320,12 +326,11 @@ class TestOpenEnvGRPO:
                 return_contiguous=False,
             )
             rollout = rollout.squeeze(0)
-            rollout.set("group_id", torch.zeros(rollout.shape, dtype=torch.long))
             return rollout
 
         rb = ReplayBuffer(storage=LazyStackStorage(4))
         advantage = MCAdvantage(
-            grpo_size=2, prompt_key="group_id", trajectory_return="sum"
+            grpo_size=2, prompt_key="query", trajectory_return="sum"
         )
         assert advantage.inv(collect_rollout()) is None
         out = advantage.inv(collect_rollout())
