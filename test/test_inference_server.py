@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import importlib.util
 import multiprocessing as mp
 import threading
 import time
@@ -28,17 +29,18 @@ from torchrl.modules.inference_server import (
 )
 from torchrl.modules.inference_server._monarch import MonarchTransport
 
-_has_ray = True
-try:
-    import ray
-except ImportError:
-    _has_ray = False
+_has_ray = importlib.util.find_spec("ray") is not None
+_has_monarch = importlib.util.find_spec("monarch") is not None
+_ray = None
 
-_has_monarch = True
-try:
-    import monarch  # noqa: F401
-except ImportError:
-    _has_monarch = False
+
+def _ray_lib():
+    global _ray
+    if _ray is None:
+        import ray
+
+        _ray = ray
+    return _ray
 
 
 # =============================================================================
@@ -421,6 +423,7 @@ class TestMPTransport:
 class TestRayTransport:
     @classmethod
     def setup_class(cls):
+        ray = _ray_lib()
         if not ray.is_initialized():
             ray.init(num_cpus=4, ignore_reinit_error=True)
 
@@ -465,6 +468,7 @@ class TestRayTransport:
 
     def test_ray_remote_actor(self):
         """A Ray remote actor can use the client to get inference results."""
+        ray = _ray_lib()
         transport = RayTransport()
         client = transport.client()
         policy = _make_policy()

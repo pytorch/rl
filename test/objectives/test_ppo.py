@@ -17,7 +17,6 @@ from _objectives_common import (
     _has_transformers,
     FUNCTORCH_ERR,
     LossModuleTestBase,
-    make_functional_with_buffers,
     MARLEnv,
 )
 
@@ -1175,7 +1174,6 @@ class TestPPO(LossModuleTestBase):
         loss_val = loss(**kwargs)
         torch.manual_seed(self.seed)
         if beta is not None:
-
             loss.beta = beta.clone()
         loss_val_td = loss(td)
 
@@ -2162,6 +2160,8 @@ class TestA2C(LossModuleTestBase):
             raise NotImplementedError
 
         loss_fn = A2CLoss(actor, value, loss_critic_type="l2")
+
+        from functorch import make_functional_with_buffers
 
         floss_fn, params, buffers = make_functional_with_buffers(loss_fn)
 

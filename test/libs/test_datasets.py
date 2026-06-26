@@ -60,12 +60,6 @@ _has_sklearn = importlib.util.find_spec("sklearn") is not None
 _has_minari = importlib.util.find_spec("minari") is not None
 _has_gymnasium = importlib.util.find_spec("gymnasium") is not None
 
-if importlib.util.find_spec("gym"):
-    import gym
-
-if _has_gymnasium:
-    import gymnasium
-
 
 @pytest.mark.slow
 class TestGenDGRL:
@@ -310,6 +304,7 @@ class TestD4RL:
     @pytest.mark.parametrize("from_env", [True, False])
     def test_dataset_build(self, task, split_trajs, from_env):
         import d4rl  # noqa: F401
+        import gym
 
         t0 = time.time()
         data = D4RLExperienceReplay(
@@ -670,6 +665,7 @@ class TestMinari:
         MINARI_DATASETS_PATH = os.environ.get("MINARI_DATASETS_PATH")
         os.environ["MINARI_DATASETS_PATH"] = str(tmpdir)
         try:
+            import gymnasium
             import minari
             from minari import DataCollector
 
