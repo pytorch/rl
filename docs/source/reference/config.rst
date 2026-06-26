@@ -325,6 +325,7 @@ Environment Library Configurations
     JumanjiEnvConfig
     MeltingpotEnvConfig
     MOGymEnvConfig
+    MJLabEnvConfig
     MultiThreadedEnvConfig
     OpenMLEnvConfig
     OpenSpielEnvConfig

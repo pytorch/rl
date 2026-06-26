@@ -61,6 +61,7 @@ from torchrl.trainers.algorithms.configs.envs_libs import (
     IsaacGymEnvConfig,
     JumanjiEnvConfig,
     MeltingpotEnvConfig,
+    MJLabEnvConfig,
     MOGymEnvConfig,
     MujocoPlaygroundEnvConfig,
     MultiThreadedEnvConfig,
@@ -275,6 +276,7 @@ __all__ = [
     "JumanjiEnvConfig",
     "MeltingpotEnvConfig",
     "MOGymEnvConfig",
+    "MJLabEnvConfig",
     "MujocoPlaygroundEnvConfig",
     "MultiThreadedEnvConfig",
     "OpenMLEnvConfig",
@@ -471,6 +473,7 @@ def _register_configs():
     cs.store(group="env", name="jumanji", node=JumanjiEnvConfig)
     cs.store(group="env", name="meltingpot", node=MeltingpotEnvConfig)
     cs.store(group="env", name="mo_gym", node=MOGymEnvConfig)
+    cs.store(group="env", name="mjlab", node=MJLabEnvConfig)
     cs.store(group="env", name="multi_threaded", node=MultiThreadedEnvConfig)
     cs.store(group="env", name="openml", node=OpenMLEnvConfig)
     cs.store(group="env", name="openspiel", node=OpenSpielEnvConfig)
