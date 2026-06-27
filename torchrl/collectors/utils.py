@@ -11,6 +11,7 @@ import torch
 from pyvers import implement_for
 
 from tensordict import NestedKey, pad, set_lazy_legacy, TensorDict, TensorDictBase
+from tensordict.base import _NESTED_TENSORS_AS_LISTS
 from tensordict.utils import Buffer
 from torch import multiprocessing as mp, nn as nn
 from torch.nn import Parameter
@@ -446,6 +447,34 @@ def _traj_chunk_ends_done(chunk: TensorDictBase) -> bool:
         if signal is not None and signal[-1].any().item():
             return True
     return False
+
+
+def _maybe_normalize_replay_buffer_tensordict_device(
+    data: TensorDictBase,
+    replay_buffer,
+) -> TensorDictBase:
+    """Align TensorDict root device metadata with replay-buffer storage when safe."""
+    if not isinstance(data, TensorDictBase) or data.device is not None:
+        return data
+
+    storage = getattr(replay_buffer, "_storage", None)
+    if storage is None:
+        storage = getattr(replay_buffer, "storage", None)
+    storage_device = getattr(storage, "device", None)
+    if storage_device is None or storage_device == "auto":
+        return data
+    storage_device = torch.device(storage_device)
+
+    for value in data.values(
+        include_nested=True,
+        leaves_only=True,
+        is_leaf=_NESTED_TENSORS_AS_LISTS,
+    ):
+        value_device = getattr(value, "device", None)
+        if value_device is not None and torch.device(value_device) != storage_device:
+            return data
+
+    return data.to(storage_device)
 
 
 def _traj_ingest(

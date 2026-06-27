@@ -148,6 +148,10 @@ TORCH_VERSION = version.parse(version.parse(torch.__version__).base_version)
 _has_cuda = torch.cuda.is_available()
 
 
+def _clear_tensordict_device(tensordict: TensorDictBase) -> TensorDictBase:
+    return tensordict.clear_device_()
+
+
 @implement_for("torch", "2.5")
 def has_mps():
     return torch.mps.is_available()
@@ -5522,6 +5526,36 @@ class TestCollectorRB:
                 ).all(), steps_counts
                 assert (idsdiff >= 0).all()
 
+    def test_multi_async_replay_buffer_device_metadata(self):
+        probe = CountingEnv()
+        try:
+            policy = RandomPolicy(probe.action_spec)
+        finally:
+            probe.close(raise_if_closed=False)
+        rb = ReplayBuffer(
+            storage=LazyTensorStorage(128, device="cpu"),
+            batch_size=4,
+            shared=True,
+        )
+
+        collector = MultiAsyncCollector(
+            [CountingEnv, CountingEnv],
+            policy,
+            replay_buffer=rb,
+            total_frames=32,
+            frames_per_batch=16,
+            postproc=_clear_tensordict_device,
+        )
+        try:
+            for data in collector:
+                assert data is None
+        finally:
+            collector.shutdown()
+
+        assert rb.write_count >= 32
+        assert len(rb) > 0
+        assert rb.storage[: len(rb)].device == torch.device("cpu")
+
     @pytest.mark.skipif(not _has_gym, reason="requires gym.")
     @pytest.mark.parametrize(
         "collector_class", [MultiSyncCollector, MultiAsyncCollector]
@@ -6840,6 +6874,41 @@ class TestTrajsPerBatchReplayBuffer:
         sample = rb.sample(num_trajs)
         assert sample.ndim == 1, "sampled entries should be individual timesteps (1-D)"
         assert ("collector", "traj_ids") in sample.keys(True)
+        self._assert_rb_trajectories_complete(rb)
+
+    def test_trajs_per_batch_replay_buffer_device_metadata(self):
+        max_steps = 4
+        num_trajs = 2
+        env_fn, policy = self._make_env_and_policy(max_steps)
+        rb = ReplayBuffer(storage=LazyTensorStorage(200, device="cpu"))
+        extend_devices = []
+        extend = rb.extend
+
+        def counted_extend(td):
+            extend_devices.append(td.device)
+            return extend(td)
+
+        rb.extend = counted_extend
+        env = env_fn()
+        collector = Collector(
+            env,
+            policy,
+            replay_buffer=rb,
+            frames_per_batch=max_steps * 3,
+            total_frames=max_steps * 12,
+            trajs_per_batch=num_trajs,
+            trajs_per_write=1,
+            postproc=_clear_tensordict_device,
+        )
+        try:
+            list(collector)
+        finally:
+            collector.shutdown()
+            env.close(raise_if_closed=False)
+
+        assert len(extend_devices) >= 2
+        assert all(device == torch.device("cpu") for device in extend_devices)
+        assert len(rb) > 0, "replay buffer must be non-empty"
         self._assert_rb_trajectories_complete(rb)
 
     def test_trajs_per_write_batches_replay_buffer_extends(self):
