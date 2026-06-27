@@ -106,6 +106,8 @@ Available wrappers
     MujocoPlaygroundAgentSpec
     MultiThreadedEnv
     MultiThreadedEnvWrapper
+    OpenEnvEnv
+    OpenEnvWrapper
     OpenMLEnv
     OpenSpielWrapper
     OpenSpielEnv

@@ -18,7 +18,8 @@ from torch.nn.utils.rnn import pad_sequence
 from torchrl._utils import _RayServiceMetaClass
 from torchrl.data import Composite, Unbounded
 from torchrl.data.tensor_specs import DEVICE_TYPING
-from torchrl.envs import EnvBase, Transform
+from torchrl.envs.common import EnvBase
+from torchrl.envs.transforms import Transform
 from torchrl.envs.transforms.ray_service import RayTransform
 from torchrl.envs.transforms.transforms import Compose
 from torchrl.envs.transforms.utils import _set_missing_tolerance
@@ -371,7 +372,8 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             ref_log_prob_padded = ref_log_prob_td.get(self.log_prob_full_key)
         else:
             ref_log_prob_unpadded = ref_log_prob_td.get(
-                self.log_prob_full_key, as_list=True  # type: ignore[misc]
+                self.log_prob_full_key,
+                as_list=True,  # type: ignore[misc]
             )
         if self.assistant_only:
             # Get the assistant mask
@@ -423,7 +425,8 @@ class KLRewardTransform(Transform, metaclass=_RayServiceMetaClass):
             curr_log_prob_padded = tensordict.get(self.log_prob_full_key)
         else:
             curr_log_prob_unpadded = tensordict.get(
-                self.log_prob_full_key, as_list=True  # type: ignore[misc]
+                self.log_prob_full_key,
+                as_list=True,  # type: ignore[misc]
             )
         if self.assistant_only:
             # we want to keep the batch dimension

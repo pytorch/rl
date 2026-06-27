@@ -37,6 +37,7 @@ from grpo_utils import (
     get_train_model,
     log_training_metrics,
     make_env,
+    make_mcadvantage_kwargs,
     make_weight_sync_scheme,
 )
 from omegaconf import DictConfig
@@ -116,7 +117,9 @@ def train(
         else 0.0,
         kl_to_inference_coeff=cfg.train.kl_to_inference_coeff,
         entropy_coeff=cfg.train.entropy_coeff,
-        masking_strategy="rlhf" if cfg.env.reasoning else "sft",
+        masking_strategy="rlhf"
+        if (cfg.env.reasoning or cfg.env.dataset == "openenv")
+        else "sft",
         device=train_device,
     )
     if cfg.env.reasoning:
@@ -428,6 +431,7 @@ def main(cfg):
         raise ValueError(
             "optim_batch_size must be divisible by gradient_accumulation_steps"
         )
+    mcadvantage_kwargs = make_mcadvantage_kwargs(cfg)
     rb = RayReplayBuffer(
         storage=partial(
             LazyStackStorage,
@@ -435,7 +439,7 @@ def main(cfg):
             if cfg.train.buffer_size
             else cfg.env.repeats * cfg.env.num_envs,
         ),
-        transform_factory=partial(MCAdvantage, grpo_size=cfg.env.repeats),
+        transform_factory=partial(MCAdvantage, **mcadvantage_kwargs),
         batch_size=max(
             1, cfg.train.optim_batch_size // cfg.train.gradient_accumulation_steps
         ),

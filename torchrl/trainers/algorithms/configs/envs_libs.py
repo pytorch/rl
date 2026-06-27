@@ -241,6 +241,30 @@ class MeltingpotEnvConfig(EnvLibsConfig):
 
 
 @dataclass
+class OpenEnvEnvConfig(EnvLibsConfig):
+    """Hydra configuration for :class:`~torchrl.envs.libs.OpenEnvEnv`."""
+
+    env_name: str = MISSING
+    auto_action: bool = True
+    env_kwargs: dict[str, Any] = field(default_factory=dict)
+    action_cls: Any | None = None
+    observation_cls: Any | None = None
+    action_adapter: Any | None = None
+    observation_adapter: Any | None = None
+    return_observation_dict: bool = False
+    include_state: bool = False
+    sync: bool = True
+    device: str = "cpu"
+    batch_size: list[int] | None = None
+    allow_done_after_reset: bool = False
+    _target_: str = "torchrl.envs.libs.openenv.OpenEnvEnv"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for OpenEnvEnv configuration."""
+        super().__post_init__()
+
+
+@dataclass
 class OpenMLEnvConfig(EnvLibsConfig):
     """Configuration for OpenMLEnv environment."""
 

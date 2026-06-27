@@ -619,7 +619,9 @@ class GRPOLoss(LossModule):
             batch = mask.sum()
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
 
-        if advantage.ndim != log_weight.ndim:
+        if advantage.ndim == log_weight.ndim - 1:
+            advantage = advantage.unsqueeze(-2).expand_as(log_weight)
+        elif advantage.ndim != log_weight.ndim:
             raise ValueError(
                 f"advantage and log_weight must have the same number of dimensions, got {advantage.ndim=} and {log_weight.ndim=}"
             )
@@ -787,6 +789,20 @@ class GRPOLoss(LossModule):
             ref_log_prob = ref_log_prob.squeeze(-1)
         cur_log_prob = tensordict.get("_cur_log_prob")
         # TODO: remove this
+        if cur_log_prob.shape != ref_log_prob.shape and (
+            cur_log_prob.shape[:-1] == ref_log_prob.shape[:-1]
+        ):
+            length_diff = cur_log_prob.shape[-1] - ref_log_prob.shape[-1]
+            if length_diff > 0:
+                ref_log_prob = torch.cat(
+                    [
+                        ref_log_prob.new_zeros(*ref_log_prob.shape[:-1], length_diff),
+                        ref_log_prob,
+                    ],
+                    dim=-1,
+                )
+            else:
+                ref_log_prob = ref_log_prob[..., -cur_log_prob.shape[-1] :]
         if cur_log_prob.shape != ref_log_prob.shape:
             raise ValueError(
                 f"cur_log_prob and ref_log_prob must have the same shape, got {cur_log_prob.shape=} and {ref_log_prob.shape=}"
@@ -825,6 +841,28 @@ class GRPOLoss(LossModule):
             )
 
         # Check for shape mismatches and provide helpful error messages
+        if cur_log_prob.shape != prev_log_prob.shape and (
+            cur_log_prob.shape[:-1] == prev_log_prob.shape[:-1]
+        ):
+            # History-mode rollouts may be re-tokenized by the training model with
+            # a slightly different prompt prefix than the inference engine used
+            # to generate the sample log-probs. Align on the right so response
+            # tokens remain matched and any prompt-only gap receives zero
+            # log-prob. Prompt positions are masked out below.
+            length_diff = cur_log_prob.shape[-1] - prev_log_prob.shape[-1]
+            if length_diff > 0:
+                prev_log_prob = torch.cat(
+                    [
+                        prev_log_prob.new_zeros(
+                            *prev_log_prob.shape[:-1], length_diff
+                        ),
+                        prev_log_prob,
+                    ],
+                    dim=-1,
+                )
+            else:
+                prev_log_prob = prev_log_prob[..., -cur_log_prob.shape[-1] :]
+
         if cur_log_prob.shape != prev_log_prob.shape:
             # Try to provide helpful debugging information
             error_msg = (

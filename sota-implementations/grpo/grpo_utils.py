@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import functools
-
+import importlib
 import time
 import warnings
 from typing import Any, Literal
@@ -15,14 +15,46 @@ from omegaconf import DictConfig
 from torch import device as torch_device, dtype as torch_dtype
 
 from torchrl._utils import logger as torchrl_logger, timeit
+from torchrl.envs import SerialEnv, StepCounter
 from torchrl.envs.llm import AddThinkingPrompt, GSM8KEnv, KLRewardTransform, RetrieveKL
 from torchrl.envs.llm.datasets.countdown import CountdownEnv
 from torchrl.envs.llm.datasets.ifeval import IFEvalEnv
 from torchrl.envs.llm.datasets.math import MATHEnv
+from torchrl.envs.llm.libs.openenv import OpenEnvChatEnv
 from torchrl.modules.llm import SGLangWrapper, TransformersWrapper, vLLMWrapper
 from torchrl.weight_update.llm import SGLangWeightSyncScheme, VLLMWeightSyncScheme
 from transformers.models.auto.modeling_auto import AutoModelForCausalLM
 from transformers.tokenization_utils import PreTrainedTokenizer
+
+
+def _resolve_callable(path_or_callable: Any) -> Any:
+    if path_or_callable is None or callable(path_or_callable):
+        return path_or_callable
+    if not isinstance(path_or_callable, str):
+        raise TypeError(
+            "Expected a callable or import path string, got "
+            f"{type(path_or_callable).__name__}."
+        )
+    module_name, sep, attr_name = path_or_callable.rpartition(".")
+    if not sep:
+        raise ValueError(
+            "Callable import paths must include a module and attribute name, "
+            f"got {path_or_callable!r}."
+        )
+    module = importlib.import_module(module_name)
+    return getattr(module, attr_name)
+
+
+def make_mcadvantage_kwargs(cfg: DictConfig) -> dict[str, Any]:
+    """Build MCAdvantage keyword arguments for the configured GRPO environment."""
+    kwargs: dict[str, Any] = {"grpo_size": cfg.env.repeats}
+    if cfg.env.dataset == "openenv":
+        openenv_cfg = cfg.env.get("openenv", {})
+        kwargs["prompt_key"] = openenv_cfg.get("prompt_key", "query")
+        trajectory_return = openenv_cfg.get("trajectory_return", "sum")
+        if trajectory_return is not None:
+            kwargs["trajectory_return"] = trajectory_return
+    return kwargs
 
 
 def check_grpo_dependencies(backend: str = "vllm") -> None:
@@ -174,7 +206,9 @@ def get_train_model(
     policy_training = TransformersWrapper(
         train_model,
         tokenizer=train_tokenizer,
-        input_mode="tokens" if not cfg.env.reasoning else "history",
+        input_mode="history"
+        if cfg.env.reasoning or cfg.env.dataset == "openenv"
+        else "tokens",
         generate=False,
         return_log_probs=True,
         pad_output=False,
@@ -494,7 +528,9 @@ def get_ref_model(
     TensorDict.from_module(ref_model).data.to_module(ref_model)
     ref_model = TransformersWrapper(
         ref_model,
-        input_mode="tokens" if not cfg.env.reasoning else "history",
+        input_mode="history"
+        if cfg.env.reasoning or cfg.env.dataset == "openenv"
+        else "tokens",
         tokenizer=tokenizer,
         generate=False,
         return_log_probs=True,
@@ -825,6 +861,44 @@ def make_env(cfg: DictConfig, single_env: bool = False):
     elif cfg.env.dataset == "countdown":
         reward_threshold = 0.1
         env = CountdownEnv(**common_kwargs)
+    elif cfg.env.dataset == "openenv":
+        openenv_cfg = cfg.env.get("openenv", {})
+        env_name = openenv_cfg.get("name", None)
+        if env_name is None:
+            raise ValueError("cfg.env.openenv.name must be set when dataset=openenv.")
+        max_steps = openenv_cfg.get("max_steps", max_steps)
+        reward_threshold = openenv_cfg.get("reward_threshold", 0.1)
+        env_kwargs = dict(openenv_cfg.get("env_kwargs", {}))
+        action_cls = _resolve_callable(openenv_cfg.get("action_cls", None))
+        action_adapter = _resolve_callable(openenv_cfg.get("action_adapter", None))
+        observation_adapter = _resolve_callable(
+            openenv_cfg.get("observation_adapter", None)
+        )
+        history_content_adapter = _resolve_callable(
+            openenv_cfg.get("history_content_adapter", None)
+        )
+        system_prompt = openenv_cfg.get("system_prompt", None)
+        return_observation_dict = openenv_cfg.get("return_observation_dict", True)
+
+        def make_openenv():
+            return OpenEnvChatEnv(
+                env_name=env_name,
+                env_kwargs=env_kwargs,
+                action_cls=action_cls,
+                action_adapter=action_adapter,
+                observation_adapter=observation_adapter,
+                history_content_adapter=history_content_adapter,
+                return_observation_dict=return_observation_dict,
+                system_prompt=system_prompt,
+                tokenizer=train_tokenizer,
+                device=torch.device("cpu"),
+            )
+
+        if num_envs == 1:
+            env = make_openenv()
+        else:
+            env = SerialEnv(num_envs, make_openenv)
+        env = env.append_transform(StepCounter(max_steps=max_steps))
     else:
         raise NotImplementedError(f"Dataset {cfg.env.dataset} not implemented")
 
