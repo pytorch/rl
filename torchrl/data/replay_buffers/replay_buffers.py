@@ -40,7 +40,16 @@ from tensordict import (
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
-from torch.utils._pytree import tree_leaves, tree_map
+
+try:
+    from torch.utils._pytree import tree_leaves, tree_map
+except ImportError:
+    from torch.utils._pytree import tree_flatten, tree_map
+
+    def tree_leaves(data):  # noqa: D103
+        tree_flat, _ = tree_flatten(data)
+        return tree_flat
+
 
 from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
 from torchrl.data.replay_buffers.samplers import (
@@ -73,7 +82,7 @@ from torchrl.data.replay_buffers.writers import (
     WriterEnsemble,
 )
 from torchrl.data.utils import DEVICE_TYPING
-from torchrl.envs.transforms.transforms import _InvertTransform, Transform
+from torchrl.envs.transforms.transforms import _InvertTransform, Compose, Transform
 
 T = TypeVar("T")
 if TYPE_CHECKING:
@@ -412,6 +421,8 @@ class ReplayBuffer:
             self._transform = self._maybe_make_transform(
                 self._init_transform, self._init_transform_factory
             )
+            if self.shared:
+                self._share_replay_buffer_transform()
 
             # Check batch_size compatibility with sampler
             if (
@@ -606,10 +617,36 @@ class ReplayBuffer:
         transform.eval()
         return transform
 
+    def _share_replay_buffer_transform(self) -> None:
+        transform = getattr(self, "_transform", None)
+        if transform is None:
+            return
+        self._share_transform_state(transform)
+
+    @classmethod
+    def _share_transform_state(cls, transform) -> None:
+        if isinstance(transform, Compose):
+            for subtransform in transform:
+                cls._share_transform_state(subtransform)
+            return
+        share_memory = getattr(transform, "share_memory_", None)
+        if callable(share_memory):
+            share_memory()
+            return
+        if getattr(transform, "requires_shared_write_state", False):
+            raise RuntimeError(
+                f"{type(transform).__name__} keeps replay-buffer write state "
+                "but does not implement share_memory_(). Use a centralized "
+                "writer, a Ray-backed transform, or a transform that supports "
+                "shared replay-buffer write state."
+            )
+
     def share(self, shared: bool = True) -> Self:
         self.shared = shared
         if self.shared:
             self._write_lock = multiprocessing.Lock()
+            if getattr(self, "_initialized", False):
+                self._share_replay_buffer_transform()
         else:
             self._write_lock = contextlib.nullcontext()
         return self
@@ -1364,6 +1401,8 @@ class ReplayBuffer:
         if invert:
             transform = _InvertTransform(transform)
         transform.eval()
+        if self.shared:
+            self._share_transform_state(transform)
         self._transform.append(transform)
         return self
 
@@ -1391,6 +1430,8 @@ class ReplayBuffer:
         transform.eval()
         if invert:
             transform = _InvertTransform(transform)
+        if self.shared:
+            self._share_transform_state(transform)
         self._transform.insert(index, transform)
         return self
 
