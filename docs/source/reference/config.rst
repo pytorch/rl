@@ -454,6 +454,7 @@ Replay Buffer and Storage Configurations
 
     ReplayBufferConfig
     TensorDictReplayBufferConfig
+    ConsumingSamplerConfig
     RandomSamplerConfig
     SamplerWithoutReplacementConfig
     PrioritizedSamplerConfig
