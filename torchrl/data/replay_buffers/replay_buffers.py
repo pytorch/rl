@@ -40,10 +40,11 @@ from tensordict import (
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
-from torch.utils._pytree import tree_map
+from torch.utils._pytree import tree_leaves, tree_map
 
 from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
 from torchrl.data.replay_buffers.samplers import (
+    ConsumingSampler,
     PrioritizedSampler,
     RandomSampler,
     Sampler,
@@ -55,6 +56,7 @@ from torchrl.data.replay_buffers.storages import (
     ListStorage,
     Storage,
     StorageEnsemble,
+    TensorStorage,
 )
 from torchrl.data.replay_buffers.utils import (
     _is_int,
@@ -187,6 +189,11 @@ class ReplayBuffer:
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        consume_after_n_samples (int, optional): if provided, sampled items are
+            removed from the sampleable set after they have been returned this
+            many times. The default value of ``None`` keeps the standard replay
+            buffer behavior. Passing ``1`` makes each item available for a
+            single sample before it is consumed.
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
         compilable (bool, optional): whether the writer is compilable.
@@ -286,10 +293,20 @@ class ReplayBuffer:
         | Callable[[], StorageCheckpointerBase]  # noqa: F821
         | None = None,  # noqa: F821
         generator: torch.Generator | None = None,
+        consume_after_n_samples: int | None = None,
         shared: bool = False,
         compilable: bool | None = None,
         delayed_init: bool | None = None,
     ) -> None:
+        if consume_after_n_samples is not None:
+            if isinstance(consume_after_n_samples, bool) or not isinstance(
+                consume_after_n_samples, INT_CLASSES
+            ):
+                raise TypeError("consume_after_n_samples must be a positive integer.")
+            if consume_after_n_samples < 1:
+                raise ValueError("consume_after_n_samples must be a positive integer.")
+            consume_after_n_samples = int(consume_after_n_samples)
+
         self._delayed_init = delayed_init
         self._initialized = False
 
@@ -303,6 +320,8 @@ class ReplayBuffer:
         self._init_checkpointer = checkpointer
         self._init_generator = generator
         self._init_compilable = compilable
+        self._init_consume_after_n_samples = consume_after_n_samples
+        self._consume_after_n_samples = consume_after_n_samples
 
         if transform is not None and transform_factory is not None:
             raise TypeError(
@@ -331,6 +350,10 @@ class ReplayBuffer:
                 "with multithreaded sampling. "
                 "When using prefetch, the batch-size must be specified in "
                 "advance. "
+            )
+        if consume_after_n_samples is not None and prefetch:
+            raise ValueError(
+                "Prefetching is not supported when consume_after_n_samples is set."
             )
 
         if dim_extend is not None and dim_extend < 0:
@@ -374,10 +397,13 @@ class ReplayBuffer:
 
             # Initialize sampler
             self._sampler = self._maybe_make_sampler(self._init_sampler)
+            self._maybe_make_consuming_sampler()
+            self._validate_consuming_sampler()
 
             # Initialize writer
             self._writer = self._maybe_make_writer(self._init_writer)
             self._writer.register_storage(self._storage)
+            self._validate_consuming_writer()
 
             # Initialize collate function
             self._get_collate_fn(self._init_collate_fn)
@@ -423,6 +449,7 @@ class ReplayBuffer:
             self._init_checkpointer = None
             self._init_generator = None
             self._init_compilable = None
+            self._init_consume_after_n_samples = None
         except Exception as e:
             self._initialized = False
             raise e
@@ -486,6 +513,53 @@ class ReplayBuffer:
                 "sampler must be either a Sampler or a callable returning a sampler instance."
             )
         return sampler
+
+    def _maybe_make_consuming_sampler(self) -> None:
+        consume_after_n_samples = self._init_consume_after_n_samples
+        if consume_after_n_samples is None:
+            if isinstance(self._sampler, ConsumingSampler):
+                self._consume_after_n_samples = self._sampler.max_sample_count
+            return
+
+        if isinstance(self._sampler, ConsumingSampler):
+            if self._sampler.max_sample_count != consume_after_n_samples:
+                raise ValueError(
+                    "consume_after_n_samples conflicts with the provided "
+                    "ConsumingSampler.max_sample_count."
+                )
+            return
+        if not isinstance(self._sampler, RandomSampler):
+            raise ValueError(
+                "consume_after_n_samples only supports the default RandomSampler "
+                "or an explicit ConsumingSampler. Prioritized, slice and "
+                "without-replacement samplers are not supported."
+            )
+        self._sampler = ConsumingSampler(max_sample_count=consume_after_n_samples)
+
+    def _validate_consuming_sampler(self) -> None:
+        if not isinstance(self._sampler, ConsumingSampler):
+            return
+        if self._prefetch:
+            raise ValueError("Prefetching is not supported with ConsumingSampler.")
+        if self._storage.ndim != 1:
+            raise ValueError(
+                "ConsumingSampler only supports 1-dimensional storages. "
+                f"Got storage.ndim={self._storage.ndim}."
+            )
+        if not isinstance(self._storage, (ListStorage, TensorStorage)):
+            raise TypeError(
+                "ConsumingSampler only supports ListStorage, TensorStorage, "
+                "LazyTensorStorage and LazyMemmapStorage."
+            )
+
+    def _validate_consuming_writer(self) -> None:
+        if not isinstance(self._sampler, ConsumingSampler):
+            return
+        if not callable(getattr(self._writer, "write_at", None)):
+            raise TypeError(
+                "ConsumingSampler requires a writer with a callable "
+                "write_at(index, data) method."
+            )
 
     def _maybe_make_writer(
         self, writer: Writer | Callable[[], Writer] | None
@@ -608,6 +682,7 @@ class ReplayBuffer:
         """
         prev_storage = self._storage
         self._storage = storage
+        self._validate_consuming_sampler()
         self._get_collate_fn(collate_fn)
 
         return prev_storage
@@ -625,11 +700,18 @@ class ReplayBuffer:
         """Sets a new sampler in the replay buffer and returns the previous sampler."""
         prev_sampler = self._sampler
         self._sampler = sampler
+        if isinstance(sampler, ConsumingSampler):
+            self._consume_after_n_samples = sampler.max_sample_count
+        elif isinstance(prev_sampler, ConsumingSampler):
+            self._consume_after_n_samples = None
+        self._validate_consuming_sampler()
         return prev_sampler
 
     @_maybe_delay_init
     def __len__(self) -> int:
         with self._replay_lock:
+            if isinstance(self._sampler, ConsumingSampler):
+                return self._sampler._num_sampleable(self._storage)
             return len(self._storage)
 
     def _getattr(self, attr):
@@ -833,6 +915,7 @@ class ReplayBuffer:
             "_writer": self._writer.state_dict(),
             "_transforms": self._transform.state_dict(),
             "_batch_size": self._batch_size,
+            "_consume_after_n_samples": self._consume_after_n_samples,
             "_rng": (self._rng.get_state().clone(), str(self._rng.device))
             if self._rng is not None
             else None,
@@ -845,6 +928,7 @@ class ReplayBuffer:
         self._writer.load_state_dict(state_dict["_writer"])
         self._transform.load_state_dict(state_dict["_transforms"])
         self._batch_size = state_dict["_batch_size"]
+        self._consume_after_n_samples = state_dict.get("_consume_after_n_samples")
         rng = state_dict.get("_rng")
         if rng is not None:
             state, device = rng
@@ -907,7 +991,13 @@ class ReplayBuffer:
         if transform_sd:
             torch.save(transform_sd, path / "transform.t")
         with open(path / "buffer_metadata.json", "w") as file:
-            json.dump({"batch_size": self._batch_size}, file)
+            json.dump(
+                {
+                    "batch_size": self._batch_size,
+                    "consume_after_n_samples": self._consume_after_n_samples,
+                },
+                file,
+            )
 
     @_maybe_delay_init
     def loads(self, path):
@@ -936,6 +1026,7 @@ class ReplayBuffer:
         with open(path / "buffer_metadata.json") as file:
             metadata = json.load(file)
         self._batch_size = metadata["batch_size"]
+        self._consume_after_n_samples = metadata.get("consume_after_n_samples")
 
     @_maybe_delay_init
     def save(self, *args, **kwargs):
@@ -1010,8 +1101,53 @@ class ReplayBuffer:
 
         return self._add(data)
 
+    def _is_consuming(self) -> bool:
+        return isinstance(self._sampler, ConsumingSampler)
+
+    def _get_batch_size(self, data) -> int:
+        if is_tensor_collection(data) or isinstance(data, torch.Tensor):
+            return len(data)
+        if isinstance(data, list):
+            return len(data)
+        return len(tree_leaves(data)[0])
+
+    def _cat_write_indices(self, first, second):
+        if _is_int(first):
+            first = torch.as_tensor([first], dtype=torch.long)
+        if _is_int(second):
+            second = torch.as_tensor([second], dtype=torch.long)
+        if isinstance(first, torch.Tensor) and isinstance(second, torch.Tensor):
+            return torch.cat([first.reshape(-1), second.to(first.device).reshape(-1)])
+        raise RuntimeError(
+            "Cannot concatenate write indices with different structures in "
+            "a consuming replay buffer."
+        )
+
+    def _cursor_write_indices(
+        self, data, batch_size: int, skip_index: torch.Tensor
+    ) -> torch.Tensor:
+        device = data.device if hasattr(data, "device") else skip_index.device
+        max_size = self._storage._max_size_along_dim0(batched_data=data)
+        skip = set(skip_index.cpu().tolist())
+        cursor = self._writer._cursor
+        write_indices = []
+        scanned = 0
+        while len(write_indices) < batch_size:
+            if cursor not in skip or scanned >= max_size:
+                write_indices.append(cursor)
+            cursor = (cursor + 1) % max_size
+            scanned += 1
+        self._writer._cursor = cursor
+        return torch.as_tensor(write_indices, dtype=torch.long, device=device)
+
     def _add(self, data):
         with self._replay_lock, self._write_lock:
+            if self._is_consuming():
+                consumed_index = self._sampler._pop_consumed_indices(self._storage, 1)
+                if consumed_index.numel():
+                    index = self._writer.write_at(int(consumed_index.item()), data)
+                    self._sampler.add(index)
+                    return index
             index = self._writer.add(data)
             self._sampler.add(index)
         return index
@@ -1022,6 +1158,23 @@ class ReplayBuffer:
         with self._replay_lock if not is_comp else nc, self._write_lock if not is_comp else nc:
             if self.dim_extend > 0:
                 data = self._transpose(data)
+            if self._is_consuming():
+                batch_size = self._get_batch_size(data)
+                consumed_index = self._sampler._pop_consumed_indices(
+                    self._storage, batch_size
+                )
+                consumed_batch_size = consumed_index.numel()
+                if consumed_batch_size:
+                    if consumed_batch_size < batch_size:
+                        cursor_index = self._cursor_write_indices(
+                            data, batch_size - consumed_batch_size, consumed_index
+                        )
+                        index = self._cat_write_indices(consumed_index, cursor_index)
+                    else:
+                        index = consumed_index
+                    index = self._writer.write_at(index, data)
+                    self._sampler.extend(index)
+                    return index
             index = self._writer.extend(data)
             self._sampler.extend(index)
         return index
@@ -1725,6 +1878,11 @@ class TensorDictReplayBuffer(ReplayBuffer):
             Defaults to ``None`` (global default generator).
 
             .. warning:: As of now, the generator has no effect on the transforms.
+        consume_after_n_samples (int, optional): if provided, sampled items are
+            removed from the sampleable set after they have been returned this
+            many times. The default value of ``None`` keeps the standard replay
+            buffer behavior. Passing ``1`` makes each item available for a
+            single sample before it is consumed.
         shared (bool, optional): whether the buffer will be shared using multiprocessing or not.
             Defaults to ``False``.
         compilable (bool, optional): whether the writer is compilable.

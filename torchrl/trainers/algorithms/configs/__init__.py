@@ -31,6 +31,7 @@ from torchrl.trainers.algorithms.configs.collectors import (
 
 from torchrl.trainers.algorithms.configs.common import ConfigBase
 from torchrl.trainers.algorithms.configs.data import (
+    ConsumingSamplerConfig,
     LazyMemmapStorageConfig,
     LazyStackStorageConfig,
     LazyTensorStorageConfig,
@@ -376,6 +377,7 @@ __all__ = [
     "TensorDictReplayBufferConfig",
     "TensorStorageConfig",
     # Samplers
+    "ConsumingSamplerConfig",
     "PrioritizedSamplerConfig",
     "RandomSamplerConfig",
     "SamplerWithoutReplacementConfig",
@@ -636,6 +638,7 @@ def _register_configs():
         group="replay_buffer", name="tensordict", node=TensorDictReplayBufferConfig
     )
     cs.store(group="sampler", name="random", node=RandomSamplerConfig)
+    cs.store(group="sampler", name="consuming", node=ConsumingSamplerConfig)
     cs.store(
         group="sampler",
         name="without_replacement",
