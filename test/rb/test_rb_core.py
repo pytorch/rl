@@ -36,6 +36,18 @@ from torchrl.data.replay_buffers.storages import (
     TensorStorage,
 )
 from torchrl.data.replay_buffers.writers import RoundRobinWriter
+from torchrl.envs.transforms.transforms import Transform
+from torchrl.objectives.llm import MCAdvantage
+
+
+class _UnshareableWriteStateTransform(Transform):
+    requires_shared_write_state = True
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
 
 
 def test_replay_buffer_read_write_all_in_order():
@@ -93,6 +105,51 @@ def test_replay_buffer_read_write_all_in_order_matches_full_slice_ndim2():
 
     assert_allclose_td(rb.read_all_in_order(), rb[:])
     assert_allclose_td(rb.read_all_in_order(), rb_slice[:])
+
+
+def test_replay_buffer_share_auto_shares_write_stateful_transform():
+    transform = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+    rb = ReplayBuffer(storage=ListStorage(10))
+    rb.append_transform(transform)
+    assert not transform.is_shared
+    rb.share()
+    assert transform.is_shared
+
+
+def test_replay_buffer_append_transform_shares_when_buffer_is_shared():
+    transform = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+    rb = ReplayBuffer(storage=ListStorage(10), shared=True)
+    rb.append_transform(transform)
+    assert transform.is_shared
+
+
+def test_replay_buffer_insert_transform_shares_when_buffer_is_shared():
+    transform = MCAdvantage(grpo_size=2, prompt_key="group_id", trajectory_return="sum")
+    rb = ReplayBuffer(storage=ListStorage(10), shared=True)
+    rb.insert_transform(0, transform)
+    assert transform.is_shared
+
+
+def test_replay_buffer_share_rejects_unshareable_write_stateful_transform():
+    transform = _UnshareableWriteStateTransform()
+    rb = ReplayBuffer(storage=ListStorage(10))
+    rb.append_transform(transform)
+    with pytest.raises(RuntimeError, match="write state"):
+        rb.share()
+
+
+def test_replay_buffer_append_transform_rejects_unshareable_when_shared():
+    transform = _UnshareableWriteStateTransform()
+    rb = ReplayBuffer(storage=ListStorage(10), shared=True)
+    with pytest.raises(RuntimeError, match="write state"):
+        rb.append_transform(transform)
+
+
+def test_replay_buffer_insert_transform_rejects_unshareable_when_shared():
+    transform = _UnshareableWriteStateTransform()
+    rb = ReplayBuffer(storage=ListStorage(10), shared=True)
+    with pytest.raises(RuntimeError, match="write state"):
+        rb.insert_transform(0, transform)
 
 
 class TestRNG:
