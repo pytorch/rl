@@ -40,7 +40,16 @@ from tensordict import (
 from tensordict.nn.utils import _set_dispatch_td_nn_modules
 from tensordict.utils import expand_as_right, expand_right
 from torch import Tensor
-from torch.utils._pytree import tree_leaves, tree_map
+
+try:
+    from torch.utils._pytree import tree_leaves, tree_map
+except ImportError:
+    from torch.utils._pytree import tree_flatten, tree_map
+
+    def tree_leaves(data):  # noqa: D103
+        tree_flat, _ = tree_flatten(data)
+        return tree_flat
+
 
 from torchrl._utils import accept_remote_rref_udf_invocation, rl_warnings
 from torchrl.data.replay_buffers.samplers import (
