@@ -304,9 +304,7 @@ class ReplayBuffer:
             ):
                 raise TypeError("consume_after_n_samples must be a positive integer.")
             if consume_after_n_samples < 1:
-                raise ValueError(
-                    "consume_after_n_samples must be a positive integer."
-                )
+                raise ValueError("consume_after_n_samples must be a positive integer.")
             consume_after_n_samples = int(consume_after_n_samples)
 
         self._delayed_init = delayed_init

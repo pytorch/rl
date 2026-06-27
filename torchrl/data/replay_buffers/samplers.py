@@ -319,9 +319,7 @@ class ConsumingSampler(Sampler):
             old_sample_count = self._sample_count
             old_live_mask = self._live_mask
             old_free_indices = self._free_indices
-            self._sample_count = torch.zeros(
-                capacity, dtype=torch.long, device=device
-            )
+            self._sample_count = torch.zeros(capacity, dtype=torch.long, device=device)
             self._live_mask = torch.zeros(capacity, dtype=torch.bool, device=device)
             if old_sample_count is not None and old_live_mask is not None:
                 copy_len = min(old_sample_count.numel(), capacity)
@@ -371,9 +369,8 @@ class ConsumingSampler(Sampler):
             self._free_indices = None
             self._free_head = 0
             return
-        consumed_mask = (
-            ~self._live_mask[: self._known_storage_len]
-            & (self._sample_count[: self._known_storage_len] >= self.max_sample_count)
+        consumed_mask = ~self._live_mask[: self._known_storage_len] & (
+            self._sample_count[: self._known_storage_len] >= self.max_sample_count
         )
         self._free_indices = torch.nonzero(consumed_mask, as_tuple=False).flatten()
         self._free_head = 0

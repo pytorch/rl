@@ -966,7 +966,9 @@ class TestReplayBufferConsumption:
             if "SumSegmentTree" not in str(err):
                 raise
         else:
-            with pytest.raises(ValueError, match="only supports the default RandomSampler"):
+            with pytest.raises(
+                ValueError, match="only supports the default RandomSampler"
+            ):
                 ReplayBuffer(
                     storage=ListStorage(10),
                     sampler=prioritized_sampler,
