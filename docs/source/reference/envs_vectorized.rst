@@ -44,6 +44,12 @@ one can simply call:
         >>> print(a)
         9.81
 
+Batched environments whose workers support state snapshots can be indexed to
+retrieve detached worker snapshots and assigned back to write the snapshot state
+into the selected worker. For :class:`ParallelEnv`, the authoritative env state
+lives in the worker processes: stepping or resetting a snapshot does not mutate
+the worker until it is explicitly assigned back, for example ``env[0] = env0``.
+
 .. note::
 
   *A note on performance*: launching a :class:`~.ParallelEnv` can take quite some time

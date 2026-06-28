@@ -124,6 +124,63 @@ def _check_start(fun):
     return decorated_fun
 
 
+def _normalize_batched_env_index(item: Any, num_workers: int) -> list[int]:
+    if isinstance(item, bool):
+        raise NotImplementedError("Boolean masks are not supported for batched envs.")
+    if isinstance(item, int):
+        item = item + num_workers if item < 0 else item
+        if item < 0 or item >= num_workers:
+            raise IndexError(f"index {item} is out of bounds for {num_workers} envs.")
+        return [item]
+    if isinstance(item, slice):
+        indices = list(range(num_workers))[item]
+        if not indices:
+            raise IndexError("Empty batched env indexing is not supported.")
+        return indices
+
+    index = torch.as_tensor(item)
+    if index.dtype == torch.bool:
+        raise NotImplementedError("Boolean masks are not supported for batched envs.")
+    if index.ndim == 0:
+        return _normalize_batched_env_index(int(index.item()), num_workers)
+    if index.ndim != 1:
+        raise IndexError(
+            f"Batched env indices must be scalar or 1D, got shape {index.shape}."
+        )
+    if index.numel() == 0:
+        raise IndexError("Empty batched env indexing is not supported.")
+    index = index.to(dtype=torch.long)
+    index = torch.where(index < 0, index + num_workers, index)
+    out_of_bounds = (index < 0) | (index >= num_workers)
+    if bool(out_of_bounds.any()):
+        bad = int(index[out_of_bounds][0].item())
+        raise IndexError(f"index {bad} is out of bounds for {num_workers} envs.")
+    return index.tolist()
+
+
+def _snapshot_full_worker_env(env: EnvBase) -> EnvBase:
+    try:
+        return env[slice(None)]
+    except (TypeError, NotImplementedError, AttributeError) as err:
+        raise NotImplementedError(
+            f"Env workers of type {type(env).__name__} do not support snapshot "
+            "indexing."
+        ) from err
+
+
+def _serial_env_from_snapshots(
+    snapshots: Sequence[EnvBase],
+    *,
+    device: DEVICE_TYPING | None,
+) -> SerialEnv:
+    return SerialEnv(
+        len(snapshots),
+        [lambda env=env: env for env in snapshots],
+        device=device,
+        shared_memory=False,
+    )
+
+
 class _dispatch_caller_parallel:
     def __init__(self, attr, parallel_env):
         self.attr = attr
@@ -612,6 +669,39 @@ class BatchedEnvBase(EnvBase):
                     tensor, self.device, non_blocking=self.non_blocking
                 )
             return tensor.clone()
+
+    def _indexed_snapshot_sources(
+        self,
+        source: EnvBase | Sequence[EnvBase],
+        expected: int,
+    ) -> list[EnvBase]:
+        if isinstance(source, BatchedEnvBase):
+            if not isinstance(source, SerialEnv):
+                raise NotImplementedError(
+                    "Writing back from a parallel snapshot source is not supported; "
+                    "use the SerialEnv snapshot returned by indexing instead."
+                )
+            if source.is_closed:
+                source._create_td()
+                source._start_workers()
+            sources = list(source._envs)
+        elif isinstance(source, EnvBase):
+            sources = [source]
+        elif isinstance(source, Sequence):
+            sources = list(source)
+        else:
+            raise TypeError(
+                f"Expected an EnvBase or sequence of EnvBase snapshots, got "
+                f"{type(source).__name__}."
+            )
+        if len(sources) != expected:
+            raise ValueError(
+                "The source snapshot count does not match the indexed "
+                f"destination: got {len(sources)} and expected {expected}."
+            )
+        if not all(isinstance(env, EnvBase) for env in sources):
+            raise TypeError("All indexed snapshot sources must be EnvBase instances.")
+        return sources
 
     @property
     def non_blocking(self):
@@ -1598,6 +1688,27 @@ class SerialEnv(BatchedEnvBase):
             return result
 
         return out
+
+    @_check_start
+    def __getitem__(self, item: Any) -> EnvBase:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        snapshots = [_snapshot_full_worker_env(self._envs[i]) for i in indices]
+        if len(snapshots) == 1:
+            return snapshots[0]
+        return _serial_env_from_snapshots(snapshots, device=self.device)
+
+    @_check_start
+    def __setitem__(self, item: Any, source: EnvBase | Sequence[EnvBase]) -> None:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        sources = self._indexed_snapshot_sources(source, len(indices))
+        for index, source_env in zip(indices, sources):
+            try:
+                self._envs[index][slice(None)] = source_env
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                raise NotImplementedError(
+                    f"Env workers of type {type(self._envs[index]).__name__} do "
+                    "not support snapshot writeback."
+                ) from err
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -2847,6 +2958,40 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     f"attribute {attr} not found in " f"{self._dummy_env_str}"
                 )
 
+    @_check_start
+    def __getitem__(self, item: Any) -> EnvBase:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        for index in indices:
+            self.parent_channels[index].send(("get_env_snapshot", None))
+
+        snapshots = []
+        for index in indices:
+            msg, snapshot = self.parent_channels[index].recv()
+            if msg != "get_env_snapshot_done":
+                raise RuntimeError(
+                    f"Expected 'get_env_snapshot_done' from worker {index}, "
+                    f"got {msg!r}."
+                )
+            snapshots.append(snapshot)
+        if len(snapshots) == 1:
+            return snapshots[0]
+        return _serial_env_from_snapshots(snapshots, device=self.device)
+
+    @_check_start
+    def __setitem__(self, item: Any, source: EnvBase | Sequence[EnvBase]) -> None:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        sources = self._indexed_snapshot_sources(source, len(indices))
+        for index, source_env in zip(indices, sources):
+            self.parent_channels[index].send(("set_env_snapshot", source_env))
+
+        for index in indices:
+            msg, _ = self.parent_channels[index].recv()
+            if msg != "set_env_snapshot_done":
+                raise RuntimeError(
+                    f"Expected 'set_env_snapshot_done' from worker {index}, "
+                    f"got {msg!r}."
+                )
+
     def to(self, device: DEVICE_TYPING):
         device = _make_ordinal_device(torch.device(device))
         if device == self.device:
@@ -3137,6 +3282,27 @@ def _run_worker_pipe_shared_mem(
 
             del td, root_next_td
 
+        elif cmd == "get_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before getting an env snapshot")
+            snapshot = _snapshot_full_worker_env(env)
+            child_pipe.send(("get_env_snapshot_done", snapshot))
+            _signal_done()
+            del snapshot
+
+        elif cmd == "set_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before setting an env snapshot")
+            try:
+                env[slice(None)] = data
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                raise NotImplementedError(
+                    f"Env workers of type {type(env).__name__} do not support "
+                    "snapshot writeback."
+                ) from err
+            child_pipe.send(("set_env_snapshot_done", None))
+            _signal_done()
+
         elif cmd == "close":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -3404,6 +3570,27 @@ def _run_worker_pipe_direct(
             child_pipe.send((td, root_next_td))
             mp_event.set()
             del td, root_next_td
+
+        elif cmd == "get_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before getting an env snapshot")
+            snapshot = _snapshot_full_worker_env(env)
+            child_pipe.send(("get_env_snapshot_done", snapshot))
+            mp_event.set()
+            del snapshot
+
+        elif cmd == "set_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before setting an env snapshot")
+            try:
+                env[slice(None)] = data
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                raise NotImplementedError(
+                    f"Env workers of type {type(env).__name__} do not support "
+                    "snapshot writeback."
+                ) from err
+            child_pipe.send(("set_env_snapshot_done", None))
+            mp_event.set()
 
         elif cmd == "close":
             if not initialized:

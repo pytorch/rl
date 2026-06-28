@@ -913,6 +913,56 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
+    def test_mujoco_serial_env_snapshot_indexing_writeback(self):
+        env = HopperEnv(backend="mujoco", num_envs=2, parallel=False, seed=0)
+        assert isinstance(env, SerialEnv)
+        env.reset()
+        env.step(env.rand_action())
+        parent_qpos = env._envs[0]._backend.qpos.clone()
+        parent_step_count = env._envs[0]._step_count.clone()
+
+        indexed_env = env[0]
+        indexed_env.step(indexed_env.rand_action())
+        indexed_env.step(indexed_env.rand_action())
+        torch.testing.assert_close(env._envs[0]._backend.qpos, parent_qpos)
+        torch.testing.assert_close(env._envs[0]._step_count, parent_step_count)
+
+        env[0] = indexed_env
+
+        torch.testing.assert_close(
+            env._envs[0]._backend.qpos,
+            indexed_env._backend.qpos,
+        )
+        torch.testing.assert_close(env._envs[0]._step_count, indexed_env._step_count)
+        assert isinstance(env[np.array([0, 1])], SerialEnv)
+        assert isinstance(env[torch.tensor([0, 1])], SerialEnv)
+        with pytest.raises(NotImplementedError, match="Boolean masks"):
+            env[torch.ones(2, dtype=torch.bool)]
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
+    def test_mujoco_parallel_env_snapshot_indexing_writeback(self):
+        env = HopperEnv(backend="mujoco", num_envs=2, seed=0)
+        assert isinstance(env, ParallelEnv)
+        env.reset()
+        env.step(env.rand_action())
+        parent_step_count = list(env._step_count)[0].clone()
+
+        indexed_env = env[0]
+        indexed_env.step(indexed_env.rand_action())
+        indexed_env.step(indexed_env.rand_action())
+        torch.testing.assert_close(list(env._step_count)[0], parent_step_count)
+
+        env[0] = indexed_env
+
+        torch.testing.assert_close(list(env._step_count)[0], indexed_env._step_count)
+        assert isinstance(env[np.array([0, 1])], SerialEnv)
+        assert isinstance(env[torch.tensor([0, 1])], SerialEnv)
+        with pytest.raises(NotImplementedError, match="Boolean masks"):
+            env[np.ones(2, dtype=bool)]
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
     def test_mujoco_backend_single_env_passthrough(self):
         """``backend='mujoco'`` with N=1 returns a bare ``HopperEnv``,
         not a ``ParallelEnv`` wrapper."""
