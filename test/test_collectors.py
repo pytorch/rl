@@ -6927,6 +6927,25 @@ class TestTrajsPerBatchReplayBuffer:
         rb.extend(data)
         assert len(rb) == 5
 
+    def test_replay_buffer_device_normalization_normalizes_nested_metadata(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10, device="cpu"))
+        data = TensorDict(
+            {
+                "obs": torch.zeros(3),
+                "next": TensorDict({"obs": torch.ones(3)}, batch_size=[3]),
+            },
+            batch_size=[3],
+            device="cpu",
+        )
+        data["next"].clear_device_()
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        assert data["next"].device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 3
+
     def test_trajs_per_write_batches_replay_buffer_extends(self):
         max_steps = 4
         num_trajs = 2

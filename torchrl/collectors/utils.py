@@ -454,7 +454,7 @@ def _maybe_normalize_replay_buffer_tensordict_device(
     replay_buffer,
 ) -> TensorDictBase:
     """Align TensorDict root device metadata with replay-buffer storage when safe."""
-    if not isinstance(data, TensorDictBase) or data.device is not None:
+    if not isinstance(data, TensorDictBase):
         return data
 
     storage = getattr(replay_buffer, "_storage", None)
@@ -477,6 +477,8 @@ def _maybe_normalize_replay_buffer_tensordict_device(
         if value_device is not None and torch.device(value_device) != storage_device:
             return data
 
+    data = data.copy()
+    data.clear_device_()
     return data.to(storage_device)
 
 
