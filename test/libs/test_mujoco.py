@@ -101,6 +101,19 @@ class TestMujoco:
         assert reward.shape[-1] == 1
         assert torch.isfinite(reward).all()
 
+    @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
+    def test_torch_backend_rollout_partial_reset(self):
+        env = HopperEnv(
+            backend="mujoco-torch",
+            num_envs=15,
+            seed=0,
+            max_episode_steps=3,
+        )
+        td = env.rollout(max_steps=10, break_when_any_done=False)
+        assert td.batch_size == torch.Size([15, 10])
+        assert torch.isfinite(td.get(("next", "reward"))).all()
+        env.close()
+
     # ------------------------------------------------------------------
     # Satellite: spec, dim sanity, finite singularity reward.
     # ------------------------------------------------------------------

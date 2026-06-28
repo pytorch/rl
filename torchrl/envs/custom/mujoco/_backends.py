@@ -296,7 +296,16 @@ class _TorchBackend(_PhysicsBackend):
             src = new_td.get(k, default=None)
             if dst is None or src is None:
                 continue
+            if not isinstance(dst, torch.Tensor) or not isinstance(
+                src, torch.Tensor
+            ):
+                continue
             if dst.ndim == 0 or dst.shape[0] != self.num_envs:
+                continue
+            # A stride-0 batch dimension means every env row aliases the same
+            # storage, so there is no row-local value to update during a
+            # masked reset.
+            if dst.stride(0) == 0:
                 continue
             m = mask.view((self.num_envs,) + (1,) * (dst.ndim - 1))
             dst.copy_(torch.where(m, src.to(dst.dtype), dst))
