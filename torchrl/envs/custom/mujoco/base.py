@@ -14,8 +14,8 @@ backends (``mujoco-torch``, ``mjx``, ``mujoco``) -- see
 from __future__ import annotations
 
 import abc
-from copy import copy
 import re
+from copy import copy
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
@@ -619,7 +619,9 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             self._backend.nq != source._backend.nq
             or self._backend.nv != source._backend.nv
         ):
-            raise ValueError("Cannot write back MuJoCo envs with different state sizes.")
+            raise ValueError(
+                "Cannot write back MuJoCo envs with different state sizes."
+            )
         self._backend.set_batch(index, source._backend)
         self._step_count[index] = source._step_count.to(
             device=self._step_count.device, dtype=self._step_count.dtype

@@ -19,9 +19,9 @@ to compute observations and rewards.
 from __future__ import annotations
 
 import abc
-from copy import copy
 import importlib.util
 import urllib.request
+from copy import copy
 from pathlib import Path
 from typing import Any, Literal
 
@@ -359,9 +359,7 @@ class _TorchBackend(_PhysicsBackend):
             src = new_td.get(k, default=None)
             if dst is None or src is None:
                 continue
-            if not isinstance(dst, torch.Tensor) or not isinstance(
-                src, torch.Tensor
-            ):
+            if not isinstance(dst, torch.Tensor) or not isinstance(src, torch.Tensor):
                 continue
             if dst.ndim == 0 or dst.shape[0] != self.num_envs:
                 continue
