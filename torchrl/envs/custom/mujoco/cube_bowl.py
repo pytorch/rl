@@ -643,6 +643,32 @@ class CubeBowlEnv(MujocoEnv):
         self._set_bowl_body_position(bowl_pos)
         return qpos, qvel
 
+    def _index_extra_state(
+        self, index: slice | torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        del index
+        return {"bowl_target_pos": self._bowl_target_pos.clone()}
+
+    def _load_indexed_extra_state(self, state: dict[str, torch.Tensor]) -> None:
+        self._bowl_target_pos = state["bowl_target_pos"]
+
+    def _set_indexed_extra_state(
+        self,
+        index: slice | torch.Tensor,
+        source: CubeBowlEnv,
+    ) -> None:
+        del index
+        self._bowl_target_pos = source._bowl_target_pos.to(
+            device=self._bowl_target_pos.device,
+            dtype=self._bowl_target_pos.dtype,
+        ).clone()
+        offset = torch.tensor(
+            self._bowl_target_offset, dtype=self.dtype, device=self.device
+        )
+        self._set_bowl_body_position(self._bowl_target_pos - offset.view(1, 3))
+        if hasattr(self._backend, "_mujoco"):
+            self._backend._mujoco.mj_forward(self._backend._m, self._backend._d)
+
     # ------------------------------------------------------------------
     # Observations, reward, and done.
     # ------------------------------------------------------------------

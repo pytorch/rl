@@ -11,6 +11,7 @@ import argparse
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -75,6 +76,17 @@ class TestMujoco:
             )
         return {"menagerie_path": menagerie_path}
 
+    @staticmethod
+    def _index_cases(n: int, device: torch.device | None):
+        rows = torch.arange(min(2, n), device=device)
+        return [
+            (0, torch.tensor([0], device=device)),
+            (-1, torch.tensor([n - 1], device=device)),
+            (slice(0, min(2, n)), rows),
+            (np.arange(min(2, n)), rows),
+            (torch.arange(min(2, n), device=device), rows),
+        ]
+
     # ------------------------------------------------------------------
     # Spec / rollout coverage across all available backends.
     # ------------------------------------------------------------------
@@ -100,6 +112,19 @@ class TestMujoco:
         reward = td.get(("next", "reward"))
         assert reward.shape[-1] == 1
         assert torch.isfinite(reward).all()
+
+    @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
+    def test_torch_backend_rollout_partial_reset(self):
+        env = HopperEnv(
+            backend="mujoco-torch",
+            num_envs=15,
+            seed=0,
+            max_episode_steps=3,
+        )
+        td = env.rollout(max_steps=10, break_when_any_done=False)
+        assert td.batch_size == torch.Size([15, 10])
+        assert torch.isfinite(td.get(("next", "reward"))).all()
+        env.close()
 
     # ------------------------------------------------------------------
     # Satellite: spec, dim sanity, finite singularity reward.
@@ -895,6 +920,81 @@ class TestMujoco:
         assert isinstance(env, HopperEnv)
         assert env.batch_size == torch.Size([1])
 
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_locomotion_snapshot_indexing_and_writeback(self, backend):
+        n = 1 if backend == "mujoco" else 3
+        env = HopperEnv(num_envs=n, seed=0, backend=backend)
+        env.reset()
+        env.step(env.rand_action())
+
+        for item, rows in self._index_cases(n, env.device):
+            rows = rows.to(env._backend.qpos.device)
+            expected_qpos = env._backend.qpos.index_select(0, rows).clone()
+            parent_qpos = env._backend.qpos.clone()
+            parent_step_count = env._step_count.clone()
+
+            indexed_env = env[item]
+            assert isinstance(indexed_env, HopperEnv)
+            assert indexed_env.num_envs == rows.numel()
+            assert indexed_env.batch_size == torch.Size([rows.numel()])
+            assert indexed_env.action_spec.shape[0] == rows.numel()
+            torch.testing.assert_close(indexed_env._backend.qpos, expected_qpos)
+
+            indexed_env.step(indexed_env.rand_action())
+            indexed_env.step(indexed_env.rand_action())
+            torch.testing.assert_close(env._backend.qpos, parent_qpos)
+            torch.testing.assert_close(env._step_count, parent_step_count)
+
+            env[item] = indexed_env
+            torch.testing.assert_close(
+                env._backend.qpos.index_select(0, rows),
+                indexed_env._backend.qpos,
+            )
+            torch.testing.assert_close(
+                env._step_count.index_select(0, rows),
+                indexed_env._step_count,
+            )
+        env.close()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_mujoco_indexing_rejects_bool_masks(self, backend):
+        n = 1 if backend == "mujoco" else 2
+        env = HopperEnv(num_envs=n, seed=0, backend=backend)
+        env.reset()
+        with pytest.raises(NotImplementedError, match="Boolean masks"):
+            env[np.ones(n, dtype=bool)]
+        with pytest.raises(NotImplementedError, match="Boolean masks"):
+            env[torch.ones(n, dtype=torch.bool, device=env.device)]
+        env.close()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_satellite_snapshot_indexing_extra_state_writeback(self, backend):
+        n = 1 if backend == "mujoco" else 3
+        env = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
+        env.reset()
+        item = 0 if n == 1 else torch.tensor([0, 2], device=env.device)
+        rows = torch.tensor([0], device=env.device) if n == 1 else item
+        indexed_env = env[item]
+        indexed_env._target_quat = torch.zeros_like(indexed_env._target_quat)
+        indexed_env._target_quat[..., 0] = 1.0
+        indexed_env._last_manip = torch.arange(
+            indexed_env.num_envs,
+            dtype=env.dtype,
+            device=env.device,
+        ).unsqueeze(-1)
+
+        env[item] = indexed_env
+
+        torch.testing.assert_close(
+            env._target_quat.index_select(0, rows.to(env._target_quat.device)),
+            indexed_env._target_quat,
+        )
+        torch.testing.assert_close(
+            env._last_manip.index_select(0, rows.to(env._last_manip.device)),
+            indexed_env._last_manip,
+        )
+        env.close()
+
     # ------------------------------------------------------------------
     # Compile / unknown-backend / custom XML.
     # ------------------------------------------------------------------
@@ -989,6 +1089,19 @@ class TestMujoco:
 
         td = env.rollout(2)
         assert torch.isfinite(td.get(("next", "reward"))).all()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_snapshot_indexing_extra_state_writeback(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        env.reset()
+        indexed_env = env[0]
+        indexed_env._bowl_target_pos = indexed_env._bowl_target_pos + torch.tensor(
+            [[0.01, 0.0, 0.0]], dtype=env.dtype, device=env.device
+        )
+
+        env[0] = indexed_env
+
+        torch.testing.assert_close(env._bowl_target_pos, indexed_env._bowl_target_pos)
 
     @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
     def test_cube_bowl_sparse_coordinate_reward(self):

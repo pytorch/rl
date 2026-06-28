@@ -19,11 +19,13 @@ to compute observations and rewards.
 from __future__ import annotations
 
 import abc
+from copy import copy
 import importlib.util
 import urllib.request
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+import numpy as np
 import torch
 
 _has_mujoco_torch = importlib.util.find_spec("mujoco_torch") is not None
@@ -33,6 +35,59 @@ _has_mjx = _has_mujoco and importlib.util.find_spec("mujoco.mjx") is not None
 
 
 BackendName = Literal["mujoco-torch", "mjx", "mujoco"]
+
+
+def _get_tensorclass_leaf(obj: Any, key: str | tuple[str, ...]) -> Any:
+    if not isinstance(key, tuple):
+        key = (key,)
+    for part in key:
+        obj = getattr(obj, part, None)
+        if obj is None:
+            return None
+    return obj
+
+
+def _copy_batched_tensorclass_(
+    dest: Any,
+    index: Any,
+    source: Any,
+    *,
+    dest_num_envs: int,
+    source_num_envs: int,
+) -> None:
+    dest_td = dest.to_tensordict()
+    source_td = source.to_tensordict()
+    for key in dest_td.keys(True, True):
+        dest_leaf = _get_tensorclass_leaf(dest, key)
+        source_leaf = source_td.get(key, default=None)
+        if not isinstance(dest_leaf, torch.Tensor) or not isinstance(
+            source_leaf, torch.Tensor
+        ):
+            continue
+        if dest_leaf.ndim == 0 or source_leaf.ndim == 0:
+            continue
+        if dest_leaf.shape[0] != dest_num_envs:
+            continue
+        if source_leaf.shape[0] != source_num_envs:
+            continue
+        if dest_leaf.stride(0) == 0:
+            continue
+        dest_leaf[index] = source_leaf.to(
+            device=dest_leaf.device, dtype=dest_leaf.dtype
+        )
+
+
+def _copy_mujoco_data(dest, source) -> None:
+    dest.qpos[:] = source.qpos.copy()
+    dest.qvel[:] = source.qvel.copy()
+    dest.ctrl[:] = source.ctrl.copy()
+    if getattr(dest, "act", np.asarray(())).size:
+        dest.act[:] = source.act.copy()
+    if getattr(dest, "mocap_pos", np.asarray(())).size:
+        dest.mocap_pos[:] = source.mocap_pos.copy()
+    if getattr(dest, "mocap_quat", np.asarray(())).size:
+        dest.mocap_quat[:] = source.mocap_quat.copy()
+    dest.time = float(source.time)
 
 
 def resolve_xml_string(path_or_url: str | Path) -> str:
@@ -105,6 +160,14 @@ class _PhysicsBackend(abc.ABC):
     @abc.abstractmethod
     def step(self, ctrl: torch.Tensor, frame_skip: int) -> None:
         """Advance state by ``frame_skip`` physics substeps."""
+
+    @abc.abstractmethod
+    def clone_batch(self, index: Any, num_envs: int) -> _PhysicsBackend:
+        """Return a detached backend snapshot for the indexed batch rows."""
+
+    @abc.abstractmethod
+    def set_batch(self, index: Any, source: _PhysicsBackend) -> None:
+        """Write ``source`` backend state into the indexed batch rows."""
 
     @property
     @abc.abstractmethod
@@ -296,7 +359,16 @@ class _TorchBackend(_PhysicsBackend):
             src = new_td.get(k, default=None)
             if dst is None or src is None:
                 continue
+            if not isinstance(dst, torch.Tensor) or not isinstance(
+                src, torch.Tensor
+            ):
+                continue
             if dst.ndim == 0 or dst.shape[0] != self.num_envs:
+                continue
+            # A stride-0 batch dimension means every env row aliases the same
+            # storage, so there is no row-local value to update during a
+            # masked reset.
+            if dst.stride(0) == 0:
                 continue
             m = mask.view((self.num_envs,) + (1,) * (dst.ndim - 1))
             dst.copy_(torch.where(m, src.to(dst.dtype), dst))
@@ -314,6 +386,26 @@ class _TorchBackend(_PhysicsBackend):
             self._dx = stepped.unsqueeze(0)
         else:
             self._dx = self._physics_step(self._dx, frame_skip)
+
+    def clone_batch(self, index: Any, num_envs: int) -> _TorchBackend:
+        backend = copy(self)
+        backend.num_envs = int(num_envs)
+        backend._dx = self._dx[index].clone()
+        backend._build_step_fn()
+        return backend
+
+    def set_batch(self, index: Any, source: _PhysicsBackend) -> None:
+        if not isinstance(source, _TorchBackend):
+            raise TypeError(
+                f"Expected a _TorchBackend source, got {type(source).__name__}."
+            )
+        _copy_batched_tensorclass_(
+            self._dx,
+            index,
+            source._dx,
+            dest_num_envs=self.num_envs,
+            source_num_envs=source.num_envs,
+        )
 
     @property
     def qpos(self) -> torch.Tensor:
@@ -450,6 +542,31 @@ class _MujocoBackend(_PhysicsBackend):
         self._d.ctrl[:] = clamped.detach().cpu().double().numpy()[0]
         for _ in range(frame_skip):
             mujoco.mj_step(self._m, self._d)
+
+    def clone_batch(self, index: Any, num_envs: int) -> _MujocoBackend:
+        if int(num_envs) != 1:
+            raise ValueError("backend='mujoco' can only snapshot one env at a time.")
+        del index
+        backend = copy(self)
+        backend.num_envs = 1
+        backend._m = copy(self._m)
+        backend._d = self._mujoco.MjData(backend._m)
+        _copy_mujoco_data(backend._d, self._d)
+        self._mujoco.mj_forward(backend._m, backend._d)
+        if hasattr(backend, "_renderer"):
+            delattr(backend, "_renderer")
+        return backend
+
+    def set_batch(self, index: Any, source: _PhysicsBackend) -> None:
+        if not isinstance(source, _MujocoBackend):
+            raise TypeError(
+                f"Expected a _MujocoBackend source, got {type(source).__name__}."
+            )
+        if source.num_envs != 1:
+            raise ValueError("backend='mujoco' can only restore one env at a time.")
+        del index
+        _copy_mujoco_data(self._d, source._d)
+        self._mujoco.mj_forward(self._m, self._d)
 
     @property
     def qpos(self) -> torch.Tensor:
@@ -599,6 +716,13 @@ class _MJXBackend(_PhysicsBackend):
         # lives on GPU, causing a mixed-device pytree at jit time.
         return self._jax.device_put(arr, self._jax_device)
 
+    def _index_to_jax(self, index: Any) -> Any:
+        if isinstance(index, torch.Tensor):
+            index = index.detach().cpu().numpy()
+        if isinstance(index, np.ndarray):
+            return self._jax.device_put(index, self._jax_device)
+        return index
+
     def _broadcast_dx0(self):
         """Build a batched copy of ``_dx0_single`` on ``self._jax_device``."""
         jax = self._jax
@@ -645,6 +769,41 @@ class _MJXBackend(_PhysicsBackend):
         self._dx = self._dx.replace(ctrl=ctrl_j)
         for _ in range(frame_skip):
             self._dx = self._vmap_step(self._dx)
+
+    def clone_batch(self, index: Any, num_envs: int) -> _MJXBackend:
+        backend = copy(self)
+        backend.num_envs = int(num_envs)
+        jax_index = self._index_to_jax(index)
+
+        def _index_leaf(leaf):
+            shape = getattr(leaf, "shape", ())
+            if shape and shape[0] == self.num_envs:
+                return leaf[jax_index]
+            return leaf
+
+        backend._dx = self._jax.tree_util.tree_map(_index_leaf, self._dx)
+        return backend
+
+    def set_batch(self, index: Any, source: _PhysicsBackend) -> None:
+        if not isinstance(source, _MJXBackend):
+            raise TypeError(
+                f"Expected a _MJXBackend source, got {type(source).__name__}."
+            )
+        jax_index = self._index_to_jax(index)
+
+        def _set_leaf(dest, source_leaf):
+            shape = getattr(dest, "shape", ())
+            source_shape = getattr(source_leaf, "shape", ())
+            if (
+                shape
+                and source_shape
+                and shape[0] == self.num_envs
+                and source_shape[0] == source.num_envs
+            ):
+                return dest.at[jax_index].set(source_leaf)
+            return dest
+
+        self._dx = self._jax.tree_util.tree_map(_set_leaf, self._dx, source._dx)
 
     @property
     def qpos(self) -> torch.Tensor:
