@@ -461,6 +461,9 @@ def _maybe_normalize_replay_buffer_tensordict_device(
     if storage is None:
         storage = getattr(replay_buffer, "storage", None)
     storage_device = getattr(storage, "device", None)
+    if storage_device is None:
+        storage_data = getattr(storage, "_storage", None)
+        storage_device = getattr(storage_data, "device", None)
     if storage_device is None or storage_device == "auto":
         return data
     storage_device = torch.device(storage_device)

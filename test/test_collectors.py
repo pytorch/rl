@@ -61,6 +61,7 @@ from torchrl.collectors.distributed.ray import _has_ray, RayCollector
 
 from torchrl.collectors.utils import (
     _make_policy_factory,
+    _maybe_normalize_replay_buffer_tensordict_device,
     _traj_chunk_ends_done,
     _traj_emit,
     _traj_ingest,
@@ -6910,6 +6911,21 @@ class TestTrajsPerBatchReplayBuffer:
         assert all(device == torch.device("cpu") for device in extend_devices)
         assert len(rb) > 0, "replay buffer must be non-empty"
         self._assert_rb_trajectories_complete(rb)
+
+    def test_replay_buffer_device_normalization_uses_initialized_storage(self):
+        rb = ReplayBuffer(storage=LazyTensorStorage(10, device="cpu"))
+        rb.extend(TensorDict({"obs": torch.zeros(2)}, batch_size=[2]))
+        assert rb.storage._storage.device == torch.device("cpu")
+
+        rb.storage.device = None
+        data = TensorDict({"obs": torch.ones(3)}, batch_size=[3])
+        assert data.device is None
+
+        data = _maybe_normalize_replay_buffer_tensordict_device(data, rb)
+
+        assert data.device == torch.device("cpu")
+        rb.extend(data)
+        assert len(rb) == 5
 
     def test_trajs_per_write_batches_replay_buffer_extends(self):
         max_steps = 4
