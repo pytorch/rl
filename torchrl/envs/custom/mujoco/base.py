@@ -14,10 +14,12 @@ backends (``mujoco-torch``, ``mjx``, ``mujoco``) -- see
 from __future__ import annotations
 
 import abc
+from copy import copy
 import re
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
+import numpy as np
 import torch
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data.tensor_specs import Binary, Bounded, Composite, Unbounded
@@ -30,6 +32,75 @@ from torchrl.envs.custom.mujoco._backends import (
 )
 
 _ASSETS_DIR = Path(__file__).parent / "assets"
+
+
+def _normalize_mujoco_index(
+    item: Any,
+    num_envs: int,
+    device: torch.device | None,
+) -> tuple[slice | torch.Tensor, int]:
+    if isinstance(item, bool):
+        raise NotImplementedError("Boolean masks are not supported for MuJoCo envs.")
+    if isinstance(item, int):
+        item = item + num_envs if item < 0 else item
+        if item < 0 or item >= num_envs:
+            raise IndexError(f"index {item} is out of bounds for {num_envs} envs.")
+        return torch.tensor([item], device=device, dtype=torch.long), 1
+    if isinstance(item, slice):
+        indexed_num_envs = len(range(num_envs)[item])
+        if indexed_num_envs == 0:
+            raise IndexError("Empty MuJoCo env indexing is not supported.")
+        return item, indexed_num_envs
+    if isinstance(item, np.ndarray):
+        if item.dtype == np.bool_:
+            raise NotImplementedError(
+                "Boolean masks are not supported for MuJoCo envs."
+            )
+        if item.ndim == 0:
+            return _normalize_mujoco_index(int(item), num_envs, device)
+        item = torch.as_tensor(item, dtype=torch.long, device=device)
+    elif isinstance(item, torch.Tensor):
+        if item.dtype == torch.bool:
+            raise NotImplementedError(
+                "Boolean masks are not supported for MuJoCo envs."
+            )
+        if item.ndim == 0:
+            return _normalize_mujoco_index(int(item.item()), num_envs, device)
+        item = item.to(device=device, dtype=torch.long)
+    else:
+        try:
+            item = torch.as_tensor(item, device=device)
+        except (TypeError, ValueError) as err:
+            raise TypeError(
+                "MuJoCo env indices must be integers, slices, integer NumPy "
+                f"arrays, or integer torch tensors, got {type(item).__name__}."
+            ) from err
+        if item.dtype == torch.bool:
+            raise NotImplementedError(
+                "Boolean masks are not supported for MuJoCo envs."
+            )
+        item = item.to(dtype=torch.long)
+
+    if item.ndim != 1:
+        raise IndexError(
+            f"MuJoCo env indices must be scalar or 1D, got shape {item.shape}."
+        )
+    if item.numel() == 0:
+        raise IndexError("Empty MuJoCo env indexing is not supported.")
+    item = torch.where(item < 0, item + num_envs, item)
+    out_of_bounds = (item < 0) | (item >= num_envs)
+    if bool(out_of_bounds.any()):
+        bad = int(item[out_of_bounds][0].item())
+        raise IndexError(f"index {bad} is out of bounds for {num_envs} envs.")
+    return item, int(item.numel())
+
+
+def _clone_generator(rng: torch.Generator | None, device: torch.device | None):
+    if rng is None:
+        return None
+    cloned = torch.Generator() if device is None else torch.Generator(device=device)
+    cloned.set_state(rng.get_state())
+    return cloned
 
 
 class _MujocoMeta(_EnvPostInit):
@@ -479,6 +550,81 @@ class MujocoEnv(EnvBase, abc.ABC, metaclass=_MujocoMeta):
             batch_size=(self.num_envs,),
             device=self.device,
         )
+
+    def _index_extra_state(self, index: slice | torch.Tensor) -> dict[str, Any]:
+        """Return subclass-owned batched state for an indexed env snapshot."""
+        del index
+        return {}
+
+    def _load_indexed_extra_state(self, state: dict[str, Any]) -> None:
+        """Load subclass-owned state into an indexed env snapshot."""
+        del state
+
+    def _set_indexed_extra_state(
+        self,
+        index: slice | torch.Tensor,
+        source: MujocoEnv,
+    ) -> None:
+        """Write subclass-owned state from an indexed snapshot into ``self``."""
+        del index, source
+
+    def __getitem__(self, item: Any) -> MujocoEnv:
+        """Return a detached snapshot of one or more environments in the batch.
+
+        The returned environment starts from the selected simulator state but is
+        independent from the parent. Assign it back with ``env[item] = sub_env``
+        to explicitly write its state back into the parent batch.
+        """
+        index, indexed_num_envs = _normalize_mujoco_index(
+            item, self.num_envs, self.device
+        )
+        env = copy(self)
+        was_locked = env.is_spec_locked
+        if was_locked:
+            env.set_spec_lock_(False)
+        env.num_envs = indexed_num_envs
+        env.__dict__["_input_spec"] = self.input_spec[index].clone()
+        env.__dict__["_output_spec"] = self.output_spec[index].clone()
+        env.batch_size = torch.Size([indexed_num_envs])
+        env._backend = self._backend.clone_batch(index, indexed_num_envs)
+        env._step_count = self._step_count[index].clone()
+        env.rng = _clone_generator(self.rng, self.device)
+        env._load_indexed_extra_state(self._index_extra_state(index))
+        env.__dict__["_cache"] = {}
+        if was_locked:
+            env.set_spec_lock_(True)
+        return env
+
+    def __setitem__(self, item: Any, source: MujocoEnv) -> None:
+        """Write an indexed MuJoCo env snapshot back into this env batch."""
+        if not isinstance(source, MujocoEnv):
+            raise TypeError(
+                f"Expected a MujocoEnv source, got {type(source).__name__}."
+            )
+        index, indexed_num_envs = _normalize_mujoco_index(
+            item, self.num_envs, self.device
+        )
+        if source.num_envs != indexed_num_envs:
+            raise ValueError(
+                "The source env batch does not match the indexed destination: "
+                f"got source.num_envs={source.num_envs} and index selects "
+                f"{indexed_num_envs} envs."
+            )
+        if self.backend_name != source.backend_name:
+            raise TypeError(
+                "Cannot write back a MuJoCo env snapshot from backend "
+                f"{source.backend_name!r} into backend {self.backend_name!r}."
+            )
+        if (
+            self._backend.nq != source._backend.nq
+            or self._backend.nv != source._backend.nv
+        ):
+            raise ValueError("Cannot write back MuJoCo envs with different state sizes.")
+        self._backend.set_batch(index, source._backend)
+        self._step_count[index] = source._step_count.to(
+            device=self._step_count.device, dtype=self._step_count.dtype
+        )
+        self._set_indexed_extra_state(index, source)
 
     # ------------------------------------------------------------------
     # EnvBase interface
