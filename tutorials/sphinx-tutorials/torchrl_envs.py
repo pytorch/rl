@@ -53,6 +53,7 @@ mp_context = multiprocessing.get_start_method()
 # sphinx_gallery_end_ignore
 
 import ale_py  # noqa: F401 - registers ALE environments with gymnasium
+import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from tensordict import TensorDict
@@ -474,6 +475,34 @@ parallel_env.reset()
 # the second the time frame. Let's check that with the ``rollout`` method:
 
 parallel_env.rollout(max_steps=20)
+
+###############################################################################
+# Indexing batched environments
+# -----------------------------
+# Batched environments can be indexed to focus on a subset of their workers.
+# Integers, slices, integer NumPy arrays and integer torch tensors are accepted;
+# boolean masks are intentionally not supported. Integer indexing preserves a
+# singleton batch dimension so that the result is still a batched environment.
+#
+# For :class:`~torchrl.envs.SerialEnv` and :class:`~torchrl.envs.ParallelEnv`,
+# the indexed environment is a live view over the selected workers. This means
+# that stepping or resetting ``parallel_env[1:]`` acts on workers 1 and 2 of the
+# original environment, rather than on a detached copy. Conversely, closing the
+# view does not close the parent workers; close the original batched environment
+# when you are done.
+
+selected_envs = parallel_env[1:]
+single_env = parallel_env[0]
+numpy_selected_envs = parallel_env[np.array([0, 2])]
+tensor_selected_envs = parallel_env[torch.tensor([0, 2])]
+
+assert selected_envs.batch_size == torch.Size([2])
+assert single_env.batch_size == torch.Size([1])
+assert numpy_selected_envs.batch_size == torch.Size([2])
+assert tensor_selected_envs.batch_size == torch.Size([2])
+
+# This random step is executed only on workers 1 and 2 of ``parallel_env``.
+selected_envs.rand_step()
 
 ###############################################################################
 # Closing parallel environments
