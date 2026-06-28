@@ -44,11 +44,11 @@ one can simply call:
         >>> print(a)
         9.81
 
-Batched environments whose workers support state snapshots can be indexed to
-retrieve detached worker snapshots and assigned back to write the snapshot state
-into the selected worker. For :class:`ParallelEnv`, the authoritative env state
-lives in the worker processes: stepping or resetting a snapshot does not mutate
-the worker until it is explicitly assigned back, for example ``env[0] = env0``.
+Batched environments can be indexed with integers, slices, integer numpy arrays
+or integer torch tensors. Indexing returns a live batched-env view over the
+selected workers. For example, ``env23 = env[2:]`` keeps talking to the same
+workers as ``env``; stepping or resetting ``env23`` updates those workers rather
+than a detached copy. Integer indexing preserves a singleton batch.
 
 .. note::
 
