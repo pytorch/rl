@@ -728,8 +728,9 @@ class BatchedEnvBase(EnvBase):
             view._shared_tensordict_parent_root = (
                 view.shared_tensordict_parent.exclude("next", *view.reset_keys)
             )
-        if self._non_tensor_cache is not None:
-            view._non_tensor_cache = self._non_tensor_cache[indices]
+        non_tensor_cache = self.__dict__.get("_non_tensor_cache", None)
+        if non_tensor_cache is not None:
+            view._non_tensor_cache = non_tensor_cache[indices]
         return view
 
     @property

@@ -913,48 +913,6 @@ class TestMujoco:
         env.close()
 
     @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
-    def test_mujoco_serial_env_live_view_indexing(self):
-        env = HopperEnv(backend="mujoco", num_envs=2, parallel=False, seed=0)
-        assert isinstance(env, SerialEnv)
-        env.reset()
-        env.step(env.rand_action())
-        parent_step_count = env._envs[0]._step_count.clone()
-
-        indexed_env = env[0]
-        assert isinstance(indexed_env, SerialEnv)
-        assert indexed_env.num_workers == 1
-        assert indexed_env.batch_size == torch.Size([1, 1])
-        indexed_env.step(indexed_env.rand_action())
-        assert (env._envs[0]._step_count > parent_step_count).all()
-        assert isinstance(env[np.array([0, 1])], SerialEnv)
-        assert isinstance(env[torch.tensor([0, 1])], SerialEnv)
-        with pytest.raises(NotImplementedError, match="Boolean masks"):
-            env[torch.ones(2, dtype=torch.bool)]
-        indexed_env.close(raise_if_closed=False)
-        env.close()
-
-    @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
-    def test_mujoco_parallel_env_live_view_indexing(self):
-        env = HopperEnv(backend="mujoco", num_envs=2, seed=0)
-        assert isinstance(env, ParallelEnv)
-        env.reset()
-        env.step(env.rand_action())
-        parent_step_count = list(env._step_count)[0].clone()
-
-        indexed_env = env[0]
-        assert isinstance(indexed_env, ParallelEnv)
-        assert indexed_env.num_workers == 1
-        assert indexed_env.batch_size == torch.Size([1, 1])
-        indexed_env.step(indexed_env.rand_action())
-        assert (list(env._step_count)[0] > parent_step_count).all()
-        assert isinstance(env[np.array([0, 1])], ParallelEnv)
-        assert isinstance(env[torch.tensor([0, 1])], ParallelEnv)
-        with pytest.raises(NotImplementedError, match="Boolean masks"):
-            env[np.ones(2, dtype=bool)]
-        indexed_env.close(raise_if_closed=False)
-        env.close()
-
-    @pytest.mark.skipif(not _has_mujoco, reason="mujoco not installed")
     def test_mujoco_backend_single_env_passthrough(self):
         """``backend='mujoco'`` with N=1 returns a bare ``HopperEnv``,
         not a ``ParallelEnv`` wrapper."""

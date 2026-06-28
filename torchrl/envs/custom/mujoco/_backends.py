@@ -487,18 +487,6 @@ class _MujocoBackend(_PhysicsBackend):
             )
         super().__init__(xml_string, num_envs=num_envs, device=device)
 
-    def __getstate__(self) -> dict[str, Any]:
-        state = self.__dict__.copy()
-        state["_mujoco"] = None
-        state.pop("_renderer", None)
-        return state
-
-    def __setstate__(self, state: dict[str, Any]) -> None:
-        import mujoco
-
-        self.__dict__.update(state)
-        self._mujoco = mujoco
-
     def _init_model(self, xml_string: str) -> None:
         import mujoco
 
