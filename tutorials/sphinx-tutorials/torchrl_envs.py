@@ -492,7 +492,10 @@ parallel_env.rollout(max_steps=20)
 # when you are done. The parent environment owns the workers: closing an indexed
 # view only closes that view object and leaves the parent usable, but closing the
 # parent shuts down the shared workers and makes any existing indexed views
-# unusable.
+# unusable. A closed view cannot be reused; index the parent again to create a
+# fresh view. The view keeps its parent alive, so rebinding a variable as
+# ``parallel_env = parallel_env[:1]`` is safe as long as the final view is closed
+# when it is no longer needed.
 
 selected_envs = parallel_env[1:]
 single_env = parallel_env[0]
@@ -508,7 +511,8 @@ assert tensor_selected_envs.batch_size == torch.Size([2])
 selected_envs.rand_step()
 
 # Closing a view does not close the underlying workers. The parent remains
-# usable and should be the object that is closed last.
+# usable and should be the object that is closed last. If we later need workers
+# 1 and 2 again, we can make a fresh view by indexing ``parallel_env`` again.
 selected_envs.close(raise_if_closed=False)
 parallel_env.rand_step()
 

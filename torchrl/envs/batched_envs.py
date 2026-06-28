@@ -113,7 +113,20 @@ def _has_float64_leaf(spec) -> bool:
 
 def _check_start(fun):
     def decorated_fun(self: BatchedEnvBase, *args, **kwargs):
-        if self.is_closed:
+        if not getattr(self, "_owns_workers", True):
+            parent_env = self.__dict__.get("_parent_env")
+            if self.is_closed:
+                raise RuntimeError(
+                    "Cannot use a closed indexed batched environment view. "
+                    "Create a new view from the parent environment instead."
+                )
+            if parent_env is None or parent_env.is_closed:
+                self.is_closed = True
+                raise RuntimeError(
+                    "Cannot use an indexed batched environment view after its "
+                    "parent environment has been closed."
+                )
+        elif self.is_closed:
             self._create_td()
             self._start_workers()
         else:
@@ -503,6 +516,7 @@ class BatchedEnvBase(EnvBase):
         self.serial_for_single = serial_for_single
         self.is_closed = True
         self._owns_workers = True
+        self.__dict__["_parent_env"] = None
         self._worker_indices = list(range(num_workers))
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
@@ -697,6 +711,7 @@ class BatchedEnvBase(EnvBase):
         view.__dict__.update(self.__dict__.copy())
         indices = list(indices)
         view._owns_workers = False
+        view.__dict__["_parent_env"] = self.__dict__.get("_parent_env") or self
         parent_worker_indices = getattr(self, "_worker_indices", range(self.num_workers))
         view._worker_indices = [parent_worker_indices[index] for index in indices]
         view.num_workers = len(indices)
@@ -1359,13 +1374,15 @@ class BatchedEnvBase(EnvBase):
 
         if self._owns_workers:
             self._shutdown_workers()
-        self.is_closed = True
-        import torchrl
+            import torchrl
 
-        num_threads = min(
-            torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
-        )
-        torch.set_num_threads(num_threads)
+            num_threads = min(
+                torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
+            )
+            torch.set_num_threads(num_threads)
+        else:
+            self.__dict__["_parent_env"] = None
+        self.is_closed = True
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError

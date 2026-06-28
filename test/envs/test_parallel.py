@@ -248,6 +248,50 @@ class TestParallel:
             env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_indexed_view_close_semantics(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+
+        env = cls(4, CountingEnv)
+        try:
+            env.reset()
+            indexed_env = env[1:]
+            indexed_env.close()
+            assert indexed_env.is_closed
+            assert not env.is_closed
+            env.rand_step()
+            with pytest.raises(RuntimeError, match="closed indexed"):
+                indexed_env.reset()
+        finally:
+            env.close(raise_if_closed=False)
+
+        env = cls(4, CountingEnv)
+        env.reset()
+        indexed_env = env[1:]
+        env.close()
+        assert env.is_closed
+        with pytest.raises(RuntimeError, match="parent environment has been closed"):
+            indexed_env.reset()
+        indexed_env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_indexed_view_keeps_parent_alive(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv)
+        env.reset()
+
+        env = env[:1]
+        try:
+            assert env.num_workers == 1
+            assert env.batch_size == torch.Size([1])
+            env.rand_step()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
     @pytest.mark.parametrize(
         "item", [np.ones(4, dtype=bool), torch.ones(4, dtype=torch.bool)]
     )
