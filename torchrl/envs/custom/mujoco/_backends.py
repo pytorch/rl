@@ -296,9 +296,7 @@ class _TorchBackend(_PhysicsBackend):
             src = new_td.get(k, default=None)
             if dst is None or src is None:
                 continue
-            if not isinstance(dst, torch.Tensor) or not isinstance(
-                src, torch.Tensor
-            ):
+            if not isinstance(dst, torch.Tensor) or not isinstance(src, torch.Tensor):
                 continue
             if dst.ndim == 0 or dst.shape[0] != self.num_envs:
                 continue
