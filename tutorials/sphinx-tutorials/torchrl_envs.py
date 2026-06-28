@@ -489,7 +489,10 @@ parallel_env.rollout(max_steps=20)
 # that stepping or resetting ``parallel_env[1:]`` acts on workers 1 and 2 of the
 # original environment, rather than on a detached copy. Conversely, closing the
 # view does not close the parent workers; close the original batched environment
-# when you are done.
+# when you are done. The parent environment owns the workers: closing an indexed
+# view only closes that view object and leaves the parent usable, but closing the
+# parent shuts down the shared workers and makes any existing indexed views
+# unusable.
 
 selected_envs = parallel_env[1:]
 single_env = parallel_env[0]
@@ -503,6 +506,11 @@ assert tensor_selected_envs.batch_size == torch.Size([2])
 
 # This random step is executed only on workers 1 and 2 of ``parallel_env``.
 selected_envs.rand_step()
+
+# Closing a view does not close the underlying workers. The parent remains
+# usable and should be the object that is closed last.
+selected_envs.close(raise_if_closed=False)
+parallel_env.rand_step()
 
 ###############################################################################
 # Closing parallel environments
