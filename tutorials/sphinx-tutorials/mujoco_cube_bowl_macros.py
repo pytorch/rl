@@ -154,6 +154,27 @@ recorder = VideoRecorder(
 env = env.append_transform(recorder)
 env = env.append_transform(primitive_control)
 
+###############################################################################
+# Indexing MuJoCo batches
+# -----------------------
+# Native MuJoCo environment batches use snapshot indexing rather than the live
+# worker views used by :class:`~torchrl.envs.ParallelEnv`. If a custom MuJoCo
+# environment is created with multiple physics states, ``env[0]`` returns a
+# detached one-element snapshot: stepping or resetting the snapshot does not
+# mutate the parent batch until the snapshot is assigned back explicitly.
+# Slices, integer NumPy arrays and integer torch tensors select larger
+# snapshots, while boolean masks are intentionally not supported.
+#
+# .. code-block:: python
+#
+#    batched_env = CubeBowlEnv(..., num_envs=4)
+#    env0 = batched_env[0]
+#    env0.rand_step()
+#    batched_env[0] = env0
+#
+# Preserving a singleton batch for integer indexing keeps downstream code that
+# expects batched specs and TensorDicts working unchanged.
+
 cube_width = 2 * env.OBJECT_HALF_SIZE
 grasp_width = cube_width - 0.001
 gripper_close_command = env.gripper_ctrl_for_width(grasp_width)
