@@ -712,7 +712,9 @@ class BatchedEnvBase(EnvBase):
         indices = list(indices)
         view._owns_workers = False
         view.__dict__["_parent_env"] = self.__dict__.get("_parent_env") or self
-        parent_worker_indices = getattr(self, "_worker_indices", range(self.num_workers))
+        parent_worker_indices = getattr(
+            self, "_worker_indices", range(self.num_workers)
+        )
         view._worker_indices = [parent_worker_indices[index] for index in indices]
         view.num_workers = len(indices)
         view.create_env_fn = self._select_indices(self.create_env_fn, indices)
@@ -737,11 +739,11 @@ class BatchedEnvBase(EnvBase):
             view._cache_shared_keys = set(
                 view.shared_tensordict_parent.keys(True, True)
             )
-            view._shared_tensordict_parent_next = (
-                view.shared_tensordict_parent.get("next")
+            view._shared_tensordict_parent_next = view.shared_tensordict_parent.get(
+                "next"
             )
-            view._shared_tensordict_parent_root = (
-                view.shared_tensordict_parent.exclude("next", *view.reset_keys)
+            view._shared_tensordict_parent_root = view.shared_tensordict_parent.exclude(
+                "next", *view.reset_keys
             )
         non_tensor_cache = self.__dict__.get("_non_tensor_cache", None)
         if non_tensor_cache is not None:
