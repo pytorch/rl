@@ -20,6 +20,11 @@ from torchrl.data.llm.history import _CHAT_TEMPLATES
 from torchrl.envs.llm.transforms.kl import RetrieveLogProb
 from torchrl.modules.llm import TransformersWrapper, vLLMWrapper
 from torchrl.modules.llm.policies.common import ChatHistory, Masks, Text, Tokens
+from torchrl.objectives.llm.distillation import (
+    distillation_loss,
+    DistillationLoss,
+    reverse_kl_token_estimate,
+)
 from torchrl.objectives.llm.grpo import (
     CISPOLoss,
     CISPOLossOutput,
@@ -1004,6 +1009,264 @@ class TestSFT:
             tokenizer_kwargs={"chat_template_name": "qwen"},
         )
         loss(td)
+
+
+class TestDistillation:
+    """Tests for the on-policy reverse-KL distillation loss."""
+
+    # ------------------------------------------------------------------
+    # Pure-math unit tests: no model/tokenizer required, fast, CPU-only.
+    # These pin the KL estimator's contract before any LLM plumbing.
+    # ------------------------------------------------------------------
+    def test_reverse_kl_zero_when_equal(self):
+        lp = torch.randn(16)
+        kl = reverse_kl_token_estimate(lp, lp.clone())
+        torch.testing.assert_close(kl, torch.zeros_like(kl))
+
+    def test_reverse_kl_nonnegative(self):
+        torch.manual_seed(0)
+        student = torch.randn(2000)
+        teacher = torch.randn(2000)
+        kl = reverse_kl_token_estimate(student, teacher)
+        assert (kl >= -1e-6).all()
+
+    def test_reverse_kl_matches_closed_form(self):
+        student = torch.tensor([-1.0, -2.0, -0.3])
+        teacher = torch.tensor([-0.5, -2.5, -0.1])
+        diff = teacher - student
+        expected = diff.expm1() - diff
+        torch.testing.assert_close(
+            reverse_kl_token_estimate(student, teacher), expected
+        )
+
+    def test_reverse_kl_shape_mismatch_raises(self):
+        with pytest.raises(ValueError, match="different shapes"):
+            reverse_kl_token_estimate(torch.randn(3), torch.randn(4))
+
+    @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+    def test_distillation_loss_reduction(self, reduction):
+        x = torch.tensor([1.0, 2.0, 3.0])
+        out = distillation_loss(x, reduction)
+        if reduction == "mean":
+            torch.testing.assert_close(out, x.mean())
+        elif reduction == "sum":
+            torch.testing.assert_close(out, x.sum())
+        else:
+            torch.testing.assert_close(out, x)
+
+    def test_distillation_loss_invalid_reduction(self):
+        with pytest.raises(ValueError, match="Invalid reduction"):
+            distillation_loss(torch.randn(3), "not-a-reduction")
+
+    def test_gradient_descends_toward_teacher(self):
+        # A gradient step on the student log-probs must reduce the reverse KL,
+        # confirming the loss sign pulls the student toward the teacher (and not
+        # away from it). This is the empirical check on the KL direction.
+        torch.manual_seed(0)
+        teacher = torch.randn(64)
+        student = torch.randn(64, requires_grad=True)
+        kl_before = reverse_kl_token_estimate(student, teacher).sum()
+        kl_before.backward()
+        with torch.no_grad():
+            stepped = student - 0.1 * student.grad
+        kl_after = reverse_kl_token_estimate(stepped, teacher).sum()
+        assert kl_after < kl_before
+
+    # ------------------------------------------------------------------
+    # Integration tests: mirror TestSFT. Fixtures are function-scoped on
+    # purpose so the teacher transform (which mutates the tensordict in
+    # place) cannot leak teacher log-probs across tests.
+    # ------------------------------------------------------------------
+    @pytest.fixture
+    def data(self):
+        from transformers import AutoTokenizer
+
+        chats = [
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello, how are you?"},
+                {"role": "assistant", "content": "I'm doing well, thank you!"},
+            ],
+            [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello, how are you?"},
+                {
+                    "role": "assistant",
+                    "content": "I'm doing well, thank you very much!",
+                },
+            ],
+        ]
+        history = History.from_chats(chats)
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
+        tokenizer.pad_token = tokenizer.eos_token
+        text = history[:, :-1].apply_chat_template(
+            tokenizer=tokenizer, chat_template_name="qwen", add_generation_prompt=True
+        )
+        full_text = history.apply_chat_template(
+            tokenizer=tokenizer, chat_template_name="qwen", add_generation_prompt=False
+        )
+        text_response = [
+            txt[len(txt_start) :] for txt, txt_start in zip(full_text, text)
+        ]
+        td = TensorDict(
+            text=Text(prompt=text, response=text_response, full=full_text),
+            history=ChatHistory(
+                full=history, prompt=history[..., :-1], response=history[..., -1:]
+            ),
+            next=TensorDict(
+                reward=torch.randn(2, 1),
+                done=torch.zeros(2, dtype=torch.bool),
+                history=ChatHistory(prompt=history),
+            ),
+            batch_size=(2,),
+        )
+        return lazy_stack(list(td.unbind(0)))
+
+    @staticmethod
+    def _tokenizer():
+        from transformers import AutoTokenizer
+
+        return AutoTokenizer.from_pretrained("facebook/opt-125m")
+
+    @pytest.fixture
+    def policy_train(self):
+        from transformers import OPTConfig, OPTForCausalLM
+
+        tokenizer = self._tokenizer()
+        model = OPTForCausalLM(OPTConfig()).eval()
+        policy_train = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            generate=False,
+            chat_template_name="qwen",
+            input_mode="history",
+            pad_output=False,
+        )
+        return policy_train, tokenizer
+
+    def _teacher_transform(self, model, tokenizer):
+        teacher = TransformersWrapper(
+            model,
+            tokenizer=tokenizer,
+            generate=False,
+            return_log_probs=True,
+            chat_template_name="qwen",
+            input_mode="history",
+            pad_output=False,
+        )
+        return RetrieveLogProb(
+            teacher,
+            assistant_only=True,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+            tokenizer=tokenizer,
+            log_probs_full_key=("teacher_log_probs", "full"),
+        )
+
+    @pytest.mark.skipif(
+        not _has_transformers, reason="transformers lib required to test distillation"
+    )
+    @pytest.mark.parametrize("reduction", ["mean", "sum", "none"])
+    @pytest.mark.parametrize("normalize_by_seq_length", [True, False])
+    def test_distillation_forward(
+        self, reduction, normalize_by_seq_length, data, policy_train
+    ):
+        from transformers import OPTConfig, OPTForCausalLM
+
+        policy_train, tokenizer = policy_train
+        # A separate teacher with different weights: KL > 0 and gradient flows.
+        teacher_model = OPTForCausalLM(OPTConfig()).eval()
+        transform = self._teacher_transform(teacher_model, tokenizer)
+        with torch.no_grad():
+            transform(data)
+
+        loss = DistillationLoss(
+            actor_network=policy_train,
+            tokenizer=tokenizer,
+            reduction=reduction,
+            normalize_by_seq_length=normalize_by_seq_length,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+        )
+        out = loss(data)
+        if reduction in ("mean", "sum"):
+            assert out.loss_distill.shape == ()
+        else:
+            assert out.loss_distill.shape == (2,)
+        assert out.kl_to_teacher.shape == ()
+        assert (out.kl_to_teacher >= -1e-4).all()
+        assert out.sum(reduce=True).shape == ()
+
+        # Gradient reaches the student, and not the detached teacher signal.
+        out.sum(reduce=True).backward()
+        grads = [p.grad for p in policy_train.model.parameters() if p.grad is not None]
+        assert len(grads) > 0
+        assert any((g != 0).any() for g in grads)
+
+    @pytest.mark.skipif(
+        not _has_transformers, reason="transformers lib required to test distillation"
+    )
+    def test_distillation_zero_when_teacher_matches_student(self, data, policy_train):
+        policy_train, tokenizer = policy_train
+        # Teacher equals student: the reverse KL is (approximately) zero.
+        transform = self._teacher_transform(policy_train.model, tokenizer)
+        with torch.no_grad():
+            transform(data)
+        loss = DistillationLoss(
+            actor_network=policy_train,
+            tokenizer=tokenizer,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+        )
+        out = loss(data)
+        torch.testing.assert_close(
+            out.kl_to_teacher,
+            torch.zeros((), dtype=out.kl_to_teacher.dtype),
+            atol=1e-4,
+            rtol=0,
+        )
+
+    @pytest.mark.skipif(
+        not _has_transformers, reason="transformers lib required to test distillation"
+    )
+    def test_distillation_missing_teacher_log_probs_raises(self, data, policy_train):
+        policy_train, tokenizer = policy_train
+        loss = DistillationLoss(
+            actor_network=policy_train,
+            tokenizer=tokenizer,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+        )
+        with pytest.raises(ValueError, match="Teacher log-probs not found"):
+            loss(data)
+
+    @pytest.mark.skipif(
+        not _has_transformers, reason="transformers lib required to test distillation"
+    )
+    def test_distillation_set_keys_nested(self, data, policy_train):
+        policy_train, tokenizer = policy_train
+        teacher = TransformersWrapper(
+            policy_train.model,
+            tokenizer=tokenizer,
+            generate=False,
+            return_log_probs=True,
+            chat_template_name="qwen",
+            input_mode="history",
+            pad_output=False,
+        )
+        transform = RetrieveLogProb(
+            teacher,
+            assistant_only=True,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+            tokenizer=tokenizer,
+            log_probs_full_key=("a_teacher", "logp", "full"),
+        )
+        with torch.no_grad():
+            transform(data)
+        loss = DistillationLoss(
+            actor_network=policy_train,
+            tokenizer=tokenizer,
+            tokenizer_kwargs={"chat_template_name": "qwen"},
+        )
+        loss.set_keys(teacher_log_prob=("next", "a_teacher", "logp", "full"))
+        out = loss(data)
+        assert out.loss_distill.shape == ()
 
 
 @pytest.mark.slow

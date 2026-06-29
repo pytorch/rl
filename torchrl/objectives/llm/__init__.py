@@ -4,6 +4,12 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from .distillation import (
+    distillation_loss,
+    DistillationLoss,
+    DistillationLossOutput,
+    reverse_kl_token_estimate,
+)
 from .grpo import (
     CISPOLoss,
     CISPOLossOutput,
@@ -23,6 +29,8 @@ __all__ = [
     "CISPOLossOutput",
     "DAPO",
     "DAPOLossOutput",
+    "DistillationLoss",
+    "DistillationLossOutput",
     "GRPOLoss",
     "GRPOLossOutput",
     "LLMLossOutput",
@@ -31,4 +39,6 @@ __all__ = [
     "RayMCAdvantage",
     "SFTLoss",
     "SFTLossOutput",
+    "distillation_loss",
+    "reverse_kl_token_estimate",
 ]
