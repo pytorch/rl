@@ -113,7 +113,20 @@ def _has_float64_leaf(spec) -> bool:
 
 def _check_start(fun):
     def decorated_fun(self: BatchedEnvBase, *args, **kwargs):
-        if self.is_closed:
+        if not getattr(self, "_owns_workers", True):
+            parent_env = self.__dict__.get("_parent_env")
+            if self.is_closed:
+                raise RuntimeError(
+                    "Cannot use a closed indexed batched environment view. "
+                    "Create a new view from the parent environment instead."
+                )
+            if parent_env is None or parent_env.is_closed:
+                self.is_closed = True
+                raise RuntimeError(
+                    "Cannot use an indexed batched environment view after its "
+                    "parent environment has been closed."
+                )
+        elif self.is_closed:
             self._create_td()
             self._start_workers()
         else:
@@ -122,6 +135,40 @@ def _check_start(fun):
         return fun(self, *args, **kwargs)
 
     return decorated_fun
+
+
+def _normalize_batched_env_index(item: Any, num_workers: int) -> list[int]:
+    if isinstance(item, bool):
+        raise NotImplementedError("Boolean masks are not supported for batched envs.")
+    if isinstance(item, int):
+        item = item + num_workers if item < 0 else item
+        if item < 0 or item >= num_workers:
+            raise IndexError(f"index {item} is out of bounds for {num_workers} envs.")
+        return [item]
+    if isinstance(item, slice):
+        indices = list(range(num_workers))[item]
+        if not indices:
+            raise IndexError("Empty batched env indexing is not supported.")
+        return indices
+
+    index = torch.as_tensor(item)
+    if index.dtype == torch.bool:
+        raise NotImplementedError("Boolean masks are not supported for batched envs.")
+    if index.ndim == 0:
+        return _normalize_batched_env_index(int(index.item()), num_workers)
+    if index.ndim != 1:
+        raise IndexError(
+            f"Batched env indices must be scalar or 1D, got shape {index.shape}."
+        )
+    if index.numel() == 0:
+        raise IndexError("Empty batched env indexing is not supported.")
+    index = index.to(dtype=torch.long)
+    index = torch.where(index < 0, index + num_workers, index)
+    out_of_bounds = (index < 0) | (index >= num_workers)
+    if bool(out_of_bounds.any()):
+        bad = int(index[out_of_bounds][0].item())
+        raise IndexError(f"index {bad} is out of bounds for {num_workers} envs.")
+    return index.tolist()
 
 
 class _dispatch_caller_parallel:
@@ -468,6 +515,9 @@ class BatchedEnvBase(EnvBase):
         super().__init__(device=device)
         self.serial_for_single = serial_for_single
         self.is_closed = True
+        self._owns_workers = True
+        self.__dict__["_parent_env"] = None
+        self._worker_indices = list(range(num_workers))
         self.num_sub_threads = num_sub_threads
         self.num_threads = num_threads
         self._cache_in_keys = None
@@ -612,6 +662,93 @@ class BatchedEnvBase(EnvBase):
                     tensor, self.device, non_blocking=self.non_blocking
                 )
             return tensor.clone()
+
+    def _indexed_snapshot_sources(
+        self,
+        source: EnvBase | Sequence[EnvBase],
+        expected: int,
+    ) -> list[EnvBase]:
+        if isinstance(source, BatchedEnvBase):
+            if not isinstance(source, SerialEnv):
+                raise NotImplementedError(
+                    "Writing back from a ParallelEnv source is not supported; "
+                    "use an EnvBase snapshot or a SerialEnv source instead."
+                )
+            if source.is_closed:
+                source._create_td()
+                source._start_workers()
+            sources = list(source._envs)
+        elif isinstance(source, EnvBase):
+            sources = [source]
+        elif isinstance(source, Sequence):
+            sources = list(source)
+        else:
+            raise TypeError(
+                f"Expected an EnvBase or sequence of EnvBase sources, got "
+                f"{type(source).__name__}."
+            )
+        if len(sources) != expected:
+            raise ValueError(
+                "The source count does not match the indexed "
+                f"destination: got {len(sources)} and expected {expected}."
+            )
+        if not all(isinstance(env, EnvBase) for env in sources):
+            raise TypeError("All indexed sources must be EnvBase instances.")
+        return sources
+
+    def _select_indices(
+        self, sequence: Sequence[Any], indices: Sequence[int]
+    ) -> list[Any]:
+        return [sequence[index] for index in indices]
+
+    def _select_batched_metadata(self, indices: Sequence[int]):
+        if self._single_task:
+            return self.meta_data[list(indices)]
+        return [self.meta_data[index] for index in indices]
+
+    def _make_batched_view(self, indices: Sequence[int]) -> BatchedEnvBase:
+        view = type(self).__new__(type(self))
+        view.__dict__.update(self.__dict__.copy())
+        indices = list(indices)
+        view._owns_workers = False
+        view.__dict__["_parent_env"] = self.__dict__.get("_parent_env") or self
+        parent_worker_indices = getattr(
+            self, "_worker_indices", range(self.num_workers)
+        )
+        view._worker_indices = [parent_worker_indices[index] for index in indices]
+        view.num_workers = len(indices)
+        view.create_env_fn = self._select_indices(self.create_env_fn, indices)
+        view.create_env_kwargs = self._select_indices(self.create_env_kwargs, indices)
+        view.meta_data = self._select_batched_metadata(indices)
+        if self._seeds is not None:
+            view._seeds = self._select_indices(self._seeds, indices)
+        view._cache_in_keys = None
+        view.__dict__["_sync_m2w_value"] = None
+        view.__dict__["_sync_w2m_value"] = None
+        view.__dict__["_input_spec"] = None
+        view.__dict__["_output_spec"] = None
+        view._properties_set = False
+        view._set_properties()
+        if not self.is_closed and self._use_buffers:
+            view.shared_tensordicts = self._select_indices(
+                self.shared_tensordicts, indices
+            )
+            view.shared_tensordict_parent = LazyStackedTensorDict(
+                *view.shared_tensordicts
+            )
+            view._cache_shared_keys = set(
+                view.shared_tensordict_parent.keys(True, True)
+            )
+            view._shared_tensordict_parent_next = view.shared_tensordict_parent.get(
+                "next"
+            )
+            view._shared_tensordict_parent_root = view.shared_tensordict_parent.exclude(
+                "next", *view.reset_keys
+            )
+        non_tensor_cache = self.__dict__.get("_non_tensor_cache", None)
+        if non_tensor_cache is not None:
+            view._non_tensor_cache = non_tensor_cache[indices]
+        return view
 
     @property
     def non_blocking(self):
@@ -1237,14 +1374,17 @@ class BatchedEnvBase(EnvBase):
         self.__dict__["_output_spec"] = None
         self._properties_set = False
 
-        self._shutdown_workers()
-        self.is_closed = True
-        import torchrl
+        if self._owns_workers:
+            self._shutdown_workers()
+            import torchrl
 
-        num_threads = min(
-            torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
-        )
-        torch.set_num_threads(num_threads)
+            num_threads = min(
+                torchrl._THREAD_POOL_INIT, torch.get_num_threads() + self.num_workers
+            )
+            torch.set_num_threads(num_threads)
+        else:
+            self.__dict__["_parent_env"] = None
+        self.is_closed = True
 
     def _shutdown_workers(self) -> None:
         raise NotImplementedError
@@ -1598,6 +1738,26 @@ class SerialEnv(BatchedEnvBase):
             return result
 
         return out
+
+    @_check_start
+    def __getitem__(self, item: Any) -> EnvBase:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        view = self._make_batched_view(indices)
+        view._envs = [self._envs[index] for index in indices]
+        return view
+
+    @_check_start
+    def __setitem__(self, item: Any, source: EnvBase | Sequence[EnvBase]) -> None:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        sources = self._indexed_snapshot_sources(source, len(indices))
+        for index, source_env in zip(indices, sources):
+            try:
+                self._envs[index][slice(None)] = source_env
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                raise NotImplementedError(
+                    f"Env workers of type {type(self._envs[index]).__name__} do "
+                    "not support snapshot writeback."
+                ) from err
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dir__():
@@ -2230,17 +2390,18 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
         # Spin-poll shared memory done flags (no syscalls on the fast path).
         if self._use_buffers:
             done_flags = self._shm_done_flags
+            worker_indices = self._worker_indices
             n_spins = 0
             while True:
                 all_done = True
                 for i in workers_range:
-                    if not done_flags[i]:
+                    if not done_flags[worker_indices[i]]:
                         all_done = False
                         break
                 if all_done:
                     # Clear flags for next round
                     for i in workers_range:
-                        done_flags[i] = 0
+                        done_flags[worker_indices[i]] = 0
                     return
 
                 n_spins += 1
@@ -2252,7 +2413,10 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                             f"threshold can be increased via the BATCHED_PIPE_TIMEOUT env variable."
                         )
                     for wi in workers_range:
-                        if not done_flags[wi] and not self._workers[wi].is_alive():
+                        if (
+                            not done_flags[worker_indices[wi]]
+                            and not self._workers[wi].is_alive()
+                        ):
                             try:
                                 self._shutdown_workers()
                             finally:
@@ -2847,6 +3011,32 @@ class ParallelEnv(BatchedEnvBase, metaclass=_PEnvMeta):
                     f"attribute {attr} not found in " f"{self._dummy_env_str}"
                 )
 
+    @_check_start
+    def __getitem__(self, item: Any) -> EnvBase:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        view = self._make_batched_view(indices)
+        view.parent_channels = [self.parent_channels[index] for index in indices]
+        view._workers = [self._workers[index] for index in indices]
+        view._events = [self._events[index] for index in indices]
+        return view
+
+    @_check_start
+    def __setitem__(self, item: Any, source: EnvBase | Sequence[EnvBase]) -> None:
+        indices = _normalize_batched_env_index(item, self.num_workers)
+        sources = self._indexed_snapshot_sources(source, len(indices))
+        for index, source_env in zip(indices, sources):
+            self.parent_channels[index].send(("set_env_snapshot", source_env))
+
+        for index in indices:
+            msg, result = self.parent_channels[index].recv()
+            if msg == "set_env_snapshot_error":
+                raise NotImplementedError(result)
+            if msg != "set_env_snapshot_done":
+                raise RuntimeError(
+                    f"Expected 'set_env_snapshot_done' from worker {index}, "
+                    f"got {msg!r}."
+                )
+
     def to(self, device: DEVICE_TYPING):
         device = _make_ordinal_device(torch.device(device))
         if device == self.device:
@@ -3137,6 +3327,23 @@ def _run_worker_pipe_shared_mem(
 
             del td, root_next_td
 
+        elif cmd == "set_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before setting an env snapshot")
+            try:
+                env[slice(None)] = data
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                child_pipe.send(
+                    (
+                        "set_env_snapshot_error",
+                        f"Env workers of type {type(env).__name__} do not support "
+                        f"snapshot writeback: {err}",
+                    )
+                )
+            else:
+                child_pipe.send(("set_env_snapshot_done", None))
+            _signal_done()
+
         elif cmd == "close":
             if not initialized:
                 raise RuntimeError("call 'init' before closing")
@@ -3404,6 +3611,23 @@ def _run_worker_pipe_direct(
             child_pipe.send((td, root_next_td))
             mp_event.set()
             del td, root_next_td
+
+        elif cmd == "set_env_snapshot":
+            if not initialized:
+                raise RuntimeError("call 'init' before setting an env snapshot")
+            try:
+                env[slice(None)] = data
+            except (TypeError, NotImplementedError, AttributeError) as err:
+                child_pipe.send(
+                    (
+                        "set_env_snapshot_error",
+                        f"Env workers of type {type(env).__name__} do not support "
+                        f"snapshot writeback: {err}",
+                    )
+                )
+            else:
+                child_pipe.send(("set_env_snapshot_done", None))
+            mp_event.set()
 
         elif cmd == "close":
             if not initialized:
