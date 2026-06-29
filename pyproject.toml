@@ -66,6 +66,12 @@ dev = [
 
 [tool.uv]
 prerelease = "allow"
+conflicts = [
+    [
+        { extra = "mjlab" },
+        { extra = "genesis" },
+    ],
+]
 
 [[tool.uv.index]]
 name = "pytorch-nightly"
