@@ -52,6 +52,7 @@ Key fields in [`config.yaml`](config.yaml):
 | Group | Field | Description |
 |-------|-------|-------------|
 | `model` | `name` | HF backbone id; empty -> tiny from-scratch model (CI). |
+| `model` | `device` | Training device; `null` auto-selects CUDA/MPS/CPU. |
 | `data` | `dataset_name` | HF preference dataset; empty -> synthetic data (CI). |
 | `data` | `max_length`, `batch_size`, `max_samples` | Tokenization / sampling. |
 | `optim` | `max_iters`, `lr`, `freeze_frac`, `clip_grad` | Optimization. |

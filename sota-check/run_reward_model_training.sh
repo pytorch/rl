@@ -13,6 +13,7 @@ group_name="reward_model_training"
 export PYTHONPATH=$(dirname $(dirname $PWD))
 python $PYTHONPATH/sota-implementations/reward_model_training/reward_model.py \
   model.name=gpt2 \
+  model.device=cuda:0 \
   logger.backend=wandb \
   logger.project_name="$project_name" \
   logger.group_name="$group_name"
