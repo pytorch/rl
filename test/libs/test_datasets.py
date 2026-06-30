@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import time
 import warnings
 from contextlib import nullcontext
@@ -726,6 +727,65 @@ class TestMinari:
         finally:
             if MINARI_DATASETS_PATH:
                 os.environ["MINARI_DATASETS_PATH"] = MINARI_DATASETS_PATH
+
+    @pytest.mark.skipif(
+        not _has_minari or not _has_gymnasium, reason="Minari or Gym not available"
+    )
+    def test_download_load_dataset_path(self, tmp_path, monkeypatch):
+        """Regression test for the ``MINARI_DATASETS_PATH`` handling on download.
+
+        ``_download_and_preproc`` downloads the dataset into a temporary directory
+        and then calls ``minari.load_dataset`` to read its metadata. Minari
+        resolves dataset locations through ``MINARI_DATASETS_PATH``; if that
+        variable is restored to a pre-existing value before the ``load_dataset``
+        call, Minari looks in the wrong directory and raises ``FileNotFoundError``.
+
+        Here we simulate a remote download by copying a locally-built dataset into
+        whatever directory torchrl points Minari at, while ``MINARI_DATASETS_PATH``
+        is set to an unrelated, empty cache. This used to fail before the fix.
+        """
+        import gymnasium
+        import minari
+        from minari import DataCollector
+
+        dataset_id = "cartpole/test-download-load-v1"
+
+        source_dir = tmp_path / "source"
+        monkeypatch.setenv("MINARI_DATASETS_PATH", str(source_dir))
+        env = DataCollector(gymnasium.make("CartPole-v1"), record_infos=True)
+        for _ in range(5):
+            env.reset(seed=123)
+            while True:
+                _, _, terminated, truncated, _ = env.step(env.action_space.sample())
+                if terminated or truncated:
+                    break
+        env.create_dataset(
+            dataset_id=dataset_id,
+            algorithm_name="RandomPolicy",
+            code_permalink="https://github.com/Farama-Foundation/Minari",
+            author="Farama",
+            author_email="contact@farama.org",
+            eval_env="CartPole-v1",
+        )
+
+        empty_cache = tmp_path / "empty_cache"
+        empty_cache.mkdir()
+        monkeypatch.setenv("MINARI_DATASETS_PATH", str(empty_cache))
+
+        def fake_download_dataset(dataset_id, *args, **kwargs):
+            dest = os.environ["MINARI_DATASETS_PATH"]
+            shutil.copytree(source_dir, dest, dirs_exist_ok=True)
+
+        monkeypatch.setattr(minari, "download_dataset", fake_download_dataset)
+
+        data = MinariExperienceReplay(
+            dataset_id=dataset_id,
+            batch_size=32,
+            root=str(tmp_path / "torchrl_root"),
+            download=True,
+        )
+        sample = data.sample()
+        assert sample.shape[0] == 32
 
     def test_correct_categorical_missions(self):
         try:
