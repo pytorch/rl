@@ -29,3 +29,14 @@ SFT
 
     SFTLoss
     SFTLossOutput
+
+Reward Model Training
+---------------------
+
+.. autosummary::
+    :toctree: generated/
+    :template: rl_template.rst
+
+    RewardModelLoss
+    RewardModelLossOutput
+    reward_model_loss
