@@ -1071,9 +1071,7 @@ class TestDistillation:
 
     def test_missing_assistant_mask_in_one_sample_raises(self):
         loss = DistillationLoss(actor_network=torch.nn.Identity(), tokenizer=object())
-        assistant_mask = torch.tensor(
-            [[True, False, False], [False, False, False]]
-        )
+        assistant_mask = torch.tensor([[True, False, False], [False, False, False]])
         td = TensorDict(
             {
                 ("masks", "all_assistant_mask"): assistant_mask,
