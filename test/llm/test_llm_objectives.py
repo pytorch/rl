@@ -31,9 +31,9 @@ from torchrl.objectives.llm.grpo import (
     RayMCAdvantage,
 )
 from torchrl.objectives.llm.reward import (
+    reward_model_loss,
     RewardModelLoss,
     RewardModelLossOutput,
-    reward_model_loss,
 )
 from torchrl.objectives.llm.sft import SFTLoss
 
