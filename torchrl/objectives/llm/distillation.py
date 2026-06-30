@@ -340,7 +340,7 @@ class DistillationLoss(LossModule):
         assistant_masks = [
             mask & a_mask for mask, a_mask in zip(assistant_masks, attention_mask)
         ]
-        if not any(mask.any(-1).all() for mask in assistant_masks):
+        if not all(mask.any(-1).all() for mask in assistant_masks):
             raise ValueError("Some inputs have no valid assistant masks.")
         return assistant_masks, token_struct
 
@@ -393,6 +393,8 @@ class DistillationLoss(LossModule):
         for student_lp, teacher_lp, mask in _zip_strict(
             log_probs, teacher_log_probs, assistant_masks
         ):
+            teacher_lp = teacher_lp.detach().to(student_lp.device)
+            mask = mask.to(student_lp.device)
             kl_token = reverse_kl_token_estimate(student_lp, teacher_lp)
             kl_token = kl_token.masked_fill(~mask, 0.0)
             summed = kl_token.sum(reduce_dim)

@@ -1014,6 +1014,17 @@ class TestSFT:
 class TestDistillation:
     """Tests for the on-policy reverse-KL distillation loss."""
 
+    class _StaticLogProbActor(torch.nn.Module):
+        def __init__(self, log_probs):
+            super().__init__()
+            self.log_probs = torch.nn.Parameter(log_probs)
+
+        def forward(self, tensordict):
+            return TensorDict(
+                {("log_probs", "full"): self.log_probs},
+                batch_size=tensordict.batch_size,
+            )
+
     # ------------------------------------------------------------------
     # Pure-math unit tests: no model/tokenizer required, fast, CPU-only.
     # These pin the KL estimator's contract before any LLM plumbing.
@@ -1057,6 +1068,46 @@ class TestDistillation:
     def test_distillation_loss_invalid_reduction(self):
         with pytest.raises(ValueError, match="Invalid reduction"):
             distillation_loss(torch.randn(3), "not-a-reduction")
+
+    def test_missing_assistant_mask_in_one_sample_raises(self):
+        loss = DistillationLoss(actor_network=torch.nn.Identity(), tokenizer=object())
+        assistant_mask = torch.tensor(
+            [[True, False, False], [False, False, False]]
+        )
+        td = TensorDict(
+            {
+                ("masks", "all_assistant_mask"): assistant_mask,
+                ("masks", "all_attention_mask"): torch.ones_like(assistant_mask),
+            },
+            batch_size=(2,),
+        )
+        with pytest.raises(ValueError, match="Some inputs have no valid assistant"):
+            loss._get_assistant_masks(td, history=None)
+
+    def test_teacher_log_probs_are_detached(self):
+        actor = self._StaticLogProbActor(
+            torch.tensor([[-1.0, -2.0, -3.0], [-0.7, -1.5, -2.4]])
+        )
+        teacher_log_probs = torch.tensor(
+            [[-0.5, -2.2, -2.8], [-1.0, -1.1, -2.0]], requires_grad=True
+        )
+        mask = torch.ones(2, 3, dtype=torch.bool)
+        td = TensorDict(
+            {
+                ("history", "full"): torch.zeros(2, 1),
+                ("masks", "all_assistant_mask"): mask,
+                ("masks", "all_attention_mask"): mask,
+                ("next", "teacher_log_probs", "full"): teacher_log_probs,
+            },
+            batch_size=(2,),
+        )
+        loss = DistillationLoss(actor_network=actor, tokenizer=object())
+
+        loss(td).sum(reduce=True).backward()
+
+        assert actor.log_probs.grad is not None
+        assert (actor.log_probs.grad != 0).any()
+        assert teacher_log_probs.grad is None
 
     def test_gradient_descends_toward_teacher(self):
         # A gradient step on the student log-probs must reduce the reverse KL,
