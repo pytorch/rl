@@ -555,6 +555,7 @@ Reward Model Training
 
     RewardModelLoss
     RewardModelLossOutput
+    reward_model_loss
 
 .. currentmodule:: torchrl.data.llm
 

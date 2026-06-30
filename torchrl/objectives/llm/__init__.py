@@ -16,7 +16,7 @@ from .grpo import (
     MCAdvantageSelector,
     RayMCAdvantage,
 )
-from .reward import RewardModelLoss, RewardModelLossOutput
+from .reward import RewardModelLoss, RewardModelLossOutput, reward_model_loss
 from .sft import SFTLoss, SFTLossOutput
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "RayMCAdvantage",
     "RewardModelLoss",
     "RewardModelLossOutput",
+    "reward_model_loss",
     "SFTLoss",
     "SFTLossOutput",
 ]

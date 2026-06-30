@@ -111,8 +111,10 @@ class RewardModelLoss(LossModule):
             ``center_coeff * (chosen_score**2 + rejected_score**2)`` that discourages
             the reward model from drifting to large magnitudes. Defaults to ``None``
             (disabled).
-        device (torch.device, optional): the device on which to run ``score_network``.
-            Defaults to ``None``.
+        device (torch.device or str, optional): if provided, chosen/rejected
+            sub-tensordicts are moved to this device before scoring and loss
+            computation. The ``score_network`` is expected to already be on this
+            device. Defaults to ``None``.
 
     .. note::
         The input tensordict is expected to contain the following keys by default:
@@ -202,13 +204,13 @@ class RewardModelLoss(LossModule):
         *,
         reduction: Literal["mean", "sum", "none"] = "mean",
         center_coeff: float | None = None,
-        device: torch.device | None = None,
+        device: torch.device | str | None = None,
     ) -> None:
         super().__init__()
         self.score_network = score_network
         self.reduction = reduction
         self.center_coeff = center_coeff
-        self.device = device
+        self.device = torch.device(device) if device is not None else None
         self._set_in_keys()
 
     def _set_in_keys(self) -> None:
@@ -224,6 +226,8 @@ class RewardModelLoss(LossModule):
                 f"Could not find the sub-tensordict at key {key!r} in the input "
                 f"tensordict with keys {set(tensordict.keys())}."
             )
+        if self.device is not None:
+            sub_td = sub_td.to(self.device)
         if self.score_network is not None:
             with (
                 torch.device(self.device)
