@@ -1,0 +1,49 @@
+seed: 42
+
+# reward-model backbone
+model:
+  # Any HF model id usable with AutoModelForSequenceClassification (e.g. gpt2,
+  # facebook/opt-125m). Leave empty to build a tiny from-scratch model (used by CI).
+  name: gpt2
+  device: cpu
+
+# preference data
+data:
+  # HF preference dataset with prompt/chosen/rejected fields. Leave empty to use a
+  # hermetic synthetic dataset (no download, no `datasets` dependency).
+  dataset_name: CarperAI/openai_summarize_comparisons
+  split_train: train
+  split_val: valid1
+  max_length: 550
+  batch_size: 16
+  max_samples: null  # cap the number of pairs loaded (null = all)
+  synthetic_size: 64  # number of synthetic pairs when dataset_name is empty
+
+# optim
+optim:
+  max_iters: 10000
+  lr: 1.0e-5
+  weight_decay: 0.0
+  clip_grad: 1.0
+  freeze_frac: 0.0  # fraction of backbone layers to freeze (0 = train all)
+
+# loss
+loss:
+  reduction: mean
+  center_coeff: null  # set a float to add the score-centering regularizer
+
+# logging / eval
+logger:
+  backend: wandb
+  project_name: reward_model_training
+  group_name: null
+  exp_name: RewardModel_${model.name}
+  mode: online
+  eval_iter: 500
+  eval_iters: 20
+  log_interval: 10
+
+# checkpointing
+checkpoint:
+  save_dir: ./reward_model_ckpt
+  save_iter: 1000
