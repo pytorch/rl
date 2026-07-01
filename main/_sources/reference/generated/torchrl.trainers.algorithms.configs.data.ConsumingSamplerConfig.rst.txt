@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.data.ConsumingSamplerConfig
+===============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.data
+
+.. autoclass:: ConsumingSamplerConfig

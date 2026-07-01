@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.weight_update.llm
+
+
+get_sglang_model_metadata
+=========================
+
+.. autoclass:: get_sglang_model_metadata
+    :members:
+    :inherited-members:

@@ -1,0 +1,2197 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Using the Evaluator &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/evaluator';</script>
+    <script src="../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Using Replay Buffers" href="rb_tutorial.html" />
+    <link rel="prev" title="Collectors Deep Dive: Trajectory Assembly" href="collector_trajectory_assembly.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="Using the Evaluator - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="tutorial">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="recurrent_sequence_training.html">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="#">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="recurrent_sequence_training.html">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="#">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"></div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Using the Evaluator</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="Using the Evaluator">
+      <meta itemprop="position" content="1">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">tutorials/evaluator</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-tutorials-evaluator-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="using-the-evaluator">
+<span id="sphx-glr-tutorials-evaluator-py"></span><h1>Using the Evaluator<a class="headerlink" href="#using-the-evaluator" title="Link to this heading">#</a></h1>
+<p><strong>Author</strong>: <a class="reference external" href="https://github.com/vmoens">Vincent Moens</a></p>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils" id="evaluator-tuto">
+<div class="sd-row sd-row-cols-2 sd-row-cols-xs-2 sd-row-cols-sm-2 sd-row-cols-md-2 sd-row-cols-lg-2 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-mortar-board" viewBox="0 0 16 16" aria-hidden="true"><path d="M7.693 1.066a.747.747 0 0 1 .614 0l7.25 3.25a.75.75 0 0 1 0 1.368L13 6.831v2.794c0 1.024-.81 1.749-1.66 2.173-.893.447-2.075.702-3.34.702-.278 0-.55-.012-.816-.036a.75.75 0 0 1 .133-1.494c.22.02.45.03.683.03 1.082 0 2.025-.221 2.67-.543.69-.345.83-.682.83-.832V7.503L8.307 8.934a.747.747 0 0 1-.614 0L4 7.28v1.663c.296.105.575.275.812.512.438.438.688 1.059.688 1.796v3a.75.75 0 0 1-.75.75h-3a.75.75 0 0 1-.75-.75v-3c0-.737.25-1.358.688-1.796.237-.237.516-.407.812-.512V6.606L.443 5.684a.75.75 0 0 1 0-1.368ZM2.583 5 8 7.428 13.416 5 8 2.572ZM2.5 11.25v2.25H4v-2.25c0-.388-.125-.611-.25-.735a.697.697 0 0 0-.5-.203.707.707 0 0 0-.5.203c-.125.124-.25.347-.25.735Z"></path></svg> What you will learn</div>
+<ul class="simple">
+<li><p class="sd-card-text">How to run synchronous and asynchronous evaluations during training</p></li>
+<li><p class="sd-card-text">How to pass updated weights to the evaluator</p></li>
+<li><p class="sd-card-text">How to use the <code class="docutils literal notranslate"><span class="pre">on_result</span></code> callback for logging</p></li>
+<li><p class="sd-card-text">How to run evaluation in a separate process</p></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-list-unordered" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.75 2.5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5ZM2 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm1-6a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM2 4a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg> Prerequisites</div>
+<ul class="simple">
+<li><p class="sd-card-text"><a class="reference external" href="https://github.com/pytorch/rl">TorchRL</a> and
+<a class="reference external" href="https://gymnasium.farama.org">gymnasium</a> installed</p></li>
+<li><p class="sd-card-text">Familiarity with <a class="reference internal" href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase" title="torchrl.envs.EnvBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">EnvBase</span></code></a> and
+<a class="reference internal" href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector"><code class="xref py py-class docutils literal notranslate"><span class="pre">Collector</span></code></a></p></li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<p>In RL training loops, evaluation is often done inline: you stop training,
+run a few rollouts, log the metrics, then resume. This blocks the
+training loop while rollouts are collected. For environments with
+expensive step functions (robotics simulators, LLM generation, etc.),
+this can waste significant GPU time.</p>
+<p>The <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluator</span></code></a> decouples evaluation from
+training by running rollouts in the background and letting you poll for
+metrics or react to results via a callback.</p>
+<p>In this tutorial we will cover:</p>
+<ol class="arabic simple">
+<li><p><a class="reference internal" href="#tuto-eval-sync"><span class="std std-ref">Synchronous evaluation</span></a> — blocking calls</p></li>
+<li><p><a class="reference internal" href="#tuto-eval-async"><span class="std std-ref">Asynchronous evaluation</span></a> — fire-and-poll</p></li>
+<li><p><a class="reference internal" href="#tuto-eval-weights"><span class="std std-ref">Weight updates</span></a> — passing trained weights</p></li>
+<li><p><a class="reference internal" href="#tuto-eval-process"><span class="std std-ref">Process-based evaluation</span></a> — out-of-process</p></li>
+<li><p><a class="reference internal" href="#tuto-eval-logging"><span class="std std-ref">Logging with callbacks</span></a> — <code class="docutils literal notranslate"><span class="pre">on_result</span></code></p></li>
+</ol>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">functools</span> <span class="kn">import</span> <span class="n">partial</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">from_module</span></a>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Evaluator</span></a><span class="p">,</span> <span class="n">RandomPolicy</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">GymEnv</span></a>
+</pre></div>
+</div>
+<section id="synchronous-evaluation">
+<h2>Synchronous evaluation<a class="headerlink" href="#synchronous-evaluation" title="Link to this heading">#</a></h2>
+<p id="tuto-eval-sync">The simplest way to use the Evaluator is to call
+<a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a>, which blocks until
+the rollout completes and returns a metrics dict.</p>
+<p>We start by creating an environment factory and a random policy.
+The Evaluator accepts either a live environment or a callable that
+creates one — the callable form is preferred because it lets the
+evaluator recreate the environment if needed.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env_maker</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">GymEnv</span></a><span class="p">,</span> <span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="n">policy</span> <span class="o">=</span> <span class="n">RandomPolicy</span><span class="p">(</span><span class="n">env_maker</span><span class="p">()</span><span class="o">.</span><span class="n">action_spec</span><span class="p">)</span>
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">evaluator</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Evaluator</span></a><span class="p">(</span><span class="n">env_maker</span><span class="p">,</span> <span class="n">policy</span><span class="p">,</span> <span class="n">num_trajectories</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Now we can run a blocking evaluation. The returned dict contains
+prefixed metrics: reward, episode length, number of episodes, and
+frames-per-second.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;First eval:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>First eval: {&#39;eval/reward&#39;: -1266.7039794921875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 702.7317353997997, &#39;eval/step&#39;: 0}
+</pre></div>
+</div>
+<p>Each subsequent call increments the internal step counter:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Second eval:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Second eval: {&#39;eval/reward&#39;: -1663.78173828125, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 712.9634624335307, &#39;eval/step&#39;: 1}
+</pre></div>
+</div>
+</section>
+<section id="asynchronous-evaluation">
+<h2>Asynchronous evaluation<a class="headerlink" href="#asynchronous-evaluation" title="Link to this heading">#</a></h2>
+<p id="tuto-eval-async">For non-blocking evaluation, use <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval" title="torchrl.collectors.Evaluator.trigger_eval"><code class="xref py py-meth docutils literal notranslate"><span class="pre">trigger_eval()</span></code></a>
+to start a rollout in the background, then <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.poll" title="torchrl.collectors.Evaluator.poll"><code class="xref py py-meth docutils literal notranslate"><span class="pre">poll()</span></code></a>
+or <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.wait" title="torchrl.collectors.Evaluator.wait"><code class="xref py py-meth docutils literal notranslate"><span class="pre">wait()</span></code></a> to retrieve the result.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval" title="torchrl.collectors.Evaluator.trigger_eval" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">trigger_eval</span></a><span class="p">()</span>
+
+<span class="c1"># poll() is non-blocking: returns None if the result isn&#39;t ready yet</span>
+<span class="n">result</span> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.poll" title="torchrl.collectors.Evaluator.poll" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">poll</span></a><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;poll() returned:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>poll() returned: None
+</pre></div>
+</div>
+<p>To wait for the result, pass a timeout to <code class="docutils literal notranslate"><span class="pre">poll()</span></code> or use <code class="docutils literal notranslate"><span class="pre">wait()</span></code>:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">result</span> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.poll" title="torchrl.collectors.Evaluator.poll" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">poll</span></a><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;poll(timeout=30) returned:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>poll(timeout=30) returned: {&#39;eval/reward&#39;: -1493.4691162109375, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 713.0044834256379, &#39;eval/step&#39;: 2}
+</pre></div>
+</div>
+<p>By default, calling <code class="docutils literal notranslate"><span class="pre">trigger_eval()</span></code> while a previous evaluation is
+still pending raises an error. This prevents silently piling up stale
+requests:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval" title="torchrl.collectors.Evaluator.trigger_eval" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">trigger_eval</span></a><span class="p">()</span>
+<span class="k">try</span><span class="p">:</span>
+    <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval" title="torchrl.collectors.Evaluator.trigger_eval" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">trigger_eval</span></a><span class="p">()</span>
+<span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Errored with: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Clean up</span>
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.wait" title="torchrl.collectors.Evaluator.wait" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">wait</span></a><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span>
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.shutdown" title="torchrl.collectors.Evaluator.shutdown" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator</span><span class="o">.</span><span class="n">shutdown</span></a><span class="p">()</span>
+</pre></div>
+</div>
+<p>If you prefer to enqueue evaluations, pass <code class="docutils literal notranslate"><span class="pre">busy_policy=&quot;queue&quot;</span></code>
+when creating the evaluator.</p>
+</section>
+<section id="weight-updates">
+<h2>Weight updates<a class="headerlink" href="#weight-updates" title="Link to this heading">#</a></h2>
+<p id="tuto-eval-weights">In a real training loop, you want to evaluate the <em>latest</em> trained
+weights, not the initial ones. The <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a>
+and <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval" title="torchrl.collectors.Evaluator.trigger_eval"><code class="xref py py-meth docutils literal notranslate"><span class="pre">trigger_eval()</span></code></a> methods accept a
+<code class="docutils literal notranslate"><span class="pre">weights</span></code> argument — either an <code class="docutils literal notranslate"><span class="pre">nn.Module</span></code> or a <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code>.</p>
+<p>Let’s create a simple MLP policy and an evaluator for it:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">env</span></a> <span class="o">=</span> <span class="n">env_maker</span><span class="p">()</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">net</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span></a><span class="p">(</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><a href="../reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.observation_spec" title="torchrl.envs.GymLikeEnv.observation_spec" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-property"><span class="n">env</span><span class="o">.</span><span class="n">observation_spec</span></a><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="mi">64</span><span class="p">),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Tanh.html#torch.nn.Tanh" title="torch.nn.Tanh" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Tanh</span></a><span class="p">(),</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <a href="../reference/generated/torchrl.envs.GymLikeEnv.html#torchrl.envs.GymLikeEnv.action_spec" title="torchrl.envs.GymLikeEnv.action_spec" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-property"><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span></a><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+<span class="p">)</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">TensorDictModule</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Sequential.html#torch.nn.Sequential" title="torch.nn.Sequential" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">net</span></a><span class="p">,</span> <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">],</span> <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">])</span>
+
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">evaluator_w</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Evaluator</span></a><span class="p">(</span><span class="n">env_maker</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a><span class="p">,</span> <span class="n">num_trajectories</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Evaluate with the initial (random) weights:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Before weight update:&quot;</span><span class="p">,</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_w</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">())</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Before weight update: {&#39;eval/reward&#39;: -1072.24072265625, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 504.0741287381306, &#39;eval/step&#39;: 0}
+</pre></div>
+</div>
+<p>Simulate a “training step” by perturbing the weights:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">with</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.no_grad.html#torch.no_grad" title="torch.no_grad" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span></a><span class="p">():</span>
+    <span class="k">for</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="torch.nn.parameter.Parameter" class="sphx-glr-backref-module-torch-nn-parameter sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">p</span></a> <span class="ow">in</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">net</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">():</span>
+        <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="torch.nn.parameter.Parameter" class="sphx-glr-backref-module-torch-nn-parameter sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">p</span></a><span class="o">.</span><span class="n">add_</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.randn_like.html#torch.randn_like" title="torch.randn_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html#torch.nn.parameter.Parameter" title="torch.nn.parameter.Parameter" class="sphx-glr-backref-module-torch-nn-parameter sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">p</span></a><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Now evaluate with the updated weights. You can pass the module
+directly — the evaluator extracts and transfers the weights
+automatically:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;After weight update:&quot;</span><span class="p">,</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_w</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">(</span><span class="n">weights</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a><span class="p">))</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>After weight update: {&#39;eval/reward&#39;: -1324.8035888671875, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 504.43095429049276, &#39;eval/step&#39;: 1}
+</pre></div>
+</div>
+<p>You can also pass a <code class="docutils literal notranslate"><span class="pre">TensorDictBase</span></code> of weights, which is useful
+when you already have detached weight snapshots:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_weights</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.from_module.html#tensordict.from_module" title="tensordict.from_module" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">from_module</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;With TensorDict weights:&quot;</span><span class="p">,</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_w</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">(</span><span class="n">weights</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_weights</span></a><span class="p">))</span>
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.shutdown" title="torchrl.collectors.Evaluator.shutdown" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_w</span><span class="o">.</span><span class="n">shutdown</span></a><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>With TensorDict weights: {&#39;eval/reward&#39;: -1252.87158203125, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 505.56100037731903, &#39;eval/step&#39;: 2}
+</pre></div>
+</div>
+</section>
+<section id="process-based-evaluation">
+<h2>Process-based evaluation<a class="headerlink" href="#process-based-evaluation" title="Link to this heading">#</a></h2>
+<p id="tuto-eval-process">For full isolation (e.g. to place evaluation on a dedicated GPU or to
+avoid GIL contention), use <code class="docutils literal notranslate"><span class="pre">backend=&quot;process&quot;</span></code>. This runs the
+environment and policy inside a child process via
+<a class="reference internal" href="../reference/generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector" title="torchrl.collectors.MultiSyncCollector"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiSyncCollector</span></code></a>.</p>
+<p>The process backend requires callable factories for both the
+environment and the policy:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env_maker</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">GymEnv</span></a><span class="p">,</span> <span class="s2">&quot;Pendulum-v1&quot;</span><span class="p">)</span>
+<span class="n">action_spec</span> <span class="o">=</span> <span class="n">env_maker</span><span class="p">()</span><span class="o">.</span><span class="n">action_spec</span>
+<span class="n">policy_factory</span> <span class="o">=</span> <span class="n">partial</span><span class="p">(</span><span class="n">RandomPolicy</span><span class="p">,</span> <span class="n">action_spec</span><span class="p">)</span>
+
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">evaluator_proc</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Evaluator</span></a><span class="p">(</span>
+    <span class="n">env_maker</span><span class="p">,</span>
+    <span class="n">policy_factory</span><span class="o">=</span><span class="n">policy_factory</span><span class="p">,</span>
+    <span class="n">num_trajectories</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">backend</span><span class="o">=</span><span class="s2">&quot;process&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_proc</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Process backend:&quot;</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.shutdown" title="torchrl.collectors.Evaluator.shutdown" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_proc</span><span class="o">.</span><span class="n">shutdown</span></a><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Process backend: {&#39;eval/reward&#39;: -896.5689086914062, &#39;eval/reward_std&#39;: 0.0, &#39;eval/num_episodes&#39;: 1, &#39;eval/episode_length&#39;: 200.0, &#39;eval/fps&#39;: 688.2360605091278, &#39;eval/step&#39;: 0}
+</pre></div>
+</div>
+</section>
+<section id="logging-with-callbacks">
+<h2>Logging with callbacks<a class="headerlink" href="#logging-with-callbacks" title="Link to this heading">#</a></h2>
+<p id="tuto-eval-logging">Rather than manually logging after each <code class="docutils literal notranslate"><span class="pre">poll()</span></code> or <code class="docutils literal notranslate"><span class="pre">wait()</span></code>, you
+can pass an <code class="docutils literal notranslate"><span class="pre">on_result</span></code> callback to the evaluator. It receives a flat
+<a class="reference external" href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="(in tensordict v0.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictBase</span></code></a> with the same prefixed metric names.</p>
+<p>Here we use TorchRL’s <a class="reference internal" href="../reference/generated/torchrl.record.loggers.csv.CSVLogger.html#torchrl.record.loggers.csv.CSVLogger" title="torchrl.record.loggers.csv.CSVLogger"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSVLogger</span></code></a> to
+automatically log every evaluation result to a CSV file:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">tempfile</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.record.loggers.csv</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger" title="torchrl.record.loggers.Logger" class="sphx-glr-backref-module-torchrl-record-loggers sphx-glr-backref-type-py-function"><span class="n">CSVLogger</span></a>
+
+<span class="n">log_dir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
+<span class="n">logger</span> <span class="o">=</span> <a href="../reference/generated/torchrl.record.loggers.Logger.html#torchrl.record.loggers.Logger" title="torchrl.record.loggers.Logger" class="sphx-glr-backref-module-torchrl-record-loggers sphx-glr-backref-type-py-function"><span class="n">CSVLogger</span></a><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="s2">&quot;eval_demo&quot;</span><span class="p">,</span> <span class="n">log_dir</span><span class="o">=</span><span class="n">log_dir</span><span class="p">)</span>
+
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">evaluator_log</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Evaluator</span></a><span class="p">(</span>
+    <span class="n">env_maker</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a><span class="p">,</span>
+    <span class="n">num_trajectories</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">on_result</span><span class="o">=</span><span class="k">lambda</span> <span class="n">result</span><span class="p">:</span> <span class="n">logger</span><span class="o">.</span><span class="n">log_metrics</span><span class="p">(</span>
+        <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="s2">&quot;eval/step&quot;</span><span class="p">},</span>
+        <span class="n">step</span><span class="o">=</span><span class="n">result</span><span class="p">[</span><span class="s2">&quot;eval/step&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Run a few evals. Each one automatically logs to CSV via the callback:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+    <a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_log</span><span class="o">.</span><span class="n">evaluate</span></a><span class="p">(</span><span class="n">weights</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">real_policy</span></a><span class="p">)</span>
+
+<a href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.shutdown" title="torchrl.collectors.Evaluator.shutdown" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">evaluator_log</span><span class="o">.</span><span class="n">shutdown</span></a><span class="p">()</span>
+</pre></div>
+</div>
+<p>Let’s verify what was logged:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="n">csv_path</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">log_dir</span><span class="p">)</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s2">&quot;*.csv&quot;</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Logged to: </span><span class="si">{</span><span class="n">csv_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">csv_path</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Logged to: /tmp/tmp10x2ek11/eval_demo/scalars/eval/reward.csv
+0,-1313.4173583984375
+1,-1282.0286865234375
+2,-1236.3291015625
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">on_result</span></code> callback works with both synchronous and asynchronous
+evaluation. For async usage, the callback runs on the evaluator’s
+background thread — if your callback writes to a shared logger, handle
+any required locking inside the callback.</p>
+</section>
+<section id="summary">
+<h2>Summary<a class="headerlink" href="#summary" title="Link to this heading">#</a></h2>
+<p>The <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator" title="torchrl.collectors.Evaluator"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluator</span></code></a> provides a single,
+composable entry-point for evaluation:</p>
+<ul class="simple">
+<li><p><strong>Synchronous</strong>: <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.evaluate" title="torchrl.collectors.Evaluator.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> for
+blocking rollouts.</p></li>
+<li><p><strong>Asynchronous</strong>: <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.trigger_eval" title="torchrl.collectors.Evaluator.trigger_eval"><code class="xref py py-meth docutils literal notranslate"><span class="pre">trigger_eval()</span></code></a>
++ <a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.poll" title="torchrl.collectors.Evaluator.poll"><code class="xref py py-meth docutils literal notranslate"><span class="pre">poll()</span></code></a> /
+<a class="reference internal" href="../reference/generated/torchrl.collectors.Evaluator.html#torchrl.collectors.Evaluator.wait" title="torchrl.collectors.Evaluator.wait"><code class="xref py py-meth docutils literal notranslate"><span class="pre">wait()</span></code></a> for background rollouts.</p></li>
+<li><p><strong>Weight sync</strong>: pass <code class="docutils literal notranslate"><span class="pre">weights</span></code> (module or tensordict) to evaluate
+the latest trained parameters.</p></li>
+<li><p><strong>Process isolation</strong>: <code class="docutils literal notranslate"><span class="pre">backend=&quot;process&quot;</span></code> for dedicated-device eval.</p></li>
+<li><p><strong>Callbacks</strong>: <code class="docutils literal notranslate"><span class="pre">on_result</span></code> for automatic logging or checkpointing.</p></li>
+</ul>
+<section id="useful-next-resources">
+<h3>Useful next resources<a class="headerlink" href="#useful-next-resources" title="Link to this heading">#</a></h3>
+<ul class="simple">
+<li><p><a class="reference internal" href="../reference/collectors_eval.html#collectors-eval"><span class="std std-ref">Evaluator API reference</span></a> — full parameter docs.</p></li>
+<li><p><a class="reference internal" href="collector_trajectory_assembly.html#collector-trajectory-assembly"><span class="std std-ref">Collector trajectory tutorial</span></a> —
+deep dive into how collectors assemble data.</p></li>
+<li><p><a class="reference external" href="https://pytorch.org/rl/">TorchRL documentation</a></p></li>
+</ul>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 7.010 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-evaluator-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/0b7694ad40d411d9b5498dc6c93ed596/evaluator.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">evaluator.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/a2327df13c566c4551caecc730bd4065/evaluator.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">evaluator.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/442d647775694bcab842ec117ca0cc74/evaluator.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">evaluator.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+</section>
+
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="collector_trajectory_assembly.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Collectors Deep Dive: Trajectory Assembly</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="rb_tutorial.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Using Replay Buffers</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="collector_trajectory_assembly.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Collectors Deep Dive: Trajectory Assembly</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="rb_tutorial.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Using Replay Buffers</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#synchronous-evaluation">Synchronous evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#asynchronous-evaluation">Asynchronous evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#weight-updates">Weight updates</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#process-based-evaluation">Process-based evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging-with-callbacks">Logging with callbacks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#summary">Summary</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#useful-next-resources">Useful next resources</a></li>
+</ul>
+</li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pytorch/rl/edit/main/docs/source/tutorials/evaluator.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="../_sources/tutorials/evaluator.rst.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+<div class="sidebar-secondary-item">
+  <div class="sidebar-heading">PyTorch Libraries</div>
+  <ul style="list-style-type: none; padding: 0; padding-bottom: 80px;">
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/executorch" style="color: var(--pst-color-text-muted)">ExecuTorch</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/helion" style="color: var(--pst-color-text-muted)">Helion</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/ao" style="color: var(--pst-color-text-muted)">torchao</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/kineto" style="color: var(--pst-color-text-muted)">kineto</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/torchtitan" style="color: var(--pst-color-text-muted)">torchtitan</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/rl" style="color: var(--pst-color-text-muted)">TorchRL</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/vision" style="color: var(--pst-color-text-muted)">torchvision</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/audio" style="color: var(--pst-color-text-muted)">torchaudio</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/tensordict" style="color: var(--pst-color-text-muted)">tensordict</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/xla" style="color: var(--pst-color-text-muted)">PyTorch on XLA Devices</a></li>
+  
+  </ul>
+</div>
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Using the Evaluator",
+       "headline": "Using the Evaluator",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/tutorials/evaluator.html",
+       "articleBody": "Note Go to the end to download the full example code. Using the Evaluator# Author: Vincent Moens What you will learn How to run synchronous and asynchronous evaluations during training How to pass updated weights to the evaluator How to use the on_result callback for logging How to run evaluation in a separate process Prerequisites TorchRL and gymnasium installed Familiarity with EnvBase and Collector In RL training loops, evaluation is often done inline: you stop training, run a few rollouts, log the metrics, then resume. This blocks the training loop while rollouts are collected. For environments with expensive step functions (robotics simulators, LLM generation, etc.), this can waste significant GPU time. The Evaluator decouples evaluation from training by running rollouts in the background and letting you poll for metrics or react to results via a callback. In this tutorial we will cover: Synchronous evaluation \u2014 blocking calls Asynchronous evaluation \u2014 fire-and-poll Weight updates \u2014 passing trained weights Process-based evaluation \u2014 out-of-process Logging with callbacks \u2014 on_result from functools import partial import torch from tensordict import from_module from tensordict.nn import TensorDictModule from torch import nn from torchrl.collectors import Evaluator, RandomPolicy from torchrl.envs import GymEnv Synchronous evaluation# The simplest way to use the Evaluator is to call evaluate(), which blocks until the rollout completes and returns a metrics dict. We start by creating an environment factory and a random policy. The Evaluator accepts either a live environment or a callable that creates one \u2014 the callable form is preferred because it lets the evaluator recreate the environment if needed. env_maker = partial(GymEnv, \"Pendulum-v1\") policy = RandomPolicy(env_maker().action_spec) evaluator = Evaluator(env_maker, policy, num_trajectories=1) Now we can run a blocking evaluation. The returned dict contains prefixed metrics: reward, episode length, number of episodes, and frames-per-second. result = evaluator.evaluate() print(\"First eval:\", result) First eval: {\u0027eval/reward\u0027: -1266.7039794921875, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 702.7317353997997, \u0027eval/step\u0027: 0} Each subsequent call increments the internal step counter: result = evaluator.evaluate() print(\"Second eval:\", result) Second eval: {\u0027eval/reward\u0027: -1663.78173828125, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 712.9634624335307, \u0027eval/step\u0027: 1} Asynchronous evaluation# For non-blocking evaluation, use trigger_eval() to start a rollout in the background, then poll() or wait() to retrieve the result. evaluator.trigger_eval() # poll() is non-blocking: returns None if the result isn\u0027t ready yet result = evaluator.poll() print(\"poll() returned:\", result) poll() returned: None To wait for the result, pass a timeout to poll() or use wait(): result = evaluator.poll(timeout=30) print(\"poll(timeout=30) returned:\", result) poll(timeout=30) returned: {\u0027eval/reward\u0027: -1493.4691162109375, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 713.0044834256379, \u0027eval/step\u0027: 2} By default, calling trigger_eval() while a previous evaluation is still pending raises an error. This prevents silently piling up stale requests: evaluator.trigger_eval() try: evaluator.trigger_eval() except RuntimeError as e: print(f\"Errored with: {e}\") # Clean up evaluator.wait(timeout=30) evaluator.shutdown() If you prefer to enqueue evaluations, pass busy_policy=\"queue\" when creating the evaluator. Weight updates# In a real training loop, you want to evaluate the latest trained weights, not the initial ones. The evaluate() and trigger_eval() methods accept a weights argument \u2014 either an nn.Module or a TensorDictBase. Let\u2019s create a simple MLP policy and an evaluator for it: env = env_maker() net = nn.Sequential( nn.Linear(env.observation_spec[\"observation\"].shape[-1], 64), nn.Tanh(), nn.Linear(64, env.action_spec.shape[-1]), ) real_policy = TensorDictModule(net, in_keys=[\"observation\"], out_keys=[\"action\"]) evaluator_w = Evaluator(env_maker, real_policy, num_trajectories=1) Evaluate with the initial (random) weights: print(\"Before weight update:\", evaluator_w.evaluate()) Before weight update: {\u0027eval/reward\u0027: -1072.24072265625, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 504.0741287381306, \u0027eval/step\u0027: 0} Simulate a \u201ctraining step\u201d by perturbing the weights: with torch.no_grad(): for p in net.parameters(): p.add_(torch.randn_like(p) * 0.1) Now evaluate with the updated weights. You can pass the module directly \u2014 the evaluator extracts and transfers the weights automatically: print(\"After weight update:\", evaluator_w.evaluate(weights=real_policy)) After weight update: {\u0027eval/reward\u0027: -1324.8035888671875, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 504.43095429049276, \u0027eval/step\u0027: 1} You can also pass a TensorDictBase of weights, which is useful when you already have detached weight snapshots: real_weights = from_module(real_policy) print(\"With TensorDict weights:\", evaluator_w.evaluate(weights=real_weights)) evaluator_w.shutdown() With TensorDict weights: {\u0027eval/reward\u0027: -1252.87158203125, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 505.56100037731903, \u0027eval/step\u0027: 2} Process-based evaluation# For full isolation (e.g. to place evaluation on a dedicated GPU or to avoid GIL contention), use backend=\"process\". This runs the environment and policy inside a child process via MultiSyncCollector. The process backend requires callable factories for both the environment and the policy: env_maker = partial(GymEnv, \"Pendulum-v1\") action_spec = env_maker().action_spec policy_factory = partial(RandomPolicy, action_spec) evaluator_proc = Evaluator( env_maker, policy_factory=policy_factory, num_trajectories=1, backend=\"process\", ) result = evaluator_proc.evaluate() print(\"Process backend:\", result) evaluator_proc.shutdown() Process backend: {\u0027eval/reward\u0027: -896.5689086914062, \u0027eval/reward_std\u0027: 0.0, \u0027eval/num_episodes\u0027: 1, \u0027eval/episode_length\u0027: 200.0, \u0027eval/fps\u0027: 688.2360605091278, \u0027eval/step\u0027: 0} Logging with callbacks# Rather than manually logging after each poll() or wait(), you can pass an on_result callback to the evaluator. It receives a flat TensorDictBase with the same prefixed metric names. Here we use TorchRL\u2019s CSVLogger to automatically log every evaluation result to a CSV file: import tempfile from torchrl.record.loggers.csv import CSVLogger log_dir = tempfile.mkdtemp() logger = CSVLogger(exp_name=\"eval_demo\", log_dir=log_dir) evaluator_log = Evaluator( env_maker, real_policy, num_trajectories=1, on_result=lambda result: logger.log_metrics( {k: v.item() for k, v in result.items() if k != \"eval/step\"}, step=result[\"eval/step\"].item(), ), ) Run a few evals. Each one automatically logs to CSV via the callback: for _ in range(3): evaluator_log.evaluate(weights=real_policy) evaluator_log.shutdown() Let\u2019s verify what was logged: from pathlib import Path csv_path = next(Path(log_dir).rglob(\"*.csv\")) print(f\"Logged to: {csv_path}\") print(csv_path.read_text()) Logged to: /tmp/tmp10x2ek11/eval_demo/scalars/eval/reward.csv 0,-1313.4173583984375 1,-1282.0286865234375 2,-1236.3291015625 The on_result callback works with both synchronous and asynchronous evaluation. For async usage, the callback runs on the evaluator\u2019s background thread \u2014 if your callback writes to a shared logger, handle any required locking inside the callback. Summary# The Evaluator provides a single, composable entry-point for evaluation: Synchronous: evaluate() for blocking rollouts. Asynchronous: trigger_eval() + poll() / wait() for background rollouts. Weight sync: pass weights (module or tensordict) to evaluate the latest trained parameters. Process isolation: backend=\"process\" for dedicated-device eval. Callbacks: on_result for automatic logging or checkpointing. Useful next resources# Evaluator API reference \u2014 full parameter docs. Collector trajectory tutorial \u2014 deep dive into how collectors assemble data. TorchRL documentation Total running time of the script: (0 minutes 7.010 seconds) Download Jupyter notebook: evaluator.ipynb Download Python source code: evaluator.py Download zipped: evaluator.zip Gallery generated by Sphinx-Gallery",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/tutorials/evaluator.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

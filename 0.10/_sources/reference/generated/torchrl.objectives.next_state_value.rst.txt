@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+next_state_value
+================
+
+.. autoclass:: next_state_value
+    :members:

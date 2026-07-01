@@ -1,0 +1,2419 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Recurrent training on sequence batches &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/recurrent_sequence_training';</script>
+    <script src="../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="MuJoCo scripted manipulation with human-readable robot actions" href="mujoco_cube_bowl_macros.html" />
+    <link rel="prev" title="Recurrent DQN: Training recurrent policies" href="dqn_with_rnn.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="Recurrent training on sequence batches - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="tutorial">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="#">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="#">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"></div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Recurrent...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="Recurrent training on sequence batches">
+      <meta itemprop="position" content="1">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">tutorials/recurrent_sequence_training</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-tutorials-recurrent-sequence-training-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="recurrent-training-on-sequence-batches">
+<span id="sphx-glr-tutorials-recurrent-sequence-training-py"></span><h1>Recurrent training on sequence batches<a class="headerlink" href="#recurrent-training-on-sequence-batches" title="Link to this heading">#</a></h1>
+<p><strong>Author</strong>: <a class="reference external" href="https://github.com/theap06">Achintya Paningapalli</a></p>
+<div class="sd-container-fluid sd-sphinx-override sd-mb-4 docutils" id="recurrent-sequence-tuto">
+<div class="sd-row sd-row-cols-2 sd-row-cols-xs-2 sd-row-cols-sm-2 sd-row-cols-md-2 sd-row-cols-lg-2 docutils">
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-mortar-board" viewBox="0 0 16 16" aria-hidden="true"><path d="M7.693 1.066a.747.747 0 0 1 .614 0l7.25 3.25a.75.75 0 0 1 0 1.368L13 6.831v2.794c0 1.024-.81 1.749-1.66 2.173-.893.447-2.075.702-3.34.702-.278 0-.55-.012-.816-.036a.75.75 0 0 1 .133-1.494c.22.02.45.03.683.03 1.082 0 2.025-.221 2.67-.543.69-.345.83-.682.83-.832V7.503L8.307 8.934a.747.747 0 0 1-.614 0L4 7.28v1.663c.296.105.575.275.812.512.438.438.688 1.059.688 1.796v3a.75.75 0 0 1-.75.75h-3a.75.75 0 0 1-.75-.75v-3c0-.737.25-1.358.688-1.796.237-.237.516-.407.812-.512V6.606L.443 5.684a.75.75 0 0 1 0-1.368ZM2.583 5 8 7.428 13.416 5 8 2.572ZM2.5 11.25v2.25H4v-2.25c0-.388-.125-.611-.25-.735a.697.697 0 0 0-.5-.203.707.707 0 0 0-.5.203c-.125.124-.25.347-.25.735Z"></path></svg> What you will learn</div>
+<ul class="simple">
+<li><p class="sd-card-text">How TorchRL auto-wires <code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code> and the
+recurrent-state primer when a recurrent policy is detected</p></li>
+<li><p class="sd-card-text">How to sample multi-step slices from a replay buffer with
+<a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a></p></li>
+<li><p class="sd-card-text">How to train a recurrent policy in <em>full-sequence</em> mode using
+<a class="reference internal" href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a></p></li>
+<li><p class="sd-card-text">How <a class="reference internal" href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a> is used in
+collectors (sequential, <code class="docutils literal notranslate"><span class="pre">False</span></code>) vs. loss modules (recurrent, <code class="docutils literal notranslate"><span class="pre">True</span></code>),
+and how to control it across processes and workers</p></li>
+<li><p class="sd-card-text">Why <code class="docutils literal notranslate"><span class="pre">is_init</span></code> at slice starts is what keeps hidden state from
+leaking across episode boundaries inside a replay batch</p></li>
+</ul>
+</div>
+</div>
+</div>
+<div class="sd-col sd-d-flex-row docutils">
+<div class="sd-card sd-sphinx-override sd-w-100 sd-shadow-sm docutils">
+<div class="sd-card-body docutils">
+<div class="sd-card-title sd-font-weight-bold docutils">
+<svg version="1.1" width="1.0em" height="1.0em" class="sd-octicon sd-octicon-list-unordered" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.75 2.5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5Zm0 5h8.5a.75.75 0 0 1 0 1.5h-8.5a.75.75 0 0 1 0-1.5ZM2 14a1 1 0 1 1 0-2 1 1 0 0 1 0 2Zm1-6a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM2 4a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg> Prerequisites</div>
+<ul class="simple">
+<li><p class="sd-card-text">PyTorch v2.0.0</p></li>
+<li><p class="sd-card-text">gymnasium[classic_control]</p></li>
+<li><p class="sd-card-text">Familiarity with <a class="reference internal" href="dqn_with_rnn.html#rnn-tuto"><span class="std std-ref">Recurrent DQN</span></a> is helpful but not
+required — this tutorial is its multi-step complement</p></li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+</pre></div>
+</div>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
+<p>There are two ways to train a recurrent policy in TorchRL, and choosing
+between them is the first design decision in any recurrent project:</p>
+<ol class="arabic simple">
+<li><p><strong>Sequential mode</strong> (one step per forward call). The policy reads the
+previous step’s hidden state from the TensorDict, runs the LSTM for one
+step, and writes the new hidden state under the <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">...)</span></code> keys.
+This is the natural mode during collection and is what
+<a class="reference internal" href="dqn_with_rnn.html#rnn-tuto"><span class="std std-ref">Recurrent DQN</span></a> covers in depth.</p></li>
+<li><p><strong>Recurrent mode</strong> (full <code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T]</span></code> sequence per forward call). The LSTM
+processes a whole time dimension at once. This is used inside loss /
+advantage code over replayed trajectory slices, where you want to
+backprop through several timesteps in a single batched call. Rectangular
+<code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T]</span></code> tensors are one option, but TorchRL also accepts the flat,
+ragged slices returned by <a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>:
+the flat dimension is treated as a packed time axis and <code class="docutils literal notranslate"><span class="pre">is_init</span></code>
+partitions it into independent chunks.</p></li>
+</ol>
+<p>This tutorial focuses on (2): how to collect data, sample multi-step
+slices, and run a recurrent policy in full-sequence mode without leaking
+hidden state across episode boundaries.</p>
+<p>The key building blocks — most of which the collector now auto-wires for
+you — are:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a> (the recurrent policy core),</p></li>
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code> (writes <code class="docutils literal notranslate"><span class="pre">is_init=True</span></code> at the start
+of every trajectory),</p></li>
+<li><p>A <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> that seeds the
+initial recurrent state on reset,</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> for trajectory-aware
+replay,</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a> for switching the LSTM
+between single-step and full-sequence execution.</p></li>
+</ul>
+<p>See <a class="reference internal" href="../reference/recurrent_state_lifecycle.html#ref-recurrent-state-lifecycle"><span class="std std-ref">Recurrent state lifecycle</span></a> for the full reference on how
+hidden state flows through the pipeline.</p>
+<p>If you are running this in Google Colab, install the dependencies first:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>!pip3<span class="w"> </span>install<span class="w"> </span>torchrl
+!pip3<span class="w"> </span>install<span class="w"> </span>gymnasium
+</pre></div>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="n">TensorDictModule</span> <span class="k">as</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">,</span> <span class="n">TensorDictSequential</span> <span class="k">as</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.collectors</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Collector</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.data</span> <span class="kn">import</span> <span class="n">LazyTensorStorage</span><span class="p">,</span> <a href="../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer" title="torchrl.data.TensorDictReplayBuffer" class="sphx-glr-backref-module-torchrl-data sphx-glr-backref-type-py-class"><span class="n">TensorDictReplayBuffer</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.data.replay_buffers.samplers</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler" title="torchrl.data.replay_buffers.Sampler" class="sphx-glr-backref-module-torchrl-data-replay_buffers sphx-glr-backref-type-py-class"><span class="n">SliceSampler</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">GymEnv</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.modules</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">LSTMModule</span></a><span class="p">,</span> <a href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">set_recurrent_mode</span></a>
+
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.manual_seed.html#torch.manual_seed" title="torch.manual_seed" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">manual_seed</span></a><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">device</span></a><span class="p">(</span><span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="environment-and-policy">
+<h2>Environment and policy<a class="headerlink" href="#environment-and-policy" title="Link to this heading">#</a></h2>
+<p>We use <code class="docutils literal notranslate"><span class="pre">CartPole-v1</span></code> for a small, fast, fully-observed env. A recurrent
+policy is overkill for CartPole, but that is precisely the point: it lets
+us focus on the sequence-batching machinery without the env being the
+bottleneck. The same pattern scales unchanged to partially-observed
+environments where memory actually matters.</p>
+<p>The policy is a tiny <a class="reference internal" href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a> followed by a
+linear head that maps the LSTM output to the action logits. We pick
+<code class="docutils literal notranslate"><span class="pre">hidden_size=16</span></code> so the tutorial finishes quickly on CPU.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">OBS_DIM</span> <span class="o">=</span> <span class="mi">4</span>  <span class="c1"># CartPole observation: cart pos, cart vel, pole angle, pole vel</span>
+<span class="n">N_ACTIONS</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># left or right</span>
+<span class="n">HIDDEN</span> <span class="o">=</span> <span class="mi">16</span>
+
+
+<span class="k">def</span> <span class="nf">make_policy</span><span class="p">()</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Construct the recurrent policy: LSTMModule + linear logits head.&quot;&quot;&quot;</span>
+    <span class="n">lstm</span> <span class="o">=</span> <a href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">LSTMModule</span></a><span class="p">(</span>
+        <span class="n">input_size</span><span class="o">=</span><span class="n">OBS_DIM</span><span class="p">,</span>
+        <span class="n">hidden_size</span><span class="o">=</span><span class="n">HIDDEN</span><span class="p">,</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observation&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_h&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_c&quot;</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">,</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_h&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_c&quot;</span><span class="p">)],</span>
+        <span class="n">python_based</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># avoids cuDNN for vmap / torch.compile compatibility</span>
+    <span class="p">)</span>
+    <span class="n">head</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span>
+        <a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Linear.html#torch.nn.Linear" title="torch.nn.Linear" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-class"><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span></a><span class="p">(</span><span class="n">HIDDEN</span><span class="p">,</span> <span class="n">N_ACTIONS</span><span class="p">),</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="c1"># Deterministic argmax action selection — enough to demonstrate the</span>
+    <span class="c1"># collection / replay / sequence-training plumbing.</span>
+    <span class="n">chooser</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictModule.html#tensordict.nn.TensorDictModule" title="tensordict.nn.TensorDictModule" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Mod</span></a><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">logits</span><span class="p">:</span> <span class="n">logits</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="n">in_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">],</span>
+        <span class="n">out_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class"><span class="n">Seq</span></a><span class="p">(</span><span class="n">lstm</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">chooser</span><span class="p">)</span>
+
+
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a> <span class="o">=</span> <span class="n">make_policy</span><span class="p">()</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval" title="torch.nn.Module.eval" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">policy</span><span class="o">.</span><span class="n">eval</span></a><span class="p">()</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>TensorDictSequential(
+    module=ModuleList(
+      (0): LSTMModule()
+      (1): TensorDictModule(
+          module=Linear(in_features=16, out_features=2, bias=True),
+          device=cpu,
+          in_keys=[&#39;features&#39;],
+          out_keys=[&#39;logits&#39;])
+      (2): TensorDictModule(
+          module=&lt;function make_policy.&lt;locals&gt;.&lt;lambda&gt; at 0x7f0a5aacb060&gt;,
+          device=cpu,
+          in_keys=[&#39;logits&#39;],
+          out_keys=[&#39;action&#39;])
+    ),
+    device=cpu,
+    in_keys=[&#39;observation&#39;, &#39;rs_h&#39;, &#39;rs_c&#39;, &#39;is_init&#39;],
+    out_keys=[&#39;features&#39;, (&#39;next&#39;, &#39;rs_h&#39;), (&#39;next&#39;, &#39;rs_c&#39;), &#39;logits&#39;, &#39;action&#39;])
+</pre></div>
+</div>
+</section>
+<section id="auto-wiring-recurrent-env-transforms">
+<h2>Auto-wiring recurrent env transforms<a class="headerlink" href="#auto-wiring-recurrent-env-transforms" title="Link to this heading">#</a></h2>
+<p>A recurrent policy needs two env-side transforms to behave correctly:</p>
+<ol class="arabic simple">
+<li><p><code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code>, which writes <code class="docutils literal notranslate"><span class="pre">is_init=True</span></code> at
+the first step after every reset.</p></li>
+<li><p>A <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer" title="torchrl.envs.transforms.TensorDictPrimer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code></a> that zero-fills
+the initial <code class="docutils literal notranslate"><span class="pre">(&quot;rs_h&quot;,</span> <span class="pre">&quot;rs_c&quot;)</span></code> recurrent state slots on reset.</p></li>
+</ol>
+<p>Forgetting either of these is the most common source of silent
+hidden-state bugs. The collector now detects recurrent submodules in the
+policy and auto-appends both transforms when <code class="docutils literal notranslate"><span class="pre">auto_register_policy_transforms=True</span></code>
+is passed. As of v0.15 this becomes the default; for earlier versions you
+need to opt in explicitly.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">env</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">GymEnv</span></a><span class="p">(</span><span class="s2">&quot;CartPole-v1&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">)</span>
+
+<a href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">collector</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class"><span class="n">Collector</span></a><span class="p">(</span>
+    <a href="../reference/generated/torchrl.envs.GymEnv.html#torchrl.envs.GymEnv" title="torchrl.envs.GymEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">env</span></a><span class="p">,</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">,</span>
+    <span class="n">frames_per_batch</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span>
+    <span class="n">total_frames</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">storing_device</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">,</span>
+    <span class="n">auto_register_policy_transforms</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">reset_at_each_iter</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="inspecting-a-single-batch">
+<h2>Inspecting a single batch<a class="headerlink" href="#inspecting-a-single-batch" title="Link to this heading">#</a></h2>
+<p>Run one rollout and look at what comes back. Three things to notice:</p>
+<ul class="simple">
+<li><p>The batch shape is <code class="docutils literal notranslate"><span class="pre">[T]</span></code> where <code class="docutils literal notranslate"><span class="pre">T</span> <span class="pre">==</span> <span class="pre">frames_per_batch</span></code> (single env).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">is_init</span></code> is <code class="docutils literal notranslate"><span class="pre">True</span></code> at the very first step and immediately after
+each <code class="docutils literal notranslate"><span class="pre">done</span></code>. These mark trajectory boundaries.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;rs_h&quot;)</span></code> / <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;rs_c&quot;)</span></code> carry the LSTM’s next-step
+hidden / cell state across timesteps.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><a href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector" title="torchrl.collectors.Collector" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">collector</span></a><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Batch shape:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.shape" title="tensordict.TensorDict.shape" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-property"><span class="n">data</span><span class="o">.</span><span class="n">shape</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Available keys:&quot;</span><span class="p">,</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.keys" title="tensordict.TensorDict.keys" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">data</span><span class="o">.</span><span class="n">keys</span></a><span class="p">()))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;is_init shape:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;# trajectory boundaries in batch:&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()))</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="s2">&quot;Next-step hidden shape:&quot;</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_h&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+    <span class="s2">&quot;(batch, num_layers, hidden_size)&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Batch shape: torch.Size([64])
+Available keys: [&#39;action&#39;, &#39;collector&#39;, &#39;done&#39;, &#39;features&#39;, &#39;is_init&#39;, &#39;logits&#39;, &#39;next&#39;, &#39;observation&#39;, &#39;rs_c&#39;, &#39;rs_h&#39;, &#39;terminated&#39;, &#39;truncated&#39;]
+is_init shape: torch.Size([64, 1])
+# trajectory boundaries in batch: 8
+Next-step hidden shape: torch.Size([64, 1, 16]) (batch, num_layers, hidden_size)
+</pre></div>
+</div>
+</section>
+<section id="replay-with-slicesampler">
+<h2>Replay with SliceSampler<a class="headerlink" href="#replay-with-slicesampler" title="Link to this heading">#</a></h2>
+<p>We store the rollout in a replay buffer and sample fixed-length slices of
+trajectories from it. <a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>
+is trajectory-aware: it uses the boundary information already in the
+batch (<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;done&quot;)</span></code> and the collector-written <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span>
+<span class="pre">&quot;traj_ids&quot;)</span></code>) to draw whole sub-trajectories.</p>
+<p>Two design choices in this section:</p>
+<ol class="arabic simple">
+<li><p><strong>Slices remain *ragged* by default</strong>. <code class="docutils literal notranslate"><span class="pre">SliceSampler</span></code> returns a flat
+batch of concatenated variable-length slices, <em>not</em> a rectangular
+<code class="docutils literal notranslate"><span class="pre">[B,</span> <span class="pre">T]</span></code> tensor. The trajectory boundaries inside that flat batch
+are marked by <code class="docutils literal notranslate"><span class="pre">is_init=True</span></code>. This avoids padding waste and matches
+how TorchRL’s recurrent modules already consume input.</p></li>
+<li><p><strong>``pad_output=True`` is available but discouraged</strong>. It pads short
+slices to <code class="docutils literal notranslate"><span class="pre">slice_len</span></code> and writes a <code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;mask&quot;)</span></code> key for
+consumers (e.g. mask-aware losses), but the docstring on SliceSampler
+explicitly steers users toward the ragged path when possible.</p></li>
+</ol>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">SLICE_LEN</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">NUM_SLICES</span> <span class="o">=</span> <span class="mi">4</span>
+
+<a href="../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer" title="torchrl.data.TensorDictReplayBuffer" class="sphx-glr-backref-module-torchrl-data sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">rb</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer" title="torchrl.data.TensorDictReplayBuffer" class="sphx-glr-backref-module-torchrl-data sphx-glr-backref-type-py-class"><span class="n">TensorDictReplayBuffer</span></a><span class="p">(</span>
+    <span class="n">storage</span><span class="o">=</span><span class="n">LazyTensorStorage</span><span class="p">(</span><span class="n">max_size</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device" title="torch.device" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">device</span></a><span class="p">),</span>
+    <span class="n">sampler</span><span class="o">=</span><a href="../reference/generated/torchrl.data.replay_buffers.Sampler.html#torchrl.data.replay_buffers.Sampler" title="torchrl.data.replay_buffers.Sampler" class="sphx-glr-backref-module-torchrl-data-replay_buffers sphx-glr-backref-type-py-class"><span class="n">SliceSampler</span></a><span class="p">(</span><span class="n">slice_len</span><span class="o">=</span><span class="n">SLICE_LEN</span><span class="p">,</span> <span class="n">strict_length</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="n">SLICE_LEN</span> <span class="o">*</span> <span class="n">NUM_SLICES</span><span class="p">,</span>
+<span class="p">)</span>
+<a href="../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.extend" title="torchrl.data.TensorDictReplayBuffer.extend" class="sphx-glr-backref-module-torchrl-data sphx-glr-backref-type-py-method"><span class="n">rb</span><span class="o">.</span><span class="n">extend</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">data</span></a><span class="p">)</span>
+
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.sample" title="torchrl.data.TensorDictReplayBuffer.sample" class="sphx-glr-backref-module-torchrl-data sphx-glr-backref-type-py-method"><span class="n">rb</span><span class="o">.</span><span class="n">sample</span></a><span class="p">()</span>
+<span class="n">is_init_positions</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a><span class="p">[</span><span class="s2">&quot;is_init&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Sampled batch shape:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.shape" title="tensordict.TensorDict.shape" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-property"><span class="n">sample</span><span class="o">.</span><span class="n">shape</span></a><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;is_init True positions (slice starts):&quot;</span><span class="p">,</span> <span class="n">is_init_positions</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Sampled batch shape: torch.Size([32])
+is_init True positions (slice starts): [0, 8, 16, 24]
+</pre></div>
+</div>
+<section id="what-is-init-marks">
+<h3>What <code class="docutils literal notranslate"><span class="pre">is_init</span></code> marks<a class="headerlink" href="#what-is-init-marks" title="Link to this heading">#</a></h3>
+<p>Each <code class="docutils literal notranslate"><span class="pre">True</span></code> value in the sampled batch’s <code class="docutils literal notranslate"><span class="pre">is_init</span></code> flags the first
+timestep of a slice (or a trajectory boundary that fell inside a slice
+because the underlying episode ended mid-slice). Downstream code — the
+recurrent module’s full-sequence forward and GAE / advantage computation —
+reads these markers to know where to reset hidden state. Padding masks are a
+separate signal: when <code class="docutils literal notranslate"><span class="pre">pad_output=True</span></code> is used, <code class="docutils literal notranslate"><span class="pre">SliceSampler</span></code> writes a
+<code class="docutils literal notranslate"><span class="pre">(&quot;collector&quot;,</span> <span class="pre">&quot;mask&quot;)</span></code> key for consumers that need to ignore padded
+timesteps.</p>
+</section>
+</section>
+<section id="sequential-mode-vs-recurrent-mode">
+<h2>Sequential mode vs. recurrent mode<a class="headerlink" href="#sequential-mode-vs-recurrent-mode" title="Link to this heading">#</a></h2>
+<p><a class="reference internal" href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode"><code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode</span></code></a> has two modes:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(False)</span></code> (<em>sequential</em>): the LSTM processes <strong>one
+timestep at a time</strong>, reading <code class="docutils literal notranslate"><span class="pre">rs_h</span></code> / <code class="docutils literal notranslate"><span class="pre">rs_c</span></code> from the TensorDict
+and writing the updated state into <code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;rs_h&quot;)</span></code> /
+<code class="docutils literal notranslate"><span class="pre">(&quot;next&quot;,</span> <span class="pre">&quot;rs_c&quot;)</span></code>. This is the natural mode during <strong>collection</strong>:
+the collector calls the policy once per environment step.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(True)</span></code> (<em>recurrent</em>): the LSTM processes a <strong>whole
+time batch</strong> in a single <code class="docutils literal notranslate"><span class="pre">nn.LSTM</span></code> call, using <code class="docutils literal notranslate"><span class="pre">is_init</span></code> to reset
+the hidden state at trajectory boundaries. This is the mode used during
+<strong>training</strong> over replayed slices.</p></li>
+</ul>
+<p><strong>How set_recurrent_mode is managed in collectors and loss modules:</strong></p>
+<ul class="simple">
+<li><p>During <em>collection</em>, the collector calls the policy inside sequential
+mode. The default <code class="docutils literal notranslate"><span class="pre">default_recurrent_mode=False</span></code> on
+<a class="reference internal" href="../reference/generated/torchrl.modules.LSTMModule.html#torchrl.modules.LSTMModule" title="torchrl.modules.LSTMModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">LSTMModule</span></code></a> means no explicit context manager
+is required — the LSTM automatically runs step-by-step.
+If you need to override this (e.g. in a custom collector), wrap the
+policy call with <code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(False)</span></code>.</p></li>
+<li><p>All built-in TorchRL <strong>loss modules</strong> wrap their <code class="docutils literal notranslate"><span class="pre">forward</span></code> with
+<code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(True)</span></code> automatically, so you never need to set
+the mode manually when calling a loss. The same applies to advantage
+estimators and value estimators.</p></li>
+<li><p>In <strong>multi-process / distributed</strong> settings (e.g.
+<code class="xref py py-class docutils literal notranslate"><span class="pre">MultiaSyncDataCollector</span></code>), each worker
+process carries its own thread-local recurrent mode. The mode set in
+the main process does <strong>not</strong> propagate to worker processes. Workers
+always start with the default (sequential, <code class="docutils literal notranslate"><span class="pre">False</span></code>); the training
+process sets recurrent mode independently when computing the loss.</p></li>
+</ul>
+<p><strong>Equivalence of sequential and recurrent mode:</strong></p>
+<p>Running the LSTM step-by-step under <code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(False)</span></code> and
+running it in a single batch under <code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(True)</span></code> produce
+numerically identical outputs. We verify this now on a short sequence.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Build a minimal hand-crafted 4-step trajectory so the equivalence is</span>
+<span class="c1"># unambiguous: one trajectory, is_init only at t=0, zero initial hidden.</span>
+<span class="n">T_equiv</span> <span class="o">=</span> <span class="mi">4</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">demo</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="n">T_equiv</span><span class="p">,</span> <span class="n">OBS_DIM</span><span class="p">),</span>
+        <span class="s2">&quot;rs_h&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">T_equiv</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">HIDDEN</span><span class="p">),</span>
+        <span class="s2">&quot;rs_c&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">T_equiv</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">HIDDEN</span><span class="p">),</span>
+        <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">([</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">]),</span>
+    <span class="p">},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="n">T_equiv</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="c1"># --- set_recurrent_mode(False): one call per step ---</span>
+<span class="c1"># The LSTM reads rs_h / rs_c, processes a single timestep, and writes the</span>
+<span class="c1"># updated state into (&quot;next&quot;, &quot;rs_h&quot;) / (&quot;next&quot;, &quot;rs_c&quot;). We thread the</span>
+<span class="c1"># hidden state from one step to the next by hand.</span>
+<span class="n">outs_seq</span> <span class="o">=</span> <span class="p">[]</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">h</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">HIDDEN</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">c</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">HIDDEN</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">T_equiv</span><span class="p">):</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">demo</span></a><span class="p">[</span><span class="n">t</span> <span class="p">:</span> <span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step</span></a><span class="p">[</span><span class="s2">&quot;rs_h&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">h</span></a>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step</span></a><span class="p">[</span><span class="s2">&quot;rs_c&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">c</span></a>
+    <span class="k">with</span> <a href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">set_recurrent_mode</span></a><span class="p">(</span><span class="kc">False</span><span class="p">):</span>
+        <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step_out</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step</span></a><span class="p">)</span>
+    <span class="n">outs_seq</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step_out</span></a><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">])</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">h</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step_out</span></a><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_h&quot;</span><span class="p">]</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">c</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">step_out</span></a><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;rs_c&quot;</span><span class="p">]</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">features_seq</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">(</span><span class="n">outs_seq</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="c1"># --- set_recurrent_mode(True): one batched call ---</span>
+<span class="k">with</span> <a href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">set_recurrent_mode</span></a><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out_rec</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clone" title="tensordict.TensorDict.clone" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">demo</span><span class="o">.</span><span class="n">clone</span></a><span class="p">())</span>
+
+<span class="c1"># They must be numerically identical.</span>
+<a href="https://docs.pytorch.org/docs/stable/testing.html#torch.testing.assert_close" title="torch.testing.assert_close" class="sphx-glr-backref-module-torch-testing sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">features_seq</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out_rec</span></a><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="s2">&quot;set_recurrent_mode(False) step-by-step == set_recurrent_mode(True) batched: verified.&quot;</span>
+<span class="p">)</span>
+
+<span class="c1"># Now run the full replay sample in recurrent mode (the training-time pattern).</span>
+<span class="k">with</span> <a href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">set_recurrent_mode</span></a><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clone" title="tensordict.TensorDict.clone" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">sample</span><span class="o">.</span><span class="n">clone</span></a><span class="p">())</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Recurrent-mode output shape:&quot;</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out</span></a><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="s2">&quot;(total_steps, hidden)&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span>
+    <span class="s2">&quot;Recurrent-mode logits shape:&quot;</span><span class="p">,</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out</span></a><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+    <span class="s2">&quot;(total_steps, n_actions)&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>set_recurrent_mode(False) step-by-step == set_recurrent_mode(True) batched: verified.
+Recurrent-mode output shape: torch.Size([32, 16]) (total_steps, hidden)
+Recurrent-mode logits shape: torch.Size([32, 2]) (total_steps, n_actions)
+</pre></div>
+</div>
+</section>
+<section id="why-the-boundary-handling-matters-a-controlled-check">
+<h2>Why the boundary handling matters: a controlled check<a class="headerlink" href="#why-the-boundary-handling-matters-a-controlled-check" title="Link to this heading">#</a></h2>
+<p>The forward above already ran the interior-split path on real sampled
+data. To make the no-leakage guarantee <em>provable</em> rather than merely
+exercised, we now build a small two-trajectory packed batch by hand, seed
+the <em>first</em> trajectory with non-zero noise in its incoming hidden, and
+check that the second trajectory’s outputs match a standalone forward over
+just that second trajectory.</p>
+<p>If hidden state leaked across the boundary, the noisy first half would
+pollute the second half’s outputs and the comparison would fail.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Two adjacent slices of length 4 each, packed end-to-end. is_init=True at</span>
+<span class="c1"># index 0 (first traj start) and index 4 (second traj start).</span>
+<span class="n">T_A</span> <span class="o">=</span> <span class="n">T_B</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">T</span> <span class="o">=</span> <span class="n">T_A</span> <span class="o">+</span> <span class="n">T_B</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_packed</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">bool</span></a><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_packed</span></a><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_packed</span></a><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">T_A</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">obs</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">OBS_DIM</span><span class="p">)</span>
+<span class="c1"># Seed the incoming hidden with noise. The recurrent forward should</span>
+<span class="c1"># *override* this at every is_init=True position.</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">noisy_h</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">HIDDEN</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">noisy_c</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.randn.html#torch.randn" title="torch.randn" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">randn</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">HIDDEN</span><span class="p">)</span>
+
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">packed</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">obs</span></a><span class="p">,</span>
+        <span class="s2">&quot;rs_h&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">noisy_h</span></a><span class="p">,</span>
+        <span class="s2">&quot;rs_c&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">noisy_c</span></a><span class="p">,</span>
+        <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_packed</span></a><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">T</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="c1"># Isolated forward over only the second trajectory, with is_init=True at</span>
+<span class="c1"># step 0 (its real start). If the packed run handles boundaries correctly,</span>
+<span class="c1"># the packed batch&#39;s second-half output must match this isolated output.</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_b</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">T_B</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">torch</span><span class="o">.</span><span class="n">bool</span></a><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_b</span></a><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">b_only</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
+    <span class="p">{</span>
+        <span class="s2">&quot;observation&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">obs</span></a><span class="p">[:,</span> <span class="n">T_A</span><span class="p">:]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+        <span class="s2">&quot;rs_h&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">noisy_h</span></a><span class="p">[:,</span> <span class="n">T_A</span><span class="p">:]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>  <span class="c1"># same noise — must be overridden</span>
+        <span class="s2">&quot;rs_c&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">noisy_c</span></a><span class="p">[:,</span> <span class="n">T_A</span><span class="p">:]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+        <span class="s2">&quot;is_init&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">is_init_b</span></a><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">T_B</span><span class="p">],</span>
+<span class="p">)</span>
+
+<span class="k">with</span> <a href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">set_recurrent_mode</span></a><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">packed_out</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">packed</span></a><span class="p">)</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">b_out</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">policy</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">b_only</span></a><span class="p">)</span>
+
+<span class="c1"># Trajectory B&#39;s features inside the packed batch == trajectory B alone.</span>
+<a href="https://docs.pytorch.org/docs/stable/testing.html#torch.testing.assert_close" title="torch.testing.assert_close" class="sphx-glr-backref-module-torch-testing sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">testing</span><span class="o">.</span><span class="n">assert_close</span></a><span class="p">(</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">packed_out</span></a><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">][:,</span> <span class="n">T_A</span><span class="p">:],</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">b_out</span></a><span class="p">[</span><span class="s2">&quot;features&quot;</span><span class="p">],</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mf">1e-6</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Hidden-state isolation across is_init boundary: verified.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Hidden-state isolation across is_init boundary: verified.
+</pre></div>
+</div>
+</section>
+<section id="a-tiny-gradient-path-smoke-test">
+<h2>A tiny gradient-path smoke test<a class="headerlink" href="#a-tiny-gradient-path-smoke-test" title="Link to this heading">#</a></h2>
+<p>We close with a minimal supervised update on top of the same
+infrastructure. We use the simplest possible objective — match the
+action logits to a constant target — purely to exercise the
+<code class="docutils literal notranslate"><span class="pre">set_recurrent_mode(True)</span></code> + replay-buffer + LSTM gradient path. In a real
+recurrent training job, this block is where you would compute returns or
+advantages and call the objective module, still under the same recurrent
+context manager.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">trainable_policy</span></a> <span class="o">=</span> <span class="n">make_policy</span><span class="p">()</span>
+<a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">optimizer</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam" title="torch.optim.Adam" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">Adam</span></a><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.parameters" title="torch.nn.Module.parameters" class="sphx-glr-backref-module-torch-nn sphx-glr-backref-type-py-method"><span class="n">trainable_policy</span><span class="o">.</span><span class="n">parameters</span></a><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="mf">3e-4</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_logits</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">N_ACTIONS</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_logits</span></a><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>  <span class="c1"># arbitrary supervised target</span>
+
+<span class="n">losses</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">_step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">):</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">sample</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.data.TensorDictReplayBuffer.html#torchrl.data.TensorDictReplayBuffer.sample" title="torchrl.data.TensorDictReplayBuffer.sample" class="sphx-glr-backref-module-torchrl-data sphx-glr-backref-type-py-method"><span class="n">rb</span><span class="o">.</span><span class="n">sample</span></a><span class="p">()</span>
+    <span class="k">with</span> <a href="../reference/generated/torchrl.modules.set_recurrent_mode.html#torchrl.modules.set_recurrent_mode" title="torchrl.modules.set_recurrent_mode" class="sphx-glr-backref-module-torchrl-modules sphx-glr-backref-type-py-class"><span class="n">set_recurrent_mode</span></a><span class="p">(</span><span class="kc">True</span><span class="p">):</span>
+        <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential" title="tensordict.nn.TensorDictSequential" class="sphx-glr-backref-module-tensordict-nn sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">trainable_policy</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict.clone" title="tensordict.TensorDict.clone" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-method"><span class="n">sample</span><span class="o">.</span><span class="n">clone</span></a><span class="p">())</span>
+    <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span></a> <span class="o">=</span> <span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out</span></a><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">]</span> <span class="o">-</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">target_logits</span></a><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">out</span></a><span class="p">[</span><span class="s2">&quot;logits&quot;</span><span class="p">]))</span><span class="o">.</span><span class="n">pow</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam.zero_grad" title="torch.optim.Adam.zero_grad" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-method"><span class="n">optimizer</span><span class="o">.</span><span class="n">zero_grad</span></a><span class="p">()</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.Tensor.backward.html#torch.Tensor.backward" title="torch.Tensor.backward" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-method"><span class="n">loss</span><span class="o">.</span><span class="n">backward</span></a><span class="p">()</span>
+    <a href="https://docs.pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam.step" title="torch.optim.Adam.step" class="sphx-glr-backref-module-torch-optim sphx-glr-backref-type-py-method"><span class="n">optimizer</span><span class="o">.</span><span class="n">step</span></a><span class="p">()</span>
+    <span class="n">losses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">loss</span></a><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+<a href="../reference/generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector.shutdown" title="torchrl.collectors.Collector.shutdown" class="sphx-glr-backref-module-torchrl-collectors sphx-glr-backref-type-py-method"><span class="n">collector</span><span class="o">.</span><span class="n">shutdown</span></a><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Training loss trajectory:&quot;</span><span class="p">,</span> <span class="p">[</span><span class="nb">round</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">losses</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>Training loss trajectory: [0.4146, 0.4059, 0.4086, 0.4057]
+</pre></div>
+</div>
+</section>
+<section id="conclusion">
+<h2>Conclusion<a class="headerlink" href="#conclusion" title="Link to this heading">#</a></h2>
+<p>You have built a recurrent training pipeline that:</p>
+<ul class="simple">
+<li><p>Lets the collector auto-wire <code class="xref py py-class docutils literal notranslate"><span class="pre">InitTracker</span></code> and the
+recurrent-state primer for you, removing two manual steps that used to
+be a frequent source of silent bugs.</p></li>
+<li><p>Samples multi-step trajectory slices from a replay buffer with
+<a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a>.</p></li>
+<li><p>Runs the LSTM in full-sequence mode under
+<code class="xref py py-class docutils literal notranslate"><span class="pre">set_recurrent_mode(True)</span></code> and verified by
+construction that hidden state does not leak across trajectory
+boundaries inside a sampled batch.</p></li>
+</ul>
+<p>This is the canonical TorchRL pattern for recurrent / sequence-based RL.
+It composes cleanly with every loss module, every advantage estimator,
+and every replay-buffer extension in the library.</p>
+</section>
+<section id="further-reading">
+<h2>Further reading<a class="headerlink" href="#further-reading" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="dqn_with_rnn.html#rnn-tuto"><span class="std std-ref">Recurrent DQN</span></a> — the single-step / collection-time
+complement to this tutorial.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">examples/replay-buffers/recurrent_slice_sampler_pipeline.py</span></code> — a
+minimal, runnable end-to-end version of this pipeline (GRU policy, the
+collector writing directly into the buffer in a background thread, and
+<a class="reference internal" href="../reference/generated/torchrl.data.replay_buffers.SliceSampler.html#torchrl.data.replay_buffers.SliceSampler" title="torchrl.data.replay_buffers.SliceSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">SliceSampler</span></code></a> auto-detecting the
+trajectory key).</p></li>
+<li><p><a class="reference internal" href="../reference/recurrent_state_lifecycle.html#ref-recurrent-state-lifecycle"><span class="std std-ref">Recurrent state lifecycle</span></a> — full reference on how hidden
+state flows from collection through replay to the loss, and what
+<code class="docutils literal notranslate"><span class="pre">is_init</span></code> controls along the way.</p></li>
+<li><p><a class="reference internal" href="../reference/collectors_internals.html#ref-collectors-internals"><span class="std std-ref">Collector Internals</span></a> — the per-step rollout flow,
+<code class="docutils literal notranslate"><span class="pre">_carrier</span></code> semantics, and how the device-cast flags interact with
+recurrent state.</p></li>
+<li><p><a class="reference internal" href="../reference/glossary.html#ref-glossary"><span class="std std-ref">Glossary</span></a> — short definitions of <code class="docutils literal notranslate"><span class="pre">is_init</span></code>,
+<code class="docutils literal notranslate"><span class="pre">TensorDictPrimer</span></code>, <code class="docutils literal notranslate"><span class="pre">recurrent</span> <span class="pre">mode</span></code>, <code class="docutils literal notranslate"><span class="pre">set_keys</span></code>, and other
+shorthand that appears throughout the recurrent code paths.</p></li>
+</ul>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.170 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-recurrent-sequence-training-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/70bdaea647addd62eb8379f8c256e50b/recurrent_sequence_training.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">recurrent_sequence_training.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/c5f0529613de180df8279ab970ead224/recurrent_sequence_training.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">recurrent_sequence_training.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/8f7c6500108a26ed094c1f7e410c85ee/recurrent_sequence_training.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">recurrent_sequence_training.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dqn_with_rnn.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Recurrent DQN: Training recurrent policies</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="mujoco_cube_bowl_macros.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">MuJoCo scripted manipulation with human-readable robot actions</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dqn_with_rnn.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Recurrent DQN: Training recurrent policies</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="mujoco_cube_bowl_macros.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">MuJoCo scripted manipulation with human-readable robot actions</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#environment-and-policy">Environment and policy</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#auto-wiring-recurrent-env-transforms">Auto-wiring recurrent env transforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#inspecting-a-single-batch">Inspecting a single batch</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#replay-with-slicesampler">Replay with SliceSampler</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#what-is-init-marks">What <code class="docutils literal notranslate"><span class="pre">is_init</span></code> marks</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequential-mode-vs-recurrent-mode">Sequential mode vs. recurrent mode</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#why-the-boundary-handling-matters-a-controlled-check">Why the boundary handling matters: a controlled check</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-tiny-gradient-path-smoke-test">A tiny gradient-path smoke test</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conclusion">Conclusion</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#further-reading">Further reading</a></li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pytorch/rl/edit/main/docs/source/tutorials/recurrent_sequence_training.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="../_sources/tutorials/recurrent_sequence_training.rst.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+<div class="sidebar-secondary-item">
+  <div class="sidebar-heading">PyTorch Libraries</div>
+  <ul style="list-style-type: none; padding: 0; padding-bottom: 80px;">
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/executorch" style="color: var(--pst-color-text-muted)">ExecuTorch</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/helion" style="color: var(--pst-color-text-muted)">Helion</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/ao" style="color: var(--pst-color-text-muted)">torchao</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/kineto" style="color: var(--pst-color-text-muted)">kineto</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/torchtitan" style="color: var(--pst-color-text-muted)">torchtitan</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/rl" style="color: var(--pst-color-text-muted)">TorchRL</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/vision" style="color: var(--pst-color-text-muted)">torchvision</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/audio" style="color: var(--pst-color-text-muted)">torchaudio</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/tensordict" style="color: var(--pst-color-text-muted)">tensordict</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/xla" style="color: var(--pst-color-text-muted)">PyTorch on XLA Devices</a></li>
+  
+  </ul>
+</div>
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "Recurrent training on sequence batches",
+       "headline": "Recurrent training on sequence batches",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/tutorials/recurrent_sequence_training.html",
+       "articleBody": "Note Go to the end to download the full example code. Recurrent training on sequence batches# Author: Achintya Paningapalli What you will learn How TorchRL auto-wires InitTracker and the recurrent-state primer when a recurrent policy is detected How to sample multi-step slices from a replay buffer with SliceSampler How to train a recurrent policy in full-sequence mode using set_recurrent_mode How set_recurrent_mode is used in collectors (sequential, False) vs. loss modules (recurrent, True), and how to control it across processes and workers Why is_init at slice starts is what keeps hidden state from leaking across episode boundaries inside a replay batch Prerequisites PyTorch v2.0.0 gymnasium[classic_control] Familiarity with Recurrent DQN is helpful but not required \u2014 this tutorial is its multi-step complement from __future__ import annotations Overview# There are two ways to train a recurrent policy in TorchRL, and choosing between them is the first design decision in any recurrent project: Sequential mode (one step per forward call). The policy reads the previous step\u2019s hidden state from the TensorDict, runs the LSTM for one step, and writes the new hidden state under the (\"next\", ...) keys. This is the natural mode during collection and is what Recurrent DQN covers in depth. Recurrent mode (full [B, T] sequence per forward call). The LSTM processes a whole time dimension at once. This is used inside loss / advantage code over replayed trajectory slices, where you want to backprop through several timesteps in a single batched call. Rectangular [B, T] tensors are one option, but TorchRL also accepts the flat, ragged slices returned by SliceSampler: the flat dimension is treated as a packed time axis and is_init partitions it into independent chunks. This tutorial focuses on (2): how to collect data, sample multi-step slices, and run a recurrent policy in full-sequence mode without leaking hidden state across episode boundaries. The key building blocks \u2014 most of which the collector now auto-wires for you \u2014 are: LSTMModule (the recurrent policy core), InitTracker (writes is_init=True at the start of every trajectory), A TensorDictPrimer that seeds the initial recurrent state on reset, SliceSampler for trajectory-aware replay, set_recurrent_mode for switching the LSTM between single-step and full-sequence execution. See Recurrent state lifecycle for the full reference on how hidden state flows through the pipeline. If you are running this in Google Colab, install the dependencies first: !pip3 install torchrl !pip3 install gymnasium import torch from tensordict import TensorDict from tensordict.nn import TensorDictModule as Mod, TensorDictSequential as Seq from torch import nn from torchrl.collectors import Collector from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer from torchrl.data.replay_buffers.samplers import SliceSampler from torchrl.envs import GymEnv from torchrl.modules import LSTMModule, set_recurrent_mode torch.manual_seed(0) device = torch.device(\"cpu\") Environment and policy# We use CartPole-v1 for a small, fast, fully-observed env. A recurrent policy is overkill for CartPole, but that is precisely the point: it lets us focus on the sequence-batching machinery without the env being the bottleneck. The same pattern scales unchanged to partially-observed environments where memory actually matters. The policy is a tiny LSTMModule followed by a linear head that maps the LSTM output to the action logits. We pick hidden_size=16 so the tutorial finishes quickly on CPU. OBS_DIM = 4 # CartPole observation: cart pos, cart vel, pole angle, pole vel N_ACTIONS = 2 # left or right HIDDEN = 16 def make_policy() -\u003e Seq: \"\"\"Construct the recurrent policy: LSTMModule + linear logits head.\"\"\" lstm = LSTMModule( input_size=OBS_DIM, hidden_size=HIDDEN, in_keys=[\"observation\", \"rs_h\", \"rs_c\"], out_keys=[\"features\", (\"next\", \"rs_h\"), (\"next\", \"rs_c\")], python_based=True, # avoids cuDNN for vmap / torch.compile compatibility ) head = Mod( nn.Linear(HIDDEN, N_ACTIONS), in_keys=[\"features\"], out_keys=[\"logits\"], ) # Deterministic argmax action selection \u2014 enough to demonstrate the # collection / replay / sequence-training plumbing. chooser = Mod( lambda logits: logits.argmax(-1, keepdim=False), in_keys=[\"logits\"], out_keys=[\"action\"], ) return Seq(lstm, head, chooser) policy = make_policy() policy.eval() TensorDictSequential( module=ModuleList( (0): LSTMModule() (1): TensorDictModule( module=Linear(in_features=16, out_features=2, bias=True), device=cpu, in_keys=[\u0027features\u0027], out_keys=[\u0027logits\u0027]) (2): TensorDictModule( module=\u003cfunction make_policy.\u003clocals\u003e.\u003clambda\u003e at 0x7f0a5aacb060\u003e, device=cpu, in_keys=[\u0027logits\u0027], out_keys=[\u0027action\u0027]) ), device=cpu, in_keys=[\u0027observation\u0027, \u0027rs_h\u0027, \u0027rs_c\u0027, \u0027is_init\u0027], out_keys=[\u0027features\u0027, (\u0027next\u0027, \u0027rs_h\u0027), (\u0027next\u0027, \u0027rs_c\u0027), \u0027logits\u0027, \u0027action\u0027]) Auto-wiring recurrent env transforms# A recurrent policy needs two env-side transforms to behave correctly: InitTracker, which writes is_init=True at the first step after every reset. A TensorDictPrimer that zero-fills the initial (\"rs_h\", \"rs_c\") recurrent state slots on reset. Forgetting either of these is the most common source of silent hidden-state bugs. The collector now detects recurrent submodules in the policy and auto-appends both transforms when auto_register_policy_transforms=True is passed. As of v0.15 this becomes the default; for earlier versions you need to opt in explicitly. env = GymEnv(\"CartPole-v1\", device=device) collector = Collector( env, policy, frames_per_batch=64, total_frames=512, device=device, storing_device=device, auto_register_policy_transforms=True, reset_at_each_iter=False, ) Inspecting a single batch# Run one rollout and look at what comes back. Three things to notice: The batch shape is [T] where T == frames_per_batch (single env). is_init is True at the very first step and immediately after each done. These mark trajectory boundaries. (\"next\", \"rs_h\") / (\"next\", \"rs_c\") carry the LSTM\u2019s next-step hidden / cell state across timesteps. data = next(iter(collector)) print(\"Batch shape:\", data.shape) print(\"Available keys:\", sorted(k for k in data.keys())) print(\"is_init shape:\", data[\"is_init\"].shape) print(\"# trajectory boundaries in batch:\", int(data[\"is_init\"].sum().item())) print( \"Next-step hidden shape:\", data[\"next\", \"rs_h\"].shape, \"(batch, num_layers, hidden_size)\", ) Batch shape: torch.Size([64]) Available keys: [\u0027action\u0027, \u0027collector\u0027, \u0027done\u0027, \u0027features\u0027, \u0027is_init\u0027, \u0027logits\u0027, \u0027next\u0027, \u0027observation\u0027, \u0027rs_c\u0027, \u0027rs_h\u0027, \u0027terminated\u0027, \u0027truncated\u0027] is_init shape: torch.Size([64, 1]) # trajectory boundaries in batch: 8 Next-step hidden shape: torch.Size([64, 1, 16]) (batch, num_layers, hidden_size) Replay with SliceSampler# We store the rollout in a replay buffer and sample fixed-length slices of trajectories from it. SliceSampler is trajectory-aware: it uses the boundary information already in the batch ((\"next\", \"done\") and the collector-written (\"collector\", \"traj_ids\")) to draw whole sub-trajectories. Two design choices in this section: Slices remain *ragged* by default. SliceSampler returns a flat batch of concatenated variable-length slices, not a rectangular [B, T] tensor. The trajectory boundaries inside that flat batch are marked by is_init=True. This avoids padding waste and matches how TorchRL\u2019s recurrent modules already consume input. ``pad_output=True`` is available but discouraged. It pads short slices to slice_len and writes a (\"collector\", \"mask\") key for consumers (e.g. mask-aware losses), but the docstring on SliceSampler explicitly steers users toward the ragged path when possible. SLICE_LEN = 8 NUM_SLICES = 4 rb = TensorDictReplayBuffer( storage=LazyTensorStorage(max_size=1024, device=device), sampler=SliceSampler(slice_len=SLICE_LEN, strict_length=False), batch_size=SLICE_LEN * NUM_SLICES, ) rb.extend(data) sample = rb.sample() is_init_positions = sample[\"is_init\"].squeeze(-1).nonzero().squeeze(-1).tolist() print(\"Sampled batch shape:\", sample.shape) print(\"is_init True positions (slice starts):\", is_init_positions) Sampled batch shape: torch.Size([32]) is_init True positions (slice starts): [0, 8, 16, 24] What is_init marks# Each True value in the sampled batch\u2019s is_init flags the first timestep of a slice (or a trajectory boundary that fell inside a slice because the underlying episode ended mid-slice). Downstream code \u2014 the recurrent module\u2019s full-sequence forward and GAE / advantage computation \u2014 reads these markers to know where to reset hidden state. Padding masks are a separate signal: when pad_output=True is used, SliceSampler writes a (\"collector\", \"mask\") key for consumers that need to ignore padded timesteps. Sequential mode vs. recurrent mode# set_recurrent_mode has two modes: set_recurrent_mode(False) (sequential): the LSTM processes one timestep at a time, reading rs_h / rs_c from the TensorDict and writing the updated state into (\"next\", \"rs_h\") / (\"next\", \"rs_c\"). This is the natural mode during collection: the collector calls the policy once per environment step. set_recurrent_mode(True) (recurrent): the LSTM processes a whole time batch in a single nn.LSTM call, using is_init to reset the hidden state at trajectory boundaries. This is the mode used during training over replayed slices. How set_recurrent_mode is managed in collectors and loss modules: During collection, the collector calls the policy inside sequential mode. The default default_recurrent_mode=False on LSTMModule means no explicit context manager is required \u2014 the LSTM automatically runs step-by-step. If you need to override this (e.g. in a custom collector), wrap the policy call with set_recurrent_mode(False). All built-in TorchRL loss modules wrap their forward with set_recurrent_mode(True) automatically, so you never need to set the mode manually when calling a loss. The same applies to advantage estimators and value estimators. In multi-process / distributed settings (e.g. MultiaSyncDataCollector), each worker process carries its own thread-local recurrent mode. The mode set in the main process does not propagate to worker processes. Workers always start with the default (sequential, False); the training process sets recurrent mode independently when computing the loss. Equivalence of sequential and recurrent mode: Running the LSTM step-by-step under set_recurrent_mode(False) and running it in a single batch under set_recurrent_mode(True) produce numerically identical outputs. We verify this now on a short sequence. # Build a minimal hand-crafted 4-step trajectory so the equivalence is # unambiguous: one trajectory, is_init only at t=0, zero initial hidden. T_equiv = 4 demo = TensorDict( { \"observation\": torch.randn(T_equiv, OBS_DIM), \"rs_h\": torch.zeros(T_equiv, 1, HIDDEN), \"rs_c\": torch.zeros(T_equiv, 1, HIDDEN), \"is_init\": torch.tensor([True, False, False, False]), }, batch_size=[T_equiv], ) # --- set_recurrent_mode(False): one call per step --- # The LSTM reads rs_h / rs_c, processes a single timestep, and writes the # updated state into (\"next\", \"rs_h\") / (\"next\", \"rs_c\"). We thread the # hidden state from one step to the next by hand. outs_seq = [] h = torch.zeros(1, 1, HIDDEN) c = torch.zeros(1, 1, HIDDEN) for t in range(T_equiv): step = demo[t : t + 1].clone() step[\"rs_h\"] = h step[\"rs_c\"] = c with set_recurrent_mode(False): step_out = policy(step) outs_seq.append(step_out[\"features\"]) h = step_out[\"next\", \"rs_h\"] c = step_out[\"next\", \"rs_c\"] features_seq = torch.cat(outs_seq, dim=0) # --- set_recurrent_mode(True): one batched call --- with set_recurrent_mode(True): out_rec = policy(demo.clone()) # They must be numerically identical. torch.testing.assert_close(features_seq, out_rec[\"features\"], rtol=1e-4, atol=1e-5) print( \"set_recurrent_mode(False) step-by-step == set_recurrent_mode(True) batched: verified.\" ) # Now run the full replay sample in recurrent mode (the training-time pattern). with set_recurrent_mode(True): out = policy(sample.clone()) print(\"Recurrent-mode output shape:\", out[\"features\"].shape, \"(total_steps, hidden)\") print( \"Recurrent-mode logits shape:\", out[\"logits\"].shape, \"(total_steps, n_actions)\", ) set_recurrent_mode(False) step-by-step == set_recurrent_mode(True) batched: verified. Recurrent-mode output shape: torch.Size([32, 16]) (total_steps, hidden) Recurrent-mode logits shape: torch.Size([32, 2]) (total_steps, n_actions) Why the boundary handling matters: a controlled check# The forward above already ran the interior-split path on real sampled data. To make the no-leakage guarantee provable rather than merely exercised, we now build a small two-trajectory packed batch by hand, seed the first trajectory with non-zero noise in its incoming hidden, and check that the second trajectory\u2019s outputs match a standalone forward over just that second trajectory. If hidden state leaked across the boundary, the noisy first half would pollute the second half\u2019s outputs and the comparison would fail. # Two adjacent slices of length 4 each, packed end-to-end. is_init=True at # index 0 (first traj start) and index 4 (second traj start). T_A = T_B = 4 T = T_A + T_B is_init_packed = torch.zeros(1, T, dtype=torch.bool) is_init_packed[0, 0] = True is_init_packed[0, T_A] = True obs = torch.randn(1, T, OBS_DIM) # Seed the incoming hidden with noise. The recurrent forward should # *override* this at every is_init=True position. noisy_h = torch.randn(1, T, 1, HIDDEN) noisy_c = torch.randn(1, T, 1, HIDDEN) packed = TensorDict( { \"observation\": obs, \"rs_h\": noisy_h, \"rs_c\": noisy_c, \"is_init\": is_init_packed, }, batch_size=[1, T], ) # Isolated forward over only the second trajectory, with is_init=True at # step 0 (its real start). If the packed run handles boundaries correctly, # the packed batch\u0027s second-half output must match this isolated output. is_init_b = torch.zeros(1, T_B, dtype=torch.bool) is_init_b[0, 0] = True b_only = TensorDict( { \"observation\": obs[:, T_A:].clone(), \"rs_h\": noisy_h[:, T_A:].clone(), # same noise \u2014 must be overridden \"rs_c\": noisy_c[:, T_A:].clone(), \"is_init\": is_init_b, }, batch_size=[1, T_B], ) with set_recurrent_mode(True): packed_out = policy(packed) b_out = policy(b_only) # Trajectory B\u0027s features inside the packed batch == trajectory B alone. torch.testing.assert_close( packed_out[\"features\"][:, T_A:], b_out[\"features\"], rtol=1e-5, atol=1e-6 ) print(\"Hidden-state isolation across is_init boundary: verified.\") Hidden-state isolation across is_init boundary: verified. A tiny gradient-path smoke test# We close with a minimal supervised update on top of the same infrastructure. We use the simplest possible objective \u2014 match the action logits to a constant target \u2014 purely to exercise the set_recurrent_mode(True) + replay-buffer + LSTM gradient path. In a real recurrent training job, this block is where you would compute returns or advantages and call the objective module, still under the same recurrent context manager. trainable_policy = make_policy() optimizer = torch.optim.Adam(trainable_policy.parameters(), lr=3e-4) target_logits = torch.zeros(N_ACTIONS) target_logits[0] = 1.0 # arbitrary supervised target losses = [] for _step in range(4): sample = rb.sample() with set_recurrent_mode(True): out = trainable_policy(sample.clone()) loss = (out[\"logits\"] - target_logits.expand_as(out[\"logits\"])).pow(2).mean() optimizer.zero_grad() loss.backward() optimizer.step() losses.append(loss.item()) collector.shutdown() print(\"Training loss trajectory:\", [round(v, 4) for v in losses]) Training loss trajectory: [0.4146, 0.4059, 0.4086, 0.4057] Conclusion# You have built a recurrent training pipeline that: Lets the collector auto-wire InitTracker and the recurrent-state primer for you, removing two manual steps that used to be a frequent source of silent bugs. Samples multi-step trajectory slices from a replay buffer with SliceSampler. Runs the LSTM in full-sequence mode under set_recurrent_mode(True) and verified by construction that hidden state does not leak across trajectory boundaries inside a sampled batch. This is the canonical TorchRL pattern for recurrent / sequence-based RL. It composes cleanly with every loss module, every advantage estimator, and every replay-buffer extension in the library. Further reading# Recurrent DQN \u2014 the single-step / collection-time complement to this tutorial. examples/replay-buffers/recurrent_slice_sampler_pipeline.py \u2014 a minimal, runnable end-to-end version of this pipeline (GRU policy, the collector writing directly into the buffer in a background thread, and SliceSampler auto-detecting the trajectory key). Recurrent state lifecycle \u2014 full reference on how hidden state flows from collection through replay to the loss, and what is_init controls along the way. Collector Internals \u2014 the per-step rollout flow, _carrier semantics, and how the device-cast flags interact with recurrent state. Glossary \u2014 short definitions of is_init, TensorDictPrimer, recurrent mode, set_keys, and other shorthand that appears throughout the recurrent code paths. Total running time of the script: (0 minutes 0.170 seconds) Download Jupyter notebook: recurrent_sequence_training.ipynb Download Python source code: recurrent_sequence_training.py Download zipped: recurrent_sequence_training.zip Gallery generated by Sphinx-Gallery",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/tutorials/recurrent_sequence_training.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

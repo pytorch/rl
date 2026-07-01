@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+WorldModelLoss
+==============
+
+.. autoclass:: WorldModelLoss
+    :members:

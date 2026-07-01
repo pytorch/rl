@@ -1,0 +1,2414 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.envs.custom.mujoco.satellite &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/envs/custom/mujoco/satellite';</script>
+    <script src="../../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.envs.custom.mujoco.satellite - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/recurrent_sequence_training.html">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/recurrent_sequence_training.html">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.envs...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.envs.custom.mujoco.satellite">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/envs/custom/mujoco/satellite</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.envs.custom.mujoco.satellite</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="sd">&quot;&quot;&quot;Satellite attitude-control task with Control Moment Gyros (CMGs).</span>
+
+<span class="sd">The agent commands gimbal rates of either 4 (pyramid) or 6 (orthogonal)</span>
+<span class="sd">CMGs to slew the satellite to a target attitude sampled uniformly on</span>
+<span class="sd">``SO(3)`` at reset, while *avoiding internal singularities* of the CMG</span>
+<span class="sd">cluster. The singularity penalty uses the manipulability metric of the</span>
+<span class="sd">gimbal Jacobian: ``m(J) = sqrt(det(J J^T) + eps)``.</span>
+
+<span class="sd">Reward</span>
+<span class="sd">    ``r = - ||q_err|| - lambda_s / m(J) - lambda_u * ||a||^2``</span>
+
+<span class="sd">Termination</span>
+<span class="sd">    Never (the satellite cannot crash). Use a</span>
+<span class="sd">    :class:`~torchrl.envs.transforms.TimeLimit` transform for truncation.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Literal</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="n">TensorDictBase</span>
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">is_compiling</span>
+<span class="kn">from</span> <span class="nn">torchrl.data.tensor_specs</span> <span class="kn">import</span> <span class="n">Bounded</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">Unbounded</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.custom.mujoco._math</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">cmg_jacobian</span><span class="p">,</span>
+    <span class="n">manipulability</span><span class="p">,</span>
+    <span class="n">orthogonal_6cmg_geometry</span><span class="p">,</span>
+    <span class="n">pyramid_4cmg_geometry</span><span class="p">,</span>
+    <span class="n">quat_conj</span><span class="p">,</span>
+    <span class="n">quat_log</span><span class="p">,</span>
+    <span class="n">quat_mul</span><span class="p">,</span>
+    <span class="n">random_unit_quat</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.custom.mujoco._satellite_primitives</span> <span class="kn">import</span> <span class="n">SatelliteAttitudeTransform</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.custom.mujoco.base</span> <span class="kn">import</span> <span class="n">MujocoEnv</span>
+<span class="kn">from</span> <span class="nn">torchrl.envs.transforms._base</span> <span class="kn">import</span> <span class="n">Transform</span>
+
+
+<div class="viewcode-block" id="SatelliteEnv">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.SatelliteEnv.html#torchrl.envs.SatelliteEnv">[docs]</a>
+<span class="k">class</span> <span class="nc">SatelliteEnv</span><span class="p">(</span><span class="n">MujocoEnv</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">&quot;&quot;&quot;Attitude-control task with 4 or 6 CMGs.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        num_cmgs: ``4`` (pyramid) or ``6`` (orthogonal cluster).</span>
+<span class="sd">        attitude_weight: weight on ``-||q_err||``. Default ``1.0``.</span>
+<span class="sd">        singularity_weight: weight on ``-1 / m_norm(J)`` where</span>
+<span class="sd">            ``m_norm(J) = m(J) / rotor_h^3``. The normalization makes</span>
+<span class="sd">            the metric rotor-speed invariant; default ``0.5`` so the</span>
+<span class="sd">            penalty is comparable in magnitude to the attitude term</span>
+<span class="sd">            for near-singular postures and effectively zero for the</span>
+<span class="sd">            nominal cluster.</span>
+<span class="sd">        ctrl_cost_weight: weight on ``||a||^2``. Default ``0.01``.</span>
+<span class="sd">        omega_weight: weight on ``-||bus_omega||^2``. Penalizes body</span>
+<span class="sd">            angular velocity so the policy is incentivised to *stop*</span>
+<span class="sd">            at the target attitude rather than swing through it.</span>
+<span class="sd">            Default ``0.1``: with omega magnitudes around 1 rad/s</span>
+<span class="sd">            during a slew this contributes ``~-0.1`` per step,</span>
+<span class="sd">            comparable to the singularity term.</span>
+<span class="sd">        action_scale: rescaling factor applied inside</span>
+<span class="sd">            :meth:`_prepare_ctrl`: the agent emits actions in</span>
+<span class="sd">            ``[-1, 1]`` and the simulator sees a commanded gimbal</span>
+<span class="sd">            rate of ``action_scale * action`` rad/s. Default ``3.0``,</span>
+<span class="sd">            chosen to keep saturated 180-deg slews physically</span>
+<span class="sd">            reachable inside ~1500-step episodes.</span>
+<span class="sd">        rotor_h: scalar rotor angular momentum used in the Jacobian.</span>
+<span class="sd">            Defaults to :attr:`ROTOR_SPEED` (proxy unit, since the</span>
+<span class="sd">            absolute scale only changes the singularity threshold).</span>
+<span class="sd">        \*\*kwargs: forwarded to :class:`MujocoEnv`.</span>
+
+<span class="sd">    Example:</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.envs import SatelliteEnv  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; env = SatelliteEnv(num_cmgs=4, num_envs=4)  # doctest: +SKIP</span>
+<span class="sd">        &gt;&gt;&gt; td = env.rollout(50)  # doctest: +SKIP</span>
+
+<span class="sd">    Reference:</span>
+<span class="sd">        Wie, Bong (2008). &quot;Space Vehicle Dynamics and Control&quot; --</span>
+<span class="sd">        chapter on CMG steering laws and singularity escape.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">FRAME_SKIP</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">RESET_NOISE_SCALE</span> <span class="o">=</span> <span class="mf">0.001</span>
+    <span class="n">ROTOR_SPEED_4</span> <span class="o">=</span> <span class="mf">100.0</span>
+    <span class="n">ROTOR_SPEED_6</span> <span class="o">=</span> <span class="mf">200.0</span>
+    <span class="n">RENDER_BACKGROUND</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">)</span>
+    <span class="n">_SATELLITE_GEOM_ALPHA</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.55</span>
+    <span class="n">_TARGET_FRAME_BODY</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;target_attitude_frame&quot;</span>
+    <span class="n">_TARGET_FRAME_POS</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">_BODY_FRAME_XML</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span>
+        <span class="nb">str</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">      &lt;site name=&quot;satellite_body_x_axis&quot; type=&quot;capsule&quot;</span>
+<span class="s2">            fromto=&quot;0 0 0 0.75 0 0&quot; size=&quot;0.018&quot; rgba=&quot;1 0.1 0.1 0.55&quot;/&gt;</span>
+<span class="s2">      &lt;site name=&quot;satellite_body_y_axis&quot; type=&quot;capsule&quot;</span>
+<span class="s2">            fromto=&quot;0 0 0 0 0.75 0&quot; size=&quot;0.018&quot; rgba=&quot;0.1 1 0.1 0.55&quot;/&gt;</span>
+<span class="s2">      &lt;site name=&quot;satellite_body_z_axis&quot; type=&quot;capsule&quot;</span>
+<span class="s2">            fromto=&quot;0 0 0 0 0 0.75&quot; size=&quot;0.018&quot; rgba=&quot;0.2 0.4 1 0.55&quot;/&gt;&quot;&quot;&quot;</span>
+    <span class="n">_TARGET_FRAME_XML</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span>
+        <span class="nb">str</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">  &lt;body name=&quot;target_attitude_frame&quot; pos=&quot;0 0 0&quot; quat=&quot;1 0 0 0&quot;&gt;</span>
+<span class="s2">    &lt;site name=&quot;target_x_axis&quot; type=&quot;capsule&quot;</span>
+<span class="s2">          fromto=&quot;0 0 0 1.1 0 0&quot; size=&quot;0.026&quot; rgba=&quot;1 0.1 0.1 0.85&quot;/&gt;</span>
+<span class="s2">    &lt;site name=&quot;target_y_axis&quot; type=&quot;capsule&quot;</span>
+<span class="s2">          fromto=&quot;0 0 0 0 1.1 0&quot; size=&quot;0.026&quot; rgba=&quot;0.1 1 0.1 0.85&quot;/&gt;</span>
+<span class="s2">    &lt;site name=&quot;target_z_axis&quot; type=&quot;capsule&quot;</span>
+<span class="s2">          fromto=&quot;0 0 0 0 0 1.1&quot; size=&quot;0.026&quot; rgba=&quot;0.2 0.4 1 0.85&quot;/&gt;</span>
+<span class="s2">    &lt;site name=&quot;target_x_tip&quot; type=&quot;sphere&quot;</span>
+<span class="s2">          pos=&quot;1.1 0 0&quot; size=&quot;0.055&quot; rgba=&quot;1 0.1 0.1 0.9&quot;/&gt;</span>
+<span class="s2">    &lt;site name=&quot;target_y_tip&quot; type=&quot;sphere&quot;</span>
+<span class="s2">          pos=&quot;0 1.1 0&quot; size=&quot;0.055&quot; rgba=&quot;0.1 1 0.1 0.9&quot;/&gt;</span>
+<span class="s2">    &lt;site name=&quot;target_z_tip&quot; type=&quot;sphere&quot;</span>
+<span class="s2">          pos=&quot;0 0 1.1&quot; size=&quot;0.055&quot; rgba=&quot;0.2 0.4 1 0.9&quot;/&gt;</span>
+<span class="s2">  &lt;/body&gt;&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">num_cmgs</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">attitude_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">singularity_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">singularity_clamp_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
+        <span class="n">singularity_mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;inverse&quot;</span><span class="p">,</span> <span class="s2">&quot;exp&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;inverse&quot;</span><span class="p">,</span>
+        <span class="n">singularity_exp_k</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="n">ctrl_cost_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">omega_weight</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">action_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="n">rotor_h</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">num_cmgs</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span> <span class="o">=</span> <span class="mi">4</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED_4</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">XML_PATH</span> <span class="o">=</span> <span class="s2">&quot;satellite_large.xml&quot;</span>
+        <span class="k">elif</span> <span class="n">num_cmgs</span> <span class="o">==</span> <span class="mi">6</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span> <span class="o">=</span> <span class="mi">6</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED_6</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">XML_PATH</span> <span class="o">=</span> <span class="s2">&quot;satellite_small.xml&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;num_cmgs must be 4 or 6, got </span><span class="si">{</span><span class="n">num_cmgs</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_cmgs</span> <span class="o">=</span> <span class="n">num_cmgs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">attitude_weight</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">attitude_weight</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">singularity_weight</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">singularity_weight</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">singularity_clamp_min</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">singularity_clamp_min</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">singularity_mode</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">singularity_mode</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">singularity_exp_k</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">singularity_exp_k</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ctrl_cost_weight</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ctrl_cost_weight</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">omega_weight</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">omega_weight</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_scale</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">action_scale</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rotor_h</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rotor_h</span><span class="p">)</span> <span class="k">if</span> <span class="n">rotor_h</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># CMG geometry, cached on the env&#39;s device / dtype.</span>
+        <span class="k">if</span> <span class="n">num_cmgs</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">g</span><span class="p">,</span> <span class="n">r0</span> <span class="o">=</span> <span class="n">pyramid_4cmg_geometry</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">g</span><span class="p">,</span> <span class="n">r0</span> <span class="o">=</span> <span class="n">orthogonal_6cmg_geometry</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_gimbal_axes</span> <span class="o">=</span> <span class="n">g</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rotor_axes_ref</span> <span class="o">=</span> <span class="n">r0</span>
+
+        <span class="c1"># Per-env target attitude, populated on reset.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+        <span class="c1"># Cached per-step manipulability so the obs builder can surface</span>
+        <span class="c1"># it without recomputing the Jacobian. Filled by</span>
+        <span class="c1"># :meth:`_compute_reward`; on the first reset, defaults to a</span>
+        <span class="c1"># large value (a non-singular nominal posture).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Per-step ``isfinite`` checks are off by default. They force a</span>
+        <span class="c1"># CUDA -&gt; CPU sync on each call (via ``bool(all_finite)``), which</span>
+        <span class="c1"># under hot-path collection erodes throughput. Set</span>
+        <span class="c1"># ``TORCHRL_SATELLITE_DEBUG=1`` (or pass ``debug_finite=True`` to</span>
+        <span class="c1"># the constructor) to re-enable them; the test suite uses this</span>
+        <span class="c1"># to validate reward guards without changing default semantics.</span>
+        <span class="n">env_flag</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;TORCHRL_SATELLITE_DEBUG&quot;</span><span class="p">,</span> <span class="s2">&quot;0&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_debug_finite</span> <span class="o">=</span> <span class="n">env_flag</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;false&quot;</span><span class="p">,</span> <span class="s2">&quot;False&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_assert_finite</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">is_compiling</span><span class="p">():</span>
+            <span class="c1"># ``torch._assert`` is a compile-time hint; cheap inside a</span>
+            <span class="c1"># compiled graph and skipped at runtime entirely.</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">_assert</span><span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(),</span>
+                <span class="sa">f</span><span class="s2">&quot;SatelliteEnv produced non-finite values in </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_debug_finite</span><span class="p">:</span>
+            <span class="c1"># Default eager path: no host-device sync, no overhead.</span>
+            <span class="k">return</span>
+        <span class="n">finite</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">finite</span><span class="o">.</span><span class="n">all</span><span class="p">()):</span>
+            <span class="k">return</span>
+
+        <span class="n">bad</span> <span class="o">=</span> <span class="o">~</span><span class="n">finite</span>
+        <span class="n">nan_count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="n">inf_count</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">isinf</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">:</span>
+            <span class="n">bad_rows</span> <span class="o">=</span> <span class="n">bad</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="n">row_list</span> <span class="o">=</span> <span class="n">bad_rows</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="n">sample</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">index_select</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">bad_rows</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">row_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">sample</span> <span class="o">=</span> <span class="n">value</span><span class="p">[</span><span class="n">bad</span><span class="p">][:</span><span class="mi">8</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;SatelliteEnv produced non-finite values in </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;nan_count=</span><span class="si">{</span><span class="n">nan_count</span><span class="si">}</span><span class="s2">, inf_count=</span><span class="si">{</span><span class="n">inf_count</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;bad_rows=</span><span class="si">{</span><span class="n">row_list</span><span class="si">}</span><span class="s2">, sample=</span><span class="si">{</span><span class="n">sample</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_normalize_quat_or_identity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">quat</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">quat</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">normalized</span> <span class="o">=</span> <span class="n">quat</span> <span class="o">/</span> <span class="n">norm</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">1e-12</span><span class="p">)</span>
+        <span class="n">identity</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">quat</span><span class="p">)</span>
+        <span class="n">identity</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">norm</span> <span class="o">&gt;</span> <span class="mf">1e-12</span><span class="p">,</span> <span class="n">normalized</span><span class="p">,</span> <span class="n">identity</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># XML patching: no ground floor in space.</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_transparent_satellite_geom</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">match</span><span class="p">:</span> <span class="n">re</span><span class="o">.</span><span class="n">Match</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">rgba</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rgba</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">rgba</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">_SATELLITE_GEOM_ALPHA</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="si">}{</span><span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">rgba</span><span class="p">)</span><span class="si">}{</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">_patch_xml</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">xml</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">xml</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;camera\b[^/]*/&gt;\s*&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">xml</span><span class="p">)</span>
+        <span class="n">xml</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;&lt;light\b[^/]*/&gt;\s*&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">xml</span><span class="p">)</span>
+        <span class="n">xml</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span>
+            <span class="sa">r</span><span class="s1">&#39;(&lt;geom\b[^&gt;]*\brgba=&quot;)([^&quot;]+)(&quot;)&#39;</span><span class="p">,</span>
+            <span class="bp">cls</span><span class="o">.</span><span class="n">_transparent_satellite_geom</span><span class="p">,</span>
+            <span class="n">xml</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">camera</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s1">&#39;&lt;camera name=&quot;side&quot; pos=&quot;6 -6 4&quot; &#39;</span>
+            <span class="s1">&#39;xyaxes=&quot;0.707 0.707 0 -0.302 0.302 0.905&quot; fovy=&quot;60&quot;/&gt;&#39;</span>
+        <span class="p">)</span>
+        <span class="n">light</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="s1">&#39;&lt;light name=&quot;top&quot; pos=&quot;0 0 4&quot; dir=&quot;0 0 -1&quot; &#39;</span>
+            <span class="s1">&#39;diffuse=&quot;0.8 0.8 0.8&quot; ambient=&quot;0.3 0.3 0.3&quot; directional=&quot;true&quot;/&gt;&#39;</span>
+        <span class="p">)</span>
+        <span class="n">xml</span> <span class="o">=</span> <span class="n">xml</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+            <span class="s1">&#39;&lt;freejoint name=&quot;root&quot;/&gt;&#39;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s1">&#39;&lt;freejoint name=&quot;root&quot;/&gt;</span><span class="se">\n</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="n">_BODY_FRAME_XML</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">xml</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+            <span class="s2">&quot;&lt;worldbody&gt;&quot;</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;worldbody&gt;</span><span class="se">\n</span><span class="s2">  </span><span class="si">{</span><span class="n">camera</span><span class="si">}</span><span class="se">\n</span><span class="s2">  </span><span class="si">{</span><span class="n">light</span><span class="si">}{</span><span class="bp">cls</span><span class="o">.</span><span class="n">_TARGET_FRAME_XML</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_sync_target_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">position</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_TARGET_FRAME_POS</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">set_static_body_pose</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_TARGET_FRAME_BODY</span><span class="p">,</span>
+            <span class="n">position</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Specs</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="nf">_make_obs_spec</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Composite</span><span class="p">:</span>
+        <span class="c1"># Semantically-split observation: the dynamics-relevant pieces</span>
+        <span class="c1"># are exposed as separate keys so downstream transforms (e.g.</span>
+        <span class="c1"># :class:`CatTensors`) can recombine them while keeping</span>
+        <span class="c1"># ``manipulability`` available for logging without feeding it</span>
+        <span class="c1"># into the policy.</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span>
+        <span class="k">return</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">bus_quat</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">quat_err</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">bus_omega</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">gimbal_angles</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">n</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">gimbal_rates</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">manipulability</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,),</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_make_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_make_specs</span><span class="p">()</span>
+        <span class="c1"># Override the action spec: agent controls only gimbals, not rotors.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_spec</span> <span class="o">=</span> <span class="n">Bounded</span><span class="p">(</span>
+            <span class="n">low</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">high</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span><span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_spec</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">(</span>
+            <span class="n">target_quat</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">init_bus_quat</span><span class="o">=</span><span class="n">Unbounded</span><span class="p">(</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+            <span class="p">),</span>
+            <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,),</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">step_mdp_static</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># State plumbing</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="nf">_sample_initial_state</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">qpos</span><span class="p">,</span> <span class="n">qvel</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_sample_initial_state</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">)</span>
+        <span class="c1"># Pin rotor velocities (qvel layout: [bus_lin(3), bus_ang(3),</span>
+        <span class="c1"># then per-CMG (gimbal_rate, rotor_rate) pairs]).</span>
+        <span class="n">rotor_vel_idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span><span class="p">)]</span>
+        <span class="n">qvel</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">rotor_vel_idx</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED</span>
+        <span class="c1"># Optional starting attitude override -- when present in the</span>
+        <span class="c1"># input tensordict, write into ``qpos[..., 3:7]`` (the bus</span>
+        <span class="c1"># quaternion) so the simulator boots at the requested attitude.</span>
+        <span class="c1"># The caller is expected to pass a full-batch ``(num_envs, 4)``</span>
+        <span class="c1"># quaternion; the backend&#39;s ``reset_mask`` picks the rows it</span>
+        <span class="c1"># actually resets, so we can write through without masking.</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;init_bus_quat&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">init_q</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;init_bus_quat&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">qpos</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">qpos</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_quat_or_identity</span><span class="p">(</span><span class="n">init_q</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">qpos</span><span class="p">,</span> <span class="n">qvel</span>
+
+    <span class="k">def</span> <span class="nf">_reset</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_reset</span><span class="p">(</span><span class="n">tensordict</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;target_quat&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="o">.</span><span class="n">clone</span><span class="p">())</span>
+        <span class="n">out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span>
+            <span class="s2">&quot;init_bus_quat&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">7</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">_index_extra_state</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">slice</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;target_quat&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="s2">&quot;last_manip&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="nf">_load_indexed_extra_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;target_quat&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;last_manip&quot;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">_set_indexed_extra_state</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">index</span><span class="p">:</span> <span class="nb">slice</span> <span class="o">|</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">source</span><span class="p">:</span> <span class="n">SatelliteEnv</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">_target_quat</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">source</span><span class="o">.</span><span class="n">_last_manip</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+            <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_target_frame</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_prepare_ctrl</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="c1"># Scale the agent&#39;s [-1, 1] command up to ``[-action_scale,</span>
+        <span class="c1"># action_scale]`` rad/s of gimbal rate. With the velocity</span>
+        <span class="c1"># actuators in the XML, the saturation cap on commanded rate</span>
+        <span class="c1"># is the dominant control-authority knob, so leaving it at 1</span>
+        <span class="c1"># rad/s makes 180-deg slews infeasible in any reasonable</span>
+        <span class="c1"># horizon. Keep the policy&#39;s action range at [-1, 1] (clean</span>
+        <span class="c1"># for ``TanhNormal``) and absorb the scaling here.</span>
+        <span class="n">scaled</span> <span class="o">=</span> <span class="n">action</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_scale</span>
+        <span class="n">rotor_ctrl</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">scaled</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ROTOR_SPEED</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">scaled</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">scaled</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">scaled</span><span class="p">,</span> <span class="n">rotor_ctrl</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_on_reset_all</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;target_quat&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_quat&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_quat_or_identity</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span> <span class="o">=</span> <span class="n">random_unit_quat</span><span class="p">(</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,),</span>
+                <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="c1"># Manipulability is only computed inside :meth:`_compute_reward`.</span>
+        <span class="c1"># Reset the cache to a non-singular default so the first obs</span>
+        <span class="c1"># after reset is well-defined.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_manip_from_qpos</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">qpos</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_target_frame</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_on_reset_mask</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">mask</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Build a full-batch target_quat candidate (either the user-</span>
+        <span class="c1"># supplied override or a freshly-sampled one) and mux only the</span>
+        <span class="c1"># masked rows in via ``torch.where``. Keeps the path free of</span>
+        <span class="c1"># data-dependent shape ops (no ``mask.sum().item()`` sync, no</span>
+        <span class="c1"># boolean indexing).</span>
+        <span class="k">if</span> <span class="n">tensordict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;target_quat&quot;</span> <span class="ow">in</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;target_quat&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_normalize_quat_or_identity</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">random_unit_quat</span><span class="p">(</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,),</span>
+                <span class="n">generator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rng</span><span class="p">,</span>
+                <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">)</span>
+        <span class="n">new_manip</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_manip_from_qpos</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">qpos</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">new_manip</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sync_target_frame</span><span class="p">()</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Observation, reward, done</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span> <span class="nf">_attitude_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qpos</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">bus_quat</span> <span class="o">=</span> <span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">7</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="c1"># q_err such that target = current * q_err  =&gt;  q_err = current^-1 * target</span>
+        <span class="n">q_err</span> <span class="o">=</span> <span class="n">quat_mul</span><span class="p">(</span><span class="n">quat_conj</span><span class="p">(</span><span class="n">bus_quat</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">quat_log</span><span class="p">(</span><span class="n">q_err</span><span class="p">)</span>  <span class="c1"># (B, 3)</span>
+
+    <span class="k">def</span> <span class="nf">_compute_manip_from_qpos</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qpos</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the per-env manipulability from a ``qpos`` snapshot.</span>
+
+<span class="sd">        Returns shape ``(num_envs, 1)``. Used to refresh</span>
+<span class="sd">        :attr:`_last_manip` on reset and inside :meth:`_compute_reward`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">gimbal_idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">7</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span><span class="p">)]</span>
+        <span class="n">gimbal_angles</span> <span class="o">=</span> <span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">gimbal_idx</span><span class="p">]</span>
+        <span class="n">jac</span> <span class="o">=</span> <span class="n">cmg_jacobian</span><span class="p">(</span>
+            <span class="n">gimbal_angles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gimbal_axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotor_axes_ref</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotor_h</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reset/qpos&quot;</span><span class="p">,</span> <span class="n">qpos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reset/gimbal_angles&quot;</span><span class="p">,</span> <span class="n">gimbal_angles</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reset/cmg_jacobian&quot;</span><span class="p">,</span> <span class="n">jac</span><span class="p">)</span>
+        <span class="n">manip</span> <span class="o">=</span> <span class="n">manipulability</span><span class="p">(</span><span class="n">jac</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reset/manipulability&quot;</span><span class="p">,</span> <span class="n">manip</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">manip</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_make_obs_split</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the observation as a dict of named sub-keys.</span>
+
+<span class="sd">        Replaces the legacy single-tensor ``_make_obs``. Downstream</span>
+<span class="sd">        :class:`CatTensors` transforms can recombine the dynamics-relevant</span>
+<span class="sd">        keys into a single observation while keeping ``manipulability``</span>
+<span class="sd">        separate for logging.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">qpos</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">qvel</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="s2">&quot;qvel&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span>
+        <span class="n">gimbal_idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">7</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
+        <span class="n">gimbal_rate_idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
+        <span class="n">bus_quat</span> <span class="o">=</span> <span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">7</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;bus_quat&quot;</span><span class="p">:</span> <span class="n">bus_quat</span><span class="p">,</span>
+            <span class="s2">&quot;quat_err&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attitude_error</span><span class="p">(</span><span class="n">qpos</span><span class="p">),</span>
+            <span class="s2">&quot;bus_omega&quot;</span><span class="p">:</span> <span class="n">qvel</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="s2">&quot;gimbal_angles&quot;</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">gimbal_idx</span><span class="p">]</span><span class="o">.</span><span class="n">sin</span><span class="p">(),</span> <span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">gimbal_idx</span><span class="p">]</span><span class="o">.</span><span class="n">cos</span><span class="p">()],</span>
+                <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="s2">&quot;gimbal_rates&quot;</span><span class="p">:</span> <span class="n">qvel</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">gimbal_rate_idx</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+            <span class="s2">&quot;manipulability&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span><span class="p">,</span>
+        <span class="p">}</span>
+
+<div class="viewcode-block" id="SatelliteEnv.make_attitude_transform">
+<a class="viewcode-back" href="../../../../../reference/generated/torchrl.envs.SatelliteEnv.html#torchrl.envs.SatelliteEnv.make_attitude_transform">[docs]</a>
+    <span class="k">def</span> <span class="nf">make_attitude_transform</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">execute</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">multi_action_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">stack_rewards</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">stack_observations</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">macro_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">36</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">8</span><span class="p">,</span>
+        <span class="n">attitude_gain</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
+        <span class="n">angular_rate_gain</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">8.0</span><span class="p">,</span>
+        <span class="n">jacobian_rotor_h</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Transform</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build the transform that expands target attitudes into CMG actions.</span>
+
+<span class="sd">        Examples:</span>
+<span class="sd">            &gt;&gt;&gt; from torchrl.envs import SatelliteEnv  # doctest: +SKIP</span>
+<span class="sd">            &gt;&gt;&gt; env = SatelliteEnv(num_cmgs=4)  # doctest: +SKIP</span>
+<span class="sd">            &gt;&gt;&gt; transform = env.make_attitude_transform(execute=True)  # doctest: +SKIP</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">SatelliteAttitudeTransform</span><span class="p">(</span>
+            <span class="n">num_cmgs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_cmgs</span><span class="p">,</span>
+            <span class="n">action_scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">action_scale</span><span class="p">,</span>
+            <span class="n">execute</span><span class="o">=</span><span class="n">execute</span><span class="p">,</span>
+            <span class="n">multi_action_dim</span><span class="o">=</span><span class="n">multi_action_dim</span><span class="p">,</span>
+            <span class="n">stack_rewards</span><span class="o">=</span><span class="n">stack_rewards</span><span class="p">,</span>
+            <span class="n">stack_observations</span><span class="o">=</span><span class="n">stack_observations</span><span class="p">,</span>
+            <span class="n">macro_steps</span><span class="o">=</span><span class="n">macro_steps</span><span class="p">,</span>
+            <span class="n">settle_steps</span><span class="o">=</span><span class="n">settle_steps</span><span class="p">,</span>
+            <span class="n">attitude_gain</span><span class="o">=</span><span class="n">attitude_gain</span><span class="p">,</span>
+            <span class="n">angular_rate_gain</span><span class="o">=</span><span class="n">angular_rate_gain</span><span class="p">,</span>
+            <span class="n">jacobian_rotor_h</span><span class="o">=</span><span class="n">jacobian_rotor_h</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_build_obs_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]:</span>
+        <span class="n">out</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixels_only</span><span class="p">:</span>
+            <span class="n">out</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_make_obs_split</span><span class="p">(</span><span class="n">state</span><span class="p">))</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_pixels</span><span class="p">:</span>
+            <span class="n">out</span><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_backend</span><span class="o">.</span><span class="n">render</span><span class="p">(</span>
+                <span class="n">camera_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">camera_id</span><span class="p">,</span>
+                <span class="n">width</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">render_width</span><span class="p">,</span>
+                <span class="n">height</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">render_height</span><span class="p">,</span>
+                <span class="n">background</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">RENDER_BACKGROUND</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">_compute_reward</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">action</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+        <span class="n">next_state</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">qpos</span> <span class="o">=</span> <span class="n">next_state</span><span class="p">[</span><span class="s2">&quot;qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">gimbal_idx</span> <span class="o">=</span> <span class="p">[</span><span class="mi">7</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_GIMBALS</span><span class="p">)]</span>
+        <span class="n">gimbal_angles</span> <span class="o">=</span> <span class="n">qpos</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">gimbal_idx</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/qpos&quot;</span><span class="p">,</span> <span class="n">qpos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/action&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/target_quat&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target_quat</span><span class="p">)</span>
+        <span class="n">quat_err</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_attitude_error</span><span class="p">(</span><span class="n">qpos</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/quat_err&quot;</span><span class="p">,</span> <span class="n">quat_err</span><span class="p">)</span>
+        <span class="n">att_err</span> <span class="o">=</span> <span class="n">quat_err</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/attitude_error&quot;</span><span class="p">,</span> <span class="n">att_err</span><span class="p">)</span>
+        <span class="n">jac</span> <span class="o">=</span> <span class="n">cmg_jacobian</span><span class="p">(</span>
+            <span class="n">gimbal_angles</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gimbal_axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotor_axes_ref</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rotor_h</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/gimbal_angles&quot;</span><span class="p">,</span> <span class="n">gimbal_angles</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/cmg_jacobian&quot;</span><span class="p">,</span> <span class="n">jac</span><span class="p">)</span>
+        <span class="n">jjt</span> <span class="o">=</span> <span class="n">jac</span> <span class="o">@</span> <span class="n">jac</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/cmg_jacobian_jjt&quot;</span><span class="p">,</span> <span class="n">jjt</span><span class="p">)</span>
+        <span class="n">det</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">jjt</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/cmg_jacobian_det&quot;</span><span class="p">,</span> <span class="n">det</span><span class="p">)</span>
+        <span class="n">manip</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">det</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/manipulability&quot;</span><span class="p">,</span> <span class="n">manip</span><span class="p">)</span>
+        <span class="c1"># Normalize manipulability by ``rotor_h ** 3`` so the metric</span>
+        <span class="c1"># is rotor-speed invariant. ``det(J J^T) ~ h^6`` scales with</span>
+        <span class="c1"># the rotor angular momentum, so without this rescaling the</span>
+        <span class="c1"># 1/manip penalty is ~5e-8 per step at ``rotor_h=100`` and</span>
+        <span class="c1"># never trains the avoid-singularity half of the task. After</span>
+        <span class="c1"># rescaling, ``manip_norm`` lives in ``[0, ~1]`` and the</span>
+        <span class="c1"># default ``singularity_weight=0.5`` yields ~0.5 / O(1) ≈ 0.5</span>
+        <span class="c1"># contribution on the nominal cluster, growing as the cluster</span>
+        <span class="c1"># approaches a singular configuration.</span>
+        <span class="n">manip_norm</span> <span class="o">=</span> <span class="n">manip</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rotor_h</span><span class="o">**</span><span class="mi">3</span><span class="p">)</span>
+        <span class="c1"># Cache the *unnormalized* metric for the obs (so logging</span>
+        <span class="c1"># remains physically interpretable across rotor speeds), but</span>
+        <span class="c1"># use the normalized one for the penalty.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_last_manip</span> <span class="o">=</span> <span class="n">manip</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">ctrl_cost</span> <span class="o">=</span> <span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/control_cost&quot;</span><span class="p">,</span> <span class="n">ctrl_cost</span><span class="p">)</span>
+        <span class="c1"># Body-rate penalty -- the slew-and-stop incentive. Without</span>
+        <span class="c1"># this, the optimal &quot;swing through the target&quot; policy is</span>
+        <span class="c1"># locally rewarded as much as the proper &quot;settle at the</span>
+        <span class="c1"># target&quot; one, because attitude error alone is zero at the</span>
+        <span class="c1"># crossing instant.</span>
+        <span class="n">qvel</span> <span class="o">=</span> <span class="n">next_state</span><span class="p">[</span><span class="s2">&quot;qvel&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">bus_omega</span> <span class="o">=</span> <span class="n">qvel</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span>
+        <span class="n">omega_cost</span> <span class="o">=</span> <span class="p">(</span><span class="n">bus_omega</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/omega_cost&quot;</span><span class="p">,</span> <span class="n">omega_cost</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">singularity_mode</span> <span class="o">==</span> <span class="s2">&quot;exp&quot;</span><span class="p">:</span>
+            <span class="c1"># Bounded smooth penalty: ``w * exp(-k * manip_norm)`` saturates</span>
+            <span class="c1"># at ``-w`` near the singularity instead of diverging via 1/0.</span>
+            <span class="n">sing_penalty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">singularity_weight</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span>
+                <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">singularity_exp_k</span> <span class="o">*</span> <span class="n">manip_norm</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># &quot;inverse&quot;</span>
+            <span class="n">sing_penalty</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">singularity_weight</span> <span class="o">/</span> <span class="n">manip_norm</span><span class="o">.</span><span class="n">clamp_min</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">singularity_clamp_min</span>
+            <span class="p">)</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">attitude_weight</span> <span class="o">*</span> <span class="n">att_err</span>
+            <span class="o">-</span> <span class="n">sing_penalty</span>
+            <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">ctrl_cost_weight</span> <span class="o">*</span> <span class="n">ctrl_cost</span>
+            <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">omega_weight</span> <span class="o">*</span> <span class="n">omega_cost</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/total&quot;</span><span class="p">,</span> <span class="n">reward</span><span class="p">)</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">reward</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assert_finite</span><span class="p">(</span><span class="s2">&quot;reward/total_unsqueezed&quot;</span><span class="p">,</span> <span class="n">reward</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">reward</span>
+
+    <span class="k">def</span> <span class="nf">_compute_done</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+        <span class="n">next_state</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_envs</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.envs.custom.mujoco.satellite",
+       "headline": "torchrl.envs.custom.mujoco.satellite",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/envs/custom/mujoco/satellite.html",
+       "articleBody": "Source code for torchrl.envs.custom.mujoco.satellite # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. \"\"\"Satellite attitude-control task with Control Moment Gyros (CMGs). The agent commands gimbal rates of either 4 (pyramid) or 6 (orthogonal) CMGs to slew the satellite to a target attitude sampled uniformly on ``SO(3)`` at reset, while *avoiding internal singularities* of the CMG cluster. The singularity penalty uses the manipulability metric of the gimbal Jacobian: ``m(J) = sqrt(det(J J^T) + eps)``. Reward ``r = - ||q_err|| - lambda_s / m(J) - lambda_u * ||a||^2`` Termination Never (the satellite cannot crash). Use a :class:`~torchrl.envs.transforms.TimeLimit` transform for truncation. \"\"\" from __future__ import annotations import os import re from typing import ClassVar, Literal import torch from tensordict import TensorDictBase from torchrl._utils import is_compiling from torchrl.data.tensor_specs import Bounded, Composite, Unbounded from torchrl.envs.custom.mujoco._math import ( cmg_jacobian, manipulability, orthogonal_6cmg_geometry, pyramid_4cmg_geometry, quat_conj, quat_log, quat_mul, random_unit_quat, ) from torchrl.envs.custom.mujoco._satellite_primitives import SatelliteAttitudeTransform from torchrl.envs.custom.mujoco.base import MujocoEnv from torchrl.envs.transforms._base import Transform [docs] class SatelliteEnv(MujocoEnv): r\"\"\"Attitude-control task with 4 or 6 CMGs. Args: num_cmgs: ``4`` (pyramid) or ``6`` (orthogonal cluster). attitude_weight: weight on ``-||q_err||``. Default ``1.0``. singularity_weight: weight on ``-1 / m_norm(J)`` where ``m_norm(J) = m(J) / rotor_h^3``. The normalization makes the metric rotor-speed invariant; default ``0.5`` so the penalty is comparable in magnitude to the attitude term for near-singular postures and effectively zero for the nominal cluster. ctrl_cost_weight: weight on ``||a||^2``. Default ``0.01``. omega_weight: weight on ``-||bus_omega||^2``. Penalizes body angular velocity so the policy is incentivised to *stop* at the target attitude rather than swing through it. Default ``0.1``: with omega magnitudes around 1 rad/s during a slew this contributes ``~-0.1`` per step, comparable to the singularity term. action_scale: rescaling factor applied inside :meth:`_prepare_ctrl`: the agent emits actions in ``[-1, 1]`` and the simulator sees a commanded gimbal rate of ``action_scale * action`` rad/s. Default ``3.0``, chosen to keep saturated 180-deg slews physically reachable inside ~1500-step episodes. rotor_h: scalar rotor angular momentum used in the Jacobian. Defaults to :attr:`ROTOR_SPEED` (proxy unit, since the absolute scale only changes the singularity threshold). \\*\\*kwargs: forwarded to :class:`MujocoEnv`. Example: \u003e\u003e\u003e from torchrl.envs import SatelliteEnv # doctest: +SKIP \u003e\u003e\u003e env = SatelliteEnv(num_cmgs=4, num_envs=4) # doctest: +SKIP \u003e\u003e\u003e td = env.rollout(50) # doctest: +SKIP Reference: Wie, Bong (2008). \"Space Vehicle Dynamics and Control\" -- chapter on CMG steering laws and singularity escape. \"\"\" FRAME_SKIP = 10 RESET_NOISE_SCALE = 0.001 ROTOR_SPEED_4 = 100.0 ROTOR_SPEED_6 = 200.0 RENDER_BACKGROUND = (0.0, 0.0, 0.05) _SATELLITE_GEOM_ALPHA: ClassVar[float] = 0.55 _TARGET_FRAME_BODY: ClassVar[str] = \"target_attitude_frame\" _TARGET_FRAME_POS: ClassVar[tuple[float, float, float]] = (0.0, 0.0, 0.0) _BODY_FRAME_XML: ClassVar[ str ] = \"\"\" \u003csite name=\"satellite_body_x_axis\" type=\"capsule\" fromto=\"0 0 0 0.75 0 0\" size=\"0.018\" rgba=\"1 0.1 0.1 0.55\"/\u003e \u003csite name=\"satellite_body_y_axis\" type=\"capsule\" fromto=\"0 0 0 0 0.75 0\" size=\"0.018\" rgba=\"0.1 1 0.1 0.55\"/\u003e \u003csite name=\"satellite_body_z_axis\" type=\"capsule\" fromto=\"0 0 0 0 0 0.75\" size=\"0.018\" rgba=\"0.2 0.4 1 0.55\"/\u003e\"\"\" _TARGET_FRAME_XML: ClassVar[ str ] = \"\"\" \u003cbody name=\"target_attitude_frame\" pos=\"0 0 0\" quat=\"1 0 0 0\"\u003e \u003csite name=\"target_x_axis\" type=\"capsule\" fromto=\"0 0 0 1.1 0 0\" size=\"0.026\" rgba=\"1 0.1 0.1 0.85\"/\u003e \u003csite name=\"target_y_axis\" type=\"capsule\" fromto=\"0 0 0 0 1.1 0\" size=\"0.026\" rgba=\"0.1 1 0.1 0.85\"/\u003e \u003csite name=\"target_z_axis\" type=\"capsule\" fromto=\"0 0 0 0 0 1.1\" size=\"0.026\" rgba=\"0.2 0.4 1 0.85\"/\u003e \u003csite name=\"target_x_tip\" type=\"sphere\" pos=\"1.1 0 0\" size=\"0.055\" rgba=\"1 0.1 0.1 0.9\"/\u003e \u003csite name=\"target_y_tip\" type=\"sphere\" pos=\"0 1.1 0\" size=\"0.055\" rgba=\"0.1 1 0.1 0.9\"/\u003e \u003csite name=\"target_z_tip\" type=\"sphere\" pos=\"0 0 1.1\" size=\"0.055\" rgba=\"0.2 0.4 1 0.9\"/\u003e \u003c/body\u003e\"\"\" def __init__( self, *, num_cmgs: Literal[4, 6] = 4, attitude_weight: float = 1.0, singularity_weight: float = 0.5, singularity_clamp_min: float = 1e-6, singularity_mode: Literal[\"inverse\", \"exp\"] = \"inverse\", singularity_exp_k: float = 5.0, ctrl_cost_weight: float = 0.01, omega_weight: float = 0.1, action_scale: float = 3.0, rotor_h: float | None = None, **kwargs, ) -\u003e None: if num_cmgs == 4: self.N_GIMBALS = 4 self.ROTOR_SPEED = self.ROTOR_SPEED_4 self.XML_PATH = \"satellite_large.xml\" elif num_cmgs == 6: self.N_GIMBALS = 6 self.ROTOR_SPEED = self.ROTOR_SPEED_6 self.XML_PATH = \"satellite_small.xml\" else: raise ValueError(f\"num_cmgs must be 4 or 6, got {num_cmgs}\") self.num_cmgs = num_cmgs self.attitude_weight = float(attitude_weight) self.singularity_weight = float(singularity_weight) self.singularity_clamp_min = float(singularity_clamp_min) self.singularity_mode = str(singularity_mode) self.singularity_exp_k = float(singularity_exp_k) self.ctrl_cost_weight = float(ctrl_cost_weight) self.omega_weight = float(omega_weight) self.action_scale = float(action_scale) self._rotor_h = float(rotor_h) if rotor_h is not None else self.ROTOR_SPEED super().__init__(**kwargs) # CMG geometry, cached on the env\u0027s device / dtype. if num_cmgs == 4: g, r0 = pyramid_4cmg_geometry(device=self.device, dtype=self.dtype) else: g, r0 = orthogonal_6cmg_geometry(device=self.device, dtype=self.dtype) self._gimbal_axes = g self._rotor_axes_ref = r0 # Per-env target attitude, populated on reset. self._target_quat = torch.zeros( self.num_envs, 4, device=self.device, dtype=self.dtype ) self._target_quat[:, 0] = 1.0 # Cached per-step manipulability so the obs builder can surface # it without recomputing the Jacobian. Filled by # :meth:`_compute_reward`; on the first reset, defaults to a # large value (a non-singular nominal posture). self._last_manip = torch.full( (self.num_envs, 1), 1.0, device=self.device, dtype=self.dtype ) # Per-step ``isfinite`` checks are off by default. They force a # CUDA -\u003e CPU sync on each call (via ``bool(all_finite)``), which # under hot-path collection erodes throughput. Set # ``TORCHRL_SATELLITE_DEBUG=1`` (or pass ``debug_finite=True`` to # the constructor) to re-enable them; the test suite uses this # to validate reward guards without changing default semantics. env_flag = os.environ.get(\"TORCHRL_SATELLITE_DEBUG\", \"0\") self._debug_finite = env_flag not in (\"0\", \"\", \"false\", \"False\") def _assert_finite(self, name: str, value: torch.Tensor) -\u003e None: if is_compiling(): # ``torch._assert`` is a compile-time hint; cheap inside a # compiled graph and skipped at runtime entirely. torch._assert( torch.isfinite(value).all(), f\"SatelliteEnv produced non-finite values in {name}.\", ) return if not self._debug_finite: # Default eager path: no host-device sync, no overhead. return finite = torch.isfinite(value) if bool(finite.all()): return bad = ~finite nan_count = torch.isnan(value).sum().item() inf_count = torch.isinf(value).sum().item() if value.ndim \u003e 0 and value.shape[0] == self.num_envs: bad_rows = bad.reshape(self.num_envs, -1).any(dim=-1).nonzero().flatten() row_list = bad_rows[:8].detach().cpu().tolist() sample = value.index_select(0, bad_rows[:3]).detach().cpu() else: row_list = [] sample = value[bad][:8].detach().cpu() raise RuntimeError( f\"SatelliteEnv produced non-finite values in {name}: \" f\"nan_count={nan_count}, inf_count={inf_count}, \" f\"bad_rows={row_list}, sample={sample}.\" ) def _normalize_quat_or_identity(self, quat: torch.Tensor) -\u003e torch.Tensor: norm = quat.norm(dim=-1, keepdim=True) normalized = quat / norm.clamp_min(1e-12) identity = torch.zeros_like(quat) identity[..., 0] = 1.0 return torch.where(norm \u003e 1e-12, normalized, identity) # ------------------------------------------------------------------ # XML patching: no ground floor in space. # ------------------------------------------------------------------ @classmethod def _transparent_satellite_geom(cls, match: re.Match[str]) -\u003e str: rgba = match.group(2).split() if len(rgba) != 4: return match.group(0) rgba[-1] = f\"{cls._SATELLITE_GEOM_ALPHA:.2f}\" return f\"{match.group(1)}{\u0027 \u0027.join(rgba)}{match.group(3)}\" @classmethod def _patch_xml(cls, xml: str) -\u003e str: xml = re.sub(r\"\u003ccamera\\b[^/]*/\u003e\\s*\", \"\", xml) xml = re.sub(r\"\u003clight\\b[^/]*/\u003e\\s*\", \"\", xml) xml = re.sub( r\u0027(\u003cgeom\\b[^\u003e]*\\brgba=\")([^\"]+)(\")\u0027, cls._transparent_satellite_geom, xml, ) camera = ( \u0027\u003ccamera name=\"side\" pos=\"6 -6 4\" \u0027 \u0027xyaxes=\"0.707 0.707 0 -0.302 0.302 0.905\" fovy=\"60\"/\u003e\u0027 ) light = ( \u0027\u003clight name=\"top\" pos=\"0 0 4\" dir=\"0 0 -1\" \u0027 \u0027diffuse=\"0.8 0.8 0.8\" ambient=\"0.3 0.3 0.3\" directional=\"true\"/\u003e\u0027 ) xml = xml.replace( \u0027\u003cfreejoint name=\"root\"/\u003e\u0027, f\u0027\u003cfreejoint name=\"root\"/\u003e\\n{cls._BODY_FRAME_XML}\u0027, 1, ) return xml.replace( \"\u003cworldbody\u003e\", f\"\u003cworldbody\u003e\\n {camera}\\n {light}{cls._TARGET_FRAME_XML}\", ) def _sync_target_frame(self) -\u003e None: position = torch.as_tensor( self._TARGET_FRAME_POS, dtype=self.dtype, device=self.device, ).expand(self.num_envs, 3) self._backend.set_static_body_pose( self._TARGET_FRAME_BODY, position, self._target_quat, ) # ------------------------------------------------------------------ # Specs # ------------------------------------------------------------------ def _make_obs_spec(self) -\u003e Composite: # Semantically-split observation: the dynamics-relevant pieces # are exposed as separate keys so downstream transforms (e.g. # :class:`CatTensors`) can recombine them while keeping # ``manipulability`` available for logging without feeding it # into the policy. n = self.N_GIMBALS return Composite( bus_quat=Unbounded( shape=(self.num_envs, 4), dtype=self.dtype, device=self.device ), quat_err=Unbounded( shape=(self.num_envs, 3), dtype=self.dtype, device=self.device ), bus_omega=Unbounded( shape=(self.num_envs, 3), dtype=self.dtype, device=self.device ), gimbal_angles=Unbounded( shape=(self.num_envs, 2 * n), dtype=self.dtype, device=self.device ), gimbal_rates=Unbounded( shape=(self.num_envs, n), dtype=self.dtype, device=self.device ), manipulability=Unbounded( shape=(self.num_envs, 1), dtype=self.dtype, device=self.device ), shape=(self.num_envs,), device=self.device, ) def _make_specs(self) -\u003e None: super()._make_specs() # Override the action spec: agent controls only gimbals, not rotors. self.action_spec = Bounded( low=-1.0, high=1.0, shape=(self.num_envs, self.N_GIMBALS), dtype=self.dtype, device=self.device, ) self.state_spec = Composite( target_quat=Unbounded( shape=(self.num_envs, 4), dtype=self.dtype, device=self.device ), init_bus_quat=Unbounded( shape=(self.num_envs, 4), dtype=self.dtype, device=self.device ), shape=(self.num_envs,), device=self.device, step_mdp_static=True, ) # ------------------------------------------------------------------ # State plumbing # ------------------------------------------------------------------ def _sample_initial_state( self, n: int, tensordict: TensorDictBase | None = None, ) -\u003e tuple[torch.Tensor, torch.Tensor]: qpos, qvel = super()._sample_initial_state(n, tensordict) # Pin rotor velocities (qvel layout: [bus_lin(3), bus_ang(3), # then per-CMG (gimbal_rate, rotor_rate) pairs]). rotor_vel_idx = [6 + 2 * i + 1 for i in range(self.N_GIMBALS)] qvel[..., rotor_vel_idx] = self.ROTOR_SPEED # Optional starting attitude override -- when present in the # input tensordict, write into ``qpos[..., 3:7]`` (the bus # quaternion) so the simulator boots at the requested attitude. # The caller is expected to pass a full-batch ``(num_envs, 4)`` # quaternion; the backend\u0027s ``reset_mask`` picks the rows it # actually resets, so we can write through without masking. if tensordict is not None and \"init_bus_quat\" in tensordict.keys(): init_q = tensordict.get(\"init_bus_quat\").to(qpos.dtype).to(qpos.device) qpos[..., 3:7] = self._normalize_quat_or_identity(init_q) return qpos, qvel def _reset( self, tensordict: TensorDictBase | None = None, **kwargs, ) -\u003e TensorDictBase: out = super()._reset(tensordict, **kwargs) out.set(\"target_quat\", self._target_quat.clone()) out.set( \"init_bus_quat\", self._backend.qpos[..., 3:7].to(self.dtype).clone(), ) return out def _index_extra_state( self, index: slice | torch.Tensor ) -\u003e dict[str, torch.Tensor]: return { \"target_quat\": self._target_quat[index].clone(), \"last_manip\": self._last_manip[index].clone(), } def _load_indexed_extra_state(self, state: dict[str, torch.Tensor]) -\u003e None: self._target_quat = state[\"target_quat\"] self._last_manip = state[\"last_manip\"] def _set_indexed_extra_state( self, index: slice | torch.Tensor, source: SatelliteEnv, ) -\u003e None: self._target_quat[index] = source._target_quat.to( device=self._target_quat.device, dtype=self._target_quat.dtype, ) self._last_manip[index] = source._last_manip.to( device=self._last_manip.device, dtype=self._last_manip.dtype, ) self._sync_target_frame() def _prepare_ctrl(self, action: torch.Tensor) -\u003e torch.Tensor: # Scale the agent\u0027s [-1, 1] command up to ``[-action_scale, # action_scale]`` rad/s of gimbal rate. With the velocity # actuators in the XML, the saturation cap on commanded rate # is the dominant control-authority knob, so leaving it at 1 # rad/s makes 180-deg slews infeasible in any reasonable # horizon. Keep the policy\u0027s action range at [-1, 1] (clean # for ``TanhNormal``) and absorb the scaling here. scaled = action * self.action_scale rotor_ctrl = torch.full( (scaled.shape[0], self.N_GIMBALS), self.ROTOR_SPEED, dtype=scaled.dtype, device=scaled.device, ) return torch.cat([scaled, rotor_ctrl], dim=-1) def _on_reset_all(self, tensordict: TensorDictBase | None = None) -\u003e None: if tensordict is not None and \"target_quat\" in tensordict.keys(): t = tensordict.get(\"target_quat\").to(self.dtype).to(self.device) self._target_quat = self._normalize_quat_or_identity(t) else: self._target_quat = random_unit_quat( (self.num_envs,), generator=self.rng, device=self.device, dtype=self.dtype, ) # Manipulability is only computed inside :meth:`_compute_reward`. # Reset the cache to a non-singular default so the first obs # after reset is well-defined. self._last_manip = self._compute_manip_from_qpos( self._backend.qpos.to(self.dtype) ) self._sync_target_frame() def _on_reset_mask( self, mask: torch.Tensor, tensordict: TensorDictBase | None = None, ) -\u003e None: # Build a full-batch target_quat candidate (either the user- # supplied override or a freshly-sampled one) and mux only the # masked rows in via ``torch.where``. Keeps the path free of # data-dependent shape ops (no ``mask.sum().item()`` sync, no # boolean indexing). if tensordict is not None and \"target_quat\" in tensordict.keys(): t = tensordict.get(\"target_quat\").to(self.dtype).to(self.device) t = self._normalize_quat_or_identity(t) else: t = random_unit_quat( (self.num_envs,), generator=self.rng, device=self.device, dtype=self.dtype, ) m = mask.unsqueeze(-1) self._target_quat = torch.where(m, t, self._target_quat) new_manip = self._compute_manip_from_qpos(self._backend.qpos.to(self.dtype)) self._last_manip = torch.where(m, new_manip, self._last_manip) self._sync_target_frame() # ------------------------------------------------------------------ # Observation, reward, done # ------------------------------------------------------------------ def _attitude_error(self, qpos: torch.Tensor) -\u003e torch.Tensor: bus_quat = qpos[..., 3:7].to(self.dtype) # q_err such that target = current * q_err =\u003e q_err = current^-1 * target q_err = quat_mul(quat_conj(bus_quat), self._target_quat) return quat_log(q_err) # (B, 3) def _compute_manip_from_qpos(self, qpos: torch.Tensor) -\u003e torch.Tensor: \"\"\"Compute the per-env manipulability from a ``qpos`` snapshot. Returns shape ``(num_envs, 1)``. Used to refresh :attr:`_last_manip` on reset and inside :meth:`_compute_reward`. \"\"\" gimbal_idx = [7 + 2 * i for i in range(self.N_GIMBALS)] gimbal_angles = qpos[..., gimbal_idx] jac = cmg_jacobian( gimbal_angles, self._gimbal_axes, self._rotor_axes_ref, self._rotor_h ) self._assert_finite(\"reset/qpos\", qpos) self._assert_finite(\"reset/gimbal_angles\", gimbal_angles) self._assert_finite(\"reset/cmg_jacobian\", jac) manip = manipulability(jac) self._assert_finite(\"reset/manipulability\", manip) return manip.unsqueeze(-1) def _make_obs_split(self, state: TensorDictBase) -\u003e dict[str, torch.Tensor]: \"\"\"Return the observation as a dict of named sub-keys. Replaces the legacy single-tensor ``_make_obs``. Downstream :class:`CatTensors` transforms can recombine the dynamics-relevant keys into a single observation while keeping ``manipulability`` separate for logging. \"\"\" qpos = state[\"qpos\"].to(self.dtype) qvel = state[\"qvel\"].to(self.dtype) n = self.N_GIMBALS gimbal_idx = [7 + 2 * i for i in range(n)] gimbal_rate_idx = [6 + 2 * i for i in range(n)] bus_quat = qpos[..., 3:7].clone() return { \"bus_quat\": bus_quat, \"quat_err\": self._attitude_error(qpos), \"bus_omega\": qvel[..., 3:6].clone(), \"gimbal_angles\": torch.cat( [qpos[..., gimbal_idx].sin(), qpos[..., gimbal_idx].cos()], dim=-1, ), \"gimbal_rates\": qvel[..., gimbal_rate_idx].clone(), \"manipulability\": self._last_manip, } [docs] def make_attitude_transform( self, *, execute: bool = True, multi_action_dim: int = 1, stack_rewards: bool = True, stack_observations: bool = False, macro_steps: int = 36, settle_steps: int = 8, attitude_gain: float = 5.0, angular_rate_gain: float = 8.0, jacobian_rotor_h: float = 1.0, ) -\u003e Transform: \"\"\"Build the transform that expands target attitudes into CMG actions. Examples: \u003e\u003e\u003e from torchrl.envs import SatelliteEnv # doctest: +SKIP \u003e\u003e\u003e env = SatelliteEnv(num_cmgs=4) # doctest: +SKIP \u003e\u003e\u003e transform = env.make_attitude_transform(execute=True) # doctest: +SKIP \"\"\" return SatelliteAttitudeTransform( num_cmgs=self.num_cmgs, action_scale=self.action_scale, execute=execute, multi_action_dim=multi_action_dim, stack_rewards=stack_rewards, stack_observations=stack_observations, macro_steps=macro_steps, settle_steps=settle_steps, attitude_gain=attitude_gain, angular_rate_gain=angular_rate_gain, jacobian_rotor_h=jacobian_rotor_h, ) def _build_obs_dict(self, state: TensorDictBase) -\u003e dict[str, torch.Tensor]: out: dict[str, torch.Tensor] = {} if not self.pixels_only: out.update(self._make_obs_split(state)) if self.from_pixels: out[\"pixels\"] = self._backend.render( camera_id=self.camera_id, width=self.render_width, height=self.render_height, background=self.RENDER_BACKGROUND, ) return out def _compute_reward( self, state: TensorDictBase, action: torch.Tensor, next_state: TensorDictBase, ) -\u003e torch.Tensor: qpos = next_state[\"qpos\"].to(self.dtype) gimbal_idx = [7 + 2 * i for i in range(self.N_GIMBALS)] gimbal_angles = qpos[..., gimbal_idx] self._assert_finite(\"reward/qpos\", qpos) self._assert_finite(\"reward/action\", action) self._assert_finite(\"reward/target_quat\", self._target_quat) quat_err = self._attitude_error(qpos) self._assert_finite(\"reward/quat_err\", quat_err) att_err = quat_err.norm(dim=-1) self._assert_finite(\"reward/attitude_error\", att_err) jac = cmg_jacobian( gimbal_angles, self._gimbal_axes, self._rotor_axes_ref, self._rotor_h ) self._assert_finite(\"reward/gimbal_angles\", gimbal_angles) self._assert_finite(\"reward/cmg_jacobian\", jac) jjt = jac @ jac.transpose(-1, -2) self._assert_finite(\"reward/cmg_jacobian_jjt\", jjt) det = torch.linalg.det(jjt) self._assert_finite(\"reward/cmg_jacobian_det\", det) manip = torch.sqrt(det.clamp_min(0.0) + 1e-8) self._assert_finite(\"reward/manipulability\", manip) # Normalize manipulability by ``rotor_h ** 3`` so the metric # is rotor-speed invariant. ``det(J J^T) ~ h^6`` scales with # the rotor angular momentum, so without this rescaling the # 1/manip penalty is ~5e-8 per step at ``rotor_h=100`` and # never trains the avoid-singularity half of the task. After # rescaling, ``manip_norm`` lives in ``[0, ~1]`` and the # default ``singularity_weight=0.5`` yields ~0.5 / O(1) \u2248 0.5 # contribution on the nominal cluster, growing as the cluster # approaches a singular configuration. manip_norm = manip / (self._rotor_h**3) # Cache the *unnormalized* metric for the obs (so logging # remains physically interpretable across rotor speeds), but # use the normalized one for the penalty. self._last_manip = manip.unsqueeze(-1) ctrl_cost = (action.to(self.dtype) ** 2).sum(dim=-1) self._assert_finite(\"reward/control_cost\", ctrl_cost) # Body-rate penalty -- the slew-and-stop incentive. Without # this, the optimal \"swing through the target\" policy is # locally rewarded as much as the proper \"settle at the # target\" one, because attitude error alone is zero at the # crossing instant. qvel = next_state[\"qvel\"].to(self.dtype) bus_omega = qvel[..., 3:6] omega_cost = (bus_omega**2).sum(dim=-1) self._assert_finite(\"reward/omega_cost\", omega_cost) if self.singularity_mode == \"exp\": # Bounded smooth penalty: ``w * exp(-k * manip_norm)`` saturates # at ``-w`` near the singularity instead of diverging via 1/0. sing_penalty = self.singularity_weight * torch.exp( -self.singularity_exp_k * manip_norm ) else: # \"inverse\" sing_penalty = self.singularity_weight / manip_norm.clamp_min( self.singularity_clamp_min ) reward = ( -self.attitude_weight * att_err - sing_penalty - self.ctrl_cost_weight * ctrl_cost - self.omega_weight * omega_cost ) self._assert_finite(\"reward/total\", reward) reward = reward.unsqueeze(-1) self._assert_finite(\"reward/total_unsqueezed\", reward) return reward def _compute_done( self, state: TensorDictBase, next_state: TensorDictBase, ) -\u003e torch.Tensor: return torch.zeros(self.num_envs, 1, dtype=torch.bool, device=self.device)",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/envs/custom/mujoco/satellite.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

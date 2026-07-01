@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.objectives.TargetNetUpdaterConfig
+=====================================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.objectives
+
+.. autoclass:: TargetNetUpdaterConfig

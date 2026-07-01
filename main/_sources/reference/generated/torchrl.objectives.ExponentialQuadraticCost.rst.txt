@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.objectives
+
+
+ExponentialQuadraticCost
+========================
+
+.. autoclass:: ExponentialQuadraticCost
+    :members:

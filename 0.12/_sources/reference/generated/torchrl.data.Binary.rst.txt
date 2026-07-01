@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+Binary
+======
+
+.. autoclass:: Binary
+    :members:
+    :inherited-members:

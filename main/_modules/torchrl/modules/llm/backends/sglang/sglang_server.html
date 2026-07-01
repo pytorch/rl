@@ -1,0 +1,2607 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.modules.llm.backends.sglang.sglang_server &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/modules/llm/backends/sglang/sglang_server';</script>
+    <script src="../../../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.modules.llm.backends.sglang.sglang_server - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/recurrent_sequence_training.html">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/recurrent_sequence_training.html">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.modu...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.modules.llm.backends.sglang.sglang_server">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/modules/llm/backends/sglang/sglang_server</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.modules.llm.backends.sglang.sglang_server</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+
+<span class="sd">&quot;&quot;&quot;SGLang server-based inference service for TorchRL.</span>
+
+<span class="sd">This module provides AsyncSGLang, a server-based SGLang backend that</span>
+<span class="sd">communicates with SGLang servers via HTTP for generation and uses</span>
+<span class="sd">NCCL for weight synchronization in RL training workflows.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">atexit</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">tempfile</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterator</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+
+<span class="kn">from</span> <span class="nn">torchrl._utils</span> <span class="kn">import</span> <span class="n">logger</span> <span class="k">as</span> <span class="n">torchrl_logger</span>
+
+<span class="kn">from</span> <span class="nn">.base</span> <span class="kn">import</span> <span class="n">RLSGLangEngine</span>
+<span class="kn">from</span> <span class="nn">.sglang_utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">check_server_health</span><span class="p">,</span>
+    <span class="n">convert_sampling_params</span><span class="p">,</span>
+    <span class="n">dtype_to_str</span><span class="p">,</span>
+    <span class="n">get_local_ip_address</span><span class="p">,</span>
+    <span class="n">get_model_info</span><span class="p">,</span>
+    <span class="n">get_open_port</span><span class="p">,</span>
+    <span class="n">get_server_info</span><span class="p">,</span>
+    <span class="n">wait_for_server</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<span class="n">_SGLANG_GENERATE_RETRIES_ENV</span> <span class="o">=</span> <span class="s2">&quot;TORCHRL_SGLANG_GENERATE_RETRIES&quot;</span>
+<span class="n">_SGLANG_GENERATE_RETRY_DELAY_ENV</span> <span class="o">=</span> <span class="s2">&quot;TORCHRL_SGLANG_GENERATE_RETRY_DELAY&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">_env_int</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Ignoring invalid integer value for </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">; &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;using </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">default</span>
+
+
+<span class="k">def</span> <span class="nf">_env_float</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Ignoring invalid float value for </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">; &quot;</span> <span class="sa">f</span><span class="s2">&quot;using </span><span class="si">{</span><span class="n">default</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">default</span>
+
+
+<div class="viewcode-block" id="AsyncSGLang">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang">[docs]</a>
+<span class="k">class</span> <span class="nc">AsyncSGLang</span><span class="p">(</span><span class="n">RLSGLangEngine</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Server-based SGLang inference service for TorchRL.</span>
+
+<span class="sd">    AsyncSGLang provides a unified interface for text generation using SGLang servers,</span>
+<span class="sd">    supporting both managed (subprocess) and external server modes. It integrates</span>
+<span class="sd">    seamlessly with TorchRL&#39;s RL training workflows through NCCL-based weight</span>
+<span class="sd">    synchronization.</span>
+
+<span class="sd">    Key Features:</span>
+<span class="sd">        - HTTP-based generation via SGLang&#39;s native /generate API</span>
+<span class="sd">        - Cache-aware load balancing through SGLang Router</span>
+<span class="sd">        - NCCL-based weight synchronization for RL training</span>
+<span class="sd">        - Support for both managed and external server modes</span>
+<span class="sd">        - Compatible interface with vLLM backends for easy migration</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        server_url: URL of an external SGLang server (e.g., &quot;http://localhost:30000&quot;).</span>
+<span class="sd">            If None, a managed server will be launched.</span>
+<span class="sd">        model_path: Path or name of the model to load (for managed mode).</span>
+<span class="sd">        tp_size: Tensor parallel size (default: 1).</span>
+<span class="sd">        dp_size: Data parallel size (default: 1).</span>
+<span class="sd">        timeout: Request timeout in seconds (default: 300).</span>
+<span class="sd">        **server_kwargs: Additional arguments passed to SGLang server launch.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; # Connect to an existing SGLang server</span>
+<span class="sd">        &gt;&gt;&gt; service = AsyncSGLang.connect(&quot;http://localhost:30000&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; result = service.generate(&quot;Hello, world!&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # Launch a managed SGLang server</span>
+<span class="sd">        &gt;&gt;&gt; service = AsyncSGLang.from_pretrained(&quot;Qwen/Qwen2.5-3B&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; result = service.generate(&quot;Hello, world!&quot;)</span>
+<span class="sd">        &gt;&gt;&gt;</span>
+<span class="sd">        &gt;&gt;&gt; # With custom parameters</span>
+<span class="sd">        &gt;&gt;&gt; service = AsyncSGLang.from_pretrained(</span>
+<span class="sd">        ...     &quot;Qwen/Qwen2.5-7B&quot;,</span>
+<span class="sd">        ...     tp_size=2,</span>
+<span class="sd">        ...     max_model_len=4096</span>
+<span class="sd">        ... )</span>
+
+<span class="sd">    Note:</span>
+<span class="sd">        For RL training with weight updates, use the weight synchronization</span>
+<span class="sd">        methods after initializing the NCCL communication group.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">server_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">model_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">tp_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">dp_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">300.0</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">server_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span> <span class="o">=</span> <span class="n">server_url</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span> <span class="o">=</span> <span class="n">model_path</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span> <span class="o">=</span> <span class="n">tp_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span> <span class="o">=</span> <span class="n">dp_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span> <span class="o">=</span> <span class="n">timeout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span> <span class="o">=</span> <span class="n">server_kwargs</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="p">:</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_preserve_log_file</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server_info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_info</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Weight sync state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">get_local_ip_address</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_update_initialized</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># If server_url is provided, we&#39;re in external mode</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_and_connect</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">_validate_and_connect</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Validate connection to an external SGLang server.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">check_server_health</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">10.0</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ConnectionError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Cannot connect to SGLang server at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="si">}</span><span class="s2">. &quot;</span>
+                <span class="s2">&quot;Ensure the server is running and accessible.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Fetch server and model info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server_info</span> <span class="o">=</span> <span class="n">get_server_info</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_info</span> <span class="o">=</span> <span class="n">get_model_info</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="p">)</span>
+
+        <span class="c1"># Extract parallelism info from server</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;tp_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dp_size&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;model_path&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span><span class="p">)</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Connected to SGLang server at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="si">}</span><span class="s2"> &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;(model=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span><span class="si">}</span><span class="s2">, tp=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span><span class="si">}</span><span class="s2">, dp=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_launch_server</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Launch a managed SGLang server subprocess.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;model_path is required to launch a managed SGLang server&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Find an available port</span>
+        <span class="n">port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;port&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="n">get_open_port</span><span class="p">()</span>
+        <span class="n">host</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;host&quot;</span><span class="p">,</span> <span class="s2">&quot;127.0.0.1&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Extract cuda_devices for GPU pinning via --base-gpu-id.</span>
+        <span class="c1"># We use base_gpu_id instead of CUDA_VISIBLE_DEVICES so that all</span>
+        <span class="c1"># processes see the full set of GPUs — required for NCCL device ID</span>
+        <span class="c1"># consistency when doing cross-process weight broadcasts.</span>
+        <span class="n">cuda_devices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;cuda_devices&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">base_gpu_id</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="n">cuda_devices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">cuda_devices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">base_gpu_id</span> <span class="o">=</span> <span class="n">cuda_devices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Pinning SGLang server to GPU </span><span class="si">{</span><span class="n">base_gpu_id</span><span class="si">}</span><span class="s2"> via --base-gpu-id&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Build command line arguments</span>
+        <span class="n">cmd</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">,</span>
+            <span class="s2">&quot;-m&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;sglang.launch_server&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;--model-path&quot;</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span><span class="p">,</span>
+            <span class="s2">&quot;--host&quot;</span><span class="p">,</span>
+            <span class="n">host</span><span class="p">,</span>
+            <span class="s2">&quot;--port&quot;</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">port</span><span class="p">),</span>
+            <span class="s2">&quot;--tp-size&quot;</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span><span class="p">),</span>
+            <span class="s2">&quot;--dp-size&quot;</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span><span class="p">),</span>
+            <span class="s2">&quot;--base-gpu-id&quot;</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">base_gpu_id</span><span class="p">),</span>
+        <span class="p">]</span>
+
+        <span class="c1"># Add additional kwargs</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Convert underscores to hyphens for CLI args</span>
+            <span class="n">cli_key</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;--</span><span class="si">{</span><span class="n">key</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;-&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">value</span><span class="p">:</span>
+                    <span class="n">cmd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cli_key</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">cmd</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">cli_key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)])</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Launching SGLang server: </span><span class="si">{</span><span class="s1">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cmd</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Create a temporary file for server output logging</span>
+        <span class="c1"># This provides better visibility than PIPE, especially in CI environments</span>
+        <span class="n">log_file</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;_sglang.log&quot;</span><span class="p">,</span> <span class="n">delete</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="o">=</span> <span class="n">log_file</span><span class="o">.</span><span class="n">name</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SGLang server output logging to: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Set up environment for the server subprocess.</span>
+        <span class="c1"># Disable NCCL P2P/IPC: Ray may restrict CUDA_VISIBLE_DEVICES for the</span>
+        <span class="c1"># trainer worker while this server sees all GPUs. The topology mismatch</span>
+        <span class="c1"># causes NCCL P2P/IPC channel setup to fail with &quot;invalid argument&quot;.</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">python_bin_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">executable</span><span class="p">)</span>
+        <span class="n">env</span><span class="p">[</span><span class="s2">&quot;PATH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">python_bin_dir</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">pathsep</span> <span class="o">+</span> <span class="n">env</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;PATH&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">env</span><span class="p">[</span><span class="s2">&quot;NCCL_P2P_DISABLE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+        <span class="n">env</span><span class="p">[</span><span class="s2">&quot;NCCL_SHM_DISABLE&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;1&quot;</span>
+        <span class="n">grpc_port</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;SGLANG_GRPC_PORT&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">valid_grpc_port</span> <span class="o">=</span> <span class="n">grpc_port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="nb">int</span><span class="p">(</span><span class="n">grpc_port</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">65535</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">valid_grpc_port</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">valid_grpc_port</span><span class="p">:</span>
+            <span class="n">env</span><span class="p">[</span><span class="s2">&quot;SGLANG_GRPC_PORT&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">get_open_port</span><span class="p">())</span>
+
+        <span class="c1"># Launch subprocess with output going to the log file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span>
+            <span class="n">cmd</span><span class="p">,</span>
+            <span class="n">stdout</span><span class="o">=</span><span class="n">log_file</span><span class="p">,</span>
+            <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">STDOUT</span><span class="p">,</span>
+            <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;SGLang server launched with PID </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">pid</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;http://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">port</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># Register cleanup handler</span>
+        <span class="n">atexit</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">)</span>
+
+        <span class="c1"># Early crash detection: check if process is still alive after 2 seconds</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">poll_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">poll_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Process crashed immediately - read log file and raise with output</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">output</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;SGLang server crashed immediately (exit=</span><span class="si">{</span><span class="n">poll_result</span><span class="si">}</span><span class="s2">):</span><span class="se">\n</span><span class="si">{</span><span class="n">output</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Wait for server to be ready, passing process handle for liveness checks</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">wait_for_server</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span><span class="p">,</span> <span class="n">process</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TimeoutError</span><span class="p">,</span> <span class="ne">RuntimeError</span><span class="p">):</span>
+            <span class="c1"># Capture server output for debugging</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">):</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">output</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                <span class="c1"># Log last 20KB of output</span>
+                <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;SGLang server output (last 20000 chars):</span><span class="se">\n</span><span class="si">{</span><span class="n">output</span><span class="p">[</span><span class="o">-</span><span class="mi">20000</span><span class="p">:]</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">poll_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">poll_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;SGLang server process exited with code </span><span class="si">{</span><span class="n">poll_result</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                        <span class="s2">&quot;SGLang server process is still running but not responding&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+            <span class="k">raise</span>
+
+        <span class="c1"># Fetch server info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_and_connect</span><span class="p">()</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Managed SGLang server launched at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AsyncSGLang.connect">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.connect">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">server_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncSGLang</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Connect to an existing SGLang server.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            server_url: URL of the SGLang server (e.g., &quot;http://localhost:30000&quot;)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            AsyncSGLang: Connected service instance</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ConnectionError: If the server is not reachable</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">server_url</span><span class="o">=</span><span class="n">server_url</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.from_pretrained">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.from_pretrained">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_pretrained</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">model_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">tp_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">dp_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsyncSGLang</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create an AsyncSGLang instance by launching a managed server.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            model_name: Model name or path to load</span>
+<span class="sd">            tp_size: Tensor parallel size</span>
+<span class="sd">            dp_size: Data parallel size</span>
+<span class="sd">            **kwargs: Additional server arguments</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            AsyncSGLang: Service with managed server</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; service = AsyncSGLang.from_pretrained(</span>
+<span class="sd">            ...     &quot;Qwen/Qwen2.5-3B&quot;,</span>
+<span class="sd">            ...     tp_size=2,</span>
+<span class="sd">            ...     max_model_len=4096</span>
+<span class="sd">            ... )</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">instance</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">model_path</span><span class="o">=</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="n">tp_size</span><span class="o">=</span><span class="n">tp_size</span><span class="p">,</span>
+            <span class="n">dp_size</span><span class="o">=</span><span class="n">dp_size</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">instance</span><span class="o">.</span><span class="n">_launch_server</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">instance</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">server_url</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the server URL.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Server URL not set. Call connect() or from_pretrained().&quot;</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span>
+
+<div class="viewcode-block" id="AsyncSGLang.generate">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.generate">[docs]</a>
+    <span class="k">def</span> <span class="nf">generate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prompts</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">sampling_params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">input_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">return_logprobs</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">return_text</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate text completions from text prompts or token IDs.</span>
+
+<span class="sd">        You can provide either `prompts` (text) OR `input_ids` (tokens), but not both.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            prompts: Input text prompt(s) for generation. Mutually exclusive with input_ids.</span>
+<span class="sd">            sampling_params: Sampling parameters (temperature, top_p, max_tokens, etc.)</span>
+<span class="sd">            input_ids: Input token ID(s) for generation. Can be a single list of ints</span>
+<span class="sd">                or a list of lists for batch generation. Mutually exclusive with prompts.</span>
+<span class="sd">            return_logprobs: Whether to return log probabilities</span>
+<span class="sd">            return_text: Whether to return generated text</span>
+<span class="sd">            timeout: Request timeout in seconds</span>
+<span class="sd">            **kwargs: Additional sampling parameters (temperature, max_new_tokens, etc.)</span>
+<span class="sd">                These are merged into sampling_params for convenience.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict or list[dict]: Generation results with &#39;text&#39;, &#39;output_ids&#39;, &#39;meta_info&#39;</span>
+
+<span class="sd">        Example:</span>
+<span class="sd">            &gt;&gt;&gt; # Generate from text</span>
+<span class="sd">            &gt;&gt;&gt; result = service.generate(</span>
+<span class="sd">            ...     &quot;What is the capital of France?&quot;,</span>
+<span class="sd">            ...     {&quot;temperature&quot;: 0.7, &quot;max_tokens&quot;: 100}</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; print(result[&quot;text&quot;])</span>
+
+<span class="sd">            &gt;&gt;&gt; # Generate from token IDs</span>
+<span class="sd">            &gt;&gt;&gt; result = service.generate(</span>
+<span class="sd">            ...     input_ids=[1, 2, 3, 4],</span>
+<span class="sd">            ...     sampling_params={&quot;max_tokens&quot;: 50}</span>
+<span class="sd">            ... )</span>
+<span class="sd">            &gt;&gt;&gt; print(result[&quot;output_ids&quot;])</span>
+
+<span class="sd">            &gt;&gt;&gt; # Using kwargs for sampling params</span>
+<span class="sd">            &gt;&gt;&gt; result = service.generate(&quot;Hello&quot;, max_new_tokens=50, temperature=0.7)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Validate inputs: must provide exactly one of prompts or input_ids</span>
+        <span class="k">if</span> <span class="n">prompts</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">input_ids</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Must provide either &#39;prompts&#39; or &#39;input_ids&#39;&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">prompts</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">input_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot provide both &#39;prompts&#39; and &#39;input_ids&#39;&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">sampling_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">sampling_params</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c1"># Merge kwargs into sampling_params for convenience</span>
+        <span class="c1"># Handle common aliases like max_new_tokens -&gt; max_tokens</span>
+        <span class="n">merged_params</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">sampling_params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">}</span>
+        <span class="k">if</span> <span class="s2">&quot;max_new_tokens&quot;</span> <span class="ow">in</span> <span class="n">merged_params</span> <span class="ow">and</span> <span class="s2">&quot;max_tokens&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">merged_params</span><span class="p">:</span>
+            <span class="n">merged_params</span><span class="p">[</span><span class="s2">&quot;max_tokens&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">merged_params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;max_new_tokens&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Convert to SGLang format</span>
+        <span class="n">sglang_params</span> <span class="o">=</span> <span class="n">convert_sampling_params</span><span class="p">(</span><span class="o">**</span><span class="n">merged_params</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">return_logprobs</span><span class="p">:</span>
+            <span class="n">sglang_params</span><span class="p">[</span><span class="s2">&quot;return_logprob&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_logged_sglang_params&quot;</span><span class="p">):</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;SGLang generate: merged_params=</span><span class="si">{</span><span class="n">merged_params</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;sglang_params=</span><span class="si">{</span><span class="n">sglang_params</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logged_sglang_params</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="n">timeout</span> <span class="o">=</span> <span class="n">timeout</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span>
+
+        <span class="c1"># Determine if using text or token mode</span>
+        <span class="n">use_tokens</span> <span class="o">=</span> <span class="n">input_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">use_tokens</span><span class="p">:</span>
+            <span class="c1"># Handle single sequence vs batch for input_ids</span>
+            <span class="n">single_input</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">input_ids</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="nb">int</span><span class="p">)</span> <span class="k">if</span> <span class="n">input_ids</span> <span class="k">else</span> <span class="kc">False</span>
+            <span class="k">if</span> <span class="n">single_input</span><span class="p">:</span>
+                <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">input_ids</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">inputs</span> <span class="o">=</span> <span class="n">input_ids</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Handle single prompt vs batch for text</span>
+            <span class="n">single_input</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prompts</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">single_input</span><span class="p">:</span>
+                <span class="n">inputs</span> <span class="o">=</span> <span class="p">[</span><span class="n">prompts</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">inputs</span> <span class="o">=</span> <span class="n">prompts</span>
+
+        <span class="c1"># SGLang&#39;s /generate endpoint expects sampling parameters nested</span>
+        <span class="c1"># under a &quot;sampling_params&quot; key, not as flat top-level fields.</span>
+        <span class="c1"># Extract top-level GenerateReqInput fields from sglang_params.</span>
+        <span class="n">top_level_keys</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;return_logprob&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;stream&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;return_text_in_logprobs&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;logprob_start_len&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;top_logprobs_num&quot;</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">top_level_params</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">sglang_params</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">top_level_keys</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">sglang_params</span>
+        <span class="p">}</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">inp</span> <span class="ow">in</span> <span class="n">inputs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">use_tokens</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;input_ids&quot;</span><span class="p">:</span> <span class="n">inp</span><span class="p">,</span>
+                    <span class="s2">&quot;sampling_params&quot;</span><span class="p">:</span> <span class="n">sglang_params</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">top_level_params</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">inp</span><span class="p">,</span>
+                    <span class="s2">&quot;sampling_params&quot;</span><span class="p">:</span> <span class="n">sglang_params</span><span class="p">,</span>
+                    <span class="o">**</span><span class="n">top_level_params</span><span class="p">,</span>
+                <span class="p">}</span>
+
+            <span class="n">retries</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">_env_int</span><span class="p">(</span><span class="n">_SGLANG_GENERATE_RETRIES_ENV</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="n">retry_delay</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">_env_float</span><span class="p">(</span><span class="n">_SGLANG_GENERATE_RETRY_DELAY_ENV</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">retries</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/generate&quot;</span><span class="p">,</span>
+                        <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+                        <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+                    <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+                    <span class="k">break</span>
+                <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">attempt</span> <span class="o">&gt;=</span> <span class="n">retries</span><span class="p">:</span>
+                        <span class="k">raise</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;SGLang generate request failed (</span><span class="si">{</span><span class="n">err</span><span class="si">}</span><span class="s2">); retrying &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;attempt </span><span class="si">{</span><span class="n">attempt</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">retries</span><span class="si">}</span><span class="s2">.&quot;</span>
+                    <span class="p">)</span>
+                    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">retry_delay</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">single_input</span> <span class="k">else</span> <span class="n">results</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.generate_batch">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.generate_batch">[docs]</a>
+    <span class="k">def</span> <span class="nf">generate_batch</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">prompts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">sampling_params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate text completions for a batch of prompts.</span>
+
+<span class="sd">        This is an alias for generate() with a list of prompts.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            prompts: List of input prompts</span>
+<span class="sd">            sampling_params: Sampling parameters</span>
+<span class="sd">            **kwargs: Additional arguments passed to generate()</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list[dict]: List of generation results</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="n">prompts</span><span class="p">,</span> <span class="n">sampling_params</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.flush_cache">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.flush_cache">[docs]</a>
+    <span class="k">def</span> <span class="nf">flush_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Flush the radix cache on the server.</span>
+
+<span class="sd">        This is automatically triggered when weights are updated.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            bool: True if cache was flushed successfully</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/flush_cache&quot;</span><span class="p">,</span>
+                <span class="n">timeout</span><span class="o">=</span><span class="mf">30.0</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">==</span> <span class="mi">200</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">RequestException</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span></div>
+
+
+    <span class="c1"># RLSGLangEngine interface implementation</span>
+
+<div class="viewcode-block" id="AsyncSGLang.get_tp_size">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.get_tp_size">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_tp_size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the tensor parallel size.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.get_dp_size">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.get_dp_size">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_dp_size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the data parallel size.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.get_model_metadata">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.get_model_metadata">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_model_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Size</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get model parameter metadata.</span>
+
+<span class="sd">        Note: This requires fetching from the server. For now, returns empty dict</span>
+<span class="sd">        and expects metadata to be provided externally.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: Implement metadata fetching from SGLang server if supported</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;AsyncSGLang.get_model_metadata() not yet implemented - returning empty dict. &quot;</span>
+            <span class="s2">&quot;Provide metadata externally during weight updates.&quot;</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">{}</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.get_master_address">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.get_master_address">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_master_address</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the master address for weight synchronization.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.get_master_port">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.get_master_port">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_master_port</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the master port for weight synchronization.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="o">=</span> <span class="n">get_open_port</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.init_weight_update_group">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.init_weight_update_group">[docs]</a>
+    <span class="k">def</span> <span class="nf">init_weight_update_group</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">master_address</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">master_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the NCCL weight update group via SGLang&#39;s HTTP API.</span>
+
+<span class="sd">        This calls the SGLang server&#39;s /init_weights_update_group endpoint</span>
+<span class="sd">        to set up NCCL communication for weight synchronization.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            master_address: Master address for NCCL (default: &quot;localhost&quot;)</span>
+<span class="sd">            master_port: Master port for NCCL (auto-assigned if None)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">master_address</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span> <span class="o">=</span> <span class="n">master_address</span>
+        <span class="k">if</span> <span class="n">master_port</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="o">=</span> <span class="n">master_port</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_master_port</span><span class="p">()</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Initializing SGLang weight update group: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;address=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span><span class="si">}</span><span class="s2">, port=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Call SGLang&#39;s init_weights_update_group API</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;master_address&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_address</span><span class="p">,</span>
+            <span class="s2">&quot;master_port&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_master_port</span><span class="p">,</span>
+            <span class="s2">&quot;rank_offset&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>  <span class="c1"># Workers start from rank 1</span>
+            <span class="s2">&quot;world_size&quot;</span><span class="p">:</span> <span class="mi">1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span><span class="p">,</span>  <span class="c1"># Trainer + workers</span>
+        <span class="p">}</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/init_weights_update_group&quot;</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;success&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Failed to initialize weight update group: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Unknown error&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_weight_update_initialized</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;SGLang weight update group initialized successfully&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.update_weights_from_distributed">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.update_weights_from_distributed">[docs]</a>
+    <span class="k">def</span> <span class="nf">update_weights_from_distributed</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+        <span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Signal the server to receive a weight update via NCCL broadcast.</span>
+
+<span class="sd">        This calls SGLang&#39;s /update_weights_from_distributed endpoint to</span>
+<span class="sd">        coordinate weight reception.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            name: Name of the parameter to update</span>
+<span class="sd">            dtype: Data type of the tensor</span>
+<span class="sd">            shape: Shape of the tensor</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_update_initialized</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Weight update group not initialized. Call init_weight_update_group() first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">,</span>
+            <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="n">dtype_to_str</span><span class="p">(</span><span class="n">dtype</span><span class="p">),</span>
+            <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span>
+        <span class="p">}</span>
+
+        <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">server_url</span><span class="si">}</span><span class="s2">/update_weights_from_distributed&quot;</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">=</span><span class="n">data</span><span class="p">,</span>
+            <span class="n">timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_timeout</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.update_weights">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.update_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Update model weights via NCCL broadcast.</span>
+
+<span class="sd">        This method coordinates with the SGLang server to broadcast weights</span>
+<span class="sd">        from the trainer (rank 0) to all workers.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            weights: Iterator yielding (parameter_name, tensor) tuples</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight_update_initialized</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;Weight update group not initialized. Call init_weight_update_group() first.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Convert iterator to dict</span>
+        <span class="n">weights_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">weights_dict</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;No weights provided for update&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Updating </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> parameters via NCCL broadcast&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Get NCCL communicator (must be set up by the caller)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_nccl_group&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_group</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">&quot;NCCL group not set up. Use SGLangWeightSyncScheme for weight synchronization.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">weight</span> <span class="ow">in</span> <span class="n">weights_dict</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="c1"># Ensure weight is on GPU</span>
+            <span class="k">if</span> <span class="n">weight</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span> <span class="o">!=</span> <span class="s2">&quot;cuda&quot;</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="n">weight</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">&quot;cuda:0&quot;</span><span class="p">,</span> <span class="n">non_blocking</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="c1"># Step 1: Signal server to expect this weight</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">update_weights_from_distributed</span><span class="p">(</span>
+                <span class="n">name</span><span class="p">,</span> <span class="n">weight</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">weight</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Step 2: Broadcast the weight via NCCL</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_group</span><span class="o">.</span><span class="n">broadcast</span><span class="p">(</span>
+                <span class="n">weight</span><span class="p">,</span> <span class="n">src</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">current_stream</span><span class="p">()</span>
+            <span class="p">)</span>
+
+        <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">synchronize</span><span class="p">()</span>
+
+        <span class="c1"># Flush cache after weight update</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flush_cache</span><span class="p">()</span>
+
+        <span class="n">t1</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Updated </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">weights_dict</span><span class="p">)</span><span class="si">}</span><span class="s2"> weights in </span><span class="si">{</span><span class="n">t1</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">t0</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AsyncSGLang.shutdown">
+<a class="viewcode-back" href="../../../../../../reference/generated/torchrl.modules.llm.AsyncSGLang.html#torchrl.modules.llm.AsyncSGLang.shutdown">[docs]</a>
+    <span class="k">def</span> <span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Shutdown the managed SGLang server if running.&quot;&quot;&quot;</span>
+        <span class="n">preserve_log</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Shutting down managed SGLang server...&quot;</span><span class="p">)</span>
+            <span class="n">poll_result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">poll_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">poll_result</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">preserve_log</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_preserve_log_file</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span>
+                <span class="p">):</span>
+                    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="n">output</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                    <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;SGLang server exited with code </span><span class="si">{</span><span class="n">poll_result</span><span class="si">}</span><span class="s2">. &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;Output log preserved at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="si">}</span><span class="s2">; &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;last 20000 chars:</span><span class="se">\n</span><span class="si">{</span><span class="n">output</span><span class="p">[</span><span class="o">-</span><span class="mi">20000</span><span class="p">:]</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">TimeoutExpired</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span><span class="o">.</span><span class="n">kill</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">torchrl_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;SGLang server shutdown complete&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Clean up the log file</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="ow">not</span> <span class="n">preserve_log</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preserve_log_file</span>
+            <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+                <span class="k">pass</span>  <span class="c1"># Ignore cleanup errors</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Serialize the client state without transferring subprocess ownership.&quot;&quot;&quot;</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="c1"># Remote workers should reconnect to the existing server instead of</span>
+        <span class="c1"># inheriting the managed subprocess handle from the parent process.</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_managed_process&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_log_file_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">state</span><span class="p">[</span><span class="s2">&quot;_nccl_group&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">state</span>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restore the client state and reconnect to the server when needed.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_file_path</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nccl_group</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_validate_and_connect</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup on deletion.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="n">managed</span> <span class="o">=</span> <span class="s2">&quot;managed&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_managed_process</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">&quot;external&quot;</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;AsyncSGLang(&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;url=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_server_url</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;model=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_model_path</span><span class="si">!r}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;tp=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_tp_size</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;dp=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dp_size</span><span class="si">}</span><span class="s2">, &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;mode=</span><span class="si">{</span><span class="n">managed</span><span class="si">}</span><span class="s2">)&quot;</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.modules.llm.backends.sglang.sglang_server",
+       "headline": "torchrl.modules.llm.backends.sglang.sglang_server",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/modules/llm/backends/sglang/sglang_server.html",
+       "articleBody": "Source code for torchrl.modules.llm.backends.sglang.sglang_server # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. \"\"\"SGLang server-based inference service for TorchRL. This module provides AsyncSGLang, a server-based SGLang backend that communicates with SGLang servers via HTTP for generation and uses NCCL for weight synchronization in RL training workflows. \"\"\" from __future__ import annotations import atexit import os import subprocess import sys import tempfile import time from collections.abc import Iterator from typing import Any import requests import torch from torchrl._utils import logger as torchrl_logger from .base import RLSGLangEngine from .sglang_utils import ( check_server_health, convert_sampling_params, dtype_to_str, get_local_ip_address, get_model_info, get_open_port, get_server_info, wait_for_server, ) _SGLANG_GENERATE_RETRIES_ENV = \"TORCHRL_SGLANG_GENERATE_RETRIES\" _SGLANG_GENERATE_RETRY_DELAY_ENV = \"TORCHRL_SGLANG_GENERATE_RETRY_DELAY\" def _env_int(name: str, default: int) -\u003e int: value = os.environ.get(name) if value is None: return default try: return int(value) except ValueError: torchrl_logger.warning( f\"Ignoring invalid integer value for {name}: {value!r}; \" f\"using {default}.\" ) return default def _env_float(name: str, default: float) -\u003e float: value = os.environ.get(name) if value is None: return default try: return float(value) except ValueError: torchrl_logger.warning( f\"Ignoring invalid float value for {name}: {value!r}; \" f\"using {default}.\" ) return default [docs] class AsyncSGLang(RLSGLangEngine): \"\"\"Server-based SGLang inference service for TorchRL. AsyncSGLang provides a unified interface for text generation using SGLang servers, supporting both managed (subprocess) and external server modes. It integrates seamlessly with TorchRL\u0027s RL training workflows through NCCL-based weight synchronization. Key Features: - HTTP-based generation via SGLang\u0027s native /generate API - Cache-aware load balancing through SGLang Router - NCCL-based weight synchronization for RL training - Support for both managed and external server modes - Compatible interface with vLLM backends for easy migration Args: server_url: URL of an external SGLang server (e.g., \"http://localhost:30000\"). If None, a managed server will be launched. model_path: Path or name of the model to load (for managed mode). tp_size: Tensor parallel size (default: 1). dp_size: Data parallel size (default: 1). timeout: Request timeout in seconds (default: 300). **server_kwargs: Additional arguments passed to SGLang server launch. Examples: \u003e\u003e\u003e # Connect to an existing SGLang server \u003e\u003e\u003e service = AsyncSGLang.connect(\"http://localhost:30000\") \u003e\u003e\u003e result = service.generate(\"Hello, world!\") \u003e\u003e\u003e \u003e\u003e\u003e # Launch a managed SGLang server \u003e\u003e\u003e service = AsyncSGLang.from_pretrained(\"Qwen/Qwen2.5-3B\") \u003e\u003e\u003e result = service.generate(\"Hello, world!\") \u003e\u003e\u003e \u003e\u003e\u003e # With custom parameters \u003e\u003e\u003e service = AsyncSGLang.from_pretrained( ... \"Qwen/Qwen2.5-7B\", ... tp_size=2, ... max_model_len=4096 ... ) Note: For RL training with weight updates, use the weight synchronization methods after initializing the NCCL communication group. \"\"\" def __init__( self, server_url: str | None = None, model_path: str | None = None, tp_size: int = 1, dp_size: int = 1, timeout: float = 300.0, **server_kwargs: Any, ): self._server_url = server_url self._model_path = model_path self._tp_size = tp_size self._dp_size = dp_size self._timeout = timeout self._server_kwargs = server_kwargs self._managed_process: subprocess.Popen | None = None self._log_file_path: str | None = None self._preserve_log_file: bool = False self._server_info: dict[str, Any] | None = None self._model_info: dict[str, Any] | None = None # Weight sync state self._master_address: str = get_local_ip_address() self._master_port: int | None = None self._weight_update_initialized: bool = False # If server_url is provided, we\u0027re in external mode if self._server_url is not None: self._validate_and_connect() def _validate_and_connect(self) -\u003e None: \"\"\"Validate connection to an external SGLang server.\"\"\" if not check_server_health(self._server_url, timeout=10.0): raise ConnectionError( f\"Cannot connect to SGLang server at {self._server_url}. \" \"Ensure the server is running and accessible.\" ) # Fetch server and model info self._server_info = get_server_info(self._server_url) self._model_info = get_model_info(self._server_url) # Extract parallelism info from server self._tp_size = self._server_info.get(\"tp_size\", 1) self._dp_size = self._server_info.get(\"dp_size\", 1) self._model_path = self._model_info.get(\"model_path\", self._model_path) torchrl_logger.info( f\"Connected to SGLang server at {self._server_url} \" f\"(model={self._model_path}, tp={self._tp_size}, dp={self._dp_size})\" ) def _launch_server(self) -\u003e None: \"\"\"Launch a managed SGLang server subprocess.\"\"\" if self._model_path is None: raise ValueError(\"model_path is required to launch a managed SGLang server\") # Find an available port port = self._server_kwargs.pop(\"port\", None) or get_open_port() host = self._server_kwargs.pop(\"host\", \"127.0.0.1\") # Extract cuda_devices for GPU pinning via --base-gpu-id. # We use base_gpu_id instead of CUDA_VISIBLE_DEVICES so that all # processes see the full set of GPUs \u2014 required for NCCL device ID # consistency when doing cross-process weight broadcasts. cuda_devices = self._server_kwargs.pop(\"cuda_devices\", None) base_gpu_id = 0 if cuda_devices is not None and len(cuda_devices) \u003e 0: base_gpu_id = cuda_devices[0] torchrl_logger.info( f\"Pinning SGLang server to GPU {base_gpu_id} via --base-gpu-id\" ) # Build command line arguments cmd = [ sys.executable, \"-m\", \"sglang.launch_server\", \"--model-path\", self._model_path, \"--host\", host, \"--port\", str(port), \"--tp-size\", str(self._tp_size), \"--dp-size\", str(self._dp_size), \"--base-gpu-id\", str(base_gpu_id), ] # Add additional kwargs for key, value in self._server_kwargs.items(): # Convert underscores to hyphens for CLI args cli_key = f\"--{key.replace(\u0027_\u0027, \u0027-\u0027)}\" if isinstance(value, bool): if value: cmd.append(cli_key) else: cmd.extend([cli_key, str(value)]) torchrl_logger.info(f\"Launching SGLang server: {\u0027 \u0027.join(cmd)}\") # Create a temporary file for server output logging # This provides better visibility than PIPE, especially in CI environments log_file = tempfile.NamedTemporaryFile( mode=\"w\", suffix=\"_sglang.log\", delete=False ) self._log_file_path = log_file.name torchrl_logger.info(f\"SGLang server output logging to: {self._log_file_path}\") # Set up environment for the server subprocess. # Disable NCCL P2P/IPC: Ray may restrict CUDA_VISIBLE_DEVICES for the # trainer worker while this server sees all GPUs. The topology mismatch # causes NCCL P2P/IPC channel setup to fail with \"invalid argument\". env = os.environ.copy() python_bin_dir = os.path.dirname(sys.executable) env[\"PATH\"] = python_bin_dir + os.pathsep + env.get(\"PATH\", \"\") env[\"NCCL_P2P_DISABLE\"] = \"1\" env[\"NCCL_SHM_DISABLE\"] = \"1\" grpc_port = env.get(\"SGLANG_GRPC_PORT\") try: valid_grpc_port = grpc_port is not None and 0 \u003c int(grpc_port) \u003c= 65535 except ValueError: valid_grpc_port = False if not valid_grpc_port: env[\"SGLANG_GRPC_PORT\"] = str(get_open_port()) # Launch subprocess with output going to the log file self._managed_process = subprocess.Popen( cmd, stdout=log_file, stderr=subprocess.STDOUT, env=env, ) torchrl_logger.info( f\"SGLang server launched with PID {self._managed_process.pid}\" ) self._server_url = f\"http://{host}:{port}\" # Register cleanup handler atexit.register(self.shutdown) # Early crash detection: check if process is still alive after 2 seconds time.sleep(2) poll_result = self._managed_process.poll() if poll_result is not None: # Process crashed immediately - read log file and raise with output with open(self._log_file_path) as f: output = f.read() raise RuntimeError( f\"SGLang server crashed immediately (exit={poll_result}):\\n{output}\" ) # Wait for server to be ready, passing process handle for liveness checks try: wait_for_server( self._server_url, timeout=self._timeout, process=self._managed_process ) except (TimeoutError, RuntimeError): # Capture server output for debugging if self._log_file_path and os.path.exists(self._log_file_path): with open(self._log_file_path) as f: output = f.read() # Log last 20KB of output torchrl_logger.error( f\"SGLang server output (last 20000 chars):\\n{output[-20000:]}\" ) if self._managed_process is not None: poll_result = self._managed_process.poll() if poll_result is not None: torchrl_logger.error( f\"SGLang server process exited with code {poll_result}\" ) else: torchrl_logger.error( \"SGLang server process is still running but not responding\" ) self.shutdown() raise # Fetch server info self._validate_and_connect() torchrl_logger.info(f\"Managed SGLang server launched at {self._server_url}\") [docs] @classmethod def connect(cls, server_url: str) -\u003e AsyncSGLang: \"\"\"Connect to an existing SGLang server. Args: server_url: URL of the SGLang server (e.g., \"http://localhost:30000\") Returns: AsyncSGLang: Connected service instance Raises: ConnectionError: If the server is not reachable \"\"\" return cls(server_url=server_url) [docs] @classmethod def from_pretrained( cls, model_name: str, tp_size: int = 1, dp_size: int = 1, **kwargs: Any, ) -\u003e AsyncSGLang: \"\"\"Create an AsyncSGLang instance by launching a managed server. Args: model_name: Model name or path to load tp_size: Tensor parallel size dp_size: Data parallel size **kwargs: Additional server arguments Returns: AsyncSGLang: Service with managed server Example: \u003e\u003e\u003e service = AsyncSGLang.from_pretrained( ... \"Qwen/Qwen2.5-3B\", ... tp_size=2, ... max_model_len=4096 ... ) \"\"\" instance = cls( model_path=model_name, tp_size=tp_size, dp_size=dp_size, **kwargs, ) instance._launch_server() return instance @property def server_url(self) -\u003e str: \"\"\"Get the server URL.\"\"\" if self._server_url is None: raise RuntimeError( \"Server URL not set. Call connect() or from_pretrained().\" ) return self._server_url [docs] def generate( self, prompts: str | list[str] | None = None, sampling_params: dict[str, Any] | None = None, *, input_ids: list[int] | list[list[int]] | None = None, return_logprobs: bool = False, return_text: bool = True, timeout: float | None = None, **kwargs: Any, ) -\u003e dict[str, Any] | list[dict[str, Any]]: \"\"\"Generate text completions from text prompts or token IDs. You can provide either `prompts` (text) OR `input_ids` (tokens), but not both. Args: prompts: Input text prompt(s) for generation. Mutually exclusive with input_ids. sampling_params: Sampling parameters (temperature, top_p, max_tokens, etc.) input_ids: Input token ID(s) for generation. Can be a single list of ints or a list of lists for batch generation. Mutually exclusive with prompts. return_logprobs: Whether to return log probabilities return_text: Whether to return generated text timeout: Request timeout in seconds **kwargs: Additional sampling parameters (temperature, max_new_tokens, etc.) These are merged into sampling_params for convenience. Returns: dict or list[dict]: Generation results with \u0027text\u0027, \u0027output_ids\u0027, \u0027meta_info\u0027 Example: \u003e\u003e\u003e # Generate from text \u003e\u003e\u003e result = service.generate( ... \"What is the capital of France?\", ... {\"temperature\": 0.7, \"max_tokens\": 100} ... ) \u003e\u003e\u003e print(result[\"text\"]) \u003e\u003e\u003e # Generate from token IDs \u003e\u003e\u003e result = service.generate( ... input_ids=[1, 2, 3, 4], ... sampling_params={\"max_tokens\": 50} ... ) \u003e\u003e\u003e print(result[\"output_ids\"]) \u003e\u003e\u003e # Using kwargs for sampling params \u003e\u003e\u003e result = service.generate(\"Hello\", max_new_tokens=50, temperature=0.7) \"\"\" # Validate inputs: must provide exactly one of prompts or input_ids if prompts is None and input_ids is None: raise ValueError(\"Must provide either \u0027prompts\u0027 or \u0027input_ids\u0027\") if prompts is not None and input_ids is not None: raise ValueError(\"Cannot provide both \u0027prompts\u0027 and \u0027input_ids\u0027\") if sampling_params is None: sampling_params = {} # Merge kwargs into sampling_params for convenience # Handle common aliases like max_new_tokens -\u003e max_tokens merged_params = {**sampling_params, **kwargs} if \"max_new_tokens\" in merged_params and \"max_tokens\" not in merged_params: merged_params[\"max_tokens\"] = merged_params.pop(\"max_new_tokens\") # Convert to SGLang format sglang_params = convert_sampling_params(**merged_params) if return_logprobs: sglang_params[\"return_logprob\"] = True if not hasattr(self, \"_logged_sglang_params\"): torchrl_logger.info( f\"SGLang generate: merged_params={merged_params}, \" f\"sglang_params={sglang_params}\" ) self._logged_sglang_params = True timeout = timeout or self._timeout # Determine if using text or token mode use_tokens = input_ids is not None if use_tokens: # Handle single sequence vs batch for input_ids single_input = isinstance(input_ids[0], int) if input_ids else False if single_input: inputs = [input_ids] else: inputs = input_ids else: # Handle single prompt vs batch for text single_input = isinstance(prompts, str) if single_input: inputs = [prompts] else: inputs = prompts # SGLang\u0027s /generate endpoint expects sampling parameters nested # under a \"sampling_params\" key, not as flat top-level fields. # Extract top-level GenerateReqInput fields from sglang_params. top_level_keys = { \"return_logprob\", \"stream\", \"return_text_in_logprobs\", \"logprob_start_len\", \"top_logprobs_num\", } top_level_params = { k: sglang_params.pop(k) for k in top_level_keys if k in sglang_params } results = [] for inp in inputs: if use_tokens: data = { \"input_ids\": inp, \"sampling_params\": sglang_params, **top_level_params, } else: data = { \"text\": inp, \"sampling_params\": sglang_params, **top_level_params, } retries = max(0, _env_int(_SGLANG_GENERATE_RETRIES_ENV, 0)) retry_delay = max(0.0, _env_float(_SGLANG_GENERATE_RETRY_DELAY_ENV, 1.0)) for attempt in range(retries + 1): try: response = requests.post( f\"{self.server_url}/generate\", json=data, timeout=timeout, ) response.raise_for_status() results.append(response.json()) break except requests.exceptions.RequestException as err: if attempt \u003e= retries: raise torchrl_logger.warning( f\"SGLang generate request failed ({err}); retrying \" f\"attempt {attempt + 1}/{retries}.\" ) time.sleep(retry_delay) return results[0] if single_input else results [docs] def generate_batch( self, prompts: list[str], sampling_params: dict[str, Any] | None = None, **kwargs: Any, ) -\u003e list[dict[str, Any]]: \"\"\"Generate text completions for a batch of prompts. This is an alias for generate() with a list of prompts. Args: prompts: List of input prompts sampling_params: Sampling parameters **kwargs: Additional arguments passed to generate() Returns: list[dict]: List of generation results \"\"\" return self.generate(prompts, sampling_params, **kwargs) [docs] def flush_cache(self) -\u003e bool: \"\"\"Flush the radix cache on the server. This is automatically triggered when weights are updated. Returns: bool: True if cache was flushed successfully \"\"\" try: response = requests.post( f\"{self.server_url}/flush_cache\", timeout=30.0, ) return response.status_code == 200 except requests.exceptions.RequestException: return False # RLSGLangEngine interface implementation [docs] def get_tp_size(self) -\u003e int: \"\"\"Get the tensor parallel size.\"\"\" return self._tp_size [docs] def get_dp_size(self) -\u003e int: \"\"\"Get the data parallel size.\"\"\" return self._dp_size [docs] def get_model_metadata(self) -\u003e dict[str, tuple[torch.dtype, torch.Size]]: \"\"\"Get model parameter metadata. Note: This requires fetching from the server. For now, returns empty dict and expects metadata to be provided externally. \"\"\" # TODO: Implement metadata fetching from SGLang server if supported torchrl_logger.warning( \"AsyncSGLang.get_model_metadata() not yet implemented - returning empty dict. \" \"Provide metadata externally during weight updates.\" ) return {} [docs] def get_master_address(self) -\u003e str: \"\"\"Get the master address for weight synchronization.\"\"\" return self._master_address [docs] def get_master_port(self) -\u003e int: \"\"\"Get the master port for weight synchronization.\"\"\" if self._master_port is None: self._master_port = get_open_port() return self._master_port [docs] def init_weight_update_group( self, master_address: str | None = None, master_port: int | None = None, ) -\u003e None: \"\"\"Initialize the NCCL weight update group via SGLang\u0027s HTTP API. This calls the SGLang server\u0027s /init_weights_update_group endpoint to set up NCCL communication for weight synchronization. Args: master_address: Master address for NCCL (default: \"localhost\") master_port: Master port for NCCL (auto-assigned if None) \"\"\" if master_address is not None: self._master_address = master_address if master_port is not None: self._master_port = master_port else: self._master_port = self.get_master_port() torchrl_logger.info( f\"Initializing SGLang weight update group: \" f\"address={self._master_address}, port={self._master_port}\" ) # Call SGLang\u0027s init_weights_update_group API data = { \"master_address\": self._master_address, \"master_port\": self._master_port, \"rank_offset\": 1, # Workers start from rank 1 \"world_size\": 1 + self._tp_size * self._dp_size, # Trainer + workers } response = requests.post( f\"{self.server_url}/init_weights_update_group\", json=data, timeout=self._timeout, ) response.raise_for_status() result = response.json() if not result.get(\"success\", False): raise RuntimeError( f\"Failed to initialize weight update group: {result.get(\u0027message\u0027, \u0027Unknown error\u0027)}\" ) self._weight_update_initialized = True torchrl_logger.info(\"SGLang weight update group initialized successfully\") [docs] def update_weights_from_distributed( self, name: str, dtype: torch.dtype, shape: tuple[int, ...], ) -\u003e None: \"\"\"Signal the server to receive a weight update via NCCL broadcast. This calls SGLang\u0027s /update_weights_from_distributed endpoint to coordinate weight reception. Args: name: Name of the parameter to update dtype: Data type of the tensor shape: Shape of the tensor \"\"\" if not self._weight_update_initialized: raise RuntimeError( \"Weight update group not initialized. Call init_weight_update_group() first.\" ) data = { \"name\": name, \"dtype\": dtype_to_str(dtype), \"shape\": list(shape), } response = requests.post( f\"{self.server_url}/update_weights_from_distributed\", json=data, timeout=self._timeout, ) response.raise_for_status() [docs] def update_weights(self, weights: Iterator[tuple[str, torch.Tensor]]) -\u003e None: \"\"\"Update model weights via NCCL broadcast. This method coordinates with the SGLang server to broadcast weights from the trainer (rank 0) to all workers. Args: weights: Iterator yielding (parameter_name, tensor) tuples \"\"\" if not self._weight_update_initialized: raise RuntimeError( \"Weight update group not initialized. Call init_weight_update_group() first.\" ) # Convert iterator to dict weights_dict = dict(weights) if not weights_dict: torchrl_logger.warning(\"No weights provided for update\") return torchrl_logger.info( f\"Updating {len(weights_dict)} parameters via NCCL broadcast\" ) # Get NCCL communicator (must be set up by the caller) if not hasattr(self, \"_nccl_group\") or self._nccl_group is None: raise RuntimeError( \"NCCL group not set up. Use SGLangWeightSyncScheme for weight synchronization.\" ) t0 = time.time() for name, weight in weights_dict.items(): # Ensure weight is on GPU if weight.device.type != \"cuda\": weight = weight.to(\"cuda:0\", non_blocking=True) # Step 1: Signal server to expect this weight self.update_weights_from_distributed( name, weight.dtype, tuple(weight.shape) ) # Step 2: Broadcast the weight via NCCL self._nccl_group.broadcast( weight, src=0, stream=torch.cuda.current_stream() ) torch.cuda.synchronize() # Flush cache after weight update self.flush_cache() t1 = time.time() torchrl_logger.info(f\"Updated {len(weights_dict)} weights in {t1 - t0:.3f}s\") [docs] def shutdown(self) -\u003e None: \"\"\"Shutdown the managed SGLang server if running.\"\"\" preserve_log = False if self._managed_process is not None: torchrl_logger.info(\"Shutting down managed SGLang server...\") poll_result = self._managed_process.poll() if poll_result is not None and poll_result != 0: preserve_log = True self._preserve_log_file = True if self._log_file_path is not None and os.path.exists( self._log_file_path ): with open(self._log_file_path) as f: output = f.read() torchrl_logger.error( f\"SGLang server exited with code {poll_result}. \" f\"Output log preserved at {self._log_file_path}; \" f\"last 20000 chars:\\n{output[-20000:]}\" ) self._managed_process.terminate() try: self._managed_process.wait(timeout=10) except subprocess.TimeoutExpired: self._managed_process.kill() self._managed_process = None torchrl_logger.info(\"SGLang server shutdown complete\") # Clean up the log file if ( not preserve_log and not self._preserve_log_file and self._log_file_path is not None and os.path.exists(self._log_file_path) ): try: os.unlink(self._log_file_path) except OSError: pass # Ignore cleanup errors self._log_file_path = None def __getstate__(self) -\u003e dict[str, Any]: \"\"\"Serialize the client state without transferring subprocess ownership.\"\"\" state = self.__dict__.copy() # Remote workers should reconnect to the existing server instead of # inheriting the managed subprocess handle from the parent process. state[\"_managed_process\"] = None state[\"_log_file_path\"] = None state[\"_nccl_group\"] = None return state def __setstate__(self, state: dict[str, Any]) -\u003e None: \"\"\"Restore the client state and reconnect to the server when needed.\"\"\" self.__dict__.update(state) self._managed_process = None self._log_file_path = None self._nccl_group = None if self._server_url is not None: self._validate_and_connect() def __del__(self) -\u003e None: \"\"\"Cleanup on deletion.\"\"\" self.shutdown() def __repr__(self) -\u003e str: managed = \"managed\" if self._managed_process is not None else \"external\" return ( f\"AsyncSGLang(\" f\"url={self._server_url!r}, \" f\"model={self._model_path!r}, \" f\"tp={self._tp_size}, \" f\"dp={self._dp_size}, \" f\"mode={managed})\" )",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/modules/llm/backends/sglang/sglang_server.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

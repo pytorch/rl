@@ -1,0 +1,2383 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.objectives.a2c &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/objectives/a2c';</script>
+    <script src="../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.objectives.a2c - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/recurrent_sequence_training.html">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/recurrent_sequence_training.html">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.obje...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.objectives.a2c">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/objectives/a2c</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.objectives.a2c</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">contextlib</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">is_tensor_collection</span><span class="p">,</span>
+    <span class="n">TensorDict</span><span class="p">,</span>
+    <span class="n">TensorDictBase</span><span class="p">,</span>
+    <span class="n">TensorDictParams</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">composite_lp_aggregate</span><span class="p">,</span>
+    <span class="n">CompositeDistribution</span><span class="p">,</span>
+    <span class="n">dispatch</span><span class="p">,</span>
+    <span class="n">ProbabilisticTensorDictSequential</span><span class="p">,</span>
+    <span class="n">set_composite_lp_aggregate</span><span class="p">,</span>
+    <span class="n">TensorDictModule</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">tensordict.utils</span> <span class="kn">import</span> <span class="n">NestedKey</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">distributions</span> <span class="k">as</span> <span class="n">d</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.modules.distributions</span> <span class="kn">import</span> <span class="n">HAS_ENTROPY</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives.common</span> <span class="kn">import</span> <span class="n">LossModule</span>
+<span class="kn">from</span> <span class="nn">torchrl.objectives.utils</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_cache_values</span><span class="p">,</span>
+    <span class="n">_clip_value_loss</span><span class="p">,</span>
+    <span class="n">_GAMMA_LMBDA_DEPREC_ERROR</span><span class="p">,</span>
+    <span class="n">_get_default_device</span><span class="p">,</span>
+    <span class="n">dispatch_value_estimator</span><span class="p">,</span>
+    <span class="n">distance_loss</span><span class="p">,</span>
+    <span class="n">ValueEstimators</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="A2CLoss">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">A2CLoss</span><span class="p">(</span><span class="n">LossModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;TorchRL implementation of the A2C loss.</span>
+
+<span class="sd">    A2C (Advantage Actor Critic) is a model-free, online RL algorithm that uses parallel rollouts of n steps to</span>
+<span class="sd">    update the policy, relying on the REINFORCE estimator to compute the gradient. It also adds an entropy term to the</span>
+<span class="sd">    objective function to improve exploration.</span>
+
+<span class="sd">    For more details regarding A2C, refer to: &quot;Asynchronous Methods for Deep Reinforcment Learning&quot;,</span>
+<span class="sd">    https://arxiv.org/abs/1602.01783v2</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        actor_network (ProbabilisticTensorDictSequential): policy operator.</span>
+<span class="sd">        critic_network (ValueOperator): value operator.</span>
+<span class="sd">        entropy_bonus (bool): if ``True``, an entropy bonus will be added to the</span>
+<span class="sd">            loss to favour exploratory policies.</span>
+<span class="sd">        samples_mc_entropy (int): if the distribution retrieved from the policy</span>
+<span class="sd">            operator does not have a closed form</span>
+<span class="sd">            formula for the entropy, a Monte-Carlo estimate will be used.</span>
+<span class="sd">            ``samples_mc_entropy`` will control how many</span>
+<span class="sd">            samples will be used to compute this estimate.</span>
+<span class="sd">            Defaults to ``1``.</span>
+<span class="sd">        entropy_coeff (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``.</span>
+<span class="sd">        critic_coeff (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic</span>
+<span class="sd">            loss won&#39;t be included and the in-keys will miss the critic inputs.</span>
+<span class="sd">        loss_critic_type (str): loss function for the value discrepancy.</span>
+<span class="sd">            Can be one of &quot;l1&quot;, &quot;l2&quot; or &quot;smooth_l1&quot;. Defaults to ``&quot;smooth_l1&quot;``.</span>
+<span class="sd">        separate_losses (bool, optional): if ``True``, shared parameters between</span>
+<span class="sd">            policy and critic will only be trained on the policy loss.</span>
+<span class="sd">            Defaults to ``False``, i.e., gradients are propagated to shared</span>
+<span class="sd">            parameters for both policy and critic losses.</span>
+<span class="sd">        advantage_key (str): [Deprecated, use set_keys(advantage_key=advantage_key) instead]</span>
+<span class="sd">            The input tensordict key where the advantage is expected to be written.  default: &quot;advantage&quot;</span>
+<span class="sd">        value_target_key (str): [Deprecated, use set_keys() instead] the input</span>
+<span class="sd">            tensordict key where the target state value is expected to be written. Defaults to ``&quot;value_target&quot;``.</span>
+<span class="sd">        functional (bool, optional): whether modules should be functionalized.</span>
+<span class="sd">            Functionalizing permits features like meta-RL, but makes it</span>
+<span class="sd">            impossible to use distributed models (DDP, FSDP, ...) and comes</span>
+<span class="sd">            with a little cost. Defaults to ``True``.</span>
+<span class="sd">        reduction (str, optional): Specifies the reduction to apply to the output:</span>
+<span class="sd">            ``&quot;none&quot;`` | ``&quot;mean&quot;`` | ``&quot;sum&quot;``. ``&quot;none&quot;``: no reduction will be applied,</span>
+<span class="sd">            ``&quot;mean&quot;``: the sum of the output will be divided by the number of</span>
+<span class="sd">            elements in the output, ``&quot;sum&quot;``: the output will be summed. Default: ``&quot;mean&quot;``.</span>
+<span class="sd">        clip_value (:obj:`float`, optional): If provided, it will be used to compute a clipped version of the value</span>
+<span class="sd">            prediction with respect to the input value estimate and use it to calculate the value loss.</span>
+<span class="sd">            The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training</span>
+<span class="sd">            and preventing large updates. However, it will have no impact if the value estimate was done by the current</span>
+<span class="sd">            version of the value estimator. Defaults to ``None``.</span>
+
+<span class="sd">    .. note:</span>
+<span class="sd">      The advantage (typically GAE) can be computed by the loss function or</span>
+<span class="sd">      in the training loop. The latter option is usually preferred, but this is</span>
+<span class="sd">      up to the user to choose which option is to be preferred.</span>
+<span class="sd">      If the advantage key (``&quot;advantage`` by default) is not present in the</span>
+<span class="sd">      input tensordict, the advantage will be computed by the :meth:`~.forward`</span>
+<span class="sd">      method.</span>
+<span class="sd">      A custom advantage module can be built using :meth:`~.make_value_estimator`.</span>
+<span class="sd">      The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters</span>
+<span class="sd">      dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torch import nn</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import Bounded</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.distributions import NormalParamExtractor, TanhNormal</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.tensordict_module.common import SafeModule</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.objectives.a2c import A2CLoss</span>
+<span class="sd">        &gt;&gt;&gt; from tensordict import TensorDict</span>
+<span class="sd">        &gt;&gt;&gt; n_act, n_obs = 4, 3</span>
+<span class="sd">        &gt;&gt;&gt; spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))</span>
+<span class="sd">        &gt;&gt;&gt; net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())</span>
+<span class="sd">        &gt;&gt;&gt; module = SafeModule(net, in_keys=[&quot;observation&quot;], out_keys=[&quot;loc&quot;, &quot;scale&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; actor = ProbabilisticActor(</span>
+<span class="sd">        ...     module=module,</span>
+<span class="sd">        ...     in_keys=[&quot;loc&quot;, &quot;scale&quot;],</span>
+<span class="sd">        ...     spec=spec,</span>
+<span class="sd">        ...     distribution_class=TanhNormal)</span>
+<span class="sd">        &gt;&gt;&gt; module = nn.Linear(n_obs, 1)</span>
+<span class="sd">        &gt;&gt;&gt; value = ValueOperator(</span>
+<span class="sd">        ...     module=module,</span>
+<span class="sd">        ...     in_keys=[&quot;observation&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; loss = A2CLoss(actor, value, loss_critic_type=&quot;l2&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; batch = [2, ]</span>
+<span class="sd">        &gt;&gt;&gt; action = spec.rand(batch)</span>
+<span class="sd">        &gt;&gt;&gt; data = TensorDict({</span>
+<span class="sd">        ...         &quot;observation&quot;: torch.randn(*batch, n_obs),</span>
+<span class="sd">        ...         &quot;action&quot;: action,</span>
+<span class="sd">        ...         (&quot;next&quot;, &quot;done&quot;): torch.zeros(*batch, 1, dtype=torch.bool),</span>
+<span class="sd">        ...         (&quot;next&quot;, &quot;terminated&quot;): torch.zeros(*batch, 1, dtype=torch.bool),</span>
+<span class="sd">        ...         (&quot;next&quot;, &quot;reward&quot;): torch.randn(*batch, 1),</span>
+<span class="sd">        ...         (&quot;next&quot;, &quot;observation&quot;): torch.randn(*batch, n_obs),</span>
+<span class="sd">        ...     }, batch)</span>
+<span class="sd">        &gt;&gt;&gt; loss(data)</span>
+<span class="sd">        TensorDict(</span>
+<span class="sd">            fields={</span>
+<span class="sd">                entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False),</span>
+<span class="sd">                loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)},</span>
+<span class="sd">            batch_size=torch.Size([]),</span>
+<span class="sd">            device=None,</span>
+<span class="sd">            is_shared=False)</span>
+
+<span class="sd">    This class is compatible with non-tensordict based modules too and can be</span>
+<span class="sd">    used without recurring to any tensordict-related primitive. In this case,</span>
+<span class="sd">    the expected keyword arguments are:</span>
+<span class="sd">    ``[&quot;action&quot;, &quot;next_reward&quot;, &quot;next_done&quot;, &quot;next_terminated&quot;]`` + in_keys of the actor and critic.</span>
+<span class="sd">    The return value is a tuple of tensors in the following order:</span>
+<span class="sd">    ``[&quot;loss_objective&quot;]`` + ``[&quot;loss_critic&quot;]`` if critic_coeff is not None + ``[&quot;entropy&quot;, &quot;loss_entropy&quot;]`` if entropy_bonus is True and critic_coeff is not None</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; import torch</span>
+<span class="sd">        &gt;&gt;&gt; from torch import nn</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.data import Bounded</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.distributions import NormalParamExtractor, TanhNormal</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.modules.tensordict_module.common import SafeModule</span>
+<span class="sd">        &gt;&gt;&gt; from torchrl.objectives.a2c import A2CLoss</span>
+<span class="sd">        &gt;&gt;&gt; _ = torch.manual_seed(42)</span>
+<span class="sd">        &gt;&gt;&gt; n_act, n_obs = 4, 3</span>
+<span class="sd">        &gt;&gt;&gt; spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,))</span>
+<span class="sd">        &gt;&gt;&gt; net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor())</span>
+<span class="sd">        &gt;&gt;&gt; module = SafeModule(net, in_keys=[&quot;observation&quot;], out_keys=[&quot;loc&quot;, &quot;scale&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; actor = ProbabilisticActor(</span>
+<span class="sd">        ...     module=module,</span>
+<span class="sd">        ...     in_keys=[&quot;loc&quot;, &quot;scale&quot;],</span>
+<span class="sd">        ...     spec=spec,</span>
+<span class="sd">        ...     distribution_class=TanhNormal)</span>
+<span class="sd">        &gt;&gt;&gt; module = nn.Linear(n_obs, 1)</span>
+<span class="sd">        &gt;&gt;&gt; value = ValueOperator(</span>
+<span class="sd">        ...     module=module,</span>
+<span class="sd">        ...     in_keys=[&quot;observation&quot;])</span>
+<span class="sd">        &gt;&gt;&gt; loss = A2CLoss(actor, value, loss_critic_type=&quot;l2&quot;)</span>
+<span class="sd">        &gt;&gt;&gt; batch = [2, ]</span>
+<span class="sd">        &gt;&gt;&gt; loss_obj, loss_critic, entropy, loss_entropy = loss(</span>
+<span class="sd">        ...     observation = torch.randn(*batch, n_obs),</span>
+<span class="sd">        ...     action = spec.rand(batch),</span>
+<span class="sd">        ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),</span>
+<span class="sd">        ...     next_terminated = torch.zeros(*batch, 1, dtype=torch.bool),</span>
+<span class="sd">        ...     next_reward = torch.randn(*batch, 1),</span>
+<span class="sd">        ...     next_observation = torch.randn(*batch, n_obs))</span>
+<span class="sd">        &gt;&gt;&gt; loss_obj.backward()</span>
+
+<span class="sd">    The output keys can also be filtered using the :meth:`SACLoss.select_out_keys`</span>
+<span class="sd">    method.</span>
+
+<span class="sd">    Examples:</span>
+<span class="sd">        &gt;&gt;&gt; loss.select_out_keys(&#39;loss_objective&#39;, &#39;loss_critic&#39;)</span>
+<span class="sd">        &gt;&gt;&gt; loss_obj, loss_critic = loss(</span>
+<span class="sd">        ...     observation = torch.randn(*batch, n_obs),</span>
+<span class="sd">        ...     action = spec.rand(batch),</span>
+<span class="sd">        ...     next_done = torch.zeros(*batch, 1, dtype=torch.bool),</span>
+<span class="sd">        ...     next_terminated = torch.zeros(*batch, 1, dtype=torch.bool),</span>
+<span class="sd">        ...     next_reward = torch.randn(*batch, 1),</span>
+<span class="sd">        ...     next_observation = torch.randn(*batch, n_obs))</span>
+<span class="sd">        &gt;&gt;&gt; loss_obj.backward()</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">      There is an exception regarding compatibility with non-tensordict-based modules.</span>
+<span class="sd">      If the actor network is probabilistic and uses a :class:`~tensordict.nn.distributions.CompositeDistribution`,</span>
+<span class="sd">      this class must be used with tensordicts and cannot function as a tensordict-independent module.</span>
+<span class="sd">      This is because composite action spaces inherently rely on the structured representation of data provided by</span>
+<span class="sd">      tensordicts to handle their actions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@dataclass</span>
+    <span class="k">class</span> <span class="nc">_AcceptedKeys</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Maintains default values for all configurable tensordict keys.</span>
+
+<span class="sd">        This class defines which tensordict keys can be set using &#39;.set_keys(key_name=key_value)&#39; and their</span>
+<span class="sd">        default values.</span>
+
+<span class="sd">        Attributes:</span>
+<span class="sd">            advantage (NestedKey): The input tensordict key where the advantage is expected.</span>
+<span class="sd">                Will be used for the underlying value estimator. Defaults to ``&quot;advantage&quot;``.</span>
+<span class="sd">            value_target (NestedKey): The input tensordict key where the target state value is expected.</span>
+<span class="sd">                Will be used for the underlying value estimator Defaults to ``&quot;value_target&quot;``.</span>
+<span class="sd">            value (NestedKey): The input tensordict key where the state value is expected.</span>
+<span class="sd">                Will be used for the underlying value estimator. Defaults to ``&quot;state_value&quot;``.</span>
+<span class="sd">            action (NestedKey): The input tensordict key where the action is expected.</span>
+<span class="sd">                Defaults to ``&quot;action&quot;``.</span>
+<span class="sd">            reward (NestedKey): The input tensordict key where the reward is expected.</span>
+<span class="sd">                Will be used for the underlying value estimator. Defaults to ``&quot;reward&quot;``.</span>
+<span class="sd">            done (NestedKey): The key in the input TensorDict that indicates</span>
+<span class="sd">                whether a trajectory is done. Will be used for the underlying value estimator.</span>
+<span class="sd">                Defaults to ``&quot;done&quot;``.</span>
+<span class="sd">            terminated (NestedKey): The key in the input TensorDict that indicates</span>
+<span class="sd">                whether a trajectory is terminated. Will be used for the underlying value estimator.</span>
+<span class="sd">                Defaults to ``&quot;terminated&quot;``.</span>
+<span class="sd">            sample_log_prob (NestedKey or list of nested keys): The input tensordict key where the</span>
+<span class="sd">               sample log probability is expected.</span>
+<span class="sd">               Defaults to ``&quot;sample_log_prob&quot;`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`,</span>
+<span class="sd">                `&quot;action_log_prob&quot;`  otherwise.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">advantage</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;advantage&quot;</span>
+        <span class="n">value_target</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;value_target&quot;</span>
+        <span class="n">value</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;state_value&quot;</span>
+        <span class="n">action</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;action&quot;</span>
+        <span class="n">reward</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;reward&quot;</span>
+        <span class="n">done</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;done&quot;</span>
+        <span class="n">terminated</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">=</span> <span class="s2">&quot;terminated&quot;</span>
+        <span class="n">sample_log_prob</span><span class="p">:</span> <span class="n">NestedKey</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">def</span> <span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">composite_lp_aggregate</span><span class="p">(</span><span class="n">nowarn</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob</span> <span class="o">=</span> <span class="s2">&quot;sample_log_prob&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">sample_log_prob</span> <span class="o">=</span> <span class="s2">&quot;action_log_prob&quot;</span>
+
+    <span class="n">default_keys</span> <span class="o">=</span> <span class="n">_AcceptedKeys</span>
+    <span class="n">tensor_keys</span><span class="p">:</span> <span class="n">_AcceptedKeys</span>
+    <span class="n">default_value_estimator</span><span class="p">:</span> <span class="n">ValueEstimators</span> <span class="o">=</span> <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">GAE</span>
+    <span class="n">_schedulable_buffers</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;entropy_coeff&quot;</span><span class="p">,</span> <span class="s2">&quot;critic_coeff&quot;</span><span class="p">,</span> <span class="s2">&quot;clip_value&quot;</span><span class="p">})</span>
+
+    <span class="n">actor_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
+    <span class="n">critic_network</span><span class="p">:</span> <span class="n">TensorDictModule</span>
+    <span class="n">actor_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">critic_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">target_actor_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">target_critic_network_params</span><span class="p">:</span> <span class="n">TensorDictParams</span> <span class="o">|</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">actor_network</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">critic_network</span><span class="p">:</span> <span class="n">TensorDictModule</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">entropy_bonus</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">samples_mc_entropy</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">entropy_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">critic_coeff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">loss_critic_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smooth_l1&quot;</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">separate_losses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">advantage_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">value_target_key</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">functional</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">actor</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">critic</span><span class="p">:</span> <span class="n">ProbabilisticTensorDictSequential</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">reduction</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">clip_value</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># entropy_coef has been removed in v0.11</span>
+        <span class="k">if</span> <span class="s2">&quot;entropy_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;entropy_coef&#39; has been removed in torchrl v0.11. Please use &#39;entropy_coeff&#39; instead.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Set default value if None</span>
+        <span class="k">if</span> <span class="n">entropy_coeff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">entropy_coeff</span> <span class="o">=</span> <span class="mf">0.01</span>
+
+        <span class="c1"># critic_coef has been removed in v0.11</span>
+        <span class="k">if</span> <span class="s2">&quot;critic_coef&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;&#39;critic_coef&#39; has been removed in torchrl v0.11. Please use &#39;critic_coeff&#39; instead.&quot;</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">actor</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor</span>
+            <span class="k">del</span> <span class="n">actor</span>
+        <span class="k">if</span> <span class="n">critic</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">critic_network</span> <span class="o">=</span> <span class="n">critic</span>
+            <span class="k">del</span> <span class="n">critic</span>
+        <span class="k">if</span> <span class="n">actor_network</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">critic_network</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">&quot;Missing positional arguments actor_network or critic_network.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">reduction</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reduction</span> <span class="o">=</span> <span class="s2">&quot;mean&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_functional</span> <span class="o">=</span> <span class="n">functional</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_deprecated_ctor_keys</span><span class="p">(</span>
+            <span class="n">advantage</span><span class="o">=</span><span class="n">advantage_key</span><span class="p">,</span> <span class="n">value_target</span><span class="o">=</span><span class="n">value_target_key</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">functional</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">convert_to_functional</span><span class="p">(</span>
+                <span class="n">actor_network</span><span class="p">,</span>
+                <span class="s2">&quot;actor_network&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span> <span class="o">=</span> <span class="n">actor_network</span>
+
+        <span class="k">if</span> <span class="n">separate_losses</span><span class="p">:</span>
+            <span class="c1"># we want to make sure there are no duplicates in the params: the</span>
+            <span class="c1"># params of critic must be refs to actor if they&#39;re shared</span>
+            <span class="n">policy_params</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">actor_network</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">policy_params</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">functional</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">convert_to_functional</span><span class="p">(</span>
+                <span class="n">critic_network</span><span class="p">,</span> <span class="s2">&quot;critic_network&quot;</span><span class="p">,</span> <span class="n">compare_against</span><span class="o">=</span><span class="n">policy_params</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span> <span class="o">=</span> <span class="n">critic_network</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">target_critic_network_params</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">samples_mc_entropy</span> <span class="o">=</span> <span class="n">samples_mc_entropy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entropy_bonus</span> <span class="o">=</span> <span class="n">entropy_bonus</span> <span class="ow">and</span> <span class="n">entropy_coeff</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reduction</span> <span class="o">=</span> <span class="n">reduction</span>
+
+        <span class="n">device</span> <span class="o">=</span> <span class="n">_get_default_device</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_coeff_buffer</span><span class="p">(</span><span class="s2">&quot;entropy_coeff&quot;</span><span class="p">,</span> <span class="n">entropy_coeff</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_coeff_buffer</span><span class="p">(</span><span class="s2">&quot;critic_coeff&quot;</span><span class="p">,</span> <span class="n">critic_coeff</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">gamma</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="n">_GAMMA_LMBDA_DEPREC_ERROR</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic_type</span> <span class="o">=</span> <span class="n">loss_critic_type</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_coeff_buffer</span><span class="p">(</span><span class="s2">&quot;clip_value&quot;</span><span class="p">,</span> <span class="n">clip_value</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">log_prob_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">log_prob_keys</span>
+        <span class="n">action_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">dist_sample_keys</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_prob_keys</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span><span class="n">sample_log_prob</span><span class="o">=</span><span class="n">log_prob_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">action</span><span class="o">=</span><span class="n">action_keys</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">functional</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_functional</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">in_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">,</span>
+            <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">reward</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">done</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">terminated</span><span class="p">),</span>
+            <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span>
+            <span class="o">*</span><span class="p">[(</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">],</span>
+        <span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">keys</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">outs</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;loss_objective&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">outs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entropy_bonus</span><span class="p">:</span>
+                <span class="n">outs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">)</span>
+                <span class="n">outs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="n">outs</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span>
+
+    <span class="nd">@out_keys</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span> <span class="nf">out_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_out_keys</span> <span class="o">=</span> <span class="n">value</span>
+
+    <span class="k">def</span> <span class="nf">_forward_value_estimator_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_value_estimator</span><span class="o">.</span><span class="n">set_keys</span><span class="p">(</span>
+                <span class="n">advantage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">,</span>
+                <span class="n">value_target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value_target</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                <span class="n">reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">reward</span><span class="p">,</span>
+                <span class="n">done</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">done</span><span class="p">,</span>
+                <span class="n">terminated</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">terminated</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">get_entropy_bonus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dist</span><span class="p">:</span> <span class="n">d</span><span class="o">.</span><span class="n">Distribution</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">HAS_ENTROPY</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">dist</span><span class="p">),</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="n">entropy</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">entropy</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">rsample</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">samples_mc_entropy</span><span class="p">,))</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">is_tensor_collection</span><span class="p">(</span><span class="n">log_prob</span><span class="p">):</span>
+                <span class="n">log_prob</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">log_prob</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">))</span>
+            <span class="n">entropy</span> <span class="o">=</span> <span class="o">-</span><span class="n">log_prob</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">entropy</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@set_composite_lp_aggregate</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">def</span> <span class="nf">_log_probs</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">Distribution</span><span class="p">]:</span>
+        <span class="c1"># current log_prob of actions</span>
+        <span class="n">tensordict_clone</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+            <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actor_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="p">,</span> <span class="n">preserve_module_state</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+            <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">actor_network</span><span class="o">.</span><span class="n">get_dist</span><span class="p">(</span><span class="n">tensordict_clone</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">CompositeDistribution</span><span class="p">):</span>
+            <span class="n">action_keys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                <span class="o">*</span><span class="p">((</span><span class="n">action_keys</span><span class="p">,)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_keys</span><span class="p">,</span> <span class="n">NestedKey</span><span class="p">)</span> <span class="k">else</span> <span class="n">action_keys</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;tensordict stored </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2"> requires grad.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">log_prob</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+            <span class="n">log_prob</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+                <span class="n">dist</span><span class="o">.</span><span class="n">log_prob</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s2">&quot;feature&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">log_prob</span> <span class="o">=</span> <span class="n">log_prob</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">log_prob</span><span class="p">,</span> <span class="n">dist</span>
+
+<div class="viewcode-block" id="A2CLoss.loss_critic">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss.loss_critic">[docs]</a>
+    <span class="k">def</span> <span class="nf">loss_critic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the loss value of the critic, multiplied by ``critic_coeff`` if it is not ``None``.</span>
+
+<span class="sd">        Returns the loss and the clip-fraction.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span><span class="p">:</span>
+            <span class="n">old_state_value</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="p">)</span>  <span class="c1"># TODO: None soon to be removed</span>
+            <span class="k">if</span> <span class="n">old_state_value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;clip_value is set to </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span><span class="si">}</span><span class="s2">, but &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;the key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2"> was not found in the input tensordict. &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Make sure that the value_key passed to A2C exists in the input tensordict.&quot;</span>
+                <span class="p">)</span>
+            <span class="n">old_state_value</span> <span class="o">=</span> <span class="n">old_state_value</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+        <span class="c1"># TODO: if the advantage is gathered by forward, this introduces an</span>
+        <span class="c1">#  overhead that we could easily reduce.</span>
+        <span class="n">target_return</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value_target</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="p">)</span>  <span class="c1"># TODO: None soon to be removed</span>
+        <span class="k">if</span> <span class="n">target_return</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;the key </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value_target</span><span class="si">}</span><span class="s2"> was not found in the input tensordict. &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;Make sure you provided the right key and the value_target (i.e. the target &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;return) has been retrieved accordingly. Advantage classes such as GAE, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;TDLambdaEstimate and TDEstimate all return a &#39;value_target&#39; entry that &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;can be used for the value loss.&quot;</span>
+            <span class="p">)</span>
+        <span class="n">tensordict_select</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+            <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="o">.</span><span class="n">in_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">to_module</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">,</span> <span class="n">preserve_module_state</span><span class="o">=</span><span class="kc">False</span>
+            <span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span>
+            <span class="k">else</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">nullcontext</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">state_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network</span><span class="p">(</span>
+                <span class="n">tensordict_select</span><span class="p">,</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+        <span class="n">loss_value</span> <span class="o">=</span> <span class="n">distance_loss</span><span class="p">(</span>
+            <span class="n">target_return</span><span class="p">,</span>
+            <span class="n">state_value</span><span class="p">,</span>
+            <span class="n">loss_function</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">loss_critic_type</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">clip_fraction</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span><span class="p">:</span>
+            <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span> <span class="o">=</span> <span class="n">_clip_value_loss</span><span class="p">(</span>
+                <span class="n">old_state_value</span><span class="p">,</span>
+                <span class="n">state_value</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">clip_value</span><span class="p">,</span>
+                <span class="n">target_return</span><span class="p">,</span>
+                <span class="n">loss_value</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic_type</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
+            <span class="n">tensordict</span><span class="p">,</span>
+            <span class="s2">&quot;actor_network_params&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;critic_network_params&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;target_actor_network_params&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;target_critic_network_params&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="o">*</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span>
+        <span class="k">return</span> <span class="n">loss_value</span><span class="p">,</span> <span class="n">clip_fraction</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="nd">@_cache_values</span>
+    <span class="k">def</span> <span class="nf">_cached_detach_critic_network_params</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">functional</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_network_params</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+<div class="viewcode-block" id="A2CLoss.forward">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss.forward">[docs]</a>
+    <span class="nd">@dispatch</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">:</span> <span class="n">TensorDictBase</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TensorDictBase</span><span class="p">:</span>
+        <span class="n">tensordict</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">clone</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">advantage</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">advantage</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">value_estimator</span><span class="p">(</span>
+                <span class="n">tensordict</span><span class="p">,</span>
+                <span class="n">params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_cached_detach_critic_network_params</span><span class="p">,</span>
+                <span class="n">target_params</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_critic_network_params</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">advantage</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">)</span>
+        <span class="n">log_probs</span><span class="p">,</span> <span class="n">dist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_probs</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">log_probs</span> <span class="o">*</span> <span class="n">advantage</span><span class="p">)</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="n">TensorDict</span><span class="p">({</span><span class="s2">&quot;loss_objective&quot;</span><span class="p">:</span> <span class="n">loss</span><span class="p">},</span> <span class="n">batch_size</span><span class="o">=</span><span class="p">[])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entropy_bonus</span><span class="p">:</span>
+            <span class="n">entropy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_entropy_bonus</span><span class="p">(</span><span class="n">dist</span><span class="p">)</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;entropy&quot;</span><span class="p">,</span> <span class="n">entropy</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>  <span class="c1"># for logging</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_entropy&quot;</span><span class="p">,</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">entropy_coeff</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">critic_coeff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">loss_critic</span><span class="p">,</span> <span class="n">value_clip_fraction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss_critic</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+            <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;loss_critic&quot;</span><span class="p">,</span> <span class="n">loss_critic</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value_clip_fraction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">td_out</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;value_clip_fraction&quot;</span><span class="p">,</span> <span class="n">value_clip_fraction</span><span class="p">)</span>
+        <span class="n">loss_mask</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;shifted_valid&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="n">td_out</span> <span class="o">=</span> <span class="n">td_out</span><span class="o">.</span><span class="n">named_apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reduce_loss</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">loss_mask</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;loss_&quot;</span><span class="p">)</span>
+            <span class="k">else</span> <span class="n">value</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_clear_weakrefs</span><span class="p">(</span>
+            <span class="n">tensordict</span><span class="p">,</span>
+            <span class="n">td_out</span><span class="p">,</span>
+            <span class="s2">&quot;actor_network_params&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;critic_network_params&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;target_actor_network_params&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;target_critic_network_params&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">td_out</span></div>
+
+
+    <span class="n">SUPPORTED_VALUE_ESTIMATORS</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD0</span><span class="p">,</span>
+        <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TD1</span><span class="p">,</span>
+        <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">TDLambda</span><span class="p">,</span>
+        <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">GAE</span><span class="p">,</span>
+        <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">MAGAE</span><span class="p">,</span>
+        <span class="n">ValueEstimators</span><span class="o">.</span><span class="n">VTrace</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<div class="viewcode-block" id="A2CLoss.make_value_estimator">
+<a class="viewcode-back" href="../../../reference/generated/torchrl.objectives.A2CLoss.html#torchrl.objectives.A2CLoss.make_value_estimator">[docs]</a>
+    <span class="k">def</span> <span class="nf">make_value_estimator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">value_type</span><span class="p">:</span> <span class="n">ValueEstimators</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">hyperparams</span><span class="p">):</span>
+        <span class="n">value_type</span><span class="p">,</span> <span class="n">hp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_prepare_value_estimator_kwargs</span><span class="p">(</span><span class="n">value_type</span><span class="p">,</span> <span class="o">**</span><span class="n">hyperparams</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+
+        <span class="n">hp</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;device&quot;</span><span class="p">,</span> <span class="n">_get_default_device</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="n">dispatch_value_estimator</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">value_type</span><span class="p">,</span>
+            <span class="n">supported</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">SUPPORTED_VALUE_ESTIMATORS</span><span class="p">,</span>
+            <span class="n">tensor_keys</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;advantage&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">advantage</span><span class="p">,</span>
+                <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+                <span class="s2">&quot;value_target&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">value_target</span><span class="p">,</span>
+                <span class="s2">&quot;reward&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">reward</span><span class="p">,</span>
+                <span class="s2">&quot;done&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">done</span><span class="p">,</span>
+                <span class="s2">&quot;terminated&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">terminated</span><span class="p">,</span>
+                <span class="s2">&quot;sample_log_prob&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">tensor_keys</span><span class="o">.</span><span class="n">sample_log_prob</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="o">**</span><span class="n">hp</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.objectives.a2c",
+       "headline": "torchrl.objectives.a2c",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/objectives/a2c.html",
+       "articleBody": "Source code for torchrl.objectives.a2c # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import contextlib from dataclasses import dataclass import torch from tensordict import ( is_tensor_collection, TensorDict, TensorDictBase, TensorDictParams, ) from tensordict.nn import ( composite_lp_aggregate, CompositeDistribution, dispatch, ProbabilisticTensorDictSequential, set_composite_lp_aggregate, TensorDictModule, ) from tensordict.utils import NestedKey from torch import distributions as d from torchrl.modules.distributions import HAS_ENTROPY from torchrl.objectives.common import LossModule from torchrl.objectives.utils import ( _cache_values, _clip_value_loss, _GAMMA_LMBDA_DEPREC_ERROR, _get_default_device, dispatch_value_estimator, distance_loss, ValueEstimators, ) [docs] class A2CLoss(LossModule): \"\"\"TorchRL implementation of the A2C loss. A2C (Advantage Actor Critic) is a model-free, online RL algorithm that uses parallel rollouts of n steps to update the policy, relying on the REINFORCE estimator to compute the gradient. It also adds an entropy term to the objective function to improve exploration. For more details regarding A2C, refer to: \"Asynchronous Methods for Deep Reinforcment Learning\", https://arxiv.org/abs/1602.01783v2 Args: actor_network (ProbabilisticTensorDictSequential): policy operator. critic_network (ValueOperator): value operator. entropy_bonus (bool): if ``True``, an entropy bonus will be added to the loss to favour exploratory policies. samples_mc_entropy (int): if the distribution retrieved from the policy operator does not have a closed form formula for the entropy, a Monte-Carlo estimate will be used. ``samples_mc_entropy`` will control how many samples will be used to compute this estimate. Defaults to ``1``. entropy_coeff (:obj:`float`): the weight of the entropy loss. Defaults to `0.01``. critic_coeff (:obj:`float`): the weight of the critic loss. Defaults to ``1.0``. If ``None``, the critic loss won\u0027t be included and the in-keys will miss the critic inputs. loss_critic_type (str): loss function for the value discrepancy. Can be one of \"l1\", \"l2\" or \"smooth_l1\". Defaults to ``\"smooth_l1\"``. separate_losses (bool, optional): if ``True``, shared parameters between policy and critic will only be trained on the policy loss. Defaults to ``False``, i.e., gradients are propagated to shared parameters for both policy and critic losses. advantage_key (str): [Deprecated, use set_keys(advantage_key=advantage_key) instead] The input tensordict key where the advantage is expected to be written. default: \"advantage\" value_target_key (str): [Deprecated, use set_keys() instead] the input tensordict key where the target state value is expected to be written. Defaults to ``\"value_target\"``. functional (bool, optional): whether modules should be functionalized. Functionalizing permits features like meta-RL, but makes it impossible to use distributed models (DDP, FSDP, ...) and comes with a little cost. Defaults to ``True``. reduction (str, optional): Specifies the reduction to apply to the output: ``\"none\"`` | ``\"mean\"`` | ``\"sum\"``. ``\"none\"``: no reduction will be applied, ``\"mean\"``: the sum of the output will be divided by the number of elements in the output, ``\"sum\"``: the output will be summed. Default: ``\"mean\"``. clip_value (:obj:`float`, optional): If provided, it will be used to compute a clipped version of the value prediction with respect to the input value estimate and use it to calculate the value loss. The purpose of clipping is to limit the impact of extreme value predictions, helping stabilize training and preventing large updates. However, it will have no impact if the value estimate was done by the current version of the value estimator. Defaults to ``None``. .. note: The advantage (typically GAE) can be computed by the loss function or in the training loop. The latter option is usually preferred, but this is up to the user to choose which option is to be preferred. If the advantage key (``\"advantage`` by default) is not present in the input tensordict, the advantage will be computed by the :meth:`~.forward` method. A custom advantage module can be built using :meth:`~.make_value_estimator`. The default is :class:`~torchrl.objectives.value.GAE` with hyperparameters dictated by :func:`~torchrl.objectives.utils.default_value_kwargs`. Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.data import Bounded \u003e\u003e\u003e from torchrl.modules.distributions import NormalParamExtractor, TanhNormal \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator \u003e\u003e\u003e from torchrl.modules.tensordict_module.common import SafeModule \u003e\u003e\u003e from torchrl.objectives.a2c import A2CLoss \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e n_act, n_obs = 4, 3 \u003e\u003e\u003e spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,)) \u003e\u003e\u003e net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor()) \u003e\u003e\u003e module = SafeModule(net, in_keys=[\"observation\"], out_keys=[\"loc\", \"scale\"]) \u003e\u003e\u003e actor = ProbabilisticActor( ... module=module, ... in_keys=[\"loc\", \"scale\"], ... spec=spec, ... distribution_class=TanhNormal) \u003e\u003e\u003e module = nn.Linear(n_obs, 1) \u003e\u003e\u003e value = ValueOperator( ... module=module, ... in_keys=[\"observation\"]) \u003e\u003e\u003e loss = A2CLoss(actor, value, loss_critic_type=\"l2\") \u003e\u003e\u003e batch = [2, ] \u003e\u003e\u003e action = spec.rand(batch) \u003e\u003e\u003e data = TensorDict({ ... \"observation\": torch.randn(*batch, n_obs), ... \"action\": action, ... (\"next\", \"done\"): torch.zeros(*batch, 1, dtype=torch.bool), ... (\"next\", \"terminated\"): torch.zeros(*batch, 1, dtype=torch.bool), ... (\"next\", \"reward\"): torch.randn(*batch, 1), ... (\"next\", \"observation\"): torch.randn(*batch, n_obs), ... }, batch) \u003e\u003e\u003e loss(data) TensorDict( fields={ entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), loss_critic: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), loss_entropy: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False), loss_objective: Tensor(shape=torch.Size([]), device=cpu, dtype=torch.float32, is_shared=False)}, batch_size=torch.Size([]), device=None, is_shared=False) This class is compatible with non-tensordict based modules too and can be used without recurring to any tensordict-related primitive. In this case, the expected keyword arguments are: ``[\"action\", \"next_reward\", \"next_done\", \"next_terminated\"]`` + in_keys of the actor and critic. The return value is a tuple of tensors in the following order: ``[\"loss_objective\"]`` + ``[\"loss_critic\"]`` if critic_coeff is not None + ``[\"entropy\", \"loss_entropy\"]`` if entropy_bonus is True and critic_coeff is not None Examples: \u003e\u003e\u003e import torch \u003e\u003e\u003e from torch import nn \u003e\u003e\u003e from torchrl.data import Bounded \u003e\u003e\u003e from torchrl.modules.distributions import NormalParamExtractor, TanhNormal \u003e\u003e\u003e from torchrl.modules.tensordict_module.actors import ProbabilisticActor, ValueOperator \u003e\u003e\u003e from torchrl.modules.tensordict_module.common import SafeModule \u003e\u003e\u003e from torchrl.objectives.a2c import A2CLoss \u003e\u003e\u003e _ = torch.manual_seed(42) \u003e\u003e\u003e n_act, n_obs = 4, 3 \u003e\u003e\u003e spec = Bounded(-torch.ones(n_act), torch.ones(n_act), (n_act,)) \u003e\u003e\u003e net = nn.Sequential(nn.Linear(n_obs, 2 * n_act), NormalParamExtractor()) \u003e\u003e\u003e module = SafeModule(net, in_keys=[\"observation\"], out_keys=[\"loc\", \"scale\"]) \u003e\u003e\u003e actor = ProbabilisticActor( ... module=module, ... in_keys=[\"loc\", \"scale\"], ... spec=spec, ... distribution_class=TanhNormal) \u003e\u003e\u003e module = nn.Linear(n_obs, 1) \u003e\u003e\u003e value = ValueOperator( ... module=module, ... in_keys=[\"observation\"]) \u003e\u003e\u003e loss = A2CLoss(actor, value, loss_critic_type=\"l2\") \u003e\u003e\u003e batch = [2, ] \u003e\u003e\u003e loss_obj, loss_critic, entropy, loss_entropy = loss( ... observation = torch.randn(*batch, n_obs), ... action = spec.rand(batch), ... next_done = torch.zeros(*batch, 1, dtype=torch.bool), ... next_terminated = torch.zeros(*batch, 1, dtype=torch.bool), ... next_reward = torch.randn(*batch, 1), ... next_observation = torch.randn(*batch, n_obs)) \u003e\u003e\u003e loss_obj.backward() The output keys can also be filtered using the :meth:`SACLoss.select_out_keys` method. Examples: \u003e\u003e\u003e loss.select_out_keys(\u0027loss_objective\u0027, \u0027loss_critic\u0027) \u003e\u003e\u003e loss_obj, loss_critic = loss( ... observation = torch.randn(*batch, n_obs), ... action = spec.rand(batch), ... next_done = torch.zeros(*batch, 1, dtype=torch.bool), ... next_terminated = torch.zeros(*batch, 1, dtype=torch.bool), ... next_reward = torch.randn(*batch, 1), ... next_observation = torch.randn(*batch, n_obs)) \u003e\u003e\u003e loss_obj.backward() .. note:: There is an exception regarding compatibility with non-tensordict-based modules. If the actor network is probabilistic and uses a :class:`~tensordict.nn.distributions.CompositeDistribution`, this class must be used with tensordicts and cannot function as a tensordict-independent module. This is because composite action spaces inherently rely on the structured representation of data provided by tensordicts to handle their actions. \"\"\" @dataclass class _AcceptedKeys: \"\"\"Maintains default values for all configurable tensordict keys. This class defines which tensordict keys can be set using \u0027.set_keys(key_name=key_value)\u0027 and their default values. Attributes: advantage (NestedKey): The input tensordict key where the advantage is expected. Will be used for the underlying value estimator. Defaults to ``\"advantage\"``. value_target (NestedKey): The input tensordict key where the target state value is expected. Will be used for the underlying value estimator Defaults to ``\"value_target\"``. value (NestedKey): The input tensordict key where the state value is expected. Will be used for the underlying value estimator. Defaults to ``\"state_value\"``. action (NestedKey): The input tensordict key where the action is expected. Defaults to ``\"action\"``. reward (NestedKey): The input tensordict key where the reward is expected. Will be used for the underlying value estimator. Defaults to ``\"reward\"``. done (NestedKey): The key in the input TensorDict that indicates whether a trajectory is done. Will be used for the underlying value estimator. Defaults to ``\"done\"``. terminated (NestedKey): The key in the input TensorDict that indicates whether a trajectory is terminated. Will be used for the underlying value estimator. Defaults to ``\"terminated\"``. sample_log_prob (NestedKey or list of nested keys): The input tensordict key where the sample log probability is expected. Defaults to ``\"sample_log_prob\"`` when :func:`~tensordict.nn.composite_lp_aggregate` returns `True`, `\"action_log_prob\"` otherwise. \"\"\" advantage: NestedKey = \"advantage\" value_target: NestedKey = \"value_target\" value: NestedKey = \"state_value\" action: NestedKey = \"action\" reward: NestedKey = \"reward\" done: NestedKey = \"done\" terminated: NestedKey = \"terminated\" sample_log_prob: NestedKey | None = None def __post_init__(self): if self.sample_log_prob is None: if composite_lp_aggregate(nowarn=True): self.sample_log_prob = \"sample_log_prob\" else: self.sample_log_prob = \"action_log_prob\" default_keys = _AcceptedKeys tensor_keys: _AcceptedKeys default_value_estimator: ValueEstimators = ValueEstimators.GAE _schedulable_buffers = frozenset({\"entropy_coeff\", \"critic_coeff\", \"clip_value\"}) actor_network: TensorDictModule critic_network: TensorDictModule actor_network_params: TensorDictParams | None critic_network_params: TensorDictParams | None target_actor_network_params: TensorDictParams | None target_critic_network_params: TensorDictParams | None def __init__( self, actor_network: ProbabilisticTensorDictSequential = None, critic_network: TensorDictModule = None, *, entropy_bonus: bool = True, samples_mc_entropy: int = 1, entropy_coeff: float | None = None, critic_coeff: float = 1.0, loss_critic_type: str = \"smooth_l1\", gamma: float | None = None, separate_losses: bool = False, advantage_key: str | None = None, value_target_key: str | None = None, functional: bool = True, actor: ProbabilisticTensorDictSequential = None, critic: ProbabilisticTensorDictSequential = None, reduction: str | None = None, clip_value: float | None = None, **kwargs, ): # entropy_coef has been removed in v0.11 if \"entropy_coef\" in kwargs: raise TypeError( \"\u0027entropy_coef\u0027 has been removed in torchrl v0.11. Please use \u0027entropy_coeff\u0027 instead.\" ) # Set default value if None if entropy_coeff is None: entropy_coeff = 0.01 # critic_coef has been removed in v0.11 if \"critic_coef\" in kwargs: raise TypeError( \"\u0027critic_coef\u0027 has been removed in torchrl v0.11. Please use \u0027critic_coeff\u0027 instead.\" ) if actor is not None: actor_network = actor del actor if critic is not None: critic_network = critic del critic if actor_network is None or critic_network is None: raise TypeError( \"Missing positional arguments actor_network or critic_network.\" ) if reduction is None: reduction = \"mean\" self._functional = functional self._out_keys = None super().__init__() self._set_deprecated_ctor_keys( advantage=advantage_key, value_target=value_target_key ) if functional: self.convert_to_functional( actor_network, \"actor_network\", ) else: self.actor_network = actor_network if separate_losses: # we want to make sure there are no duplicates in the params: the # params of critic must be refs to actor if they\u0027re shared policy_params = list(actor_network.parameters()) else: policy_params = None if functional: self.convert_to_functional( critic_network, \"critic_network\", compare_against=policy_params ) else: self.critic_network = critic_network self.target_critic_network_params = None self.samples_mc_entropy = samples_mc_entropy self.entropy_bonus = entropy_bonus and entropy_coeff self.reduction = reduction device = _get_default_device(self) self.register_coeff_buffer(\"entropy_coeff\", entropy_coeff, device=device) self.register_coeff_buffer(\"critic_coeff\", critic_coeff, device=device) if gamma is not None: raise TypeError(_GAMMA_LMBDA_DEPREC_ERROR) self.loss_critic_type = loss_critic_type self.register_coeff_buffer(\"clip_value\", clip_value, device=device) log_prob_keys = self.actor_network.log_prob_keys action_keys = self.actor_network.dist_sample_keys if len(log_prob_keys) \u003e 1: self.set_keys(sample_log_prob=log_prob_keys, action=action_keys) else: self.set_keys(sample_log_prob=log_prob_keys[0], action=action_keys[0]) @property def functional(self): return self._functional @property def in_keys(self): keys = [ self.tensor_keys.action, (\"next\", self.tensor_keys.reward), (\"next\", self.tensor_keys.done), (\"next\", self.tensor_keys.terminated), *self.actor_network.in_keys, *[(\"next\", key) for key in self.actor_network.in_keys], ] if self.critic_coeff is not None: keys.extend(self.critic_network.in_keys) return list(set(keys)) @property def out_keys(self): if self._out_keys is None: outs = [\"loss_objective\"] if self.critic_coeff is not None: outs.append(\"loss_critic\") if self.entropy_bonus: outs.append(\"entropy\") outs.append(\"loss_entropy\") self._out_keys = outs return self._out_keys @out_keys.setter def out_keys(self, value): self._out_keys = value def _forward_value_estimator_keys(self, **kwargs) -\u003e None: if self._value_estimator is not None: self._value_estimator.set_keys( advantage=self.tensor_keys.advantage, value_target=self.tensor_keys.value_target, value=self.tensor_keys.value, reward=self.tensor_keys.reward, done=self.tensor_keys.done, terminated=self.tensor_keys.terminated, ) def reset(self) -\u003e None: pass @set_composite_lp_aggregate(False) def get_entropy_bonus(self, dist: d.Distribution) -\u003e torch.Tensor: if HAS_ENTROPY.get(type(dist), False): entropy = dist.entropy() else: x = dist.rsample((self.samples_mc_entropy,)) log_prob = dist.log_prob(x) if is_tensor_collection(log_prob): log_prob = sum(log_prob.sum(dim=\"feature\").values(True, True)) entropy = -log_prob.mean(0) return entropy.unsqueeze(-1) @set_composite_lp_aggregate(False) def _log_probs( self, tensordict: TensorDictBase ) -\u003e tuple[torch.Tensor, d.Distribution]: # current log_prob of actions tensordict_clone = tensordict.select( *self.actor_network.in_keys, strict=False ).copy() with ( self.actor_network_params.to_module( self.actor_network, preserve_module_state=False ) if self.functional else contextlib.nullcontext() ): dist = self.actor_network.get_dist(tensordict_clone) if isinstance(dist, CompositeDistribution): action_keys = self.tensor_keys.action action = tensordict.select( *((action_keys,) if isinstance(action_keys, NestedKey) else action_keys) ) else: action = tensordict.get(self.tensor_keys.action) if action.requires_grad: raise RuntimeError( f\"tensordict stored {self.tensor_keys.action} requires grad.\" ) log_prob = dist.log_prob(action) if not isinstance(action, torch.Tensor): log_prob = sum( dist.log_prob(tensordict).sum(dim=\"feature\").values(True, True) ) log_prob = log_prob.unsqueeze(-1) return log_prob, dist [docs] def loss_critic(self, tensordict: TensorDictBase) -\u003e tuple[torch.Tensor, float]: \"\"\"Returns the loss value of the critic, multiplied by ``critic_coeff`` if it is not ``None``. Returns the loss and the clip-fraction. \"\"\" if self.clip_value: old_state_value = tensordict.get( self.tensor_keys.value, None ) # TODO: None soon to be removed if old_state_value is None: raise KeyError( f\"clip_value is set to {self.clip_value}, but \" f\"the key {self.tensor_keys.value} was not found in the input tensordict. \" f\"Make sure that the value_key passed to A2C exists in the input tensordict.\" ) old_state_value = old_state_value.clone() # TODO: if the advantage is gathered by forward, this introduces an # overhead that we could easily reduce. target_return = tensordict.get( self.tensor_keys.value_target, None ) # TODO: None soon to be removed if target_return is None: raise KeyError( f\"the key {self.tensor_keys.value_target} was not found in the input tensordict. \" f\"Make sure you provided the right key and the value_target (i.e. the target \" f\"return) has been retrieved accordingly. Advantage classes such as GAE, \" f\"TDLambdaEstimate and TDEstimate all return a \u0027value_target\u0027 entry that \" f\"can be used for the value loss.\" ) tensordict_select = tensordict.select( *self.critic_network.in_keys, strict=False ) with ( self.critic_network_params.to_module( self.critic_network, preserve_module_state=False ) if self.functional else contextlib.nullcontext() ): state_value = self.critic_network( tensordict_select, ).get(self.tensor_keys.value) loss_value = distance_loss( target_return, state_value, loss_function=self.loss_critic_type, ) clip_fraction = None if self.clip_value: loss_value, clip_fraction = _clip_value_loss( old_state_value, state_value, self.clip_value, target_return, loss_value, self.loss_critic_type, ) self._clear_weakrefs( tensordict, \"actor_network_params\", \"critic_network_params\", \"target_actor_network_params\", \"target_critic_network_params\", ) if self.critic_coeff is not None: return self.critic_coeff * loss_value, clip_fraction return loss_value, clip_fraction @property @_cache_values def _cached_detach_critic_network_params(self): if not self.functional: return None return self.critic_network_params.detach() [docs] @dispatch() def forward(self, tensordict: TensorDictBase) -\u003e TensorDictBase: tensordict = tensordict.clone(False) advantage = tensordict.get(self.tensor_keys.advantage, None) if advantage is None: self.value_estimator( tensordict, params=self._cached_detach_critic_network_params, target_params=self.target_critic_network_params, ) advantage = tensordict.get(self.tensor_keys.advantage) log_probs, dist = self._log_probs(tensordict) loss = -(log_probs * advantage) td_out = TensorDict({\"loss_objective\": loss}, batch_size=[]) if self.entropy_bonus: entropy = self.get_entropy_bonus(dist) td_out.set(\"entropy\", entropy.detach().mean()) # for logging td_out.set(\"loss_entropy\", -self.entropy_coeff * entropy) if self.critic_coeff is not None: loss_critic, value_clip_fraction = self.loss_critic(tensordict) td_out.set(\"loss_critic\", loss_critic) if value_clip_fraction is not None: td_out.set(\"value_clip_fraction\", value_clip_fraction) loss_mask = tensordict.get(\"shifted_valid\", default=None) td_out = td_out.named_apply( lambda name, value: self._reduce_loss(value, mask=loss_mask).squeeze(-1) if name.startswith(\"loss_\") else value, ) self._clear_weakrefs( tensordict, td_out, \"actor_network_params\", \"critic_network_params\", \"target_actor_network_params\", \"target_critic_network_params\", ) return td_out SUPPORTED_VALUE_ESTIMATORS = ( ValueEstimators.TD0, ValueEstimators.TD1, ValueEstimators.TDLambda, ValueEstimators.GAE, ValueEstimators.MAGAE, ValueEstimators.VTrace, ) [docs] def make_value_estimator(self, value_type: ValueEstimators = None, **hyperparams): value_type, hp = self._prepare_value_estimator_kwargs(value_type, **hyperparams) if value_type is None: return self hp.setdefault(\"device\", _get_default_device(self)) dispatch_value_estimator( self, value_type, supported=self.SUPPORTED_VALUE_ESTIMATORS, tensor_keys={ \"advantage\": self.tensor_keys.advantage, \"value\": self.tensor_keys.value, \"value_target\": self.tensor_keys.value_target, \"reward\": self.tensor_keys.reward, \"done\": self.tensor_keys.done, \"terminated\": self.tensor_keys.terminated, \"sample_log_prob\": self.tensor_keys.sample_log_prob, }, **hp, )",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/objectives/a2c.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

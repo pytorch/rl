@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+RobotDatasetMetadata
+====================
+
+.. autoclass:: RobotDatasetMetadata
+    :members:

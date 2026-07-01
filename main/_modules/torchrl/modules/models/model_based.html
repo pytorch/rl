@@ -1,0 +1,2403 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>torchrl.modules.models.model_based &#8212; torchrl main documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../../../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../../../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../../../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../../../../_static/documentation_options.js?v=a8da1a53"></script>
+    <script src="../../../../_static/doctools.js?v=888ff710"></script>
+    <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/torchrl/modules/models/model_based';</script>
+    <script src="../../../../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="torchrl.modules.models.model_based - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="main (0.13.0)">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="documentation">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../../../../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../../../../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', 'main (0.13.0)');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../../../../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/recurrent_sequence_training.html">
+                Recurrent training on sequence batches
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/vla.html">
+                Vision-Language-Action (VLA) policies with TorchRL
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../tutorials/coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../../../../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <div class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../../../../index.html" class="version">main (0.13.0)</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/recurrent_sequence_training.html">
+            Recurrent training on sequence batches
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/mujoco_cube_bowl_macros.html">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/vla.html">
+            Vision-Language-Action (VLA) policies with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item">
+        
+          
+          <a class="nav-link nav-internal" href="../../../../tutorials/coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-26">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/vla.html">
+                  Vision-Language-Action (VLA)
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../../../../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-27">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../../../../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">torchrl.modu...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <link itemprop="item" href="../../../index.html">
+      <meta itemprop="name" content="Module code">
+      <meta itemprop="position" content="1">
+    </div>
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="torchrl.modules.models.model_based">
+      <meta itemprop="position" content="2">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">_modules/torchrl/modules/models/model_based</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../../../../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../../../../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for torchrl.modules.models.model_based</h1><div class="highlight"><pre>
+<span></span><span class="c1"># Copyright (c) Meta Platforms, Inc. and affiliates.</span>
+<span class="c1">#</span>
+<span class="c1"># This source code is licensed under the MIT license found in the</span>
+<span class="c1"># LICENSE file in the root directory of this source tree.</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">warnings</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">packaging</span> <span class="kn">import</span> <span class="n">version</span>
+<span class="kn">from</span> <span class="nn">tensordict.nn</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NormalParamExtractor</span><span class="p">,</span>
+    <span class="n">TensorDictModule</span><span class="p">,</span>
+    <span class="n">TensorDictModuleBase</span><span class="p">,</span>
+    <span class="n">TensorDictSequential</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">nn</span>
+
+<span class="c1"># from torchrl.modules.tensordict_module.rnn import GRUCell</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="kn">import</span> <span class="n">GRUCell</span>
+
+<span class="kn">from</span> <span class="nn">torchrl.modules.models.models</span> <span class="kn">import</span> <span class="n">MLP</span>
+
+<span class="n">UNSQUEEZE_RNN_INPUT</span> <span class="o">=</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">version</span><span class="o">.</span><span class="n">parse</span><span class="p">(</span><span class="s2">&quot;1.11&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="DreamerActor">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.DreamerActor.html#torchrl.modules.DreamerActor">[docs]</a>
+<span class="k">class</span> <span class="nc">DreamerActor</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Dreamer actor network.</span>
+
+<span class="sd">    This network is used to predict the action distribution given the</span>
+<span class="sd">    the stochastic state and the deterministic belief at the current</span>
+<span class="sd">    time step.</span>
+<span class="sd">    It outputs the mean and the scale of the action distribution.</span>
+
+<span class="sd">    Reference: https://arxiv.org/abs/1912.01603</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        out_features (int): Number of output features.</span>
+<span class="sd">        depth (int, optional): Number of hidden layers.</span>
+<span class="sd">            Defaults to 4.</span>
+<span class="sd">        num_cells (int, optional): Number of hidden units per layer.</span>
+<span class="sd">            Defaults to 200.</span>
+<span class="sd">        activation_class (nn.Module, optional): Activation class.</span>
+<span class="sd">            Defaults to nn.ELU.</span>
+<span class="sd">        std_bias (:obj:`float`, optional): Bias of the softplus transform.</span>
+<span class="sd">            Defaults to 5.0.</span>
+<span class="sd">        std_min_val (:obj:`float`, optional): Minimum value of the standard deviation.</span>
+<span class="sd">            Defaults to 1e-4.</span>
+<span class="sd">        device (torch.device, optional): Device to create the module on.</span>
+<span class="sd">            Defaults to None (uses default device).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">out_features</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+        <span class="n">num_cells</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+        <span class="n">activation_class</span><span class="o">=</span><span class="n">nn</span><span class="o">.</span><span class="n">ELU</span><span class="p">,</span>
+        <span class="n">std_bias</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
+        <span class="n">std_min_val</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backbone</span> <span class="o">=</span> <span class="n">MLP</span><span class="p">(</span>
+            <span class="n">out_features</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="n">out_features</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span>
+            <span class="n">num_cells</span><span class="o">=</span><span class="n">num_cells</span><span class="p">,</span>
+            <span class="n">activation_class</span><span class="o">=</span><span class="n">activation_class</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backbone</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">NormalParamExtractor</span><span class="p">(</span>
+                <span class="n">scale_mapping</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;biased_softplus_</span><span class="si">{</span><span class="n">std_bias</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">std_min_val</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="c1"># scale_mapping=&quot;relu&quot;,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="DreamerActor.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.DreamerActor.html#torchrl.modules.DreamerActor.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">belief</span><span class="p">):</span>
+        <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backbone</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="n">scale</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ObsEncoder">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder">[docs]</a>
+<span class="k">class</span> <span class="nc">ObsEncoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Observation encoder network.</span>
+
+<span class="sd">    Takes a pixel observation and encodes it into a latent space.</span>
+
+<span class="sd">    Reference: https://arxiv.org/abs/1803.10122</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        channels (int, optional): Number of hidden units in the first layer.</span>
+<span class="sd">            Defaults to 32.</span>
+<span class="sd">        num_layers (int, optional): Depth of the network. Defaults to 4.</span>
+<span class="sd">        in_channels (int, optional): Number of input channels. If None, uses LazyConv2d.</span>
+<span class="sd">            Defaults to None for backward compatibility.</span>
+<span class="sd">        device (torch.device, optional): Device to create the module on.</span>
+<span class="sd">            Defaults to None (uses default device).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">channels</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span> <span class="n">num_layers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">in_channels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">depth</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The depth argument in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> will soon be deprecated and &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;used for the depth of the network instead. Please use channels &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;for the layer size and num_layers for the depth until depth &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;replaces num_layers.&quot;</span>
+            <span class="p">)</span>
+            <span class="n">channels</span> <span class="o">=</span> <span class="n">depth</span>
+        <span class="k">if</span> <span class="n">num_layers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;num_layers cannot be smaller than 1.&quot;</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="c1"># Use explicit Conv2d if in_channels provided, else LazyConv2d for backward compat</span>
+        <span class="k">if</span> <span class="n">in_channels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">first_conv</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">in_channels</span><span class="p">,</span> <span class="n">channels</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">first_conv</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LazyConv2d</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">first_conv</span><span class="p">,</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+        <span class="p">]</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_layers</span><span class="p">):</span>
+            <span class="n">layers</span> <span class="o">+=</span> <span class="p">[</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">(</span><span class="n">channels</span> <span class="o">*</span> <span class="n">k</span><span class="p">,</span> <span class="n">channels</span> <span class="o">*</span> <span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="mi">2</span><span class="p">),</span> <span class="mi">4</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+            <span class="p">]</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="n">k</span> <span class="o">*</span> <span class="mi">2</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
+
+<div class="viewcode-block" id="ObsEncoder.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ObsEncoder.html#torchrl.modules.ObsEncoder.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation</span><span class="p">):</span>
+        <span class="o">*</span><span class="n">batch_sizes</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_sizes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">end_dim</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">end_dim</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">batch_sizes</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">start_dim</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">end_dim</span><span class="o">=</span><span class="n">end_dim</span><span class="p">)</span>
+        <span class="n">obs_encoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encoder</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+        <span class="n">latent</span> <span class="o">=</span> <span class="n">obs_encoded</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">*</span><span class="n">batch_sizes</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">latent</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ObsDecoder">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ObsDecoder.html#torchrl.modules.ObsDecoder">[docs]</a>
+<span class="k">class</span> <span class="nc">ObsDecoder</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Observation decoder network.</span>
+
+<span class="sd">    Takes the deterministic state and the stochastic belief and decodes it into a pixel observation.</span>
+
+<span class="sd">    Reference: https://arxiv.org/abs/1803.10122</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        channels (int, optional): Number of hidden units in the last layer.</span>
+<span class="sd">            Defaults to 32.</span>
+<span class="sd">        num_layers (int, optional): Depth of the network. Defaults to 4.</span>
+<span class="sd">        kernel_sizes (int or list of int, optional): the kernel_size of each layer.</span>
+<span class="sd">            Defaults to ``[5, 5, 6, 6]`` if num_layers if 4, else ``[5] * num_layers``.</span>
+<span class="sd">        latent_dim (int, optional): Input dimension (state_dim + rnn_hidden_dim).</span>
+<span class="sd">            If None, uses LazyLinear. Defaults to None for backward compatibility.</span>
+<span class="sd">        out_channels (int, optional): Number of output channels in the final</span>
+<span class="sd">            ConvTranspose2d layer.  Defaults to 3 (RGB).  Set to 1 for</span>
+<span class="sd">            grayscale.</span>
+<span class="sd">        device (torch.device, optional): Device to create the module on.</span>
+<span class="sd">            Defaults to None (uses default device).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">channels</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
+        <span class="n">num_layers</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+        <span class="n">kernel_sizes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">latent_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">out_channels</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">depth</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;The depth argument in </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="si">}</span><span class="s2"> will soon be deprecated and &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;used for the depth of the network instead. Please use channels &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;for the layer size and num_layers for the depth until depth &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;replaces num_layers.&quot;</span>
+            <span class="p">)</span>
+            <span class="n">channels</span> <span class="o">=</span> <span class="n">depth</span>
+        <span class="k">if</span> <span class="n">num_layers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;num_layers cannot be smaller than 1.&quot;</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="c1"># Use explicit Linear if latent_dim provided, else LazyLinear for backward compat</span>
+        <span class="n">linear_out</span> <span class="o">=</span> <span class="n">channels</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">2</span>
+        <span class="k">if</span> <span class="n">latent_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">first_linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">latent_dim</span><span class="p">,</span> <span class="n">linear_out</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">first_linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="n">linear_out</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_to_latent</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">first_linear</span><span class="p">,</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">kernel_sizes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">num_layers</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">kernel_sizes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="mi">5</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">kernel_sizes</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="p">[</span><span class="n">kernel_sizes</span><span class="p">]</span> <span class="o">*</span> <span class="n">num_layers</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose2d</span><span class="p">(</span>
+                <span class="n">channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">,</span> <span class="n">kernel_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span>
+            <span class="p">),</span>
+        <span class="p">]</span>
+        <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="n">kernel_sizes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_layers</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">j</span> <span class="o">!=</span> <span class="n">num_layers</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose2d</span><span class="p">(</span>
+                        <span class="n">channels</span> <span class="o">*</span> <span class="n">k</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span>
+                        <span class="n">channels</span> <span class="o">*</span> <span class="n">k</span><span class="p">,</span>
+                        <span class="n">kernel_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                        <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">]</span> <span class="o">+</span> <span class="n">layers</span>
+                <span class="n">kernel_sizes</span> <span class="o">=</span> <span class="n">kernel_sizes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">k</span> <span class="o">=</span> <span class="n">k</span> <span class="o">*</span> <span class="mi">2</span>
+                <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">nn</span><span class="o">.</span><span class="n">ReLU</span><span class="p">()]</span> <span class="o">+</span> <span class="n">layers</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Use explicit ConvTranspose2d - input is always channels * 8 from state_to_latent</span>
+                <span class="n">layers</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="n">nn</span><span class="o">.</span><span class="n">ConvTranspose2d</span><span class="p">(</span>
+                        <span class="n">linear_out</span><span class="p">,</span>
+                        <span class="n">channels</span> <span class="o">*</span> <span class="n">k</span><span class="p">,</span>
+                        <span class="n">kernel_sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+                        <span class="n">stride</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+                        <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">]</span> <span class="o">+</span> <span class="n">layers</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="o">*</span><span class="n">layers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_depth</span> <span class="o">=</span> <span class="n">channels</span>
+
+<div class="viewcode-block" id="ObsDecoder.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.ObsDecoder.html#torchrl.modules.ObsDecoder.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">rnn_hidden</span><span class="p">):</span>
+        <span class="n">latent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_to_latent</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">state</span><span class="p">,</span> <span class="n">rnn_hidden</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">))</span>
+        <span class="o">*</span><span class="n">batch_sizes</span><span class="p">,</span> <span class="n">D</span> <span class="o">=</span> <span class="n">latent</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">latent</span> <span class="o">=</span> <span class="n">latent</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">obs_decoded</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">(</span><span class="n">latent</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span> <span class="o">=</span> <span class="n">obs_decoded</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">obs_decoded</span> <span class="o">=</span> <span class="n">obs_decoded</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">*</span><span class="n">batch_sizes</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">obs_decoded</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RSSMRollout">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout">[docs]</a>
+<span class="k">class</span> <span class="nc">RSSMRollout</span><span class="p">(</span><span class="n">TensorDictModuleBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Rollout the RSSM network.</span>
+
+<span class="sd">    Given a set of encoded observations and actions, this module will rollout the RSSM network to compute all the intermediate</span>
+<span class="sd">    states and beliefs.</span>
+<span class="sd">    The previous posterior is used as the prior for the next time step.</span>
+<span class="sd">    The forward method returns a stack of all intermediate states and beliefs.</span>
+
+<span class="sd">    Reference: https://arxiv.org/abs/1811.04551</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        rssm_prior (TensorDictModule): Prior network.</span>
+<span class="sd">        rssm_posterior (TensorDictModule): Posterior network.</span>
+<span class="sd">        use_scan (bool, optional): If True, uses torch._higher_order_ops.scan for</span>
+<span class="sd">            the rollout loop. This is more torch.compile friendly but may have</span>
+<span class="sd">            different performance characteristics. Defaults to False.</span>
+<span class="sd">        compile_step (bool, optional): If True, compiles the individual step function.</span>
+<span class="sd">            Only used when use_scan=False. Defaults to False.</span>
+<span class="sd">        compile_backend (str, optional): Backend to use for compilation.</span>
+<span class="sd">            Defaults to &quot;inductor&quot;.</span>
+<span class="sd">        compile_mode (str, optional): Mode to use for compilation.</span>
+<span class="sd">            Defaults to None (uses PyTorch default).</span>
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">rssm_prior</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
+        <span class="n">rssm_posterior</span><span class="p">:</span> <span class="n">TensorDictModule</span><span class="p">,</span>
+        <span class="n">use_scan</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">compile_step</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">compile_backend</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;inductor&quot;</span><span class="p">,</span>
+        <span class="n">compile_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="n">_module</span> <span class="o">=</span> <span class="n">TensorDictSequential</span><span class="p">(</span><span class="n">rssm_prior</span><span class="p">,</span> <span class="n">rssm_posterior</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">in_keys</span> <span class="o">=</span> <span class="n">_module</span><span class="o">.</span><span class="n">in_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span> <span class="o">=</span> <span class="n">_module</span><span class="o">.</span><span class="n">out_keys</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rssm_prior</span> <span class="o">=</span> <span class="n">rssm_prior</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rssm_posterior</span> <span class="o">=</span> <span class="n">rssm_posterior</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_scan</span> <span class="o">=</span> <span class="n">use_scan</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compile_step</span> <span class="o">=</span> <span class="n">compile_step</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compile_backend</span> <span class="o">=</span> <span class="n">compile_backend</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compile_mode</span> <span class="o">=</span> <span class="n">compile_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_step</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="nf">_get_step_fn</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the step function, optionally compiled.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_step</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_step</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_step</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_step</span><span class="p">,</span>
+                <span class="n">backend</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_backend</span><span class="p">,</span>
+                <span class="n">mode</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">compile_mode</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compiled_step</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">compile_step</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_step</span>
+
+    <span class="k">def</span> <span class="nf">_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">_tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Single RSSM step: prior + posterior.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rssm_prior</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rssm_posterior</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_tensordict</span>
+
+<div class="viewcode-block" id="RSSMRollout.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMRollout.html#torchrl.modules.RSSMRollout.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations.</span>
+
+<span class="sd">        The rollout requires a belief and posterior state primer.</span>
+
+<span class="sd">        At each step, two probability distributions are built and sampled from:</span>
+
+<span class="sd">        - A prior distribution p(s_{t+1} | s_t, a_t, b_t) where b_t is a</span>
+<span class="sd">            deterministic transform of the form b_t(s_{t-1}, a_{t-1}). The</span>
+<span class="sd">            previous state s_t is sampled according to the posterior</span>
+<span class="sd">            distribution (see below), creating a chain of posterior-to-priors</span>
+<span class="sd">            that accumulates evidence to compute a prior distribution over</span>
+<span class="sd">            the current event distribution:</span>
+<span class="sd">            p(s_{t+1} s_t | o_t, a_t, s_{t-1}, a_{t-1}) = p(s_{t+1} | s_t, a_t, b_t) q(s_t | b_t, o_t)</span>
+
+<span class="sd">        - A posterior distribution of the form q(s_{t+1} | b_{t+1}, o_{t+1})</span>
+<span class="sd">            which amends to q(s_{t+1} | s_t, a_t, o_{t+1})</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_scan</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forward_scan</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_forward_loop</span><span class="p">(</span><span class="n">tensordict</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span> <span class="nf">_forward_loop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Traditional loop-based forward.&quot;&quot;&quot;</span>
+        <span class="n">tensordict_out</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">time_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="n">update_values</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">step_fn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_step_fn</span><span class="p">()</span>
+
+        <span class="c1"># Determine output keys from first timestep to ensure consistent stacking.</span>
+        <span class="c1"># Root state/belief may be added by carry_forward for t&gt;0 but won&#39;t exist</span>
+        <span class="c1"># for t=0, so we use the original input structure as reference.</span>
+        <span class="n">output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">time_steps</span><span class="p">):</span>
+            <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">step_fn</span><span class="p">(</span><span class="n">_tensordict</span><span class="p">)</span>
+
+            <span class="c1"># Select consistent keys for stacking (excludes root state/belief</span>
+            <span class="c1"># that may have been added by carry_forward for t&gt;0)</span>
+            <span class="n">tensordict_out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_tensordict</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">output_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="n">time_steps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="c1"># Propagate state/belief from (&quot;next&quot;, ...) to root level for next iteration</span>
+                <span class="c1"># The posterior outputs (&quot;next&quot;, &quot;state&quot;) which should become &quot;state&quot; for t+1</span>
+                <span class="c1"># The prior outputs (&quot;next&quot;, &quot;belief&quot;) which should become &quot;belief&quot; for t+1</span>
+                <span class="n">next_state</span> <span class="o">=</span> <span class="n">_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">))</span>
+                <span class="n">next_belief</span> <span class="o">=</span> <span class="n">_tensordict</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;belief&quot;</span><span class="p">))</span>
+
+                <span class="c1"># Get next timestep&#39;s input data (action, encoded_latents, etc.)</span>
+                <span class="n">_tensordict</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="n">t</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+
+                <span class="c1"># Set the propagated state/belief (overwriting original data&#39;s initial values)</span>
+                <span class="n">_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+                <span class="n">_tensordict</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;belief&quot;</span><span class="p">,</span> <span class="n">next_belief</span><span class="p">)</span>
+
+        <span class="n">out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">tensordict_out</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span>
+
+    <span class="k">def</span> <span class="nf">_forward_scan</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tensordict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Scan-based forward using torch._higher_order_ops.scan.</span>
+
+<span class="sd">        This is more torch.compile friendly as it avoids Python control flow.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span> <span class="nn">torch._higher_order_ops.scan</span> <span class="kn">import</span> <span class="n">scan</span>
+
+        <span class="o">*</span><span class="n">batch</span><span class="p">,</span> <span class="n">time_steps</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="n">update_values</span> <span class="o">=</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">exclude</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span><span class="o">.</span><span class="n">unbind</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">init_td</span> <span class="o">=</span> <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Determine output keys from first timestep to ensure consistent stacking.</span>
+        <span class="n">output_keys</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+            <span class="n">update_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">keys</span><span class="p">(</span><span class="n">include_nested</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">leaves_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">out_keys</span><span class="p">)</span>
+
+        <span class="c1"># Stack the update values for scan input</span>
+        <span class="n">stacked_updates</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">update_values</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">def</span> <span class="nf">scan_fn</span><span class="p">(</span><span class="n">carry</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+            <span class="c1"># carry is the current tensordict with propagated state/belief</span>
+            <span class="c1"># x is the next timestep&#39;s input data (action, encoded_latents, etc.)</span>
+
+            <span class="c1"># Get propagated state/belief from previous step&#39;s output</span>
+            <span class="n">next_state</span> <span class="o">=</span> <span class="n">carry</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;state&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">next_belief</span> <span class="o">=</span> <span class="n">carry</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;belief&quot;</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
+
+            <span class="c1"># Start with next timestep&#39;s data</span>
+            <span class="n">_td</span> <span class="o">=</span> <span class="n">x</span>
+
+            <span class="c1"># Propagate state/belief if available (not first step)</span>
+            <span class="k">if</span> <span class="n">next_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;state&quot;</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">next_belief</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">_td</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="s2">&quot;belief&quot;</span><span class="p">,</span> <span class="n">next_belief</span><span class="p">)</span>
+
+            <span class="c1"># Run prior and posterior</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rssm_prior</span><span class="p">(</span><span class="n">_td</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rssm_posterior</span><span class="p">(</span><span class="n">_td</span><span class="p">)</span>
+
+            <span class="c1"># Select consistent keys for stacking</span>
+            <span class="n">output_td</span> <span class="o">=</span> <span class="n">_td</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">output_keys</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+            <span class="c1"># Return output for stacking and full _td as carry for propagation</span>
+            <span class="k">return</span> <span class="n">_td</span><span class="p">,</span> <span class="n">output_td</span>
+
+        <span class="c1"># Run scan</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">outputs</span> <span class="o">=</span> <span class="n">scan</span><span class="p">(</span><span class="n">scan_fn</span><span class="p">,</span> <span class="p">[</span><span class="n">init_td</span><span class="p">],</span> <span class="p">[</span><span class="n">stacked_updates</span><span class="p">])</span>
+
+        <span class="c1"># outputs is stacked along dim 0, move to time dimension</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">outputs</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">tensordict</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+
+<div class="viewcode-block" id="RSSMPrior">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior">[docs]</a>
+<span class="k">class</span> <span class="nc">RSSMPrior</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The prior network of the RSSM.</span>
+
+<span class="sd">    This network takes as input the previous state and belief and the current action.</span>
+<span class="sd">    It returns the next prior state and belief, as well as the parameters of the prior state distribution.</span>
+<span class="sd">    State is by construction stochastic and belief is deterministic. In &quot;Dream to control&quot;, these are called &quot;deterministic state &quot; and &quot;stochastic state&quot;, respectively.</span>
+
+<span class="sd">    Reference: https://arxiv.org/abs/1811.04551</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        action_spec (TensorSpec): Action spec.</span>
+<span class="sd">        hidden_dim (int, optional): Number of hidden units in the linear network. Input size of the recurrent network.</span>
+<span class="sd">            Defaults to 200.</span>
+<span class="sd">        rnn_hidden_dim (int, optional): Number of hidden units in the recurrent network. Also size of the belief.</span>
+<span class="sd">            Defaults to 200.</span>
+<span class="sd">        state_dim (int, optional): Size of the state.</span>
+<span class="sd">            Defaults to 30.</span>
+<span class="sd">        scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution.</span>
+<span class="sd">            Defaults to 0.1.</span>
+<span class="sd">        action_dim (int, optional): Dimension of the action. If provided along with state_dim,</span>
+<span class="sd">            uses explicit Linear instead of LazyLinear. Defaults to None for backward compatibility.</span>
+<span class="sd">        device (torch.device, optional): Device to create the module on.</span>
+<span class="sd">            Defaults to None (uses default device).</span>
+
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">action_spec</span><span class="p">,</span>
+        <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+        <span class="n">rnn_hidden_dim</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+        <span class="n">state_dim</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+        <span class="n">scale_lb</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">action_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Prior - use explicit Linear if action_dim provided, else LazyLinear</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rnn</span> <span class="o">=</span> <span class="n">GRUCell</span><span class="p">(</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="n">rnn_hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">projector_in</span> <span class="o">=</span> <span class="n">state_dim</span> <span class="o">+</span> <span class="n">action_dim</span>
+            <span class="n">first_linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">projector_in</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">first_linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_state_projector</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span><span class="n">first_linear</span><span class="p">,</span> <span class="n">nn</span><span class="o">.</span><span class="n">ELU</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rnn_to_prior_projector</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ELU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">state_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">NormalParamExtractor</span><span class="p">(</span>
+                <span class="n">scale_lb</span><span class="o">=</span><span class="n">scale_lb</span><span class="p">,</span>
+                <span class="n">scale_mapping</span><span class="o">=</span><span class="s2">&quot;softplus&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_dim</span> <span class="o">=</span> <span class="n">state_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rnn_hidden_dim</span> <span class="o">=</span> <span class="n">rnn_hidden_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_shape</span> <span class="o">=</span> <span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span>
+
+<div class="viewcode-block" id="RSSMPrior.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMPrior.html#torchrl.modules.RSSMPrior.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">belief</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">noise</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass through the prior network.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            state: Previous stochastic state.</span>
+<span class="sd">            belief: Previous deterministic belief.</span>
+<span class="sd">            action: Action to condition on.</span>
+<span class="sd">            noise: Optional pre-sampled noise for the prior state.</span>
+<span class="sd">                If None, samples from standard normal. Used for deterministic testing.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tuple of (prior_mean, prior_std, state, belief).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">projector_input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">action_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_state_projector</span><span class="p">(</span><span class="n">projector_input</span><span class="p">)</span>
+        <span class="n">unsqueeze</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">UNSQUEEZE_RNN_INPUT</span> <span class="ow">and</span> <span class="n">action_state</span><span class="o">.</span><span class="n">ndimension</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">belief</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">action_state</span> <span class="o">=</span> <span class="n">action_state</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">unsqueeze</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># GRUCell can have issues with bfloat16 autocast on some GPU/cuBLAS combinations.</span>
+        <span class="c1"># Run the RNN in full precision to avoid CUBLAS_STATUS_INVALID_VALUE errors.</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">action_state</span><span class="o">.</span><span class="n">dtype</span>
+        <span class="n">device_type</span> <span class="o">=</span> <span class="n">action_state</span><span class="o">.</span><span class="n">device</span><span class="o">.</span><span class="n">type</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">amp</span><span class="o">.</span><span class="n">autocast</span><span class="p">(</span><span class="n">device_type</span><span class="o">=</span><span class="n">device_type</span><span class="p">,</span> <span class="n">enabled</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+            <span class="n">belief</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn</span><span class="p">(</span>
+                <span class="n">action_state</span><span class="o">.</span><span class="n">float</span><span class="p">(),</span> <span class="n">belief</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="k">if</span> <span class="n">belief</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">unsqueeze</span><span class="p">:</span>
+            <span class="n">belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">prior_mean</span><span class="p">,</span> <span class="n">prior_std</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_to_prior_projector</span><span class="p">(</span><span class="n">belief</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">noise</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">prior_std</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">prior_mean</span> <span class="o">+</span> <span class="n">noise</span> <span class="o">*</span> <span class="n">prior_std</span>
+        <span class="k">return</span> <span class="n">prior_mean</span><span class="p">,</span> <span class="n">prior_std</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">belief</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="RSSMPosterior">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior">[docs]</a>
+<span class="k">class</span> <span class="nc">RSSMPosterior</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The posterior network of the RSSM.</span>
+
+<span class="sd">    This network takes as input the belief and the associated encoded observation.</span>
+<span class="sd">    It returns the parameters of the posterior as well as a state sampled according to this distribution.</span>
+
+<span class="sd">    Reference: https://arxiv.org/abs/1811.04551</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        hidden_dim (int, optional): Number of hidden units in the linear network.</span>
+<span class="sd">            Defaults to 200.</span>
+<span class="sd">        state_dim (int, optional): Size of the state.</span>
+<span class="sd">            Defaults to 30.</span>
+<span class="sd">        scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution.</span>
+<span class="sd">            Defaults to 0.1.</span>
+<span class="sd">        rnn_hidden_dim (int, optional): Dimension of the belief/rnn hidden state.</span>
+<span class="sd">            If provided along with obs_embed_dim, uses explicit Linear. Defaults to None.</span>
+<span class="sd">        obs_embed_dim (int, optional): Dimension of the observation embedding.</span>
+<span class="sd">            If provided along with rnn_hidden_dim, uses explicit Linear. Defaults to None.</span>
+<span class="sd">        device (torch.device, optional): Device to create the module on.</span>
+<span class="sd">            Defaults to None (uses default device).</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+        <span class="n">state_dim</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>
+        <span class="n">scale_lb</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">rnn_hidden_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">obs_embed_dim</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="c1"># Use explicit Linear if both dims provided, else LazyLinear for backward compat</span>
+        <span class="k">if</span> <span class="n">rnn_hidden_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">obs_embed_dim</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">projector_in</span> <span class="o">=</span> <span class="n">rnn_hidden_dim</span> <span class="o">+</span> <span class="n">obs_embed_dim</span>
+            <span class="n">first_linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">projector_in</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">first_linear</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">LazyLinear</span><span class="p">(</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obs_rnn_to_post_projector</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">first_linear</span><span class="p">,</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">ELU</span><span class="p">(),</span>
+            <span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">hidden_dim</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">state_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">NormalParamExtractor</span><span class="p">(</span>
+                <span class="n">scale_lb</span><span class="o">=</span><span class="n">scale_lb</span><span class="p">,</span>
+                <span class="n">scale_mapping</span><span class="o">=</span><span class="s2">&quot;softplus&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hidden_dim</span> <span class="o">=</span> <span class="n">hidden_dim</span>
+
+<div class="viewcode-block" id="RSSMPosterior.forward">
+<a class="viewcode-back" href="../../../../reference/generated/torchrl.modules.RSSMPosterior.html#torchrl.modules.RSSMPosterior.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief</span><span class="p">,</span> <span class="n">obs_embedding</span><span class="p">,</span> <span class="n">noise</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Forward pass through the posterior network.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            belief: Deterministic belief from the prior.</span>
+<span class="sd">            obs_embedding: Encoded observation.</span>
+<span class="sd">            noise: Optional pre-sampled noise for the posterior state.</span>
+<span class="sd">                If None, samples from standard normal. Used for deterministic testing.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tuple of (posterior_mean, posterior_std, state).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">posterior_mean</span><span class="p">,</span> <span class="n">posterior_std</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obs_rnn_to_post_projector</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">belief</span><span class="p">,</span> <span class="n">obs_embedding</span><span class="p">],</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">noise</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">noise</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn_like</span><span class="p">(</span><span class="n">posterior_std</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">posterior_mean</span> <span class="o">+</span> <span class="n">noise</span> <span class="o">*</span> <span class="n">posterior_std</span>
+        <span class="k">return</span> <span class="n">posterior_mean</span><span class="p">,</span> <span class="n">posterior_std</span><span class="p">,</span> <span class="n">state</span></div>
+</div>
+
+</pre></div>
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../../../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../../../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "torchrl.modules.models.model_based",
+       "headline": "torchrl.modules.models.model_based",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/_modules/torchrl/modules/models/model_based.html",
+       "articleBody": "Source code for torchrl.modules.models.model_based # Copyright (c) Meta Platforms, Inc. and affiliates. # # This source code is licensed under the MIT license found in the # LICENSE file in the root directory of this source tree. from __future__ import annotations import warnings import torch from packaging import version from tensordict.nn import ( NormalParamExtractor, TensorDictModule, TensorDictModuleBase, TensorDictSequential, ) from torch import nn # from torchrl.modules.tensordict_module.rnn import GRUCell from torch.nn import GRUCell from torchrl.modules.models.models import MLP UNSQUEEZE_RNN_INPUT = version.parse(torch.__version__) \u003c version.parse(\"1.11\") [docs] class DreamerActor(nn.Module): \"\"\"Dreamer actor network. This network is used to predict the action distribution given the the stochastic state and the deterministic belief at the current time step. It outputs the mean and the scale of the action distribution. Reference: https://arxiv.org/abs/1912.01603 Args: out_features (int): Number of output features. depth (int, optional): Number of hidden layers. Defaults to 4. num_cells (int, optional): Number of hidden units per layer. Defaults to 200. activation_class (nn.Module, optional): Activation class. Defaults to nn.ELU. std_bias (:obj:`float`, optional): Bias of the softplus transform. Defaults to 5.0. std_min_val (:obj:`float`, optional): Minimum value of the standard deviation. Defaults to 1e-4. device (torch.device, optional): Device to create the module on. Defaults to None (uses default device). \"\"\" def __init__( self, out_features, depth=4, num_cells=200, activation_class=nn.ELU, std_bias=5.0, std_min_val=1e-4, device=None, ): super().__init__() self.backbone = MLP( out_features=2 * out_features, depth=depth, num_cells=num_cells, activation_class=activation_class, device=device, ) self.backbone.append( NormalParamExtractor( scale_mapping=f\"biased_softplus_{std_bias}_{std_min_val}\", # scale_mapping=\"relu\", ), ) [docs] def forward(self, state, belief): loc, scale = self.backbone(state, belief) return loc, scale [docs] class ObsEncoder(nn.Module): \"\"\"Observation encoder network. Takes a pixel observation and encodes it into a latent space. Reference: https://arxiv.org/abs/1803.10122 Args: channels (int, optional): Number of hidden units in the first layer. Defaults to 32. num_layers (int, optional): Depth of the network. Defaults to 4. in_channels (int, optional): Number of input channels. If None, uses LazyConv2d. Defaults to None for backward compatibility. device (torch.device, optional): Device to create the module on. Defaults to None (uses default device). \"\"\" def __init__( self, channels=32, num_layers=4, in_channels=None, depth=None, device=None ): if depth is not None: warnings.warn( f\"The depth argument in {type(self)} will soon be deprecated and \" f\"used for the depth of the network instead. Please use channels \" f\"for the layer size and num_layers for the depth until depth \" f\"replaces num_layers.\" ) channels = depth if num_layers \u003c 1: raise RuntimeError(\"num_layers cannot be smaller than 1.\") super().__init__() # Use explicit Conv2d if in_channels provided, else LazyConv2d for backward compat if in_channels is not None: first_conv = nn.Conv2d(in_channels, channels, 4, stride=2, device=device) else: first_conv = nn.LazyConv2d(channels, 4, stride=2, device=device) layers = [ first_conv, nn.ReLU(), ] k = 1 for _ in range(1, num_layers): layers += [ nn.Conv2d(channels * k, channels * (k * 2), 4, stride=2, device=device), nn.ReLU(), ] k = k * 2 self.encoder = nn.Sequential(*layers) [docs] def forward(self, observation): *batch_sizes, C, H, W = observation.shape if len(batch_sizes) == 0: end_dim = 0 else: end_dim = len(batch_sizes) - 1 observation = torch.flatten(observation, start_dim=0, end_dim=end_dim) obs_encoded = self.encoder(observation) latent = obs_encoded.reshape(*batch_sizes, -1) return latent [docs] class ObsDecoder(nn.Module): \"\"\"Observation decoder network. Takes the deterministic state and the stochastic belief and decodes it into a pixel observation. Reference: https://arxiv.org/abs/1803.10122 Args: channels (int, optional): Number of hidden units in the last layer. Defaults to 32. num_layers (int, optional): Depth of the network. Defaults to 4. kernel_sizes (int or list of int, optional): the kernel_size of each layer. Defaults to ``[5, 5, 6, 6]`` if num_layers if 4, else ``[5] * num_layers``. latent_dim (int, optional): Input dimension (state_dim + rnn_hidden_dim). If None, uses LazyLinear. Defaults to None for backward compatibility. out_channels (int, optional): Number of output channels in the final ConvTranspose2d layer. Defaults to 3 (RGB). Set to 1 for grayscale. device (torch.device, optional): Device to create the module on. Defaults to None (uses default device). \"\"\" def __init__( self, channels=32, num_layers=4, kernel_sizes=None, latent_dim=None, out_channels=3, depth=None, device=None, ): if depth is not None: warnings.warn( f\"The depth argument in {type(self)} will soon be deprecated and \" f\"used for the depth of the network instead. Please use channels \" f\"for the layer size and num_layers for the depth until depth \" f\"replaces num_layers.\" ) channels = depth if num_layers \u003c 1: raise RuntimeError(\"num_layers cannot be smaller than 1.\") super().__init__() # Use explicit Linear if latent_dim provided, else LazyLinear for backward compat linear_out = channels * 8 * 2 * 2 if latent_dim is not None: first_linear = nn.Linear(latent_dim, linear_out, device=device) else: first_linear = nn.LazyLinear(linear_out, device=device) self.state_to_latent = nn.Sequential( first_linear, nn.ReLU(), ) if kernel_sizes is None and num_layers == 4: kernel_sizes = [5, 5, 6, 6] elif kernel_sizes is None: kernel_sizes = 5 if isinstance(kernel_sizes, int): kernel_sizes = [kernel_sizes] * num_layers layers = [ nn.ReLU(), nn.ConvTranspose2d( channels, out_channels, kernel_sizes[-1], stride=2, device=device ), ] kernel_sizes = kernel_sizes[:-1] k = 1 for j in range(1, num_layers): if j != num_layers - 1: layers = [ nn.ConvTranspose2d( channels * k * 2, channels * k, kernel_sizes[-1], stride=2, device=device, ), ] + layers kernel_sizes = kernel_sizes[:-1] k = k * 2 layers = [nn.ReLU()] + layers else: # Use explicit ConvTranspose2d - input is always channels * 8 from state_to_latent layers = [ nn.ConvTranspose2d( linear_out, channels * k, kernel_sizes[-1], stride=2, device=device, ) ] + layers self.decoder = nn.Sequential(*layers) self._depth = channels [docs] def forward(self, state, rnn_hidden): latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1)) *batch_sizes, D = latent.shape latent = latent.view(-1, D, 1, 1) obs_decoded = self.decoder(latent) _, C, H, W = obs_decoded.shape obs_decoded = obs_decoded.view(*batch_sizes, C, H, W) return obs_decoded [docs] class RSSMRollout(TensorDictModuleBase): \"\"\"Rollout the RSSM network. Given a set of encoded observations and actions, this module will rollout the RSSM network to compute all the intermediate states and beliefs. The previous posterior is used as the prior for the next time step. The forward method returns a stack of all intermediate states and beliefs. Reference: https://arxiv.org/abs/1811.04551 Args: rssm_prior (TensorDictModule): Prior network. rssm_posterior (TensorDictModule): Posterior network. use_scan (bool, optional): If True, uses torch._higher_order_ops.scan for the rollout loop. This is more torch.compile friendly but may have different performance characteristics. Defaults to False. compile_step (bool, optional): If True, compiles the individual step function. Only used when use_scan=False. Defaults to False. compile_backend (str, optional): Backend to use for compilation. Defaults to \"inductor\". compile_mode (str, optional): Mode to use for compilation. Defaults to None (uses PyTorch default). \"\"\" def __init__( self, rssm_prior: TensorDictModule, rssm_posterior: TensorDictModule, use_scan: bool = False, compile_step: bool = False, compile_backend: str = \"inductor\", compile_mode: str | None = None, ): super().__init__() _module = TensorDictSequential(rssm_prior, rssm_posterior) self.in_keys = _module.in_keys self.out_keys = _module.out_keys self.rssm_prior = rssm_prior self.rssm_posterior = rssm_posterior self.use_scan = use_scan self.compile_step = compile_step self.compile_backend = compile_backend self.compile_mode = compile_mode self._compiled_step = None def _get_step_fn(self): \"\"\"Get the step function, optionally compiled.\"\"\" if self.compile_step and self._compiled_step is None: self._compiled_step = torch.compile( self._step, backend=self.compile_backend, mode=self.compile_mode, ) return self._compiled_step if self.compile_step else self._step def _step(self, _tensordict): \"\"\"Single RSSM step: prior + posterior.\"\"\" self.rssm_prior(_tensordict) self.rssm_posterior(_tensordict) return _tensordict [docs] def forward(self, tensordict): \"\"\"Runs a rollout of simulated transitions in the latent space given a sequence of actions and environment observations. The rollout requires a belief and posterior state primer. At each step, two probability distributions are built and sampled from: - A prior distribution p(s_{t+1} | s_t, a_t, b_t) where b_t is a deterministic transform of the form b_t(s_{t-1}, a_{t-1}). The previous state s_t is sampled according to the posterior distribution (see below), creating a chain of posterior-to-priors that accumulates evidence to compute a prior distribution over the current event distribution: p(s_{t+1} s_t | o_t, a_t, s_{t-1}, a_{t-1}) = p(s_{t+1} | s_t, a_t, b_t) q(s_t | b_t, o_t) - A posterior distribution of the form q(s_{t+1} | b_{t+1}, o_{t+1}) which amends to q(s_{t+1} | s_t, a_t, o_{t+1}) \"\"\" if self.use_scan: return self._forward_scan(tensordict) return self._forward_loop(tensordict) def _forward_loop(self, tensordict): \"\"\"Traditional loop-based forward.\"\"\" tensordict_out = [] *batch, time_steps = tensordict.shape update_values = tensordict.exclude(*self.out_keys).unbind(-1) _tensordict = update_values[0] step_fn = self._get_step_fn() # Determine output keys from first timestep to ensure consistent stacking. # Root state/belief may be added by carry_forward for t\u003e0 but won\u0027t exist # for t=0, so we use the original input structure as reference. output_keys = list( update_values[0].keys(include_nested=True, leaves_only=True) ) + list(self.out_keys) for t in range(time_steps): _tensordict = step_fn(_tensordict) # Select consistent keys for stacking (excludes root state/belief # that may have been added by carry_forward for t\u003e0) tensordict_out.append(_tensordict.select(*output_keys, strict=False)) if t \u003c time_steps - 1: # Propagate state/belief from (\"next\", ...) to root level for next iteration # The posterior outputs (\"next\", \"state\") which should become \"state\" for t+1 # The prior outputs (\"next\", \"belief\") which should become \"belief\" for t+1 next_state = _tensordict.get((\"next\", \"state\")) next_belief = _tensordict.get((\"next\", \"belief\")) # Get next timestep\u0027s input data (action, encoded_latents, etc.) _tensordict = update_values[t + 1] # Set the propagated state/belief (overwriting original data\u0027s initial values) _tensordict.set(\"state\", next_state) _tensordict.set(\"belief\", next_belief) out = torch.stack(tensordict_out, tensordict.ndim - 1) return out def _forward_scan(self, tensordict): \"\"\"Scan-based forward using torch._higher_order_ops.scan. This is more torch.compile friendly as it avoids Python control flow. \"\"\" from torch._higher_order_ops.scan import scan *batch, time_steps = tensordict.shape update_values = tensordict.exclude(*self.out_keys).unbind(-1) init_td = update_values[0] # Determine output keys from first timestep to ensure consistent stacking. output_keys = list( update_values[0].keys(include_nested=True, leaves_only=True) ) + list(self.out_keys) # Stack the update values for scan input stacked_updates = torch.stack(list(update_values), dim=0) def scan_fn(carry, x): # carry is the current tensordict with propagated state/belief # x is the next timestep\u0027s input data (action, encoded_latents, etc.) # Get propagated state/belief from previous step\u0027s output next_state = carry.get((\"next\", \"state\"), None) next_belief = carry.get((\"next\", \"belief\"), None) # Start with next timestep\u0027s data _td = x # Propagate state/belief if available (not first step) if next_state is not None: _td.set(\"state\", next_state) if next_belief is not None: _td.set(\"belief\", next_belief) # Run prior and posterior self.rssm_prior(_td) self.rssm_posterior(_td) # Select consistent keys for stacking output_td = _td.select(*output_keys, strict=False) # Return output for stacking and full _td as carry for propagation return _td, output_td # Run scan _, outputs = scan(scan_fn, [init_td], [stacked_updates]) # outputs is stacked along dim 0, move to time dimension out = outputs.transpose(0, tensordict.ndim - 1) return out [docs] class RSSMPrior(nn.Module): \"\"\"The prior network of the RSSM. This network takes as input the previous state and belief and the current action. It returns the next prior state and belief, as well as the parameters of the prior state distribution. State is by construction stochastic and belief is deterministic. In \"Dream to control\", these are called \"deterministic state \" and \"stochastic state\", respectively. Reference: https://arxiv.org/abs/1811.04551 Args: action_spec (TensorSpec): Action spec. hidden_dim (int, optional): Number of hidden units in the linear network. Input size of the recurrent network. Defaults to 200. rnn_hidden_dim (int, optional): Number of hidden units in the recurrent network. Also size of the belief. Defaults to 200. state_dim (int, optional): Size of the state. Defaults to 30. scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution. Defaults to 0.1. action_dim (int, optional): Dimension of the action. If provided along with state_dim, uses explicit Linear instead of LazyLinear. Defaults to None for backward compatibility. device (torch.device, optional): Device to create the module on. Defaults to None (uses default device). \"\"\" def __init__( self, action_spec, hidden_dim=200, rnn_hidden_dim=200, state_dim=30, scale_lb=0.1, action_dim=None, device=None, ): super().__init__() # Prior - use explicit Linear if action_dim provided, else LazyLinear self.rnn = GRUCell(hidden_dim, rnn_hidden_dim, device=device) if action_dim is not None: projector_in = state_dim + action_dim first_linear = nn.Linear(projector_in, hidden_dim, device=device) else: first_linear = nn.LazyLinear(hidden_dim, device=device) self.action_state_projector = nn.Sequential(first_linear, nn.ELU()) self.rnn_to_prior_projector = nn.Sequential( nn.Linear(hidden_dim, hidden_dim, device=device), nn.ELU(), nn.Linear(hidden_dim, 2 * state_dim, device=device), NormalParamExtractor( scale_lb=scale_lb, scale_mapping=\"softplus\", ), ) self.state_dim = state_dim self.rnn_hidden_dim = rnn_hidden_dim self.action_shape = action_spec.shape [docs] def forward(self, state, belief, action, noise=None): \"\"\"Forward pass through the prior network. Args: state: Previous stochastic state. belief: Previous deterministic belief. action: Action to condition on. noise: Optional pre-sampled noise for the prior state. If None, samples from standard normal. Used for deterministic testing. Returns: Tuple of (prior_mean, prior_std, state, belief). \"\"\" projector_input = torch.cat([state, action], dim=-1) action_state = self.action_state_projector(projector_input) unsqueeze = False if UNSQUEEZE_RNN_INPUT and action_state.ndimension() == 1: if belief is not None: belief = belief.unsqueeze(0) action_state = action_state.unsqueeze(0) unsqueeze = True # GRUCell can have issues with bfloat16 autocast on some GPU/cuBLAS combinations. # Run the RNN in full precision to avoid CUBLAS_STATUS_INVALID_VALUE errors. dtype = action_state.dtype device_type = action_state.device.type with torch.amp.autocast(device_type=device_type, enabled=False): belief = self.rnn( action_state.float(), belief.float() if belief is not None else None ) belief = belief.to(dtype) if unsqueeze: belief = belief.squeeze(0) prior_mean, prior_std = self.rnn_to_prior_projector(belief) if noise is None: noise = torch.randn_like(prior_std) state = prior_mean + noise * prior_std return prior_mean, prior_std, state, belief [docs] class RSSMPosterior(nn.Module): \"\"\"The posterior network of the RSSM. This network takes as input the belief and the associated encoded observation. It returns the parameters of the posterior as well as a state sampled according to this distribution. Reference: https://arxiv.org/abs/1811.04551 Args: hidden_dim (int, optional): Number of hidden units in the linear network. Defaults to 200. state_dim (int, optional): Size of the state. Defaults to 30. scale_lb (:obj:`float`, optional): Lower bound of the scale of the state distribution. Defaults to 0.1. rnn_hidden_dim (int, optional): Dimension of the belief/rnn hidden state. If provided along with obs_embed_dim, uses explicit Linear. Defaults to None. obs_embed_dim (int, optional): Dimension of the observation embedding. If provided along with rnn_hidden_dim, uses explicit Linear. Defaults to None. device (torch.device, optional): Device to create the module on. Defaults to None (uses default device). \"\"\" def __init__( self, hidden_dim=200, state_dim=30, scale_lb=0.1, rnn_hidden_dim=None, obs_embed_dim=None, device=None, ): super().__init__() # Use explicit Linear if both dims provided, else LazyLinear for backward compat if rnn_hidden_dim is not None and obs_embed_dim is not None: projector_in = rnn_hidden_dim + obs_embed_dim first_linear = nn.Linear(projector_in, hidden_dim, device=device) else: first_linear = nn.LazyLinear(hidden_dim, device=device) self.obs_rnn_to_post_projector = nn.Sequential( first_linear, nn.ELU(), nn.Linear(hidden_dim, 2 * state_dim, device=device), NormalParamExtractor( scale_lb=scale_lb, scale_mapping=\"softplus\", ), ) self.hidden_dim = hidden_dim [docs] def forward(self, belief, obs_embedding, noise=None): \"\"\"Forward pass through the posterior network. Args: belief: Deterministic belief from the prior. obs_embedding: Encoded observation. noise: Optional pre-sampled noise for the posterior state. If None, samples from standard normal. Used for deterministic testing. Returns: Tuple of (posterior_mean, posterior_std, state). \"\"\" posterior_mean, posterior_std = self.obs_rnn_to_post_projector( torch.cat([belief, obs_embedding], dim=-1) ) if noise is None: noise = torch.randn_like(posterior_std) state = posterior_mean + noise * posterior_std return posterior_mean, posterior_std, state",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/_modules/torchrl/modules/models/model_based.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

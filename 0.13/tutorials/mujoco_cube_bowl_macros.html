@@ -1,0 +1,2426 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>MuJoCo scripted manipulation with human-readable robot actions &#8212; torchrl 0.13 documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=a746c00c" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=a6c16915" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery.css?v=fd6457a4" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=064f27fb" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=9bec1924"></script>
+    <script src="../_static/doctools.js?v=888ff710"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'tutorials/mujoco_cube_bowl_macros';</script>
+    <script src="../_static/js/torchrl_tutorial_links.js?v=c4b7c8cb"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Collectors Deep Dive: Trajectory Assembly" href="collector_trajectory_assembly.html" />
+    <link rel="prev" title="Recurrent DQN: Training recurrent policies" href="dqn_with_rnn.html" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+<!-- LLM/AI Agent: See /llms.txt for comprehensive navigation guidance -->
+<!-- Machine-readable LLM metadata -->
+<meta name="llm:site-type" content="documentation">
+<meta name="llm:framework" content="PyTorch">
+
+<meta name="llm:description" content="MuJoCo scripted manipulation with human-readable robot actions - Documentation for torchrl, part of the PyTorch ecosystem.">
+
+
+
+
+
+<meta name="llm:navigation-file" content="https://docs.pytorch.org/rl/llms.txt">
+<meta name="llm:sitemap" content="https://docs.pytorch.org/rl/sitemap.xml">
+<meta name="llm:version" content="0.13">
+<meta name="llm:project" content="torchrl">
+<meta name="llm:page-type" content="tutorial">
+<link rel="alternate" type="text/plain" href="https://docs.pytorch.org/rl/llms.txt" title="LLM Navigation Guide">
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/list.js/2.3.1/list.min.js"></script>
+<script>
+  if (window.location.hostname === 'docs.pytorch.org' || window.location.hostname === 'docs-preview.pytorch.org') {
+    const script = document.createElement('script');
+    script.src = 'https://cmp.osano.com/16A0DbT9yDNIaQkvZ/31b1b91a-e0b6-47ea-bde2-7f2bd13dbe5c/osano.js?variant=one';
+    document.head.appendChild(script);
+  }
+</script>
+<script>
+  // Cookie banner for non-LF projects
+  document.addEventListener('DOMContentLoaded', function () {
+    // Hide cookie banner on local environments and LF owned docs
+    if (window.location.hostname === 'localhost' ||
+      window.location.hostname === '0.0.0.0' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === 'docs.pytorch.org' ||
+      window.location.hostname === 'docs-preview.pytorch.org' ||
+      window.location.hostname.startsWith('192.168.')) {
+      const banner = document.querySelector('.cookie-banner-wrapper');
+      if (banner) {
+        banner.style.display = 'none';
+      }
+    }
+  });
+</script>
+<!-- Conditional CSS for header and footer height adjustment -->
+
+<style>
+  :root {
+    --header-height: 0px !important;
+    --header-height-desktop: 0px !important;
+  }
+  /* Ensure proper mobile layout when LF header is hidden */
+  @media (max-width: 960px) {
+    .bd-header {
+      top: 0 !important;
+      position: sticky !important;
+      z-index: 1020 !important;
+    }
+    .bd-main {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
+    }
+    .bd-article-container {
+      padding-top: 0 !important;
+    }
+    .header-article__inner {
+      padding-top: 1rem !important;
+    }
+
+  }
+</style>
+
+
+<link rel="stylesheet" type="text/css" href="../_static/css/theme.css" crossorigin="anonymous">
+<script type="text/javascript" src="../_static/js/theme.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400&display=swap" rel="stylesheet">
+<meta property="og:image" content="https://docs.pytorch.org/docs/stable/_static/img/pytorch_seo.png" />
+<link rel="stylesheet" href="../_static/webfonts/all.min.css" crossorigin="anonymous">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval' blob:;">
+<meta name="pytorch_project" content="torchrl">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=UA-117752657-2" height="0" width="0"
+    style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- Google Tag Manager -->
+<script>(function (w, d, s, l, i) {
+    w[l] = w[l] || []; w[l].push({
+      'gtm.start':
+        new Date().getTime(), event: 'gtm.js'
+    }); var f = d.getElementsByTagName(s)[0],
+      j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+        'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    j.onload = function () {
+      window.dispatchEvent(new Event('gtm_loaded'));
+      console.log('GTM loaded successfully');
+    };
+  })(window, document, 'script', 'dataLayer', 'UA-117752657-2');
+</script>
+<!-- End Google Tag Manager -->
+<!-- Facebook Pixel Code -->
+<script>
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () {
+      n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+    };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+    n.queue = []; t = b.createElement(e); t.async = !0;
+    t.src = v; s = b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t, s)
+  }(window, document, 'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', '243028289693773');
+  fbq('track', 'PageView');
+</script>
+<script>
+  document.documentElement.setAttribute('data-version', '0.13');
+</script>
+<noscript>
+  <img height="1" width="1" src="https://www.facebook.com/tr?id=243028289693773&ev=PageView&noscript=1" />
+</noscript>
+<script>
+  function gtag() {
+    window.dataLayer.push(arguments);
+  }
+</script>
+<!-- End Facebook Pixel Code -->
+<!-- Repository configuration for tutorials -->
+
+<script>
+  // Define repository configuration for tutorial buttons using existing html_context variables
+  // Only injected when tutorial buttons are shown AND github variables are defined
+  // If either condition is false, JavaScript will fallback to default PyTorch tutorial links
+  window.repoConfig = {
+    github_repo: "pytorch/rl",
+    github_branch: "main",
+    colab_repo: "pytorch/rl",
+    colab_branch: "gh-pages/main"
+  };
+</script>
+
+
+<!-- Script to Fix scrolling with fast fixed-duration animation -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const SCROLL_DURATION = 150; // Fixed duration in ms regardless of distance
+    let lockedTargetId = null; // Lock the TOC to this target until user scrolls manually
+    let isUpdatingToc = false; // Guard against infinite loops
+
+    function smoothScrollTo(targetY, duration, onComplete) {
+      const startY = window.pageYOffset;
+      const difference = targetY - startY;
+      const startTime = performance.now();
+
+      function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        window.scrollTo(0, startY + difference * easeOut);
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      requestAnimationFrame(step);
+    }
+
+    function updateTocHighlight(targetId) {
+      if (isUpdatingToc) return; // Prevent infinite loop
+      isUpdatingToc = true;
+
+      // Find the TOC link that points to this target
+      const tocNav = document.querySelector('.bd-toc-nav');
+      if (!tocNav) {
+        isUpdatingToc = false;
+        return;
+      }
+
+      // Remove active class from all TOC items
+      tocNav.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+        link.parentElement.classList.remove('active');
+      });
+
+      // Add active class to the matching link and all its ancestor TOC items
+      const matchingLink = tocNav.querySelector(`a[href="#${CSS.escape(targetId)}"]`);
+      if (matchingLink) {
+        matchingLink.classList.add('active');
+        matchingLink.parentElement.classList.add('active');
+
+        // Walk up the DOM to activate parent TOC entries (e.g. h2 parent of h3)
+        let ancestor = matchingLink.parentElement.parentElement;
+        while (ancestor && ancestor !== tocNav) {
+          if (ancestor.classList.contains('toc-entry')) {
+            ancestor.classList.add('active');
+            const parentLink = ancestor.querySelector(':scope > a.nav-link');
+            if (parentLink) {
+              parentLink.classList.add('active');
+            }
+          }
+          ancestor = ancestor.parentElement;
+        }
+      }
+
+      // Use setTimeout to reset the guard after the current call stack
+      setTimeout(function() {
+        isUpdatingToc = false;
+      }, 0);
+    }
+
+    // Watch for ScrollSpy trying to change the active state and override it
+    const tocNav = document.querySelector('.bd-toc-nav');
+    if (tocNav) {
+      const observer = new MutationObserver(function(mutations) {
+        if (lockedTargetId && !isUpdatingToc) {
+          // Force our target to stay highlighted
+          updateTocHighlight(lockedTargetId);
+        }
+      });
+      observer.observe(tocNav, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
+    // Release the lock when user scrolls manually (not programmatically)
+    window.addEventListener('wheel', function() {
+      lockedTargetId = null;
+    });
+    window.addEventListener('touchmove', function() {
+      lockedTargetId = null;
+    });
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const targetId = this.getAttribute('href').substring(1);
+        if (!targetId) return; // Skip empty hash links
+        const targetElement = document.getElementById(targetId);
+
+        if (targetElement) {
+          e.preventDefault();
+
+          // Lock the TOC to this target
+          lockedTargetId = targetId;
+
+          const headerHeight =
+            (document.querySelector('.header-holder') ? document.querySelector('.header-holder').offsetHeight : 0) +
+            (document.querySelector('.bd-header') ? document.querySelector('.bd-header').offsetHeight : 0) + 20;
+
+          const targetPosition = targetElement.getBoundingClientRect().top + window.pageYOffset - headerHeight;
+
+          // Update TOC highlight immediately
+          updateTocHighlight(targetId);
+
+          smoothScrollTo(targetPosition, SCROLL_DURATION, function() {
+            // Keep it highlighted after scroll
+            updateTocHighlight(targetId);
+          });
+
+          // Update URL hash without scrolling
+          history.pushState(null, null, '#' + targetId);
+        }
+      });
+    });
+  });
+</script>
+
+<script async src="https://cse.google.com/cse.js?cx=e65585f8c3ea1440e"></script>
+<!-- RunLLM Widget Configuration -->
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+
+  </head>
+
+<body data-feedback-url="https://github.com/pytorch/rl" class="pytorch-body">
+  
+
+
+  
+  
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+
+  
+  <div class="navbar-header-items__mobile-logo">
+    
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+  </div>
+
+  
+  
+  <div class=" navbar-header-items__start">
+    
+      
+      
+        <div class="navbar-item">
+          
+
+
+
+
+
+
+
+  
+  
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+    <span class="logo__title">TorchRL</span>
+  
+</a>
+        </div>
+      
+    
+      
+      
+        
+        <div class="navbar-item desktop-only-version">
+          
+  <a href="../index.html" class="version">0.13</a>
+
+        </div>
+      
+    
+  </div>
+  
+  <div class=" navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+
+    
+    
+      <li class="nav-item dropdown more-dropdown">
+        <div class="nav-item-with-toggle">
+          <span class="nav-link more-toggle" tabindex="0" role="button" aria-expanded="false" aria-controls="pst-nav-more-links">
+            More
+          </span>
+        </div>
+        <ul id="pst-nav-more-links" class="dropdown-menu">
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="pendulum.html">
+                Pendulum: Writing your environment and transforms with TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="torchrl_demo.html">
+                Introduction to TorchRL
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multiagent_ppo.html">
+                Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="torchrl_envs.html">
+                TorchRL envs
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="pretrained_models.html">
+                Using pretrained models
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="dqn_with_rnn.html">
+                Recurrent DQN: Training recurrent policies
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="#">
+                MuJoCo scripted manipulation with human-readable robot actions
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="collector_trajectory_assembly.html">
+                Collectors Deep Dive: Trajectory Assembly
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="evaluator.html">
+                Using the Evaluator
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="rb_tutorial.html">
+                Using Replay Buffers
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="memory_efficient_rl.html">
+                Memory-Efficient RL Training
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="export.html">
+                Exporting TorchRL modules
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multiagent_competitive_ddpg.html">
+                Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="multi_task.html">
+                Task-specific policy in multi-task environments
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="coding_ddpg.html">
+                TorchRL objectives: Coding a DDPG loss
+              </a>
+            </li>
+          
+            <li class="current active">
+              <a class="nav-link dropdown-item nav-internal" href="coding_dqn.html">
+                TorchRL trainer: A DQN example
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../reference/index.html">
+                API Reference
+              </a>
+            </li>
+          
+            <li class="">
+              <a class="nav-link dropdown-item nav-internal" href="../reference/knowledge_base.html">
+                Knowledge Base
+              </a>
+            </li>
+          
+        </ul>
+      </li>
+    
+  </ul>
+</nav>
+</div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+      
+      
+        <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+      
+      
+        <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    <div class="sidebar-header-items__start">
+      <div class="navbar-item">
+        
+  <a href="../index.html" class="version">0.13</a>
+
+      </div>
+    </div>
+    
+
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-0.html">
+            Get started with Environments, TED and transforms
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-1.html">
+            Get started with TorchRL’s modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-2.html">
+            Getting started with model optimization
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-3.html">
+            Get started with data collection and storage
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-4.html">
+            Get started with logging
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="getting-started-5.html">
+            Get started with your own first training loop
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ppo.html">
+            Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="pendulum.html">
+            Pendulum: Writing your environment and transforms with TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="torchrl_demo.html">
+            Introduction to TorchRL
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multiagent_ppo.html">
+            Multi-Agent Reinforcement Learning (PPO) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="torchrl_envs.html">
+            TorchRL envs
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="pretrained_models.html">
+            Using pretrained models
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="dqn_with_rnn.html">
+            Recurrent DQN: Training recurrent policies
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="#">
+            MuJoCo scripted manipulation with human-readable robot actions
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="collector_trajectory_assembly.html">
+            Collectors Deep Dive: Trajectory Assembly
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="evaluator.html">
+            Using the Evaluator
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="rb_tutorial.html">
+            Using Replay Buffers
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="memory_efficient_rl.html">
+            Memory-Efficient RL Training
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="export.html">
+            Exporting TorchRL modules
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multiagent_competitive_ddpg.html">
+            Competitive Multi-Agent Reinforcement Learning (DDPG) with TorchRL Tutorial
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="multi_task.html">
+            Task-specific policy in multi-task environments
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_ddpg.html">
+            TorchRL objectives: Coding a DDPG loss
+          </a>
+        
+      </li>
+    
+      <li class="nav-item current active">
+        
+          
+          <a class="nav-link nav-internal active" href="coding_dqn.html">
+            TorchRL trainer: A DQN example
+          </a>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/index.html">
+              API Reference
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-24">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/collectors.html">
+                  torchrl.collectors package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/data.html">
+                  torchrl.data package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/data_layout.html">
+                  Data layout: contiguous trajectories
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/envs.html">
+                  torchrl.envs package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/llms.html">
+                  LLM Interface
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/modules.html">
+                  torchrl.modules package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/objectives.html">
+                  torchrl.objectives package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/services.html">
+                  Service Registry
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/trainers.html">
+                  torchrl.trainers package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/utils.html">
+                  torchrl._utils package
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/config.html">
+                  TorchRL Configuration System
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/profiling.html">
+                  Profiling collectors and envs
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/glossary.html">
+                  Glossary
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+      <li class="nav-item dropdown">
+        
+          
+          <div class="nav-item-with-toggle">
+            <a class="nav-link nav-internal" href="../reference/knowledge_base.html">
+              Knowledge Base
+            </a>
+          </div>
+          <ul class="dropdown-menu" id="dropdown-25">
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/DEBUGGING_RL.html">
+                  Things to consider when debugging RL
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/DM_CONTROL_INSTALLATION.html">
+                  Installing dm_control
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/FLAKY_TESTS.html">
+                  Flaky Test Resolution Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/GYM.html">
+                  Working with gym
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/HABITAT.html">
+                  Working with habitat-lab
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/ISAACLAB.html">
+                  IsaacLab Guide
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/MUJOCO_INSTALLATION.html">
+                  Working with MuJoCo-based environments
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/PRO-TIPS.html">
+                  Common PyTorch errors and solutions
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/RESOURCES.html">
+                  Useful resources
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/VERSIONING_ISSUES.html">
+                  Versioning Issues
+                </a>
+              </li>
+            
+              <li class=" ">
+                <a class="nav-link dropdown-item nav-internal" href="../reference/generated/knowledge_base/VIDEO_CUSTOMISATION.html">
+                  Customising Video Renders
+                </a>
+              </li>
+            
+          </ul>
+        
+      </li>
+    
+
+    
+    
+  </ul>
+</nav>
+</div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+        
+          <div class="navbar-item"><!-- PyTorch.org site link - desktop only, two-line layout -->
+<!-- Note: The show_pytorch_org_link check is handled in layout.html's navbar_end block -->
+<a href="https://pytorch.org" class="pytorch-site-link nav-link nav-external" data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-title="Go to PyTorch.org">
+  <span class="pytorch-site-link-text">
+    <span>Go to</span>
+    <span>pytorch.org <i class="fa-solid fa-arrow-up-right-from-square external-icon"></i></span>
+  </span>
+</a></div>
+        
+        
+          <div class="navbar-item">
+  
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+</div>
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/pytorch/rl" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://x.com/PyTorch" title="X" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-x-twitter fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">X</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://pypi.org/project/torchrl/" title="PyPi" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-python fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">PyPi</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"></div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+<div id="rtd-footer-container"></div>
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">MuJoCo...</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+</div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="searchbox"></div>
+<div id="pytorch-article">
+  <!-- Hidden breadcrumb schema for SEO only -->
+  <div style="display:none;" itemscope itemtype="https://schema.org/BreadcrumbList">
+    
+    <div itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+      <meta itemprop="name" content="MuJoCo scripted manipulation with human-readable robot actions">
+      <meta itemprop="position" content="1">
+    </div>
+  </div>
+
+  
+  
+  <div class="pytorch-call-to-action-links">
+    <div id="tutorial-type">tutorials/mujoco_cube_bowl_macros</div>
+    <a id="colab-link" data-behavior="call-to-action-event" data-response="Run in Google Colab" target="_blank">
+      <div id="google-colab-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-colab.svg" />
+        <div class="call-to-action-desktop-view">Run in Google Colab</div>
+        <div class="call-to-action-mobile-view">Colab</div>
+      </div>
+    </a>
+    <a id="notebook-link" data-behavior="call-to-action-event" data-response="Download Notebook">
+      <div id="download-notebook-link">
+        <img class="call-to-action-notebook-img" src="../_static/img/pytorch-download.svg" />
+        <div class="call-to-action-desktop-view">Download Notebook</div>
+        <div class="call-to-action-mobile-view">Notebook</div>
+      </div>
+    </a>
+    <a id="github-link" data-behavior="call-to-action-event" data-response="View on Github" target="_blank">
+      <div id="github-view-link">
+        <img class="call-to-action-img" src="../_static/img/pytorch-github.svg" />
+        <div class="call-to-action-desktop-view">View on GitHub</div>
+        <div class="call-to-action-mobile-view">GitHub</div>
+      </div>
+    </a>
+  </div>
+  
+
+  
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-tutorials-mujoco-cube-bowl-macros-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="mujoco-scripted-manipulation-with-human-readable-robot-actions">
+<span id="sphx-glr-tutorials-mujoco-cube-bowl-macros-py"></span><h1>MuJoCo scripted manipulation with human-readable robot actions<a class="headerlink" href="#mujoco-scripted-manipulation-with-human-readable-robot-actions" title="Link to this heading">#</a></h1>
+<p>The first step in controlling a complex robot is rarely an end-to-end RL
+policy. Closed-loop controllers, scripted motion primitives, and imitation data
+are often used first to make the task reliable enough for later reward-driven
+fine tuning. This tutorial uses a MuJoCo Menagerie UR5e arm with a Robotiq
+2F-85 gripper and shows how to ask the robot to do human-readable things such
+as “reach this pose”, “close the gripper”, or “go home” while TorchRL handles
+the low-level action plumbing.</p>
+<p>We will control a cube-to-bowl task without learning. A policy emits a single
+<code class="docutils literal notranslate"><span class="pre">RobotMacroAction</span></code> object under the normal <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code> key, and a TorchRL
+transform expands and executes that high-level command through MuJoCo. The same
+pattern can later provide demonstrations, curricula, or a safe initialization
+for residual RL.</p>
+<section id="what-you-will-learn">
+<h2>What you will learn<a class="headerlink" href="#what-you-will-learn" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p>how to instantiate a Menagerie-backed custom MuJoCo environment;</p></li>
+<li><p>how to use <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction" title="torchrl.envs.transforms.RobotMacroAction"><code class="xref py py-class docutils literal notranslate"><span class="pre">RobotMacroAction</span></code></a> as a readable action object;</p></li>
+<li><p>how <a class="reference internal" href="../reference/generated/torchrl.envs.transforms.URScriptPrimitiveTransform.html#torchrl.envs.transforms.URScriptPrimitiveTransform" title="torchrl.envs.transforms.URScriptPrimitiveTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">URScriptPrimitiveTransform</span></code></a> lets <code class="docutils literal notranslate"><span class="pre">env.step(td)</span></code>
+consume those actions directly;</p></li>
+<li><p>how to write a scripted contact-rich cube-to-bowl policy as an explicit list
+of poses and gripper commands;</p></li>
+<li><p>how to request rendered pixels from the environment and record them with
+<a class="reference internal" href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder"><code class="xref py py-class docutils literal notranslate"><span class="pre">VideoRecorder</span></code></a>;</p></li>
+<li><p>how to reset and reuse one environment across scripted scenes.</p></li>
+</ul>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span> <span class="nn">importlib.util</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">from</span> <span class="nn">collections.abc</span> <span class="kn">import</span> <span class="n">Iterator</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tensordict</span> <span class="kn">import</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.envs</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv" title="torchrl.envs.CubeBowlEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-class"><span class="n">CubeBowlEnv</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="p">,</span> <span class="n">RobotMacroActionMode</span><span class="p">,</span> <a href="../reference/generated/torchrl.envs.step_mdp.html#torchrl.envs.step_mdp" title="torchrl.envs.step_mdp" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">step_mdp</span></a>
+<span class="kn">from</span> <span class="nn">torchrl.record</span> <span class="kn">import</span> <a href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder" class="sphx-glr-backref-module-torchrl-record sphx-glr-backref-type-py-function"><span class="n">VideoRecorder</span></a>
+
+<span class="n">_has_mujoco</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">find_spec</span><span class="p">(</span><span class="s2">&quot;mujoco&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<span class="k">if</span> <span class="ow">not</span> <span class="n">_has_mujoco</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span><span class="s2">&quot;This tutorial requires the `mujoco` Python package.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="environment">
+<h2>Environment<a class="headerlink" href="#environment" title="Link to this heading">#</a></h2>
+<p>The scene uses the MuJoCo Menagerie UR5e and Robotiq 2F-85 models. Set
+<code class="docutils literal notranslate"><span class="pre">TORCHRL_MUJOCO_MENAGERIE_PATH</span></code> to a checkout containing the
+<code class="docutils literal notranslate"><span class="pre">universal_robots_ur5e</span></code> and <code class="docutils literal notranslate"><span class="pre">robotiq_2f85</span></code> assets:</p>
+<blockquote>
+<div><div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>--depth<span class="o">=</span><span class="m">1</span><span class="w"> </span>--filter<span class="o">=</span>blob:none<span class="w"> </span>--sparse<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>https://github.com/google-deepmind/mujoco_menagerie.git<span class="w"> </span>/tmp/menagerie
+git<span class="w"> </span>-C<span class="w"> </span>/tmp/menagerie<span class="w"> </span>sparse-checkout<span class="w"> </span><span class="nb">set</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>universal_robots_ur5e<span class="w"> </span>robotiq_2f85
+<span class="nb">export</span><span class="w"> </span><span class="nv">TORCHRL_MUJOCO_MENAGERIE_PATH</span><span class="o">=</span>/tmp/menagerie
+</pre></div>
+</div>
+</div></blockquote>
+<p><a class="reference internal" href="../reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv" title="torchrl.envs.CubeBowlEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">CubeBowlEnv</span></code></a> exposes the state needed for scripted
+manipulation: robot joints, gripper joints, the pinch site, the cube pose, the
+bowl target and a success flag. The task reward is intentionally sparse. It is
+<code class="docutils literal notranslate"><span class="pre">1</span></code> only when the cube center is within the environment’s placement
+tolerance of the bowl target coordinate, and <code class="docutils literal notranslate"><span class="pre">0</span></code> otherwise.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">MENAGERIE_PATH</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><a href="../reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv" title="torchrl.envs.CubeBowlEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-class"><span class="n">CubeBowlEnv</span></a><span class="o">.</span><span class="n">MENAGERIE_ENV_VAR</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">MENAGERIE_PATH</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">&quot;Set </span><span class="si">{</span><a href="../reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv" title="torchrl.envs.CubeBowlEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-class"><span class="n">CubeBowlEnv</span></a><span class="o">.</span><span class="n">MENAGERIE_ENV_VAR</span><span class="si">}</span><span class="s2"> to a MuJoCo Menagerie checkout &quot;</span>
+        <span class="s2">&quot;before running this tutorial.&quot;</span>
+    <span class="p">)</span>
+
+<span class="n">MAX_EPISODE_STEPS</span> <span class="o">=</span> <span class="mi">12000</span>
+<span class="n">RENDER_WIDTH</span> <span class="o">=</span> <span class="mi">480</span>
+<span class="n">RENDER_HEIGHT</span> <span class="o">=</span> <span class="mi">360</span>
+<span class="n">VIDEO_FRAME_SKIP</span> <span class="o">=</span> <span class="mi">16</span>
+<span class="n">VIDEO_INTERVAL_MS</span> <span class="o">=</span> <span class="mi">55</span>
+<span class="n">IK_KWARGS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;iterations&quot;</span><span class="p">:</span> <span class="mi">220</span><span class="p">,</span>
+    <span class="s2">&quot;orientation_weight&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="s2">&quot;step_size&quot;</span><span class="p">:</span> <span class="mf">0.7</span><span class="p">,</span>
+    <span class="s2">&quot;damping&quot;</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">,</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="robotmacroaction-as-the-action">
+<h2>RobotMacroAction as the action<a class="headerlink" href="#robotmacroaction-as-the-action" title="Link to this heading">#</a></h2>
+<p>A readable manipulation policy should not have to emit magic flat tensors or
+loose collections of root TensorDict keys. It can emit one structured object
+under <code class="docutils literal notranslate"><span class="pre">&quot;action&quot;</span></code>. <code class="docutils literal notranslate"><span class="pre">RobotMacroAction</span></code> is that object:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">RobotMacroAction.reach_pose(position=...,</span> <span class="pre">quaternion=...)</span></code> moves the arm;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RobotMacroAction.close_gripper()</span></code> closes only the gripper and keeps the arm
+where it is;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RobotMacroAction.reach_pose(...,</span> <span class="pre">gripper=&quot;closed&quot;)</span></code> moves the arm and closes
+the gripper in one macro action;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RobotMacroAction.RESET</span></code> asks the environment to return to its configured home
+joint posture.</p></li>
+</ul>
+<p>The symbolic gripper commands <code class="docutils literal notranslate"><span class="pre">&quot;open&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;closed&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;keep&quot;</span></code> are
+resolved by the transform. User code never has to know the Robotiq actuator’s
+numeric command range. When we want a task-specific grasp, we can still make
+the target explicit in object units: close about one millimeter past the cube
+width, ask the environment to convert that width to a gripper command, and
+pass that command to the <code class="docutils literal notranslate"><span class="pre">RobotMacroAction</span></code>.</p>
+</section>
+<section id="create-the-mujoco-scene">
+<h2>Create the MuJoCo scene<a class="headerlink" href="#create-the-mujoco-scene" title="Link to this heading">#</a></h2>
+<p>We start by constructing the cube-and-bowl task once. <code class="docutils literal notranslate"><span class="pre">from_pixels=True</span></code>
+asks the environment to include rendered frames in the TensorDict, which a
+standard <a class="reference internal" href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder"><code class="xref py py-class docutils literal notranslate"><span class="pre">VideoRecorder</span></code></a> can capture. We then append
+one primitive-control transform with <code class="docutils literal notranslate"><span class="pre">execute=True</span></code>. After that,
+<code class="docutils literal notranslate"><span class="pre">env.step</span></code> accepts a <code class="docutils literal notranslate"><span class="pre">RobotMacroAction</span></code> directly under <code class="docutils literal notranslate"><span class="pre">td[&quot;action&quot;]</span></code> and
+executes the expanded low-level sequence internally.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv" title="torchrl.envs.CubeBowlEnv" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-class"><span class="n">CubeBowlEnv</span></a><span class="p">(</span>
+    <span class="n">seed</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">max_episode_steps</span><span class="o">=</span><span class="n">MAX_EPISODE_STEPS</span><span class="p">,</span>
+    <span class="n">menagerie_path</span><span class="o">=</span><span class="n">MENAGERIE_PATH</span><span class="p">,</span>
+    <span class="n">from_pixels</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">pixels_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="n">render_width</span><span class="o">=</span><span class="n">RENDER_WIDTH</span><span class="p">,</span>
+    <span class="n">render_height</span><span class="o">=</span><span class="n">RENDER_HEIGHT</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">assert</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.action_spec" title="torchrl.envs.EnvBase.action_spec" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-property"><span class="n">env</span><span class="o">.</span><span class="n">action_spec</span><span class="o">.</span><span class="n">shape</span></a><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">7</span>
+<span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">robot_home_qpos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<span class="n">primitive_control</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">make_urscript_transform</span><span class="p">(</span>
+    <span class="n">execute</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">macro_steps</span><span class="o">=</span><span class="mi">250</span><span class="p">,</span>
+    <span class="n">settle_steps</span><span class="o">=</span><span class="mi">1600</span><span class="p">,</span>
+    <span class="n">ik_kwargs</span><span class="o">=</span><span class="n">IK_KWARGS</span><span class="p">,</span>
+    <span class="n">stack_rewards</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">stack_observations</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<a href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder" class="sphx-glr-backref-module-torchrl-record sphx-glr-backref-type-py-function"><span class="n">recorder</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder" class="sphx-glr-backref-module-torchrl-record sphx-glr-backref-type-py-function"><span class="n">VideoRecorder</span></a><span class="p">(</span>
+    <span class="n">logger</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;scripted_macro&quot;</span><span class="p">,</span>
+    <span class="n">skip</span><span class="o">=</span><span class="n">VIDEO_FRAME_SKIP</span><span class="p">,</span>
+    <span class="n">make_grid</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">env</span> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.append_transform" title="torchrl.envs.EnvBase.append_transform" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-method"><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span></a><span class="p">(</span><a href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder" class="sphx-glr-backref-module-torchrl-record sphx-glr-backref-type-py-function"><span class="n">recorder</span></a><span class="p">)</span>
+<span class="n">env</span> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#torchrl.envs.EnvBase.append_transform" title="torchrl.envs.EnvBase.append_transform" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-method"><span class="n">env</span><span class="o">.</span><span class="n">append_transform</span></a><span class="p">(</span><span class="n">primitive_control</span><span class="p">)</span>
+
+<span class="n">cube_width</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">env</span><span class="o">.</span><span class="n">OBJECT_HALF_SIZE</span>
+<span class="n">grasp_width</span> <span class="o">=</span> <span class="n">cube_width</span> <span class="o">-</span> <span class="mf">0.001</span>
+<span class="n">gripper_close_command</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">gripper_ctrl_for_width</span><span class="p">(</span><span class="n">grasp_width</span><span class="p">)</span>
+
+<a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">workspace_layouts</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.tensor.html#torch.tensor" title="torch.tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">tensor</span></a><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="c1"># Cube in front of the robot, bowl behind it and slightly to the right.</span>
+        <span class="p">[[</span><span class="mf">0.44</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.21</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.48</span><span class="p">,</span> <span class="mf">0.10</span><span class="p">]],</span>
+        <span class="c1"># Cube on the robot&#39;s right-front side, bowl on the left-back side.</span>
+        <span class="p">[[</span><span class="mf">0.51</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.18</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.39</span><span class="p">,</span> <span class="mf">0.04</span><span class="p">]],</span>
+        <span class="c1"># Cube in front of the robot, bowl on the left-back side.</span>
+        <span class="p">[[</span><span class="mf">0.45</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.20</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.38</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">]],</span>
+        <span class="c1"># Cube on the robot&#39;s right-front side, bowl near the center-back.</span>
+        <span class="p">[[</span><span class="mf">0.52</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.18</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.45</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">]],</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">random_scene_reset</span><span class="p">(</span><span class="n">rollout_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">:</span>
+    <span class="n">layout</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">workspace_layouts</span></a><span class="p">[</span><span class="n">rollout_index</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">workspace_layouts</span></a><span class="p">)]</span>
+    <span class="n">cube_xy</span> <span class="o">=</span> <span class="n">layout</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">bowl_xy</span> <span class="o">=</span> <span class="n">layout</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">cube_pos</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">(</span>
+        <span class="p">[</span><span class="n">cube_xy</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.full_like.html#torch.full_like" title="torch.full_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span></a><span class="p">(</span><span class="n">cube_xy</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="n">env</span><span class="o">.</span><span class="n">cube_position</span><span class="p">[</span><span class="mi">2</span><span class="p">])],</span>
+        <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">bowl_target_z</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">bowl_position</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">env</span><span class="o">.</span><span class="n">MENAGERIE_BOWL_TARGET_OFFSET</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">bowl_pos</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">(</span>
+        <span class="p">[</span><span class="n">bowl_xy</span><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.full_like.html#torch.full_like" title="torch.full_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span></a><span class="p">(</span><span class="n">bowl_xy</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="n">bowl_target_z</span><span class="p">)],</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDict</span></a><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;cube_pos&quot;</span><span class="p">:</span> <span class="n">cube_pos</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">env</span><span class="o">.</span><span class="n">dtype</span></a><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="s2">&quot;bowl_pos&quot;</span><span class="p">:</span> <span class="n">bowl_pos</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype" title="torch.dtype" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">env</span><span class="o">.</span><span class="n">dtype</span></a><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+        <span class="p">},</span>
+        <span class="n">batch_size</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-method"><span class="n">env</span><span class="o">.</span><span class="n">reset</span></a><span class="p">()</span>
+<span class="k">assert</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">6</span>
+<span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">low_level_action</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">7</span>
+<span class="k">assert</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;pixels&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span> <span class="o">==</span> <a href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Size</span></a><span class="p">([</span><span class="n">RENDER_HEIGHT</span><span class="p">,</span> <span class="n">RENDER_WIDTH</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="policy-shape">
+<h2>Policy shape<a class="headerlink" href="#policy-shape" title="Link to this heading">#</a></h2>
+<p>A scripted policy can be just a generator of explicit robot commands. This is
+the minimal shape we want users to see: build a list of poses and gripper
+commands, place the next <code class="docutils literal notranslate"><span class="pre">RobotMacroAction</span></code> under the normal action key, and call
+<code class="docutils literal notranslate"><span class="pre">env.step</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">gen_small_actions</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="p">]:</span>
+    <span class="n">joints</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">joints</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">joints</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mf">0.35</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_joints</span><span class="p">(</span><span class="n">joints</span><span class="o">=</span><span class="n">joints</span><span class="p">,</span> <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">close_gripper</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>
+
+
+<span class="n">small_actions</span> <span class="o">=</span> <span class="n">gen_small_actions</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+<span class="n">small_action</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">small_actions</span><span class="p">)</span>
+<a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">small_action</span>
+<span class="k">assert</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">mode</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <a href="https://docs.pytorch.org/docs/stable/size.html#torch.Size" title="torch.Size" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Size</span></a><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+</pre></div>
+</div>
+</section>
+<section id="a-scripted-cube-to-bowl-macro">
+<h2>A scripted cube-to-bowl macro<a class="headerlink" href="#a-scripted-cube-to-bowl-macro" title="Link to this heading">#</a></h2>
+<p>We can now write the cube-to-bowl controller as a readable sequence of manual
+robot commands. The generator below is deliberately explicit: it names the
+poses we want the pinch site to reach and interleaves them with gripper
+commands.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">home_qpos</span></a> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.as_tensor.html#torch.as_tensor" title="torch.as_tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span></a><span class="p">(</span>
+    <span class="n">env</span><span class="o">.</span><span class="n">robot_home_qpos</span><span class="p">,</span>
+    <span class="n">dtype</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+    <span class="n">device</span><span class="o">=</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+<span class="n">policy_state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a> <span class="o">|</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;td&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">,</span>
+    <span class="s2">&quot;gripper_quat&quot;</span><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;pinch_quat&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">(),</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">pose_at</span><span class="p">(</span>
+    <span class="n">xyz</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">,</span> <span class="n">quat</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">,</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">quat</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">quat</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros.html#torch.zeros" title="torch.zeros" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros</span></a><span class="p">(</span><span class="n">xyz</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="mi">4</span><span class="p">,),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">xyz</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">xyz</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">quat</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">quat</span> <span class="o">=</span> <span class="n">quat</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">xyz</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">xyz</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">xyz</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="mi">4</span><span class="p">,))</span>
+    <span class="k">return</span> <span class="n">xyz</span><span class="p">,</span> <span class="n">quat</span>
+
+
+<span class="k">def</span> <span class="nf">carry_action</span><span class="p">(</span><span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">bowl</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a><span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="p">:</span>
+    <span class="n">current_td</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span>
+    <span class="n">gripper_quat</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;gripper_quat&quot;</span><span class="p">]</span>
+    <span class="n">cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">carry_start_cube</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;carry_start_cube&quot;</span><span class="p">]</span>
+    <span class="n">pinch_to_cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;pinch_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="o">-</span> <span class="n">cube</span>
+    <span class="n">desired_xy</span> <span class="o">=</span> <span class="n">carry_start_cube</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="n">bowl</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">carry_start_cube</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">desired_cube</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">desired_xy</span><span class="p">,</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.full_like.html#torch.full_like" title="torch.full_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span></a><span class="p">(</span><span class="n">bowl</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="mf">0.24</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">position</span><span class="p">,</span> <span class="n">quaternion</span> <span class="o">=</span> <span class="n">pose_at</span><span class="p">(</span><span class="n">desired_cube</span> <span class="o">+</span> <span class="n">pinch_to_cube</span><span class="p">,</span> <span class="n">gripper_quat</span><span class="p">)</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_pose</span><span class="p">(</span>
+        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+        <span class="n">quaternion</span><span class="o">=</span><span class="n">quaternion</span><span class="p">,</span>
+        <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;closed&quot;</span><span class="p">,</span>
+        <span class="n">gripper_command</span><span class="o">=</span><span class="n">gripper_close_command</span><span class="p">,</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">gen_actions</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">:</span>
+    <span class="n">cube</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">bowl</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;bowl_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">quat</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;pinch_quat&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">grasp_offset</span> <span class="o">=</span> <span class="n">cube</span><span class="o">.</span><span class="n">new_tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.016</span><span class="p">]])</span>
+
+    <span class="c1"># Action 0: Keep the arm at the reset joint target and let the scene settle.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">settle_steps</span><span class="o">=</span><span class="mi">19</span><span class="p">)</span>
+
+    <span class="c1"># Action 1: Fully open the gripper before approaching the cube.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">open_gripper</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">settle_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+
+    <span class="n">current_td</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span>
+    <span class="n">cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">bowl</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;bowl_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">quat</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;pinch_quat&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">position</span><span class="p">,</span> <span class="n">quaternion</span> <span class="o">=</span> <span class="n">pose_at</span><span class="p">(</span><span class="n">cube</span> <span class="o">+</span> <span class="n">cube</span><span class="o">.</span><span class="n">new_tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.18</span><span class="p">]]),</span> <span class="n">quat</span><span class="p">)</span>
+    <span class="c1"># Action 2: Move the open gripper above the cube.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_pose</span><span class="p">(</span>
+        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+        <span class="n">quaternion</span><span class="o">=</span><span class="n">quaternion</span><span class="p">,</span>
+        <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">180</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">position</span><span class="p">,</span> <span class="n">quaternion</span> <span class="o">=</span> <span class="n">pose_at</span><span class="p">(</span><span class="n">cube</span> <span class="o">+</span> <span class="n">grasp_offset</span><span class="p">,</span> <span class="n">quat</span><span class="p">)</span>
+    <span class="c1"># Action 3: Lower the open gripper to the grasp pose around the cube.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_pose</span><span class="p">(</span>
+        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+        <span class="n">quaternion</span><span class="o">=</span><span class="n">quaternion</span><span class="p">,</span>
+        <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">180</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Action 4: Close the gripper to a grasp about one millimeter tighter than</span>
+    <span class="c1"># the cube width.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">close_gripper</span><span class="p">(</span>
+        <span class="n">command</span><span class="o">=</span><span class="n">gripper_close_command</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">160</span><span class="p">,</span> <span class="n">settle_steps</span><span class="o">=</span><span class="mi">80</span>
+    <span class="p">)</span>
+
+    <span class="n">current_td</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span>
+    <span class="n">cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">pinch_to_cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;pinch_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="o">-</span> <span class="n">cube</span>
+    <span class="n">position</span><span class="p">,</span> <span class="n">quaternion</span> <span class="o">=</span> <span class="n">pose_at</span><span class="p">(</span>
+        <span class="n">cube</span> <span class="o">+</span> <span class="n">pinch_to_cube</span> <span class="o">+</span> <span class="n">cube</span><span class="o">.</span><span class="n">new_tensor</span><span class="p">([[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.20</span><span class="p">]]),</span>
+        <span class="n">quat</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="c1"># Action 5: Lift the grasped cube above the table.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_pose</span><span class="p">(</span>
+        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+        <span class="n">quaternion</span><span class="o">=</span><span class="n">quaternion</span><span class="p">,</span>
+        <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;closed&quot;</span><span class="p">,</span>
+        <span class="n">gripper_command</span><span class="o">=</span><span class="n">gripper_close_command</span><span class="p">,</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># The cube is not welded to the gripper. It is held by contact and</span>
+    <span class="c1"># friction between the pads. If we ask for one large move directly to the</span>
+    <span class="c1"># bowl, the fingers can drag faster than the cube can safely follow: the</span>
+    <span class="c1"># cube may slide inside the grasp, get pushed out, or arrive shifted enough</span>
+    <span class="c1"># that the final drop misses the bowl. We therefore carry it through a few</span>
+    <span class="c1"># intermediate waypoints in the table plane. After each waypoint, the next</span>
+    <span class="c1"># command uses the latest observed cube and finger positions.</span>
+    <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;carry_start_cube&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">][</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+
+    <span class="c1"># Action 6: Carry the cube one quarter of the way toward the bowl.</span>
+    <span class="k">yield</span> <span class="n">carry_action</span><span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="n">bowl</span><span class="p">)</span>
+
+    <span class="c1"># Action 7: Carry the cube halfway toward the bowl.</span>
+    <span class="k">yield</span> <span class="n">carry_action</span><span class="p">(</span><span class="mf">0.50</span><span class="p">,</span> <span class="n">bowl</span><span class="p">)</span>
+
+    <span class="c1"># Action 8: Carry the cube three quarters of the way toward the bowl.</span>
+    <span class="k">yield</span> <span class="n">carry_action</span><span class="p">(</span><span class="mf">0.75</span><span class="p">,</span> <span class="n">bowl</span><span class="p">)</span>
+
+    <span class="c1"># Action 9: Carry the cube above the bowl center.</span>
+    <span class="k">yield</span> <span class="n">carry_action</span><span class="p">(</span><span class="mf">1.00</span><span class="p">,</span> <span class="n">bowl</span><span class="p">)</span>
+
+    <span class="n">drop_cube</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">bowl</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">bowl</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.full_like.html#torch.full_like" title="torch.full_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span></a><span class="p">(</span><span class="n">bowl</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="mf">0.13</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">current_td</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span>
+    <span class="n">cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">pinch_to_cube</span> <span class="o">=</span> <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;pinch_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span> <span class="o">-</span> <span class="n">cube</span>
+    <span class="n">position</span><span class="p">,</span> <span class="n">quaternion</span> <span class="o">=</span> <span class="n">pose_at</span><span class="p">(</span><span class="n">drop_cube</span> <span class="o">+</span> <span class="n">pinch_to_cube</span><span class="p">,</span> <span class="n">quat</span><span class="p">)</span>
+    <span class="c1"># Action 10: Lower the grasped cube into the bowl.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_pose</span><span class="p">(</span>
+        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+        <span class="n">quaternion</span><span class="o">=</span><span class="n">quaternion</span><span class="p">,</span>
+        <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;closed&quot;</span><span class="p">,</span>
+        <span class="n">gripper_command</span><span class="o">=</span><span class="n">gripper_close_command</span><span class="p">,</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Action 11: Open the gripper to release the cube.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">open_gripper</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">settle_steps</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+
+    <span class="c1"># Action 12: Wait with the gripper open so the cube can settle in the bowl.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">240</span><span class="p">)</span>
+
+    <span class="n">current_td</span> <span class="o">=</span> <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span>
+    <span class="n">retreat_xyz</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.cat.html#torch.cat" title="torch.cat" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">cat</span></a><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;pinch_pos&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <a href="https://docs.pytorch.org/docs/stable/generated/torch.full_like.html#torch.full_like" title="torch.full_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span></a><span class="p">(</span><span class="n">current_td</span><span class="p">[</span><span class="s2">&quot;pinch_pos&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span> <span class="mf">0.26</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">position</span><span class="p">,</span> <span class="n">quaternion</span> <span class="o">=</span> <span class="n">pose_at</span><span class="p">(</span><span class="n">retreat_xyz</span><span class="p">,</span> <span class="n">quat</span><span class="p">)</span>
+    <span class="c1"># Action 13: Retreat upward and away from the released cube.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">reach_pose</span><span class="p">(</span>
+        <span class="n">position</span><span class="o">=</span><span class="n">position</span><span class="p">,</span>
+        <span class="n">quaternion</span><span class="o">=</span><span class="n">quaternion</span><span class="p">,</span>
+        <span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span>
+        <span class="n">steps</span><span class="o">=</span><span class="mi">120</span><span class="p">,</span>
+        <span class="n">settle_steps</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Action 14: Return the arm to the environment&#39;s reset joint configuration.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">RESET</span>
+
+    <span class="c1"># Action 15: Hold the reset pose while the final reward is measured.</span>
+    <span class="k">yield</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">gripper</span><span class="o">=</span><span class="s2">&quot;open&quot;</span><span class="p">,</span> <span class="n">steps</span><span class="o">=</span><span class="mi">800</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">action_mode</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="s2">&quot;mode&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">mode</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+
+<span class="k">def</span> <span class="nf">action_gripper</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="s2">&quot;gripper&quot;</span><span class="p">):</span>
+        <span class="k">return</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">GRIPPER_OPEN</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">action</span><span class="o">.</span><span class="n">gripper</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+
+
+<span class="k">def</span> <span class="nf">run_scripted_rollout</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">:</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">)</span> <span class="o">-&gt;</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase" title="tensordict.TensorDictBase" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">TensorDictBase</span></a><span class="p">:</span>
+    <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a>
+    <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;gripper_quat&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;pinch_quat&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">policy_state</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;carry_start_cube&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">grasp_distance</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.full_like.html#torch.full_like" title="torch.full_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">full_like</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;inf&quot;</span><span class="p">))</span>
+    <span class="n">cube_motion_while_closed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">grasp_distance</span><span class="p">)</span>
+    <span class="n">cube_lift_while_closed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">grasp_distance</span><span class="p">)</span>
+    <span class="n">max_reward</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">grasp_distance</span><span class="p">)</span>
+    <span class="n">last_reward</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.zeros_like.html#torch.zeros_like" title="torch.zeros_like" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span></a><span class="p">(</span><span class="n">grasp_distance</span><span class="p">)</span>
+    <span class="n">closed_reference_cube</span><span class="p">:</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class"><span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span></a> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="n">script_actions</span> <span class="o">=</span> <span class="n">gen_actions</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">script_actions</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="n">action</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">]</span>
+        <span class="n">transition</span> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#id4" title="torchrl.envs.EnvBase.step" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-method"><span class="n">env</span><span class="o">.</span><span class="n">step</span></a><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">transition</span><span class="p">[</span><span class="s2">&quot;next&quot;</span><span class="p">,</span> <span class="s2">&quot;reward&quot;</span><span class="p">]</span>
+        <span class="n">max_reward</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.maximum.html#torch.maximum" title="torch.maximum" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">maximum</span></a><span class="p">(</span><span class="n">max_reward</span><span class="p">,</span> <span class="n">reward</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">))</span>
+        <span class="n">last_reward</span> <span class="o">=</span> <span class="n">reward</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">:]</span>
+        <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.step_mdp.html#torchrl.envs.step_mdp" title="torchrl.envs.step_mdp" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-function"><span class="n">step_mdp</span></a><span class="p">(</span><span class="n">transition</span><span class="p">)</span>
+        <span class="n">policy_state</span><span class="p">[</span><span class="s2">&quot;td&quot;</span><span class="p">]</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a>
+
+        <span class="n">mode</span> <span class="o">=</span> <span class="n">action_mode</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="n">gripper</span> <span class="o">=</span> <span class="n">action_gripper</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">RobotMacroActionMode</span><span class="o">.</span><span class="n">CLOSE_GRIPPER</span><span class="p">):</span>
+            <span class="n">grasp_distance</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.minimum.html#torch.minimum" title="torch.minimum" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">minimum</span></a><span class="p">(</span>
+                <span class="n">grasp_distance</span><span class="p">,</span> <span class="n">env</span><span class="o">.</span><span class="n">gripper_cube_distance</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">closed_reference_cube</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="n">closed_reference_cube</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="ow">and</span> <span class="n">gripper</span> <span class="o">==</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorClass.html#tensordict.TensorClass" title="tensordict.TensorClass" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class"><span class="n">RobotMacroAction</span></a><span class="o">.</span><span class="n">GRIPPER_CLOSED</span>
+        <span class="p">):</span>
+            <span class="n">cube_motion</span> <span class="o">=</span> <span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">closed_reference_cube</span><span class="p">)</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span>
+                <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="n">cube_lift</span> <span class="o">=</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">closed_reference_cube</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+            <span class="n">cube_motion_while_closed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.maximum.html#torch.maximum" title="torch.maximum" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">maximum</span></a><span class="p">(</span>
+                <span class="n">cube_motion_while_closed</span><span class="p">,</span> <span class="n">cube_motion</span>
+            <span class="p">)</span>
+            <span class="n">cube_lift_while_closed</span> <span class="o">=</span> <a href="https://docs.pytorch.org/docs/stable/generated/torch.maximum.html#torch.maximum" title="torch.maximum" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-function"><span class="n">torch</span><span class="o">.</span><span class="n">maximum</span></a><span class="p">(</span><span class="n">cube_lift_while_closed</span><span class="p">,</span> <span class="n">cube_lift</span><span class="p">)</span>
+
+    <span class="n">robot_home_error</span> <span class="o">=</span> <span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span> <span class="o">-</span> <a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">home_qpos</span></a><span class="p">)</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">assert</span> <span class="n">grasp_distance</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mf">0.025</span><span class="p">,</span> <span class="n">grasp_distance</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">cube_motion_while_closed</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mf">0.05</span><span class="p">,</span> <span class="n">cube_motion_while_closed</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">cube_lift_while_closed</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mf">0.08</span><span class="p">,</span> <span class="n">cube_lift_while_closed</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">robot_home_error</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mf">0.04</span><span class="p">,</span> <span class="n">robot_home_error</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="n">max_reward</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="p">(</span>
+        <span class="n">max_reward</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+        <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;cube_pos&quot;</span><span class="p">],</span>
+        <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;bowl_pos&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">last_reward</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">last_reward</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="k">assert</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;success&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="k">return</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a>
+</pre></div>
+</div>
+</section>
+<section id="fixed-scene-video">
+<h2>Fixed scene video<a class="headerlink" href="#fixed-scene-video" title="Link to this heading">#</a></h2>
+<p>First, render the default task once. This is the simple cube-to-bowl scene
+used above to introduce the scripted policy.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <span class="n">run_scripted_rollout</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+
+<span class="n">scripted_macro_animation</span> <span class="o">=</span> <a href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder" class="sphx-glr-backref-module-torchrl-record sphx-glr-backref-type-py-function"><span class="n">recorder</span></a><span class="o">.</span><span class="n">to_animation</span><span class="p">(</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Scripted RobotMacroAction rollout&quot;</span><span class="p">,</span>
+    <span class="n">interval</span><span class="o">=</span><span class="n">VIDEO_INTERVAL_MS</span><span class="p">,</span>
+    <span class="n">clear</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div  class="sphinx-contrib-video-container align-left"><video autoplay="True" controls="True" height="480" loop="True" preload="auto" width="640" class="sphx-glr-single-img"><source src="../_images/sphx_glr_mujoco_cube_bowl_macros_001.mp4" type="video/mp4"></video></div></section>
+<section id="randomized-workspace-video">
+<h2>Randomized workspace video<a class="headerlink" href="#randomized-workspace-video" title="Link to this heading">#</a></h2>
+<p>Next, reset the same environment onto new reachable layouts sampled from a
+square in the table plane. For readability, each rollout starts from a
+different pair of workspace regions: front-to-back, right-front to left-back,
+front-to-left-back, and right-front to center-back. The <code class="docutils literal notranslate"><span class="pre">VideoRecorder</span></code> keeps
+appending frames until we ask it to render, so the final video is one long
+clip containing all four randomized rollouts.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">rollout_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><a href="https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor" title="torch.Tensor" class="sphx-glr-backref-module-torch sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">workspace_layouts</span></a><span class="p">)</span>
+<span class="k">for</span> <span class="n">rollout_index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">rollout_count</span><span class="p">):</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-method"><span class="n">env</span><span class="o">.</span><span class="n">reset</span></a><span class="p">(</span><span class="n">random_scene_reset</span><span class="p">(</span><span class="n">rollout_index</span><span class="p">))</span>
+    <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a> <span class="o">=</span> <span class="n">run_scripted_rollout</span><span class="p">(</span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="rendered-randomized-rollouts">
+<h2>Rendered randomized rollouts<a class="headerlink" href="#rendered-randomized-rollouts" title="Link to this heading">#</a></h2>
+<p>The second animation shows the same hand-written policy on the randomized
+scenes.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">randomized_macro_animation</span> <span class="o">=</span> <a href="../reference/generated/torchrl.record.VideoRecorder.html#torchrl.record.VideoRecorder" title="torchrl.record.VideoRecorder" class="sphx-glr-backref-module-torchrl-record sphx-glr-backref-type-py-function"><span class="n">recorder</span></a><span class="o">.</span><span class="n">to_animation</span><span class="p">(</span>
+    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Randomized RobotMacroAction rollouts&quot;</span><span class="p">,</span>
+    <span class="n">interval</span><span class="o">=</span><span class="n">VIDEO_INTERVAL_MS</span><span class="p">,</span>
+    <span class="n">clear</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div  class="sphinx-contrib-video-container align-left"><video autoplay="True" controls="True" height="480" loop="True" preload="auto" width="640" class="sphx-glr-single-img"><source src="../_images/sphx_glr_mujoco_cube_bowl_macros_002.mp4" type="video/mp4"></video></div></section>
+<section id="reset-and-reuse-the-same-environment">
+<h2>Reset and reuse the same environment<a class="headerlink" href="#reset-and-reuse-the-same-environment" title="Link to this heading">#</a></h2>
+<p>The same transformed environment can be reset and reused for another scripted
+rollout.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">reset_td</span></a> <span class="o">=</span> <a href="../reference/generated/torchrl.envs.EnvBase.html#id1" title="torchrl.envs.EnvBase.reset" class="sphx-glr-backref-module-torchrl-envs sphx-glr-backref-type-py-method"><span class="n">env</span><span class="o">.</span><span class="n">reset</span></a><span class="p">()</span>
+<span class="k">assert</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">reset_td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <a href="https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDict.html#tensordict.TensorDict" title="tensordict.TensorDict" class="sphx-glr-backref-module-tensordict sphx-glr-backref-type-py-class sphx-glr-backref-instance"><span class="n">td</span></a><span class="p">[</span><span class="s2">&quot;robot_qpos&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+</pre></div>
+</div>
+</section>
+<section id="conclusion-and-further-reading">
+<h2>Conclusion and further reading<a class="headerlink" href="#conclusion-and-further-reading" title="Link to this heading">#</a></h2>
+<p>Macro actions are useful when a policy should choose <em>what</em> to do at a slower
+time scale while a scripted controller handles short-horizon actuation. They
+are not a replacement for learning in difficult contact-rich settings: they
+still depend on calibration, solver quality and reachable waypoints. Their
+practical value is that they provide a strong baseline, a source of
+demonstrations, and a structured action space for residual policies or RL fine
+tuning.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../reference/macro_primitives.html#macro-primitives-guide"><span class="std std-ref">Macro-control primitives</span></a> for the design guide comparing generic
+and domain-specific macro transforms.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.envs.CubeBowlEnv.html#torchrl.envs.CubeBowlEnv" title="torchrl.envs.CubeBowlEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">CubeBowlEnv</span></code></a> for the custom MuJoCo task used here.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.envs.MujocoEnv.html#torchrl.envs.MujocoEnv" title="torchrl.envs.MujocoEnv"><code class="xref py py-class docutils literal notranslate"><span class="pre">MujocoEnv</span></code></a> for the base class behind custom MuJoCo
+environments.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction" title="torchrl.envs.transforms.RobotMacroAction"><code class="xref py py-class docutils literal notranslate"><span class="pre">RobotMacroAction</span></code></a> for the structured action object used
+by the scripted policy.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.envs.transforms.MacroPrimitiveTransform.html#torchrl.envs.transforms.MacroPrimitiveTransform" title="torchrl.envs.transforms.MacroPrimitiveTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">MacroPrimitiveTransform</span></code></a> for robot-agnostic macro
+expansion that domain transforms specialize via <code class="docutils literal notranslate"><span class="pre">_resolve</span></code> hooks.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.envs.transforms.URScriptPrimitiveTransform.html#torchrl.envs.transforms.URScriptPrimitiveTransform" title="torchrl.envs.transforms.URScriptPrimitiveTransform"><code class="xref py py-class docutils literal notranslate"><span class="pre">URScriptPrimitiveTransform</span></code></a> for the URScript-style
+preset used in this tutorial.</p></li>
+<li><p><a class="reference internal" href="../reference/generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction" title="torchrl.envs.transforms.MultiAction"><code class="xref py py-class docutils literal notranslate"><span class="pre">MultiAction</span></code></a> for executing batched low-level action
+sequences.</p></li>
+</ul>
+</div>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span></span><span class="n">env</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (45 minutes 57.361 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-tutorials-mujoco-cube-bowl-macros-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/bcaf588259087706c7dcfb03a5a9380e/mujoco_cube_bowl_macros.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">mujoco_cube_bowl_macros.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/11e35e1ad5d6e4d63c1cf2743be0285d/mujoco_cube_bowl_macros.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">mujoco_cube_bowl_macros.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../_downloads/1b9482140b9bb2ffd7dbf3d0549468ad/mujoco_cube_bowl_macros.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">mujoco_cube_bowl_macros.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+</div>
+
+              
+              
+                <footer class="bd-footer-article">
+                  <div class="footer-article-items footer-article__inner">
+  
+    <div class="footer-article-item">
+<div class="feedback">
+  
+<div class="rating">
+    Rate this Page
+    <div class="stars">
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="1" data-value="1">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="2" data-value="2">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="3" data-value="3">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="4" data-value="4">★</span>
+        
+        <span class="star" data-behavior="tutorial-rating" data-count="5" data-value="5">★</span>
+        
+    </div>
+</div>
+
+  <div class="feedback-send">
+    <button class="feedback-btn"
+            onclick="openGitHubIssue()"
+            data-bs-title="Create a GitHub Issue"
+            data-bs-placement="bottom"
+            data-bs-toggle="tooltip"
+            data-gtm="feedback-btn-click">Send Feedback
+    </button>
+  </div>
+</div>
+
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dqn_with_rnn.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Recurrent DQN: Training recurrent policies</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="collector_trajectory_assembly.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Collectors Deep Dive: Trajectory Assembly</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+
+<div class="footer-info">
+  <p class="copyright">
+    
+  </p>
+
+  <p class="theme-version">
+    Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+  </p>
+</div>
+</div>
+  
+</div>
+                </footer>
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="dqn_with_rnn.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Recurrent DQN: Training recurrent policies</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="collector_trajectory_assembly.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Collectors Deep Dive: Trajectory Assembly</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc">
+<div class="sidebar-secondary-items sidebar-secondary__inner">
+    
+       <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-you-will-learn">What you will learn</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#environment">Environment</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#robotmacroaction-as-the-action">RobotMacroAction as the action</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#create-the-mujoco-scene">Create the MuJoCo scene</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policy-shape">Policy shape</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-scripted-cube-to-bowl-macro">A scripted cube-to-bowl macro</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#fixed-scene-video">Fixed scene video</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#randomized-workspace-video">Randomized workspace video</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rendered-randomized-rollouts">Rendered randomized rollouts</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reset-and-reuse-the-same-environment">Reset and reuse the same environment</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conclusion-and-further-reading">Conclusion and further reading</a></li>
+</ul>
+  </nav></div>
+    
+       <div class="sidebar-secondary-item">
+
+  
+  <div class="tocsection editthispage">
+    <a href="https://github.com/pytorch/rl/edit/main/docs/source/tutorials/mujoco_cube_bowl_macros.rst">
+      <i class="fa-solid fa-pencil"></i>
+      
+      
+        
+          Edit on GitHub
+        
+      
+    </a>
+  </div>
+</div>
+    
+       <div class="sidebar-secondary-item">
+    <div class="tocsection sourcelink">
+      <a href="../_sources/tutorials/mujoco_cube_bowl_macros.rst.txt">
+        <i class="fa-solid fa-file-lines"></i> Show Source
+      </a>
+    </div>
+</div>
+    
+
+
+
+
+<div class="sidebar-secondary-item">
+  <div class="sidebar-heading">PyTorch Libraries</div>
+  <ul style="list-style-type: none; padding: 0; padding-bottom: 80px;">
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/executorch" style="color: var(--pst-color-text-muted)">ExecuTorch</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/helion" style="color: var(--pst-color-text-muted)">Helion</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/ao" style="color: var(--pst-color-text-muted)">torchao</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/kineto" style="color: var(--pst-color-text-muted)">kineto</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://github.com/pytorch/torchtitan" style="color: var(--pst-color-text-muted)">torchtitan</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/rl" style="color: var(--pst-color-text-muted)">TorchRL</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/vision" style="color: var(--pst-color-text-muted)">torchvision</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/audio" style="color: var(--pst-color-text-muted)">torchaudio</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/tensordict" style="color: var(--pst-color-text-muted)">tensordict</a></li>
+  
+   <li><a class="nav-link nav-external" href="https://docs.pytorch.org/xla" style="color: var(--pst-color-text-muted)">PyTorch on XLA Devices</a></li>
+  
+  </ul>
+</div>
+
+</div>
+</div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  
+
+<div class="container-fluid docs-tutorials-resources" id="docs-tutorials-resources">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-4">
+        <h2>Docs</h2>
+        <p>Access comprehensive developer documentation for PyTorch</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/docs/stable/index.html">View Docs</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Tutorials</h2>
+        <p>Get in-depth tutorials for beginners and advanced developers</p>
+        <a class="with-right-arrow" href="https://docs.pytorch.org/tutorials">View Tutorials</a>
+      </div>
+
+      <div class="col-md-4">
+        <h2>Resources</h2>
+        <p>Find development resources and get your questions answered</p>
+        <a class="with-right-arrow" href="https://pytorch.org/resources">View Resources</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+<footer class="site-footer">
+
+  <div class="container footer-container">
+
+    <div class="newsletter" id="newsletter">
+
+      <p class="newsletter__title is-style-max-width-800"><strong>Stay in touch</strong> for updates, event info, and
+        the latest news</p>
+
+
+      <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+      <script>
+        hbspt.forms.create({
+          region: "na1",
+          portalId: "8112310",
+          formId: "2fb2231c-000b-4ec5-88a0-1ab242549c9e"
+        });
+      </script>
+
+
+      <p class="newsletter__privacy">By submitting this form, I consent to receive marketing emails from the LF and its
+        projects regarding their events, training, research, developments, and related announcements. I understand that
+        I can unsubscribe at any time using the links in the footers of the emails I receive. <a
+          href="https://www.linuxfoundation.org/privacy/">Privacy Policy</a>.</p>
+
+    </div>
+
+    <div class="lf-grid">
+      <ul class="social-links">
+        <li><a href="https://www.facebook.com/pytorch" target="_blank" title="PyTorch on Facebook">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-0.51 -0.26 26.45 26.45" aria-label="Facebook">
+              <path fill="currentColor"
+                d="M25.497 13.075c0-2.45-.698-4.848-2.011-6.911a12.765 12.765 0 0 0-5.398-4.73A12.671 12.671 0 0 0 11.008.38a12.705 12.705 0 0 0-6.529 2.95A12.827 12.827 0 0 0 .563 9.358a12.896 12.896 0 0 0-.07 7.201 12.831 12.831 0 0 0 3.801 6.103 12.709 12.709 0 0 0 6.471 3.078v-8.957H7.53v-3.708h3.235v-2.824c0-3.213 1.903-4.988 4.813-4.988.956.014 1.909.097 2.852.25V8.67h-1.607a1.83 1.83 0 0 0-1.518.497 1.854 1.854 0 0 0-.561 1.505v2.404h3.535l-.563 3.708h-2.97v8.957a12.725 12.725 0 0 0 7.697-4.337 12.87 12.87 0 0 0 3.054-8.328z" />
+            </svg>
+          </a></li>
+        <li><a href="https://twitter.com/pytorch" target="_blank" title="PyTorch on X">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0 0 300 300" aria-label="X">
+              <path fill="currentColor"
+                d="M178.57 127.15 290.27 0h-26.46l-97.03 110.38L89.34 0H0l117.13 166.93L0 300.25h26.46l102.4-116.59 81.8 116.59h89.34M36.01 19.54H76.66l187.13 262.13h-40.66" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.youtube.com/pytorch" target="_blank" title="PyTorch on YouTube">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="0.21 0.27 34.45 25.07" aria-label="YouTube">
+              <path fill="currentColor"
+                d="M33.729 6.084s-.327-2.33-1.317-3.356a4.691 4.691 0 0 0-3.32-1.432c-4.634-.34-11.589-.34-11.589-.34h-.014s-6.954 0-11.59.342a4.692 4.692 0 0 0-3.32 1.432c-.993 1.025-1.315 3.354-1.315 3.354a52.189 52.189 0 0 0-.331 5.473v2.566c.014 1.829.125 3.656.331 5.472 0 0 .322 2.33 1.316 3.36 1.26 1.345 2.916 1.3 3.653 1.445 2.65.26 11.263.34 11.263.34s6.96-.01 11.597-.353a4.691 4.691 0 0 0 3.32-1.432c.993-1.026 1.316-3.356 1.316-3.356.206-1.817.316-3.644.33-5.473v-2.57a52.26 52.26 0 0 0-.33-5.472zM14.076 17.232V7.729l8.951 4.768-8.95 4.735z" />
+            </svg>
+          </a></li>
+        <li><a href="https://www.linkedin.com/company/pytorch" target="_blank" title="PyTorch on LinkedIn">
+            <svg xmlns="http://www.w3.org/2000/svg" viewbox="-10.23 -10.23 531.96 531.96" aria-label="LinkedIn">
+              <rect width="512" height="512" rx="0" fill="currentColor" />
+              <circle fill="#000" cx="142" cy="138" r="37" />
+              <path stroke="#000" stroke-width="66" d="M244 194v198M142 194v198" />
+              <path fill="#000"
+                d="M276 282c0-20 13-40 36-40 24 0 33 18 33 45v105h66V279c0-61-32-89-76-89-34 0-51 19-59 32" />
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.slack.com" target="_blank" title="PyTorch Slack">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.16 -0.03 21.19 21.19" aria-label="Slack">
+              <path fill="currentColor"
+                d="M4.896 13.27a2.147 2.147 0 0 1-2.141 2.142A2.147 2.147 0 0 1 .613 13.27c0-1.178.963-2.141 2.142-2.141h2.141v2.141zm1.08 0c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.363a2.147 2.147 0 0 1-2.142 2.141 2.147 2.147 0 0 1-2.141-2.142V13.27zm2.141-8.6a2.147 2.147 0 0 1-2.141-2.14c0-1.18.962-2.142 2.141-2.142s2.142.963 2.142 2.141v2.142H8.117zm0 1.08c1.179 0 2.141.962 2.141 2.141a2.147 2.147 0 0 1-2.141 2.142H2.755A2.147 2.147 0 0 1 .613 7.89c0-1.179.963-2.141 2.142-2.141h5.362zm8.599 2.141c0-1.179.963-2.141 2.141-2.141 1.179 0 2.143.962 2.143 2.14a2.147 2.147 0 0 1-2.142 2.142h-2.141V7.89zm-1.08 0a2.147 2.147 0 0 1-2.141 2.142 2.147 2.147 0 0 1-2.141-2.142V2.53c0-1.178.962-2.141 2.141-2.141s2.142.963 2.142 2.141v5.362zm-2.141 8.6c1.179 0 2.142.962 2.142 2.14a2.147 2.147 0 0 1-2.142 2.142 2.147 2.147 0 0 1-2.141-2.141V16.49h2.141zm0-1.08a2.147 2.147 0 0 1-2.141-2.141c0-1.179.962-2.142 2.141-2.142h5.362c1.179 0 2.142.963 2.142 2.142a2.147 2.147 0 0 1-2.142 2.142h-5.362z">
+              </path>
+            </svg>
+          </a></li>
+        <li><a href="https://pytorch.org/wechat" title="PyTorch on WeChat">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0.14 -0.17 38.02 33.02" aria-label="WeChat">
+              <path fill="currentColor"
+                d="M26.289 10.976a12.972 12.972 0 0 0-8.742 3.53 10.386 10.386 0 0 0-3.224 8.795c-1.326-.164-2.535-.345-3.75-.448a2.332 2.332 0 0 0-1.273.216c-1.18.666-2.311 1.418-3.652 2.255.246-1.112.405-2.087.687-3.024a1.15 1.15 0 0 0-.523-1.52C1.737 17.902.02 13.601 1.307 9.165c1.189-4.1 4.11-6.587 8.077-7.884A13.54 13.54 0 0 1 24.18 5.617a10.135 10.135 0 0 1 2.109 5.359zM10.668 9.594a1.564 1.564 0 0 0-2.095-1.472 1.52 1.52 0 0 0-.895 1.964 1.502 1.502 0 0 0 1.391.966 1.545 1.545 0 0 0 1.598-1.46v.002zm8.15-1.566a1.567 1.567 0 0 0-1.528 1.543 1.528 1.528 0 0 0 1.571 1.492 1.52 1.52 0 0 0 1.375-2.117 1.518 1.518 0 0 0-1.415-.919l-.003.001z">
+              </path>
+              <path fill="currentColor"
+                d="M33.914 32.137c-1.075-.478-2.062-1.196-3.11-1.306-1.049-.11-2.145.494-3.24.605a10.821 10.821 0 0 1-8.781-2.864c-4.682-4.33-4.013-10.97 1.403-14.518 4.811-3.154 11.874-2.102 15.268 2.273a8.671 8.671 0 0 1-1.002 12.095c-1.046.929-1.422 1.693-.751 2.917.102.257.174.525.213.798zM21.68 20.292a1.264 1.264 0 1 0 .01-2.528 1.264 1.264 0 0 0-.01 2.528zm7.887-2.526a1.266 1.266 0 0 0-1.256 1.21 1.247 1.247 0 1 0 1.256-1.21z">
+              </path>
+            </svg>
+          </a></li>
+      </ul>
+    </div>
+    
+    <div class="privacy-policy">
+      <div class="copyright">
+      
+        <p>
+          &copy; PyTorch. Copyright © The Linux Foundation®. All rights reserved. The Linux Foundation has registered
+          trademarks and uses trademarks. For more information, including terms of use, privacy policy, and trademark
+          usage, please see our <a href="https://www.linuxfoundation.org/legal/policies">Policies</a> page. <a
+            href="https://www.linuxfoundation.org/trademark-usage">Trademark Usage</a>. <a
+            href="http://www.linuxfoundation.org/privacy">Privacy Policy</a>.
+        </p>
+        
+      </div>
+    </div>
+
+
+  </div>
+</footer>
+
+<div class="cookie-banner-wrapper" data-nosnippet>
+  <div class="container">
+    <p class="gdpr-notice">To analyze traffic and optimize your experience, we serve cookies on this site. By clicking or navigating, you agree to allow our usage of cookies. As the current maintainers of this site, Facebook’s Cookies Policy applies. Learn more, including about available controls: <a href="https://opensource.fb.com/legal/cookie-policy">Cookies Policy</a>.</p>
+    <button class="close-button" aria-label="Close cookie banner"></button>
+  </div>
+</div>
+  
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2022, Meta.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 7.2.6.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  <script type="application/ld+json">
+    {
+       "@context": "https://schema.org",
+       "@type": "Article",
+       "name": "MuJoCo scripted manipulation with human-readable robot actions",
+       "headline": "MuJoCo scripted manipulation with human-readable robot actions",
+       "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
+       "url": "/tutorials/mujoco_cube_bowl_macros.html",
+       "articleBody": "Note Go to the end to download the full example code. MuJoCo scripted manipulation with human-readable robot actions# The first step in controlling a complex robot is rarely an end-to-end RL policy. Closed-loop controllers, scripted motion primitives, and imitation data are often used first to make the task reliable enough for later reward-driven fine tuning. This tutorial uses a MuJoCo Menagerie UR5e arm with a Robotiq 2F-85 gripper and shows how to ask the robot to do human-readable things such as \u201creach this pose\u201d, \u201cclose the gripper\u201d, or \u201cgo home\u201d while TorchRL handles the low-level action plumbing. We will control a cube-to-bowl task without learning. A policy emits a single RobotMacroAction object under the normal \"action\" key, and a TorchRL transform expands and executes that high-level command through MuJoCo. The same pattern can later provide demonstrations, curricula, or a safe initialization for residual RL. What you will learn# how to instantiate a Menagerie-backed custom MuJoCo environment; how to use RobotMacroAction as a readable action object; how URScriptPrimitiveTransform lets env.step(td) consume those actions directly; how to write a scripted contact-rich cube-to-bowl policy as an explicit list of poses and gripper commands; how to request rendered pixels from the environment and record them with VideoRecorder; how to reset and reuse one environment across scripted scenes. from __future__ import annotations import importlib.util import os from collections.abc import Iterator import torch from tensordict import TensorDict, TensorDictBase from torchrl.envs import CubeBowlEnv, RobotMacroAction, RobotMacroActionMode, step_mdp from torchrl.record import VideoRecorder _has_mujoco = importlib.util.find_spec(\"mujoco\") is not None if not _has_mujoco: raise ImportError(\"This tutorial requires the `mujoco` Python package.\") Environment# The scene uses the MuJoCo Menagerie UR5e and Robotiq 2F-85 models. Set TORCHRL_MUJOCO_MENAGERIE_PATH to a checkout containing the universal_robots_ur5e and robotiq_2f85 assets: git clone --depth=1 --filter=blob:none --sparse \\ https://github.com/google-deepmind/mujoco_menagerie.git /tmp/menagerie git -C /tmp/menagerie sparse-checkout set \\ universal_robots_ur5e robotiq_2f85 export TORCHRL_MUJOCO_MENAGERIE_PATH=/tmp/menagerie CubeBowlEnv exposes the state needed for scripted manipulation: robot joints, gripper joints, the pinch site, the cube pose, the bowl target and a success flag. The task reward is intentionally sparse. It is 1 only when the cube center is within the environment\u2019s placement tolerance of the bowl target coordinate, and 0 otherwise. MENAGERIE_PATH = os.environ.get(CubeBowlEnv.MENAGERIE_ENV_VAR) if MENAGERIE_PATH is None: raise RuntimeError( f\"Set {CubeBowlEnv.MENAGERIE_ENV_VAR} to a MuJoCo Menagerie checkout \" \"before running this tutorial.\" ) MAX_EPISODE_STEPS = 12000 RENDER_WIDTH = 480 RENDER_HEIGHT = 360 VIDEO_FRAME_SKIP = 16 VIDEO_INTERVAL_MS = 55 IK_KWARGS = { \"iterations\": 220, \"orientation_weight\": 1.0, \"step_size\": 0.7, \"damping\": 1e-4, } RobotMacroAction as the action# A readable manipulation policy should not have to emit magic flat tensors or loose collections of root TensorDict keys. It can emit one structured object under \"action\". RobotMacroAction is that object: RobotMacroAction.reach_pose(position=..., quaternion=...) moves the arm; RobotMacroAction.close_gripper() closes only the gripper and keeps the arm where it is; RobotMacroAction.reach_pose(..., gripper=\"closed\") moves the arm and closes the gripper in one macro action; RobotMacroAction.RESET asks the environment to return to its configured home joint posture. The symbolic gripper commands \"open\", \"closed\" and \"keep\" are resolved by the transform. User code never has to know the Robotiq actuator\u2019s numeric command range. When we want a task-specific grasp, we can still make the target explicit in object units: close about one millimeter past the cube width, ask the environment to convert that width to a gripper command, and pass that command to the RobotMacroAction. Create the MuJoCo scene# We start by constructing the cube-and-bowl task once. from_pixels=True asks the environment to include rendered frames in the TensorDict, which a standard VideoRecorder can capture. We then append one primitive-control transform with execute=True. After that, env.step accepts a RobotMacroAction directly under td[\"action\"] and executes the expanded low-level sequence internally. env = CubeBowlEnv( seed=0, max_episode_steps=MAX_EPISODE_STEPS, menagerie_path=MENAGERIE_PATH, from_pixels=True, pixels_only=False, render_width=RENDER_WIDTH, render_height=RENDER_HEIGHT, ) assert env.action_spec.shape[-1] == 7 assert env.robot_home_qpos is not None primitive_control = env.make_urscript_transform( execute=True, macro_steps=250, settle_steps=1600, ik_kwargs=IK_KWARGS, stack_rewards=True, stack_observations=False, ) recorder = VideoRecorder( logger=None, tag=\"scripted_macro\", skip=VIDEO_FRAME_SKIP, make_grid=False, ) env = env.append_transform(recorder) env = env.append_transform(primitive_control) cube_width = 2 * env.OBJECT_HALF_SIZE grasp_width = cube_width - 0.001 gripper_close_command = env.gripper_ctrl_for_width(grasp_width) workspace_layouts = torch.tensor( [ # Cube in front of the robot, bowl behind it and slightly to the right. [[0.44, -0.21], [0.48, 0.10]], # Cube on the robot\u0027s right-front side, bowl on the left-back side. [[0.51, -0.18], [0.39, 0.04]], # Cube in front of the robot, bowl on the left-back side. [[0.45, -0.20], [0.38, 0.02]], # Cube on the robot\u0027s right-front side, bowl near the center-back. [[0.52, -0.18], [0.45, 0.02]], ], ) def random_scene_reset(rollout_index: int) -\u003e TensorDict: layout = workspace_layouts[rollout_index % len(workspace_layouts)] cube_xy = layout[0].view(1, 2) bowl_xy = layout[1].view(1, 2) cube_pos = torch.cat( [cube_xy, torch.full_like(cube_xy[..., :1], env.cube_position[2])], dim=-1, ) bowl_target_z = env.bowl_position[2] + env.MENAGERIE_BOWL_TARGET_OFFSET[2] bowl_pos = torch.cat( [bowl_xy, torch.full_like(bowl_xy[..., :1], bowl_target_z)], -1 ) return TensorDict( { \"cube_pos\": cube_pos.to(dtype=env.dtype, device=env.device), \"bowl_pos\": bowl_pos.to(dtype=env.dtype, device=env.device), }, batch_size=[1], device=env.device, ) td = env.reset() assert td[\"robot_qpos\"].shape[-1] == 6 assert env.low_level_action(td[\"robot_qpos\"]).shape[-1] == 7 assert td[\"pixels\"].shape[-3:] == torch.Size([RENDER_HEIGHT, RENDER_WIDTH, 3]) Policy shape# A scripted policy can be just a generator of explicit robot commands. This is the minimal shape we want users to see: build a list of poses and gripper commands, place the next RobotMacroAction under the normal action key, and call env.step. def gen_small_actions(td: TensorDictBase) -\u003e Iterator[RobotMacroAction]: joints = td[\"robot_qpos\"].clone() joints[..., 0] = joints[..., 0] + 0.35 yield RobotMacroAction.reach_joints(joints=joints, gripper=\"open\", steps=18) yield RobotMacroAction.close_gripper(steps=18) small_actions = gen_small_actions(td) small_action = next(small_actions) td[\"action\"] = small_action assert td[\"action\"].mode.shape == torch.Size([1, 1]) A scripted cube-to-bowl macro# We can now write the cube-to-bowl controller as a readable sequence of manual robot commands. The generator below is deliberately explicit: it names the poses we want the pinch site to reach and interleaves them with gripper commands. home_qpos = torch.as_tensor( env.robot_home_qpos, dtype=td[\"robot_qpos\"].dtype, device=td[\"robot_qpos\"].device, ).view(1, 6) policy_state: dict[str, TensorDictBase | torch.Tensor] = { \"td\": td, \"gripper_quat\": td[\"pinch_quat\"].clone(), } def pose_at( xyz: torch.Tensor, quat: torch.Tensor | None = None ) -\u003e tuple[torch.Tensor, torch.Tensor]: if quat is None: quat = torch.zeros(xyz.shape[:-1] + (4,), dtype=xyz.dtype, device=xyz.device) quat[..., 0] = 1.0 else: quat = quat.to(dtype=xyz.dtype, device=xyz.device).expand(xyz.shape[:-1] + (4,)) return xyz, quat def carry_action(alpha: float, bowl: torch.Tensor) -\u003e RobotMacroAction: current_td = policy_state[\"td\"] gripper_quat = policy_state[\"gripper_quat\"] cube = current_td[\"cube_pos\"].clone() carry_start_cube = policy_state[\"carry_start_cube\"] pinch_to_cube = current_td[\"pinch_pos\"].clone() - cube desired_xy = carry_start_cube[..., :2] + alpha * ( bowl[..., :2] - carry_start_cube[..., :2] ) desired_cube = torch.cat( [ desired_xy, torch.full_like(bowl[..., 2:3], 0.24), ], dim=-1, ) position, quaternion = pose_at(desired_cube + pinch_to_cube, gripper_quat) return RobotMacroAction.reach_pose( position=position, quaternion=quaternion, gripper=\"closed\", gripper_command=gripper_close_command, steps=80, settle_steps=20, ) def gen_actions(td: TensorDictBase) -\u003e Iterator: cube = td[\"cube_pos\"].clone() bowl = td[\"bowl_pos\"].clone() quat = td[\"pinch_quat\"].clone() grasp_offset = cube.new_tensor([[0.0, 0.0, -0.016]]) # Action 0: Keep the arm at the reset joint target and let the scene settle. yield RobotMacroAction.wait(gripper=\"open\", steps=1, settle_steps=19) # Action 1: Fully open the gripper before approaching the cube. yield RobotMacroAction.open_gripper(steps=100, settle_steps=20) current_td = policy_state[\"td\"] cube = current_td[\"cube_pos\"].clone() bowl = current_td[\"bowl_pos\"].clone() quat = current_td[\"pinch_quat\"].clone() position, quaternion = pose_at(cube + cube.new_tensor([[0.0, 0.0, 0.18]]), quat) # Action 2: Move the open gripper above the cube. yield RobotMacroAction.reach_pose( position=position, quaternion=quaternion, gripper=\"open\", steps=180, settle_steps=60, ) position, quaternion = pose_at(cube + grasp_offset, quat) # Action 3: Lower the open gripper to the grasp pose around the cube. yield RobotMacroAction.reach_pose( position=position, quaternion=quaternion, gripper=\"open\", steps=180, settle_steps=60, ) # Action 4: Close the gripper to a grasp about one millimeter tighter than # the cube width. yield RobotMacroAction.close_gripper( command=gripper_close_command, steps=160, settle_steps=80 ) current_td = policy_state[\"td\"] cube = current_td[\"cube_pos\"].clone() pinch_to_cube = current_td[\"pinch_pos\"].clone() - cube position, quaternion = pose_at( cube + pinch_to_cube + cube.new_tensor([[0.0, 0.0, 0.20]]), quat, ) # Action 5: Lift the grasped cube above the table. yield RobotMacroAction.reach_pose( position=position, quaternion=quaternion, gripper=\"closed\", gripper_command=gripper_close_command, steps=120, settle_steps=60, ) # The cube is not welded to the gripper. It is held by contact and # friction between the pads. If we ask for one large move directly to the # bowl, the fingers can drag faster than the cube can safely follow: the # cube may slide inside the grasp, get pushed out, or arrive shifted enough # that the final drop misses the bowl. We therefore carry it through a few # intermediate waypoints in the table plane. After each waypoint, the next # command uses the latest observed cube and finger positions. policy_state[\"carry_start_cube\"] = policy_state[\"td\"][\"cube_pos\"].clone() # Action 6: Carry the cube one quarter of the way toward the bowl. yield carry_action(0.25, bowl) # Action 7: Carry the cube halfway toward the bowl. yield carry_action(0.50, bowl) # Action 8: Carry the cube three quarters of the way toward the bowl. yield carry_action(0.75, bowl) # Action 9: Carry the cube above the bowl center. yield carry_action(1.00, bowl) drop_cube = torch.cat( [ bowl[..., :1], bowl[..., 1:2], torch.full_like(bowl[..., 2:3], 0.13), ], dim=-1, ) current_td = policy_state[\"td\"] cube = current_td[\"cube_pos\"].clone() pinch_to_cube = current_td[\"pinch_pos\"].clone() - cube position, quaternion = pose_at(drop_cube + pinch_to_cube, quat) # Action 10: Lower the grasped cube into the bowl. yield RobotMacroAction.reach_pose( position=position, quaternion=quaternion, gripper=\"closed\", gripper_command=gripper_close_command, steps=100, settle_steps=40, ) # Action 11: Open the gripper to release the cube. yield RobotMacroAction.open_gripper(steps=100, settle_steps=20) # Action 12: Wait with the gripper open so the cube can settle in the bowl. yield RobotMacroAction.wait(gripper=\"open\", steps=240) current_td = policy_state[\"td\"] retreat_xyz = torch.cat( [ current_td[\"pinch_pos\"][..., :2], torch.full_like(current_td[\"pinch_pos\"][..., 2:3], 0.26), ], dim=-1, ) position, quaternion = pose_at(retreat_xyz, quat) # Action 13: Retreat upward and away from the released cube. yield RobotMacroAction.reach_pose( position=position, quaternion=quaternion, gripper=\"open\", steps=120, settle_steps=60, ) # Action 14: Return the arm to the environment\u0027s reset joint configuration. yield RobotMacroAction.RESET # Action 15: Hold the reset pose while the final reward is measured. yield RobotMacroAction.wait(gripper=\"open\", steps=800) def action_mode(action) -\u003e int | None: if not hasattr(action, \"mode\"): return None return int(action.mode.reshape(-1)[0].item()) def action_gripper(action) -\u003e int: if not hasattr(action, \"gripper\"): return RobotMacroAction.GRIPPER_OPEN return int(action.gripper.reshape(-1)[0].item()) def run_scripted_rollout(td: TensorDictBase) -\u003e TensorDictBase: policy_state[\"td\"] = td policy_state[\"gripper_quat\"] = td[\"pinch_quat\"].clone() policy_state.pop(\"carry_start_cube\", None) grasp_distance = torch.full_like(td[\"cube_pos\"][..., :1], float(\"inf\")) cube_motion_while_closed = torch.zeros_like(grasp_distance) cube_lift_while_closed = torch.zeros_like(grasp_distance) max_reward = torch.zeros_like(grasp_distance) last_reward = torch.zeros_like(grasp_distance) closed_reference_cube: torch.Tensor | None = None script_actions = gen_actions(td) while True: try: td[\"action\"] = next(script_actions) except StopIteration: break action = td[\"action\"] transition = env.step(td) reward = transition[\"next\", \"reward\"] max_reward = torch.maximum(max_reward, reward.amax(dim=-2)) last_reward = reward[..., -1, :] td = step_mdp(transition) policy_state[\"td\"] = td mode = action_mode(action) gripper = action_gripper(action) if mode == int(RobotMacroActionMode.CLOSE_GRIPPER): grasp_distance = torch.minimum( grasp_distance, env.gripper_cube_distance(td) ) closed_reference_cube = td[\"cube_pos\"].clone() if ( closed_reference_cube is not None and gripper == RobotMacroAction.GRIPPER_CLOSED ): cube_motion = (td[\"cube_pos\"] - closed_reference_cube).norm( dim=-1, keepdim=True ) cube_lift = td[\"cube_pos\"][..., 2:3] - closed_reference_cube[..., 2:3] cube_motion_while_closed = torch.maximum( cube_motion_while_closed, cube_motion ) cube_lift_while_closed = torch.maximum(cube_lift_while_closed, cube_lift) robot_home_error = (td[\"robot_qpos\"] - home_qpos).norm(dim=-1, keepdim=True) assert grasp_distance.item() \u003c= 0.025, grasp_distance.item() assert cube_motion_while_closed.item() \u003e= 0.05, cube_motion_while_closed.item() assert cube_lift_while_closed.item() \u003e= 0.08, cube_lift_while_closed.item() assert robot_home_error.item() \u003c= 0.04, robot_home_error.item() assert max_reward.item() == 1.0, ( max_reward.item(), td[\"cube_pos\"], td[\"bowl_pos\"], ) assert last_reward.item() == 1.0, last_reward.item() assert td[\"success\"].all() return td Fixed scene video# First, render the default task once. This is the simple cube-to-bowl scene used above to introduce the scripted policy. td = run_scripted_rollout(td) scripted_macro_animation = recorder.to_animation( title=\"Scripted RobotMacroAction rollout\", interval=VIDEO_INTERVAL_MS, clear=True, ) Randomized workspace video# Next, reset the same environment onto new reachable layouts sampled from a square in the table plane. For readability, each rollout starts from a different pair of workspace regions: front-to-back, right-front to left-back, front-to-left-back, and right-front to center-back. The VideoRecorder keeps appending frames until we ask it to render, so the final video is one long clip containing all four randomized rollouts. rollout_count = len(workspace_layouts) for rollout_index in range(rollout_count): td = env.reset(random_scene_reset(rollout_index)) td = run_scripted_rollout(td) Rendered randomized rollouts# The second animation shows the same hand-written policy on the randomized scenes. randomized_macro_animation = recorder.to_animation( title=\"Randomized RobotMacroAction rollouts\", interval=VIDEO_INTERVAL_MS, clear=True, ) Reset and reuse the same environment# The same transformed environment can be reset and reused for another scripted rollout. reset_td = env.reset() assert reset_td[\"robot_qpos\"].shape == td[\"robot_qpos\"].shape Conclusion and further reading# Macro actions are useful when a policy should choose what to do at a slower time scale while a scripted controller handles short-horizon actuation. They are not a replacement for learning in difficult contact-rich settings: they still depend on calibration, solver quality and reachable waypoints. Their practical value is that they provide a strong baseline, a source of demonstrations, and a structured action space for residual policies or RL fine tuning. See also Macro-control primitives for the design guide comparing generic and domain-specific macro transforms. CubeBowlEnv for the custom MuJoCo task used here. MujocoEnv for the base class behind custom MuJoCo environments. RobotMacroAction for the structured action object used by the scripted policy. MacroPrimitiveTransform for robot-agnostic macro expansion that domain transforms specialize via _resolve hooks. URScriptPrimitiveTransform for the URScript-style preset used in this tutorial. MultiAction for executing batched low-level action sequences. env.close() Total running time of the script: (45 minutes 57.361 seconds) Download Jupyter notebook: mujoco_cube_bowl_macros.ipynb Download Python source code: mujoco_cube_bowl_macros.py Download zipped: mujoco_cube_bowl_macros.zip Gallery generated by Sphinx-Gallery",
+       "author": {
+         "@type": "Organization",
+         "name": "PyTorch Contributors",
+         "url": "https://pytorch.org"
+       },
+       "image": "https://pytorch.org/docs/stable/_static/img/pytorch_seo.png",
+       "mainEntityOfPage": {
+         "@type": "WebPage",
+         "@id": "/tutorials/mujoco_cube_bowl_macros.html"
+       },
+       "datePublished": "2023-01-01T00:00:00Z",
+       "dateModified": "2023-01-01T00:00:00Z"
+     }
+ </script>
+  <script>
+    // Tutorials Call to action event tracking
+    $("[data-behavior='call-to-action-event']").on('click', function () {
+      fbq('trackCustom', "Download", {
+        tutorialTitle: $('h1:first').text(),
+        downloadLink: this.href,
+        tutorialLink: window.location.href,
+        downloadTitle: $(this).attr("data-response")
+      });
+      if (typeof gtag === 'function') {
+        gtag('event', 'click', {
+          'event_category': $(this).attr("data-response"),
+          'event_label': $("h1").first().text(),
+          'tutorial_link': window.location.href
+        });
+      }
+    });
+  </script>
+  
+  </body>
+</html>

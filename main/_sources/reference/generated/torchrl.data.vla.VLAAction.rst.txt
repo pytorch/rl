@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.data.vla
+
+
+VLAAction
+=========
+
+.. autoclass:: VLAAction
+    :members:

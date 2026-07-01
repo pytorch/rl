@@ -1,0 +1,6 @@
+﻿torchrl.trainers.algorithms.configs.trainers.PPOTrainerConfig
+=============================================================
+
+.. currentmodule:: torchrl.trainers.algorithms.configs.trainers
+
+.. autoclass:: PPOTrainerConfig

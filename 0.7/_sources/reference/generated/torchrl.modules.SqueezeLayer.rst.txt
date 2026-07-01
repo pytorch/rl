@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+SqueezeLayer
+============
+
+.. autoclass:: SqueezeLayer
+    :members:

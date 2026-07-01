@@ -1,0 +1,7 @@
+# torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig
+
+*class*torchrl.trainers.algorithms.configs.trainers.CQLTrainerConfig(*collector: Any*, *total_frames: int*, *optim_steps_per_batch: int | None*, *loss_module: Any*, *optimizer: Any*, *logger: Any*, *save_trainer_file: Any*, *replay_buffer: Any*, *frame_skip: int = 1*, *clip_grad_norm: bool = True*, *clip_norm: float | None = None*, *progress_bar: bool = True*, *seed: int | None = None*, *save_trainer_interval: int = 10000*, *log_interval: int = 10000*, *create_env_fn: Any = None*, *actor_network: Any = None*, *qvalue_network: Any = None*, *target_net_updater: Any = None*, *async_collection: bool = False*, *log_timings: bool = False*, *auto_log_optim_steps: bool = True*, *enable_logging: bool = True*, *log_rewards: bool = True*, *log_actions: bool = True*, *log_observations: bool = False*, *hooks: list[Any] | None = None*, *_target_: str = 'torchrl.trainers.algorithms.configs.trainers._make_cql_trainer'*)[[source]](../../_modules/torchrl/trainers/algorithms/configs/trainers.html#CQLTrainerConfig)
+
+Hydra configuration for [`CQLTrainer`](torchrl.trainers.algorithms.CQLTrainer.html#torchrl.trainers.algorithms.CQLTrainer).
+
+Every kwarg accepted by `CQLTrainer.__init__` is exposed as a field here.

@@ -1,0 +1,9 @@
+﻿.. currentmodule:: torchrl.data
+
+
+ConstantKLController
+====================
+
+.. autoclass:: ConstantKLController
+    :members:
+    :inherited-members:

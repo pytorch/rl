@@ -1,0 +1,8 @@
+﻿.. currentmodule:: torchrl.modules
+
+
+GPWorldModel
+============
+
+.. autoclass:: GPWorldModel
+    :members:
