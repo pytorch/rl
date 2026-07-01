@@ -2,6 +2,14 @@ name: Unit-tests on Windows
 
 on:
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - '**.rst'
+      - 'benchmarks/**'
+      - 'tutorials/**'
+      - 'examples/**'
+      - 'sota-implementations/**'
   push:
     branches:
       - nightly
@@ -21,7 +29,31 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      in_scope: ${{ steps.filter.outputs.any_changed || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            torchrl/**
+            test/**
+            setup.py
+            pyproject.toml
+            .github/unittest/windows_optdepts/**
+
   unittests-cpu:
+    needs: changes
+    # Skip on PRs unless core torchrl/test code is touched, or an opt-in label is present.
+    if: >-
+      github.event_name != 'pull_request' ||
+      needs.changes.outputs.in_scope == 'true' ||
+      contains(github.event.pull_request.labels.*.name, 'ciflow/full') ||
+      contains(github.event.pull_request.labels.*.name, 'ciflow/windows')
     strategy:
       matrix:
         python-version:
