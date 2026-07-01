@@ -13,9 +13,9 @@ The backbone is any Hugging Face ``AutoModelForSequenceClassification`` with a
 single-output head. The helper functions live in the ``utils.py`` next to this script.
 
 Examples:
-    Train on the default summarization-comparisons dataset with a GPT2 backbone::
+    Train on the default summarization-comparisons dataset with a small Qwen backbone::
 
-        python reward_model.py model.name=gpt2
+        python reward_model.py model.name=Qwen/Qwen2.5-0.5B
 
     Run a quick hermetic smoke test (tiny from-scratch model, synthetic data)::
 
