@@ -64,6 +64,7 @@ scripts=(
     run_ppo_atari.sh
     run_ppo_mujoco.sh
     run_rnd_mujoco.sh
+    run_reward_model_training.sh
     run_sac.sh
     run_td3.sh
     run_td3bc.sh

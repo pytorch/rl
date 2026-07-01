@@ -25,6 +25,19 @@ commands = {
   logger.eval_episodes=4 \
   checkpoint.save_iter=2
 """,
+    "reward_model_training": """python sota-implementations/reward_model_training/reward_model.py \
+  model.name= \
+  data.dataset_name= \
+  data.synthetic_size=32 \
+  data.batch_size=8 \
+  data.max_length=32 \
+  optim.max_iters=3 \
+  logger.eval_iter=2 \
+  logger.eval_iters=1 \
+  logger.log_interval=1 \
+  logger.backend= \
+  checkpoint.save_iter=2
+""",
     "diffusion_bc": """python sota-implementations/diffusion_bc/diffusion_bc.py \
   optim.gradient_steps=55 \
   replay_buffer.dataset= \
