@@ -1230,12 +1230,18 @@ class PrioritizedSampler(Sampler):
 
     @property
     def default_priority(self) -> float:
+        # Return the RAW max priority. Every consumer feeds this value back through
+        # ``update_priority``, which applies the ``(p + eps) ** alpha`` transform
+        # exactly once. Returning an already-transformed value here caused new items
+        # to be transformed twice (``((p + eps) ** alpha + eps) ** alpha``), which
+        # systematically under-prioritized them (for ``alpha < 1``) and broke PER's
+        # "new experience is sampled at least once" guarantee.
         mp = self._max_priority[0]
         if mp is None:
             mp = 1
         if isinstance(mp, torch.Tensor):
             mp = mp.to(self.device)
-        return (mp + self._eps) ** self._alpha
+        return mp
 
     def sample(self, storage: Storage, batch_size: int) -> torch.Tensor:
         self._maybe_init_from_storage(storage)
@@ -1433,6 +1439,12 @@ class PrioritizedSampler(Sampler):
                 ).max(0)
             else:
                 return
+            # ``maxval`` is read from the sum-tree, which stores (p + eps) ** alpha.
+            # Convert it back to the raw priority so ``_max_priority`` is always the
+            # raw max, matching the non-recomputed path and what ``default_priority``
+            # expects (it re-applies the alpha transform once via ``update_priority``).
+            if self._alpha != 0:
+                maxval = (maxval ** (1.0 / self._alpha) - self._eps).clamp_min(0)
             self._max_priority = (maxval, maxidx)
 
     def mark_update(
