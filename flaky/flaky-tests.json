@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-06-30T07:25:49.202817+00:00",
+  "generated_at": "2026-07-01T07:40:28.682300+00:00",
   "analysis_period": {
     "start": "2026-06-23",
-    "end": "2026-06-29",
+    "end": "2026-06-30",
     "runs_analyzed": 30
   },
   "summary": {
-    "total_tests": 29445,
+    "total_tests": 29446,
     "flaky_count": 17,
     "new_flaky_count": 17,
     "resolved_count": 0
@@ -64,7 +64,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 1.589,
+      "avg_duration": 1.59,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -85,7 +85,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 1.596,
+      "avg_duration": 1.597,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -127,7 +127,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 1.477,
+      "avg_duration": 1.478,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -148,7 +148,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 1.477,
+      "avg_duration": 1.478,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -232,7 +232,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 3.178,
+      "avg_duration": 3.179,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -274,7 +274,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 25.556,
+      "avg_duration": 25.557,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -295,7 +295,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 25.569,
+      "avg_duration": 25.57,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -316,7 +316,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 25.583,
+      "avg_duration": 25.585,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
@@ -337,7 +337,7 @@
       "failed": 0,
       "error": 8,
       "reruns": 0,
-      "avg_duration": 25.577,
+      "avg_duration": 25.578,
       "recent_failures": [
         "2026-06-27T17:45:50Z",
         "2026-06-27T17:45:50Z",
