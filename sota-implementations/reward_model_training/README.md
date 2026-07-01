@@ -13,6 +13,10 @@ loss = -log σ(r_θ(x, y_chosen) - r_θ(x, y_rejected))
 This is the reward-modelling stage that precedes policy optimization (e.g.
 [GRPO](../grpo/)) in RLHF pipelines.
 
+This recipe is a minimal **single-node reference implementation**, not a large-scale
+training stack. See [Scaling and integration](#scaling-and-integration) for how it is
+meant to fit into serious training.
+
 ## Install
 
 ```bash
@@ -21,10 +25,10 @@ pip install -r requirements.txt
 
 ## Usage
 
-Train on the default summarization-comparisons dataset with a GPT2 backbone:
+Train on the default summarization-comparisons dataset with a small Qwen backbone:
 
 ```bash
-python reward_model.py model.name=gpt2
+python reward_model.py model.name=Qwen/Qwen2.5-0.5B
 ```
 
 The backbone is **model-agnostic**: `model.name` accepts any Hugging Face model id
@@ -35,7 +39,7 @@ Use a different preference dataset (must expose `chosen`/`rejected`, and optiona
 `prompt` fields):
 
 ```bash
-python reward_model.py model.name=gpt2 data.dataset_name=Anthropic/hh-rlhf \
+python reward_model.py model.name=Qwen/Qwen2.5-0.5B data.dataset_name=Anthropic/hh-rlhf \
   data.split_train=train data.split_val=test
 ```
 
@@ -69,3 +73,26 @@ without the `datasets` dependency (this is what CI exercises):
 python reward_model.py model.name= data.dataset_name= \
   optim.max_iters=3 logger.eval_iter=2 logger.eval_iters=1 logger.backend=
 ```
+
+## Scaling and integration
+
+This recipe is a minimal single-node baseline: a readable, single-process training loop
+that exercises the loss and data format end to end. It is **not** a large-scale
+reward-model training stack, and is not meant to become one.
+
+TorchRL owns the **contract**, not the parallelism. What this recipe provides:
+
+- a canonical TensorDict **preference-data format** (prompt / chosen / rejected),
+- a canonical **reward-model loss**
+  ([`RewardModelLoss`](../../torchrl/objectives/llm/reward.py), Bradley-Terry),
+- a small **reference trainer** (this recipe),
+- and, in the future, **adapters/scorers** so an externally trained reward model plugs
+  back into TorchRL GRPO/PPO/SFT pipelines.
+
+For serious distributed reward-model training (parallelism, sharded checkpointing,
+fault tolerance, packed/streamed datasets, mixed precision, activation checkpointing,
+multi-node orchestration), use a dedicated backend such as TRL/Accelerate/FSDP,
+TorchTitan/FSDP2, Megatron/NeMo, or OpenRLHF, while **preserving the TorchRL data and
+scoring contract** so the resulting model plugs straight back into TorchRL's RLHF
+pipelines. Interfacing with those backends, rather than reimplementing them, is the
+intended direction for scaling this and the rest of the TorchRL LLM stack.
