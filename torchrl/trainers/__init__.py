@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from .learners import Learner, LearnerCapabilities, LocalLearner
 from .trainers import (
     BatchSubSampler,
     ClearCudaCache,
@@ -31,6 +32,9 @@ __all__ = [
     "CountFramesLog",
     "DefaultOptimizationStepper",
     "EarlyStopping",
+    "Learner",
+    "LearnerCapabilities",
+    "LocalLearner",
     "LogScalar",
     "LogTiming",
     "LogValidationReward",

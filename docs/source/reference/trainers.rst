@@ -49,3 +49,4 @@ Documentation Sections
    trainers_basics
    trainers_loggers
    trainers_hooks
+   trainers_learners
