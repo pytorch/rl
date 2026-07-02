@@ -1683,6 +1683,37 @@ class TestLocalLearner:
         with pytest.raises(NotImplementedError):
             Learner().get_weights()
 
+    def test_state_dict_round_trip_includes_optimizer(self):
+        # plain nn.Module.state_dict() would silently drop the optimizer's
+        # state (Optimizer is not an nn.Module) -- this is the regression test
+        # for that gap. Momentum must be nonzero, or SGD never populates a
+        # momentum_buffer in its state to begin with.
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+        learner = LocalLearner(model, optimizer)
+        loss_module = _ToyRegressionLoss(model)
+        torch.manual_seed(2)
+        for _ in range(3):
+            learner.update(self._batch(), loss_module)
+        checkpoint = learner.state_dict()
+        saved_weight = model.weight.clone()
+        saved_momentum = next(iter(learner.optimizer.state.values()))[
+            "momentum_buffer"
+        ].clone()
+
+        with torch.no_grad():
+            model.weight.zero_()
+        for state in learner.optimizer.state.values():
+            state["momentum_buffer"].zero_()
+
+        learner.load_state_dict(checkpoint)
+        torch.testing.assert_close(model.weight, saved_weight)
+        restored_momentum = next(iter(learner.optimizer.state.values()))[
+            "momentum_buffer"
+        ]
+        torch.testing.assert_close(restored_momentum, saved_momentum)
+
 
 @pytest.mark.skipif(
     not torch.distributed.is_available(), reason="torch.distributed required"
@@ -1780,6 +1811,86 @@ class TestFSDP2Learner:
         gathered = fsdp2_learner.get_weights()
         torch.testing.assert_close(gathered["weight"], local_model.weight)
         torch.testing.assert_close(gathered["bias"], local_model.bias)
+
+    def test_grad_accumulation_defers_step(self):
+        learner, loss_module, model = self._make(grad_accum_steps=2, lr=1.0)
+        before = model.weight.full_tensor().clone()
+        learner.update(self._batch(seed=1), loss_module)
+        assert torch.equal(before, model.weight.full_tensor())
+        learner.update(self._batch(seed=2), loss_module)
+        assert not torch.equal(before, model.weight.full_tensor())
+
+    def test_grad_accumulation_matches_non_sharded_reference(self):
+        """Regression test for the set_requires_gradient_sync(False) toggle
+        update() uses to skip communication on non-final accumulation steps:
+        the accumulated gradient must still equal a plain (non-sharded)
+        reference that accumulates the same two micro-batches."""
+        from torch.distributed._composable.fsdp import fully_shard
+        from torch.distributed.device_mesh import init_device_mesh
+
+        batch1, batch2 = self._batch(seed=10), self._batch(seed=11)
+
+        # update() divides each micro-batch's loss by grad_accum_steps before
+        # backward (accumulation averages, rather than sums, the microbatches),
+        # so the reference must apply the same scaling.
+        torch.manual_seed(0)
+        ref_model = nn.Linear(4, 1)
+        ref_loss = _ToyRegressionLoss(ref_model)
+        ref_model.zero_grad()
+        (ref_loss(batch1).get("loss_mse") / 2).backward()
+        (ref_loss(batch2).get("loss_mse") / 2).backward()
+        ref_grad = ref_model.weight.grad.clone()
+
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        mesh = init_device_mesh("cpu", (1,))
+        fully_shard(model, mesh=mesh)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        learner = FSDP2Learner(model, optimizer, grad_accum_steps=2)
+        loss_module = _ToyRegressionLoss(model)
+        learner.update(batch1, loss_module)  # sync disabled; .grad stays None
+        learner.update(batch2, loss_module)  # sync re-enabled; optimizer.step()
+        # optimizer.step() does not clear .grad (only zero_grad() does), so the
+        # fully-accumulated, synced gradient is still readable here.
+        accumulated_grad = model.weight.grad.full_tensor()
+        torch.testing.assert_close(accumulated_grad, ref_grad)
+
+    def test_state_dict_round_trip_includes_optimizer(self):
+        from torch.distributed._composable.fsdp import fully_shard
+        from torch.distributed.device_mesh import init_device_mesh
+
+        # momentum must be nonzero, or SGD never populates optimizer state to
+        # begin with, and the DCP loader has nothing meaningful to restore.
+        torch.manual_seed(0)
+        model = nn.Linear(4, 1)
+        mesh = init_device_mesh("cpu", (1,))
+        fully_shard(model, mesh=mesh)
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+        learner = FSDP2Learner(model, optimizer)
+        loss_module = _ToyRegressionLoss(model)
+
+        torch.manual_seed(3)
+        for _ in range(3):
+            learner.update(self._batch(), loss_module)
+        checkpoint = learner.state_dict()
+        saved_weight = model.weight.full_tensor().clone()
+        saved_momentum = (
+            next(iter(optimizer.state.values()))["momentum_buffer"]
+            .full_tensor()
+            .clone()
+        )
+
+        with torch.no_grad():
+            model.weight.to_local().zero_()
+        for state in optimizer.state.values():
+            state["momentum_buffer"].to_local().zero_()
+
+        learner.load_state_dict(checkpoint)
+        torch.testing.assert_close(model.weight.full_tensor(), saved_weight)
+        restored_momentum = next(iter(optimizer.state.values()))[
+            "momentum_buffer"
+        ].full_tensor()
+        torch.testing.assert_close(restored_momentum, saved_momentum)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,25 @@ from torch import nn
 from torchrl.objectives.common import LossModule
 
 
+def _clone_tensors(obj):
+    """Recursively clone every tensor in a (possibly nested) state-dict-like structure.
+
+    ``nn.Module.state_dict()`` and ``Optimizer.state_dict()`` both return
+    views onto their live tensors, not independent copies, so holding onto
+    their output as a "checkpoint" while training continues silently mutates
+    that checkpoint too.
+    """
+    if isinstance(obj, torch.Tensor):
+        return obj.clone()
+    if isinstance(obj, dict):
+        return {k: _clone_tensors(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clone_tensors(v) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(_clone_tensors(v) for v in obj)
+    return obj
+
+
 @dataclass
 class LearnerCapabilities:
     """Declares what a :class:`Learner` implementation supports.
@@ -61,6 +80,16 @@ class Learner(nn.Module):
     ``fully_shard``) and how :meth:`get_weights` gathers the result, not how a
     step is taken.
 
+    During gradient accumulation, if ``self.model`` exposes
+    ``set_requires_gradient_sync`` (as an FSDP2 ``fully_shard``-wrapped module
+    does), :meth:`update` disables cross-rank gradient synchronization on
+    every accumulation step except the last: gradients still accumulate
+    correctly (verified against a non-sharded reference), but the
+    communication (reduce-scatter) only happens once per accumulation window
+    instead of once per micro-batch. This is a no-op for
+    :class:`~torchrl.trainers.learners.LocalLearner`, whose model has no such
+    method.
+
     .. note::
         ``update`` requires ``loss_module.forward`` to follow the
         :class:`~torchrl.objectives.common.LossModule` convention: every
@@ -73,6 +102,17 @@ class Learner(nn.Module):
         :meth:`get_weights` to synchronize a learner's parameters to remote
         inference workers, so a ``Learner`` composes with the existing
         weight-sync machinery without changes on either side.
+
+    .. warning::
+        :meth:`state_dict` / :meth:`load_state_dict` are overridden (relative
+        to plain :class:`torch.nn.Module`) to checkpoint the optimizer state
+        alongside the model: a bare :class:`~torch.optim.Optimizer` is not an
+        ``nn.Module``, so the default ``nn.Module.state_dict()`` would
+        silently omit it, corrupting a training resume (Adam's moments, etc.,
+        would reset). Subclasses whose model/optimizer need
+        sharding-aware (DTensor) checkpointing, e.g.
+        :class:`~torchrl.trainers.learners.FSDP2Learner`, override these two
+        methods again with a DTensor-aware implementation.
     """
 
     capabilities: LearnerCapabilities = LearnerCapabilities()
@@ -100,6 +140,13 @@ class Learner(nn.Module):
         """
         if self._accum_step == 0:
             self.optimizer.zero_grad(set_to_none=True)
+
+        # Sharded (e.g. FSDP2) models can defer the cross-rank gradient
+        # reduction until the last micro-batch of an accumulation window;
+        # LocalLearner's plain model has no such method, so this is a no-op.
+        set_grad_sync = getattr(self.model, "set_requires_gradient_sync", None)
+        if set_grad_sync is not None:
+            set_grad_sync(self._accum_step == self.grad_accum_steps - 1)
 
         loss_td = loss_module(batch)
         loss_keys = [k for k in loss_td.keys() if k.startswith("loss")]
@@ -140,3 +187,25 @@ class Learner(nn.Module):
         inference roles.
         """
         raise NotImplementedError
+
+    def state_dict(self, *args, **kwargs) -> dict:  # noqa: D417
+        """Return a checkpoint covering the model, optimizer, and accumulation state.
+
+        See the class-level warning: this intentionally does not reuse plain
+        :meth:`torch.nn.Module.state_dict`, which would silently drop the
+        optimizer's state. The returned tensors are independent clones (both
+        ``nn.Module.state_dict()`` and ``Optimizer.state_dict()`` otherwise
+        return views onto the live parameters/state, so an in-place update
+        after checkpointing would silently corrupt the "saved" checkpoint too).
+        """
+        return {
+            "model": _clone_tensors(self.model.state_dict()),
+            "optimizer": _clone_tensors(self.optimizer.state_dict()),
+            "accum_step": self._accum_step,
+        }
+
+    def load_state_dict(self, state_dict: dict, *args, **kwargs) -> None:  # noqa: D417
+        """Restore a checkpoint produced by :meth:`state_dict`."""
+        self.model.load_state_dict(state_dict["model"])
+        self.optimizer.load_state_dict(state_dict["optimizer"])
+        self._accum_step = state_dict.get("accum_step", 0)
