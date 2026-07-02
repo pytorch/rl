@@ -5,24 +5,22 @@
 from __future__ import annotations
 
 import torch
-from tensordict import is_tensorclass, TensorDict, TensorDictBase
+from tensordict import TensorDict, TensorDictBase
 from torch import nn
 
-from torchrl.objectives.common import LossModule
 from torchrl.trainers.learners.common import Learner, LearnerCapabilities
 
 
 class LocalLearner(Learner):
     """A single-process, single-device :class:`~torchrl.trainers.learners.Learner`.
 
-    Wraps a model and an optimizer and performs the update in-process: forward
-    through ``loss_module``, sum the outputs' ``"loss"``-prefixed entries,
-    backward, optionally clip gradients, and step the optimizer. This is the
+    Holds a model and an optimizer, unwrapped and unsharded. This is the
     reference implementation the :class:`~torchrl.trainers.learners.Learner`
-    contract is designed around -- a sharded (e.g. FSDP2-backed) or remote
-    learner implements the same two methods, :meth:`update` and
-    :meth:`get_weights`, so that algorithm code written against
-    ``LocalLearner`` runs unchanged against those backends.
+    contract is designed around --
+    :class:`~torchrl.trainers.learners.FSDP2Learner` shards the same model
+    with ``fully_shard`` and reuses :meth:`~torchrl.trainers.learners.Learner.update`
+    unchanged, so algorithm code written against ``LocalLearner`` runs
+    unmodified under sharded training.
 
     Args:
         model (torch.nn.Module): the trainable module. Also the source for
@@ -78,39 +76,6 @@ class LocalLearner(Learner):
         self.grad_accum_steps = grad_accum_steps
         self._accum_step = 0
         self.capabilities = LearnerCapabilities(sharded=False, remote=False)
-
-    def update(self, batch: TensorDictBase, loss_module: LossModule) -> TensorDictBase:
-        if self._accum_step == 0:
-            self.optimizer.zero_grad(set_to_none=True)
-
-        loss_td = loss_module(batch)
-        loss_keys = [k for k in loss_td.keys() if k.startswith("loss")]
-        if not loss_keys:
-            raise ValueError(
-                "loss_module returned no keys starting with 'loss': "
-                f"{list(loss_td.keys())}. LossModule.forward must return at "
-                "least one 'loss'-prefixed entry."
-            )
-        total_loss = sum(loss_td.get(k) for k in loss_keys) / self.grad_accum_steps
-        total_loss.backward()
-
-        self._accum_step += 1
-        if self._accum_step < self.grad_accum_steps:
-            return loss_td
-        self._accum_step = 0
-
-        if self.clip_grad_norm is not None:
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(), self.clip_grad_norm
-            )
-            # loss_module may return a strict TensorClass (e.g. RewardModelLossOutput)
-            # that rejects undeclared keys; convert to a writable TensorDict first.
-            if is_tensorclass(loss_td):
-                loss_td = loss_td.to_tensordict()
-            loss_td.set("grad_norm", grad_norm)
-
-        self.optimizer.step()
-        return loss_td
 
     def get_weights(self) -> TensorDictBase:
         return TensorDict.from_module(self.model)
