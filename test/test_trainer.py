@@ -31,7 +31,13 @@ from torchrl.data import (
 from torchrl.envs.libs.gym import _has_gym
 from torchrl.objectives.common import LossModule
 from torchrl.testing import PONG_VERSIONED
-from torchrl.trainers import Learner, LocalLearner, LogValidationReward, Trainer
+from torchrl.trainers import (
+    FSDP2Learner,
+    Learner,
+    LocalLearner,
+    LogValidationReward,
+    Trainer,
+)
 from torchrl.trainers.algorithms.cql import CQLTrainer
 from torchrl.trainers.algorithms.ddpg import DDPGTrainer
 from torchrl.trainers.algorithms.dqn import DQNTrainer
@@ -1671,12 +1677,109 @@ class TestLocalLearner:
         with pytest.raises(ValueError, match="grad_accum_steps must be"):
             LocalLearner(model, optimizer, grad_accum_steps=0)
 
-    def test_base_learner_methods_are_abstract(self):
-        learner = Learner()
+    def test_base_learner_get_weights_is_abstract(self):
+        # update() is concrete on Learner (shared by LocalLearner/FSDP2Learner);
+        # only get_weights() -- the backend-specific gather -- remains abstract.
         with pytest.raises(NotImplementedError):
-            learner.update(self._batch(), _ToyRegressionLoss(nn.Linear(4, 1)))
-        with pytest.raises(NotImplementedError):
-            learner.get_weights()
+            Learner().get_weights()
+
+
+@pytest.mark.skipif(
+    not torch.distributed.is_available(), reason="torch.distributed required"
+)
+class TestFSDP2Learner:
+    """FSDP2Learner exercised on a single-rank process group (gloo/CPU).
+
+    world_size=1 does not exercise cross-rank sharding, but it runs the exact
+    fully_shard()/DTensor code path FSDP2Learner is built on, so these tests
+    catch real API breakage, not just interface stubs.
+    """
+
+    _PORT = "29601"
+
+    @pytest.fixture(autouse=True)
+    def _process_group(self):
+        import torch.distributed as dist
+
+        os.environ.setdefault("MASTER_ADDR", "localhost")
+        os.environ["MASTER_PORT"] = self._PORT
+        dist.init_process_group(backend="gloo", rank=0, world_size=1)
+        try:
+            yield
+        finally:
+            dist.destroy_process_group()
+
+    @staticmethod
+    def _make(clip_grad_norm=None, grad_accum_steps=1, lr=0.1, seed=0):
+        from torch.distributed._composable.fsdp import fully_shard
+        from torch.distributed.device_mesh import init_device_mesh
+
+        torch.manual_seed(seed)
+        model = nn.Linear(4, 1)
+        mesh = init_device_mesh("cpu", (1,))
+        fully_shard(model, mesh=mesh)
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+        learner = FSDP2Learner(
+            model,
+            optimizer,
+            clip_grad_norm=clip_grad_norm,
+            grad_accum_steps=grad_accum_steps,
+        )
+        loss_module = _ToyRegressionLoss(model)
+        return learner, loss_module, model
+
+    @staticmethod
+    def _batch(n=8, seed=None):
+        if seed is not None:
+            torch.manual_seed(seed)
+        return TensorDict(
+            {"x": torch.randn(n, 4), "y": torch.randn(n, 1)}, batch_size=[n]
+        )
+
+    def test_update_returns_loss_and_metric(self):
+        learner, loss_module, _ = self._make()
+        out = learner.update(self._batch(seed=1), loss_module)
+        assert "loss_mse" in out.keys()
+        assert "metric" in out.keys()
+
+    def test_clip_grad_norm_writes_grad_norm(self):
+        learner, loss_module, _ = self._make(clip_grad_norm=0.5)
+        out = learner.update(self._batch(seed=1), loss_module)
+        assert "grad_norm" in out.keys()
+        assert out.get("grad_norm") >= 0
+
+    def test_get_weights_returns_plain_tensors(self):
+        learner, _, _ = self._make()
+        weights = learner.get_weights()
+        for leaf in weights.values(True, True):
+            assert not isinstance(leaf, torch.distributed.tensor.DTensor)
+
+    def test_capabilities_report_sharded(self):
+        learner, _, _ = self._make()
+        assert learner.capabilities.sharded
+        assert not learner.capabilities.remote
+
+    def test_matches_local_learner_bit_exact(self):
+        """The whole point of the abstraction: same update() logic, same
+        result, whether the model is sharded or not."""
+        batch = self._batch(n=8, seed=42)
+
+        fsdp2_learner, fsdp2_loss, fsdp2_model = self._make(
+            clip_grad_norm=1.0, lr=0.5, seed=0
+        )
+        fsdp2_out = fsdp2_learner.update(batch, fsdp2_loss)
+
+        torch.manual_seed(0)
+        local_model = nn.Linear(4, 1)
+        local_optimizer = torch.optim.SGD(local_model.parameters(), lr=0.5)
+        local_learner = LocalLearner(local_model, local_optimizer, clip_grad_norm=1.0)
+        local_loss = _ToyRegressionLoss(local_model)
+        local_out = local_learner.update(batch, local_loss)
+
+        assert fsdp2_out.get("loss_mse").item() == local_out.get("loss_mse").item()
+        gathered = fsdp2_learner.get_weights()
+        torch.testing.assert_close(gathered["weight"], local_model.weight)
+        torch.testing.assert_close(gathered["bias"], local_model.bias)
 
 
 if __name__ == "__main__":
