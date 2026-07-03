@@ -558,6 +558,80 @@ def test_dqn_cartpole_checkpoint_render_factories(tmp_path, monkeypatch):
     assert "model_state_dict" in saved
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("mujoco") is None,
+    reason="MuJoCo is required for the PPO render factory integration test",
+)
+def test_ppo_inverted_pendulum_checkpoint_render_factories(tmp_path, monkeypatch):
+    ppo_dir = Path("sota-implementations/ppo").resolve()
+    utils_path = ppo_dir / "utils_mujoco.py"
+    make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
+    checkpoint_path = tmp_path / "ppo_inverted_pendulum.pt"
+    actor, _ = make_ppo_models(
+        "InvertedPendulum-v4",
+        device="cpu",
+        normalize_observation=False,
+    )
+    torch.save(
+        {
+            "model_state_dict": actor.state_dict(),
+            "env_name": "InvertedPendulum-v4",
+            "normalize_observation": False,
+        },
+        checkpoint_path,
+    )
+    config = RenderConfig(
+        ckpt=checkpoint_path,
+        policy=f"{utils_path}:make_render_policy",
+        env=f"{utils_path}:make_render_env",
+        env_kwargs={"env_name": "InvertedPendulum-v4"},
+        max_steps=3,
+        num_trajs=1,
+        format="npz",
+        render_backend="null",
+        out=tmp_path / "ppo_inverted_pendulum.npz",
+        mujoco_qpos_key="qpos",
+        overwrite=True,
+    )
+    env = make_render_env(config)
+    try:
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+    finally:
+        env.close()
+    qpos = result.trajectories[0].get("qpos")
+    assert qpos.shape[-1] == 2
+    assert result.metadata["trajectories"][0]["num_steps"] > 0
+
+    monkeypatch.syspath_prepend(str(ppo_dir))
+    save_checkpoint = import_from_string(
+        f"{ppo_dir / 'ppo_mujoco.py'}:_save_checkpoint"
+    )
+    saved_path = tmp_path / "saved_ppo.pt"
+    save_checkpoint(
+        saved_path,
+        cfg=OmegaConf.create(
+            {
+                "env": {
+                    "env_name": "InvertedPendulum-v4",
+                    "backend": "gym",
+                    "config_overrides": {},
+                    "num_envs": 1,
+                    "batch_mode": "parallel",
+                    "normalize_observation": False,
+                }
+            }
+        ),
+        model=actor,
+        collected_frames=24,
+        metrics={"eval/reward": 20.0},
+    )
+    saved = torch.load(saved_path, weights_only=False)
+    assert saved["frames"] == 24
+    assert saved["env_backend"] == "gym"
+    assert saved["normalize_observation"] is False
+
+
 def test_extract_qpos_trajectory():
     rollout = TensorDict({"qpos": torch.arange(6).reshape(2, 3)}, batch_size=[2])
     assert extract_qpos_trajectory(rollout, "qpos") == [
