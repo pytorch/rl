@@ -1,6 +1,10 @@
 # task and env
 env:
   env_name: HalfCheetah-v4
+  backend: gym
+  config_overrides: {}
+  normalize_observation: True
+  max_episode_steps: null
 
 # collector
 collector:
@@ -40,3 +44,7 @@ compile:
   compile: False
   compile_mode:
   cudagraphs: False
+
+checkpoint:
+  path: null
+  interval: 0
