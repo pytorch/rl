@@ -4,7 +4,8 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-from typing import Any
+import importlib.util
+from typing import Any, Literal
 
 import torch
 import torch.nn
@@ -26,6 +27,11 @@ from torchrl.envs.libs.gym import GymEnv
 from torchrl.modules import MLP, ProbabilisticActor, TanhNormal, ValueOperator
 from torchrl.record import VideoRecorder
 
+_has_mujoco_playground = importlib.util.find_spec("mujoco_playground") is not None
+
+_EnvBackend = Literal["gym", "mujoco_playground"]
+_MujocoPlaygroundEnv: type | None = None
+
 
 # ====================================================================
 # Environment utils
@@ -45,17 +51,45 @@ def make_env(
     device="cpu",
     from_pixels: bool = False,
     *,
+    backend: _EnvBackend = "gym",
+    config_overrides: dict[str, Any] | None = None,
     normalize_observation: bool = True,
     qpos_key: NestedKey | None = None,
 ):
-    env = GymEnv(env_name, device=device, from_pixels=from_pixels, pixels_only=False)
+    if backend == "gym":
+        env = GymEnv(
+            env_name, device=device, from_pixels=from_pixels, pixels_only=False
+        )
+    elif backend == "mujoco_playground":
+        if not _has_mujoco_playground:
+            raise ImportError(
+                "mujoco_playground is required for env.backend=mujoco_playground. "
+                "Run with `uv run --extra mujoco_playground ...`."
+            )
+        if from_pixels:
+            raise ValueError(
+                "from_pixels=True is not supported for MuJoCo Playground PPO envs."
+            )
+        MujocoPlaygroundEnv = _get_mujoco_playground_env()
+
+        env = MujocoPlaygroundEnv(
+            env_name,
+            device=device,
+            config_overrides=config_overrides,
+        )
+    else:
+        raise ValueError(
+            f"Unsupported PPO MuJoCo backend {backend!r}. "
+            "Expected 'gym' or 'mujoco_playground'."
+        )
     env = TransformedEnv(env)
     if normalize_observation:
         env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
         env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
-    env.append_transform(DoubleToFloat(in_keys=["observation"]))
+    if _observation_dtype(env) is torch.float64:
+        env.append_transform(DoubleToFloat(in_keys=["observation"]))
     if qpos_key is not None:
         env.append_transform(
             _MujocoQposTransform(
@@ -66,21 +100,41 @@ def make_env(
     return env
 
 
+def _observation_dtype(env) -> torch.dtype | None:
+    try:
+        return env.observation_spec["observation"].dtype
+    except Exception:
+        return None
+
+
+def _get_mujoco_playground_env() -> type:
+    global _MujocoPlaygroundEnv
+    if _MujocoPlaygroundEnv is None:
+        from torchrl.envs.libs.mujoco_playground import MujocoPlaygroundEnv
+
+        _MujocoPlaygroundEnv = MujocoPlaygroundEnv
+    return _MujocoPlaygroundEnv
+
+
 def make_render_env(spec: Any):
     """Builds a MuJoCo environment suitable for ``rlrender``.
 
-    The render factory emits an additional ``qpos`` TensorDict key for simple
-    MuJoCo-WASM playback. ``InvertedPendulum-v4`` is the first supported
+    The Gym render factory emits an additional ``qpos`` TensorDict key for
+    simple MuJoCo-WASM playback. ``InvertedPendulum-v4`` is the first supported
     checkpoint-rendering task and defaults to unnormalized observations so the
     saved policy can be replayed without a separate VecNorm state checkpoint.
     """
     env_name = spec.env_kwargs.get("env_name", "InvertedPendulum-v4")
+    backend = spec.env_kwargs.get("backend", "gym")
+    config_overrides = spec.env_kwargs.get("config_overrides")
     normalize_observation = bool(spec.env_kwargs.get("normalize_observation", False))
-    qpos_key = spec.env_kwargs.get("qpos_key", "qpos")
+    qpos_key = spec.env_kwargs.get("qpos_key", "qpos" if backend == "gym" else None)
     return make_env(
         env_name,
         device=spec.device,
         from_pixels=spec.from_pixels,
+        backend=backend,
+        config_overrides=config_overrides,
         normalize_observation=normalize_observation,
         qpos_key=qpos_key,
     )
@@ -167,10 +221,19 @@ def make_ppo_models_state(proof_environment, device):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, device, *, normalize_observation: bool = True):
+def make_ppo_models(
+    env_name,
+    device,
+    *,
+    backend: _EnvBackend = "gym",
+    config_overrides: dict[str, Any] | None = None,
+    normalize_observation: bool = True,
+):
     proof_environment = make_env(
         env_name,
         device=device,
+        backend=backend,
+        config_overrides=config_overrides,
         normalize_observation=normalize_observation,
     )
     actor, critic = make_ppo_models_state(proof_environment, device=device)
@@ -184,10 +247,14 @@ def make_render_policy(spec: Any):
         "env_name",
         spec.policy_kwargs.get("env_name", "InvertedPendulum-v4"),
     )
+    backend = checkpoint.get("env_backend", spec.policy_kwargs.get("backend", "gym"))
+    config_overrides = checkpoint.get("env_config_overrides")
     normalize_observation = bool(checkpoint.get("normalize_observation", False))
     actor, _ = make_ppo_models(
         env_name,
         device=spec.device,
+        backend=backend,
+        config_overrides=config_overrides,
         normalize_observation=normalize_observation,
     )
     return actor
@@ -238,7 +305,7 @@ def dump_video(module):
         module.dump()
 
 
-def eval_model(actor, test_env, num_episodes=3):
+def eval_model(actor, test_env, num_episodes=3, max_steps=10_000_000):
     test_rewards = []
     for _ in range(num_episodes):
         td_test = test_env.rollout(
@@ -246,9 +313,11 @@ def eval_model(actor, test_env, num_episodes=3):
             auto_reset=True,
             auto_cast_to_device=True,
             break_when_any_done=True,
-            max_steps=10_000_000,
+            max_steps=max_steps,
         )
         reward = td_test["next", "episode_reward"][td_test["next", "done"]]
+        if reward.numel() == 0:
+            reward = td_test["next", "reward"].sum().view(1)
         test_rewards.append(reward.cpu())
         test_env.apply(dump_video)
     del td_test

@@ -670,6 +670,40 @@ def test_ppo_inverted_pendulum_checkpoint_render_factories(tmp_path, monkeypatch
     assert saved["normalize_observation"] is False
 
 
+def test_mujoco_playground_ppo_factory(monkeypatch):
+    utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+    make_env = import_from_string(f"{utils_path}:make_env")
+    module_globals = make_env.__globals__
+
+    class FakeMujocoPlaygroundEnv:
+        def __init__(self, env_name, **kwargs):
+            self.env_name = env_name
+            self.kwargs = kwargs
+
+    class FakeTransformedEnv:
+        def __init__(self, env):
+            self.base_env = env
+            self.transforms = []
+
+        def append_transform(self, transform):
+            self.transforms.append(transform)
+
+    monkeypatch.setitem(module_globals, "_has_mujoco_playground", True)
+    monkeypatch.setitem(module_globals, "_MujocoPlaygroundEnv", FakeMujocoPlaygroundEnv)
+    monkeypatch.setitem(module_globals, "TransformedEnv", FakeTransformedEnv)
+    monkeypatch.setitem(module_globals, "_observation_dtype", lambda env: torch.float32)
+
+    env = make_env(
+        "PandaPickCube",
+        backend="mujoco_playground",
+        config_overrides={"impl": "jax"},
+        normalize_observation=False,
+    )
+    assert env.base_env.env_name == "PandaPickCube"
+    assert env.base_env.kwargs["config_overrides"] == {"impl": "jax"}
+    assert len(env.transforms) == 2
+
+
 def test_extract_qpos_trajectory():
     rollout = TensorDict({"qpos": torch.arange(6).reshape(2, 3)}, batch_size=[2])
     assert extract_qpos_trajectory(rollout, "qpos") == [
