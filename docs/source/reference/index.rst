@@ -11,6 +11,7 @@ API Reference
     llms
     modules
     objectives
+    render
     services
     trainers
     utils
