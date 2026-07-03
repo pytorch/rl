@@ -1,6 +1,7 @@
 # task and env
 env:
   env_name: HalfCheetah-v4
+  normalize_observation: True
 
 # collector
 collector:
@@ -40,3 +41,7 @@ compile:
   compile: False
   compile_mode:
   cudagraphs: False
+
+checkpoint:
+  path: null
+  interval: 0

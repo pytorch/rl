@@ -27,3 +27,119 @@ You can execute the PPO algorithm on MuJoCo environments by running the followin
 ```bash
 python ppo_mujoco.py
 ``` 
+
+## Rendering an InvertedPendulum checkpoint with MuJoCo-WASM
+
+The MuJoCo PPO script can write a local checkpoint that is directly loadable by
+`rlrender`. The checkpoint stores the actor state dict, Gymnasium environment
+name, observation-normalization setting, resolved Hydra config, frame count, and
+latest training metrics.
+
+`InvertedPendulum-v4` is a lightweight MuJoCo task that works well as a first
+MuJoCo-WASM render target. On macOS, pass `optim.device=cpu`; MuJoCo specs use
+`float64`, which is not supported by the MPS backend.
+
+### Smoke test
+
+Use a small run first to validate checkpointing:
+
+```bash
+uv run --frozen python sota-implementations/ppo/ppo_mujoco.py \
+  env.env_name=InvertedPendulum-v4 \
+  env.normalize_observation=false \
+  optim.device=cpu \
+  logger.backend=null \
+  collector.total_frames=2048 \
+  collector.frames_per_batch=512 \
+  loss.mini_batch_size=64 \
+  loss.ppo_epochs=2 \
+  logger.test_interval=1024 \
+  logger.num_test_episodes=1 \
+  checkpoint.path=/tmp/torchrl_ppo_inverted_pendulum_smoke.pt
+```
+
+### Training run with W&B
+
+Set ``WANDB_API_KEY`` in the environment and leave ``logger.backend=wandb``
+enabled for an online W&B run:
+
+```bash
+uv run --frozen python sota-implementations/ppo/ppo_mujoco.py \
+  env.env_name=InvertedPendulum-v4 \
+  env.normalize_observation=false \
+  optim.device=cpu \
+  logger.backend=wandb \
+  logger.project_name=torchrl_rlrender \
+  logger.group_name=ppo_inverted_pendulum_mujoco_wasm \
+  logger.test_interval=10000 \
+  logger.num_test_episodes=5 \
+  collector.total_frames=100000 \
+  collector.frames_per_batch=2048 \
+  loss.mini_batch_size=64 \
+  loss.ppo_epochs=10 \
+  checkpoint.path=/tmp/torchrl_ppo_inverted_pendulum.pt \
+  checkpoint.interval=10000
+```
+
+This scale is intended to produce a visible training curve and a solved
+InvertedPendulum checkpoint.
+
+### MuJoCo-WASM notebook render
+
+Render a notebook that opens a live MuJoCo-WASM viewer and plays the saved
+`qpos` trajectory:
+
+```bash
+MODEL_PATH="$(uv run --frozen python - <<'PY'
+from pathlib import Path
+import gymnasium.envs.mujoco
+print(Path(gymnasium.envs.mujoco.__file__).parent / "assets" / "inverted_pendulum.xml")
+PY
+)"
+
+uv run --frozen --extra rendering python -m torchrl.render \
+  --ckpt /tmp/torchrl_ppo_inverted_pendulum.pt \
+  --policy sota-implementations/ppo/utils_mujoco.py:make_render_policy \
+  --env sota-implementations/ppo/utils_mujoco.py:make_render_env \
+  --env-kwargs '{"env_name":"InvertedPendulum-v4"}' \
+  --render-backend null \
+  --max-steps 1000 \
+  --num-trajs 1 \
+  --format ipynb \
+  --out /tmp/torchrl_ppo_inverted_pendulum_mujoco_wasm.ipynb \
+  --notebook-render-backend mujoco-wasm \
+  --mujoco-model-path "$MODEL_PATH" \
+  --mujoco-qpos-key qpos \
+  --overwrite
+```
+
+To generate trajectories inside the notebook instead of before notebook
+creation, add `--notebook-rollout-mode live`. The generated notebook will
+construct the configured policy and environment in the kernel, collect fresh
+rollouts when the rollout cell is executed, and then play the resulting `qpos`
+trajectory in the already-open MuJoCo-WASM iframe:
+
+```bash
+uv run --frozen --extra rendering python -m torchrl.render \
+  --ckpt /tmp/torchrl_ppo_inverted_pendulum.pt \
+  --policy sota-implementations/ppo/utils_mujoco.py:make_render_policy \
+  --env sota-implementations/ppo/utils_mujoco.py:make_render_env \
+  --env-kwargs '{"env_name":"InvertedPendulum-v4"}' \
+  --render-backend null \
+  --max-steps 1000 \
+  --num-trajs 1 \
+  --format ipynb \
+  --out /tmp/torchrl_ppo_inverted_pendulum_mujoco_wasm_live.ipynb \
+  --notebook-render-backend mujoco-wasm \
+  --notebook-rollout-mode live \
+  --mujoco-model-path "$MODEL_PATH" \
+  --mujoco-qpos-key qpos \
+  --overwrite
+```
+
+Open the notebook with the locked environment to avoid triggering a fresh
+cross-version dependency resolution:
+
+```bash
+uv run --frozen --extra notebook jupyter-lab /tmp/torchrl_ppo_inverted_pendulum_mujoco_wasm.ipynb
+```
