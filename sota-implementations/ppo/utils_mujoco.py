@@ -4,16 +4,21 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
-import torch.nn
-import torch.optim
+from typing import Any
 
+import torch
+import torch.nn
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
+
+from tensordict.utils import NestedKey
+from torchrl.data import Unbounded
 from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
     ExplorationType,
     RewardSum,
     StepCounter,
+    Transform,
     TransformedEnv,
     VecNorm,
 )
@@ -27,15 +32,58 @@ from torchrl.record import VideoRecorder
 # --------------------------------------------------------------------
 
 
-def make_env(env_name="HalfCheetah-v4", device="cpu", from_pixels: bool = False):
+_MUJOCO_QPOS_DIMS = {
+    "InvertedPendulum-v4": 2,
+    "InvertedPendulum-v5": 2,
+    "InvertedDoublePendulum-v4": 3,
+    "InvertedDoublePendulum-v5": 3,
+}
+
+
+def make_env(
+    env_name="HalfCheetah-v4",
+    device="cpu",
+    from_pixels: bool = False,
+    *,
+    normalize_observation: bool = True,
+    qpos_key: NestedKey | None = None,
+):
     env = GymEnv(env_name, device=device, from_pixels=from_pixels, pixels_only=False)
     env = TransformedEnv(env)
-    env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
-    env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    if normalize_observation:
+        env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
+        env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
     env.append_transform(RewardSum())
     env.append_transform(StepCounter())
     env.append_transform(DoubleToFloat(in_keys=["observation"]))
+    if qpos_key is not None:
+        env.append_transform(
+            _MujocoQposTransform(
+                qpos_dim=_qpos_dim(env_name),
+                out_key=qpos_key,
+            )
+        )
     return env
+
+
+def make_render_env(spec: Any):
+    """Builds a MuJoCo environment suitable for ``rlrender``.
+
+    The render factory emits an additional ``qpos`` TensorDict key for simple
+    MuJoCo-WASM playback. ``InvertedPendulum-v4`` is the first supported
+    checkpoint-rendering task and defaults to unnormalized observations so the
+    saved policy can be replayed without a separate VecNorm state checkpoint.
+    """
+    env_name = spec.env_kwargs.get("env_name", "InvertedPendulum-v4")
+    normalize_observation = bool(spec.env_kwargs.get("normalize_observation", False))
+    qpos_key = spec.env_kwargs.get("qpos_key", "qpos")
+    return make_env(
+        env_name,
+        device=spec.device,
+        from_pixels=spec.from_pixels,
+        normalize_observation=normalize_observation,
+        qpos_key=qpos_key,
+    )
 
 
 # ====================================================================
@@ -119,10 +167,65 @@ def make_ppo_models_state(proof_environment, device):
     return policy_module, value_module
 
 
-def make_ppo_models(env_name, device):
-    proof_environment = make_env(env_name, device=device)
+def make_ppo_models(env_name, device, *, normalize_observation: bool = True):
+    proof_environment = make_env(
+        env_name,
+        device=device,
+        normalize_observation=normalize_observation,
+    )
     actor, critic = make_ppo_models_state(proof_environment, device=device)
     return actor, critic
+
+
+def make_render_policy(spec: Any):
+    """Builds the PPO policy module for ``rlrender`` checkpoint loading."""
+    checkpoint = spec.checkpoint if isinstance(spec.checkpoint, dict) else {}
+    env_name = checkpoint.get(
+        "env_name",
+        spec.policy_kwargs.get("env_name", "InvertedPendulum-v4"),
+    )
+    normalize_observation = bool(checkpoint.get("normalize_observation", False))
+    actor, _ = make_ppo_models(
+        env_name,
+        device=spec.device,
+        normalize_observation=normalize_observation,
+    )
+    return actor
+
+
+class _MujocoQposTransform(Transform):
+    def __init__(
+        self,
+        *,
+        qpos_dim: int,
+        in_key: NestedKey = "observation",
+        out_key: NestedKey = "qpos",
+    ) -> None:
+        super().__init__(in_keys=[in_key], out_keys=[out_key])
+        self.qpos_dim = qpos_dim
+
+    def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
+        return observation[..., : self.qpos_dim].clone()
+
+    def transform_observation_spec(self, observation_spec):
+        observation_spec = observation_spec.clone()
+        source_spec = observation_spec[self.in_keys[0]]
+        observation_spec[self.out_keys[0]] = Unbounded(
+            shape=(*source_spec.shape[:-1], self.qpos_dim),
+            dtype=source_spec.dtype,
+            device=source_spec.device,
+        )
+        return observation_spec
+
+
+def _qpos_dim(env_name: str) -> int:
+    try:
+        return _MUJOCO_QPOS_DIMS[env_name]
+    except KeyError as err:
+        raise ValueError(
+            f"MuJoCo-WASM qpos extraction is not configured for {env_name!r}. "
+            "Pass a supported env_name or extend _MUJOCO_QPOS_DIMS."
+        ) from err
 
 
 # ====================================================================
