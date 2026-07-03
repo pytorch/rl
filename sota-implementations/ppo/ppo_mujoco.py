@@ -63,6 +63,8 @@ def _save_checkpoint(
             "env_name": cfg.env.env_name,
             "env_backend": cfg.env.backend,
             "env_config_overrides": _to_container(cfg.env.config_overrides),
+            "env_num_envs": int(cfg.env.num_envs),
+            "env_batch_mode": cfg.env.batch_mode,
             "normalize_observation": bool(cfg.env.normalize_observation),
             "frames": collected_frames,
             "metrics": dict(metrics),
@@ -83,8 +85,17 @@ def _make_env_kwargs(cfg: DictConfig) -> dict[str, object]:
     return {
         "backend": cfg.env.backend,
         "config_overrides": _to_container(cfg.env.config_overrides),
+        "num_envs": int(cfg.env.num_envs),
+        "batch_mode": cfg.env.batch_mode,
         "normalize_observation": cfg.env.normalize_observation,
     }
+
+
+def _make_eval_env_kwargs(cfg: DictConfig) -> dict[str, object]:
+    kwargs = _make_env_kwargs(cfg)
+    kwargs["num_envs"] = 1
+    kwargs["batch_mode"] = "parallel"
+    return kwargs
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -200,7 +211,7 @@ def main(cfg: DictConfig):
         cfg.env.env_name,
         device,
         from_pixels=logger_video,
-        **env_kwargs,
+        **_make_eval_env_kwargs(cfg),
     )
     if logger_video:
         test_env = test_env.append_transform(

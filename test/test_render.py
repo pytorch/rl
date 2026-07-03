@@ -704,6 +704,104 @@ def test_mujoco_playground_ppo_factory(monkeypatch):
     assert len(env.transforms) == 2
 
 
+def test_mujoco_playground_ppo_batch_modes(monkeypatch):
+    utils_path = Path("sota-implementations/ppo/utils_mujoco.py").resolve()
+    make_env = import_from_string(f"{utils_path}:make_env")
+    module_globals = make_env.__globals__
+
+    class FakeMujocoPlaygroundEnv:
+        def __init__(self, env_name, **kwargs):
+            self.env_name = env_name
+            self.kwargs = kwargs
+
+    class FakeParallelEnv:
+        def __init__(self, num_workers, create_env_fn, **kwargs):
+            self.num_workers = num_workers
+            self.create_env_fn = create_env_fn
+            self.kwargs = kwargs
+
+    monkeypatch.setitem(module_globals, "_has_mujoco_playground", True)
+    monkeypatch.setitem(module_globals, "_MujocoPlaygroundEnv", FakeMujocoPlaygroundEnv)
+    monkeypatch.setitem(module_globals, "ParallelEnv", FakeParallelEnv)
+    monkeypatch.setitem(
+        module_globals, "_add_ppo_transforms", lambda env, **kwargs: env
+    )
+
+    vmapped = make_env(
+        "PandaPickCube",
+        backend="mujoco_playground",
+        num_envs=4,
+        batch_mode="vmap",
+    )
+    assert vmapped.env_name == "PandaPickCube"
+    assert vmapped.kwargs["batch_size"] == [4]
+
+    parallel = make_env(
+        "PandaPickCube",
+        backend="mujoco_playground",
+        num_envs=3,
+        batch_mode="parallel",
+    )
+    assert parallel.num_workers == 3
+    assert parallel.kwargs["serial_for_single"] is True
+
+
+def test_mujoco_playground_ppo_uses_scalar_proof_and_eval_envs(monkeypatch):
+    ppo_dir = Path("sota-implementations/ppo").resolve()
+    utils_path = ppo_dir / "utils_mujoco.py"
+    make_ppo_models = import_from_string(f"{utils_path}:make_ppo_models")
+    module_globals = make_ppo_models.__globals__
+    calls = []
+
+    class FakeProofEnv:
+        is_closed = False
+
+        def close(self):
+            self.is_closed = True
+
+    proof_env = FakeProofEnv()
+
+    def make_fake_env(*args, **kwargs):
+        calls.append((args, kwargs))
+        return proof_env
+
+    monkeypatch.setitem(module_globals, "make_env", make_fake_env)
+    monkeypatch.setitem(
+        module_globals,
+        "make_ppo_models_state",
+        lambda env, device: ("actor", "critic"),
+    )
+    actor, critic = make_ppo_models(
+        "PandaPickCube",
+        "cpu",
+        backend="mujoco_playground",
+        num_envs=32,
+        batch_mode="vmap",
+    )
+    assert (actor, critic) == ("actor", "critic")
+    assert calls[0][1]["num_envs"] == 1
+    assert calls[0][1]["batch_mode"] == "parallel"
+    assert proof_env.is_closed is True
+
+    monkeypatch.syspath_prepend(str(ppo_dir))
+    make_eval_env_kwargs = import_from_string(
+        f"{ppo_dir / 'ppo_mujoco.py'}:_make_eval_env_kwargs"
+    )
+    cfg = OmegaConf.create(
+        {
+            "env": {
+                "backend": "mujoco_playground",
+                "config_overrides": {},
+                "num_envs": 32,
+                "batch_mode": "vmap",
+                "normalize_observation": False,
+            }
+        }
+    )
+    assert make_eval_env_kwargs(cfg)["num_envs"] == 1
+    assert make_eval_env_kwargs(cfg)["batch_mode"] == "parallel"
+
+
 def test_extract_qpos_trajectory():
     rollout = TensorDict({"qpos": torch.arange(6).reshape(2, 3)}, batch_size=[2])
     assert extract_qpos_trajectory(rollout, "qpos") == [

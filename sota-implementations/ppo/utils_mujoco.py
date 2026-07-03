@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import functools
 import importlib.util
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
     ExplorationType,
+    ParallelEnv,
     RewardSum,
     StepCounter,
     Transform,
@@ -30,6 +32,7 @@ from torchrl.record import VideoRecorder
 _has_mujoco_playground = importlib.util.find_spec("mujoco_playground") is not None
 
 _EnvBackend = Literal["gym", "mujoco_playground"]
+_EnvBatchMode = Literal["parallel", "vmap"]
 _MujocoPlaygroundEnv: type | None = None
 
 
@@ -53,12 +56,26 @@ def make_env(
     *,
     backend: _EnvBackend = "gym",
     config_overrides: dict[str, Any] | None = None,
+    num_envs: int = 1,
+    batch_mode: _EnvBatchMode = "parallel",
     normalize_observation: bool = True,
     qpos_key: NestedKey | None = None,
 ):
+    if num_envs < 1:
+        raise ValueError(f"num_envs must be greater than zero, got {num_envs}.")
     if backend == "gym":
+        if num_envs != 1:
+            raise ValueError(
+                "env.num_envs is only supported for env.backend=mujoco_playground."
+            )
         env = GymEnv(
             env_name, device=device, from_pixels=from_pixels, pixels_only=False
+        )
+        return _add_ppo_transforms(
+            env,
+            env_name=env_name,
+            normalize_observation=normalize_observation,
+            qpos_key=qpos_key,
         )
     elif backend == "mujoco_playground":
         if not _has_mujoco_playground:
@@ -70,18 +87,56 @@ def make_env(
             raise ValueError(
                 "from_pixels=True is not supported for MuJoCo Playground PPO envs."
             )
-        MujocoPlaygroundEnv = _get_mujoco_playground_env()
-
-        env = MujocoPlaygroundEnv(
-            env_name,
-            device=device,
-            config_overrides=config_overrides,
-        )
+        if batch_mode == "parallel":
+            make_scalar_env = functools.partial(
+                _make_transformed_mujoco_playground_env,
+                env_name=env_name,
+                device=device,
+                config_overrides=config_overrides,
+                normalize_observation=normalize_observation,
+                qpos_key=qpos_key,
+            )
+            if num_envs == 1:
+                return make_scalar_env()
+            return ParallelEnv(
+                num_envs,
+                make_scalar_env,
+                device=device,
+                serial_for_single=True,
+            )
+        elif batch_mode == "vmap":
+            env = _make_mujoco_playground_env(
+                env_name=env_name,
+                device=device,
+                config_overrides=config_overrides,
+                num_envs=num_envs,
+            )
+            return _add_ppo_transforms(
+                env,
+                env_name=env_name,
+                normalize_observation=normalize_observation,
+                qpos_key=qpos_key,
+            )
+        else:
+            raise ValueError(
+                f"Unsupported MuJoCo Playground batch_mode {batch_mode!r}. "
+                "Expected 'parallel' or 'vmap'."
+            )
     else:
         raise ValueError(
             f"Unsupported PPO MuJoCo backend {backend!r}. "
             "Expected 'gym' or 'mujoco_playground'."
         )
+    raise RuntimeError("Unreachable PPO environment construction branch.")
+
+
+def _add_ppo_transforms(
+    env,
+    *,
+    env_name: str,
+    normalize_observation: bool,
+    qpos_key: NestedKey | None,
+):
     env = TransformedEnv(env)
     if normalize_observation:
         env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
@@ -98,6 +153,48 @@ def make_env(
             )
         )
     return env
+
+
+def _make_transformed_mujoco_playground_env(
+    *,
+    env_name: str,
+    device,
+    config_overrides: dict[str, Any] | None,
+    normalize_observation: bool,
+    qpos_key: NestedKey | None,
+):
+    env = _make_mujoco_playground_env(
+        env_name=env_name,
+        device=device,
+        config_overrides=config_overrides,
+        num_envs=1,
+    )
+    return _add_ppo_transforms(
+        env,
+        env_name=env_name,
+        normalize_observation=normalize_observation,
+        qpos_key=qpos_key,
+    )
+
+
+def _make_mujoco_playground_env(
+    *,
+    env_name: str,
+    device,
+    config_overrides: dict[str, Any] | None,
+    num_envs: int,
+):
+    MujocoPlaygroundEnv = _get_mujoco_playground_env()
+    env_kwargs = {}
+    if num_envs != 1:
+        env_kwargs["batch_size"] = [num_envs]
+
+    return MujocoPlaygroundEnv(
+        env_name,
+        device=device,
+        config_overrides=config_overrides,
+        **env_kwargs,
+    )
 
 
 def _observation_dtype(env) -> torch.dtype | None:
@@ -127,6 +224,8 @@ def make_render_env(spec: Any):
     env_name = spec.env_kwargs.get("env_name", "InvertedPendulum-v4")
     backend = spec.env_kwargs.get("backend", "gym")
     config_overrides = spec.env_kwargs.get("config_overrides")
+    num_envs = int(spec.env_kwargs.get("num_envs", 1))
+    batch_mode = spec.env_kwargs.get("batch_mode", "parallel")
     normalize_observation = bool(spec.env_kwargs.get("normalize_observation", False))
     qpos_key = spec.env_kwargs.get("qpos_key", "qpos" if backend == "gym" else None)
     return make_env(
@@ -135,6 +234,8 @@ def make_render_env(spec: Any):
         from_pixels=spec.from_pixels,
         backend=backend,
         config_overrides=config_overrides,
+        num_envs=num_envs,
+        batch_mode=batch_mode,
         normalize_observation=normalize_observation,
         qpos_key=qpos_key,
     )
@@ -227,6 +328,8 @@ def make_ppo_models(
     *,
     backend: _EnvBackend = "gym",
     config_overrides: dict[str, Any] | None = None,
+    num_envs: int = 1,
+    batch_mode: _EnvBatchMode = "parallel",
     normalize_observation: bool = True,
 ):
     proof_environment = make_env(
@@ -234,9 +337,15 @@ def make_ppo_models(
         device=device,
         backend=backend,
         config_overrides=config_overrides,
+        num_envs=1,
+        batch_mode="parallel",
         normalize_observation=normalize_observation,
     )
-    actor, critic = make_ppo_models_state(proof_environment, device=device)
+    try:
+        actor, critic = make_ppo_models_state(proof_environment, device=device)
+    finally:
+        if not proof_environment.is_closed:
+            proof_environment.close()
     return actor, critic
 
 
@@ -249,12 +358,16 @@ def make_render_policy(spec: Any):
     )
     backend = checkpoint.get("env_backend", spec.policy_kwargs.get("backend", "gym"))
     config_overrides = checkpoint.get("env_config_overrides")
+    num_envs = int(spec.policy_kwargs.get("num_envs", 1))
+    batch_mode = spec.policy_kwargs.get("batch_mode", "parallel")
     normalize_observation = bool(checkpoint.get("normalize_observation", False))
     actor, _ = make_ppo_models(
         env_name,
         device=spec.device,
         backend=backend,
         config_overrides=config_overrides,
+        num_envs=num_envs,
+        batch_mode=batch_mode,
         normalize_observation=normalize_observation,
     )
     return actor
