@@ -12,6 +12,7 @@ from torchrl.render.config import (
     ExplorationMode,
     FrameBundle,
     key_to_string,
+    NotebookRenderBackendName,
     parse_nested_key,
     RenderBackendName,
     RenderConfig,
@@ -27,6 +28,13 @@ from torchrl.render.env import (
     seed_env,
 )
 from torchrl.render.import_utils import call_with_supported_kwargs, import_from_string
+from torchrl.render.mujoco_wasm import (
+    display_mujoco_wasm_viewer,
+    extract_qpos_trajectory,
+    play_mujoco_wasm_trajectory,
+    send_mujoco_wasm_qpos,
+    write_mujoco_wasm_viewer,
+)
 from torchrl.render.policy import (
     load_render_policy,
     normalize_policy,
@@ -39,6 +47,7 @@ __all__ = [
     "EnvBackendName",
     "ExplorationMode",
     "FrameBundle",
+    "NotebookRenderBackendName",
     "RenderBackendName",
     "RenderConfig",
     "RenderEnvSpec",
@@ -50,6 +59,8 @@ __all__ = [
     "call_with_supported_kwargs",
     "checkpoint_hash",
     "collect_render_rollouts",
+    "display_mujoco_wasm_viewer",
+    "extract_qpos_trajectory",
     "import_from_string",
     "infer_state_dict",
     "key_to_string",
@@ -59,9 +70,12 @@ __all__ = [
     "normalize_env",
     "normalize_policy",
     "parse_nested_key",
+    "play_mujoco_wasm_trajectory",
     "render_policy",
+    "send_mujoco_wasm_qpos",
     "seed_env",
     "write_render_artifact",
+    "write_mujoco_wasm_viewer",
 ]
 
 

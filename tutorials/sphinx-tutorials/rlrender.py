@@ -117,5 +117,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
 #
 # ``rlrender`` is a thin application layer over reusable TorchRL APIs. The MVP
 # captures frames from TensorDict pixel entries or ``env.render()`` and writes
-# metadata with every artifact. For API details, see :ref:`ref_render` and the
-# recorder utilities in :ref:`Environment-Recorders`.
+# metadata with every artifact. Notebook artifacts can additionally generate a
+# MuJoCo WASM sidecar viewer when ``--notebook-render-backend mujoco-wasm``,
+# ``--mujoco-model-path``, and ``--mujoco-qpos-key`` are provided. The generated
+# notebook imports the MuJoCo WASM display and playback helpers from TorchRL
+# rather than embedding one-off helper code in the notebook itself. For API
+# details, see :ref:`ref_render` and the recorder utilities in
+# :ref:`Environment-Recorders`.

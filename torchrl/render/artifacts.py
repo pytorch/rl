@@ -17,6 +17,7 @@ import torchrl
 from tensordict import TensorDictBase
 from torchrl.render.checkpoint import checkpoint_hash
 from torchrl.render.config import FrameBundle, key_to_string, RenderConfig, RenderResult
+from torchrl.render.mujoco_wasm import write_mujoco_wasm_viewer
 from torchrl.render.notebook import write_render_notebook
 from torchrl.render.video import compose_frame_grid, encode_gif, encode_video, write_png
 
@@ -46,6 +47,7 @@ def write_render_artifact(result: RenderResult, config: RenderConfig) -> RenderR
     elif config.format == "ipynb":
         result.metadata["asset_dir"] = _relative_asset_dir(asset_dir, out.parent)
         _write_notebook_assets(result, config, asset_dir)
+        _write_mujoco_wasm_assets(result, config, asset_dir)
         if _has_any_frames(result.frames):
             try:
                 frame_paths.extend(_write_videos(result.frames, asset_dir, config))
@@ -212,6 +214,51 @@ def _write_notebook_assets(
     if config.save_rollout or config.save_tensordicts or config.format == "ipynb":
         _write_rollout_assets(result, asset_dir)
     _write_json(asset_dir / "config.json", config.to_dict())
+
+
+def _write_mujoco_wasm_assets(
+    result: RenderResult, config: RenderConfig, asset_dir: Path
+) -> None:
+    if not _needs_mujoco_wasm_notebook(config):
+        return
+    if config.mujoco_model_path is None:
+        _append_warning(
+            result,
+            "MuJoCo WASM notebook backend requested but no mujoco_model_path was "
+            "provided; the notebook will include static media only.",
+        )
+        return
+    viewer_dir = write_mujoco_wasm_viewer(
+        asset_dir / "mujoco_wasm",
+        config.mujoco_model_path,
+        asset_paths=list(config.mujoco_asset_paths),
+    )
+    result.metadata["mujoco_wasm"] = {
+        "viewer_dir": _relative_asset_dir(viewer_dir, asset_dir),
+        "model_path": str(config.mujoco_model_path),
+        "qpos_key": (
+            key_to_string(config.mujoco_qpos_key)
+            if config.mujoco_qpos_key is not None
+            else None
+        ),
+        "viewer_port": config.notebook_viewer_port,
+    }
+
+
+def _needs_mujoco_wasm_notebook(config: RenderConfig) -> bool:
+    if config.format != "ipynb":
+        return False
+    if config.notebook_render_backend == "mujoco_wasm":
+        return True
+    return (
+        config.notebook_render_backend == "auto"
+        and config.mujoco_model_path is not None
+    )
+
+
+def _append_warning(result: RenderResult, warning: str) -> None:
+    result.warnings.append(warning)
+    result.metadata.setdefault("warnings", []).append(warning)
 
 
 def _write_rollout_assets(result: RenderResult, asset_dir: Path) -> None:
