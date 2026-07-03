@@ -13,6 +13,7 @@ from torchrl.render.config import (
     FrameBundle,
     key_to_string,
     NotebookRenderBackendName,
+    NotebookRolloutMode,
     parse_nested_key,
     RenderBackendName,
     RenderConfig,
@@ -48,6 +49,7 @@ __all__ = [
     "ExplorationMode",
     "FrameBundle",
     "NotebookRenderBackendName",
+    "NotebookRolloutMode",
     "RenderBackendName",
     "RenderConfig",
     "RenderEnvSpec",
@@ -88,6 +90,8 @@ def render_policy(config: RenderConfig) -> RenderResult:
     Returns:
         The render result with trajectories, metadata, and artifact paths.
     """
+    if _defer_rollout_to_notebook(config):
+        return write_render_artifact(_empty_notebook_result(config), config)
     env = make_render_env(config)
     try:
         policy = load_render_policy(config, env)
@@ -97,3 +101,30 @@ def render_policy(config: RenderConfig) -> RenderResult:
         close = getattr(env, "close", None)
         if callable(close):
             close()
+
+
+def _defer_rollout_to_notebook(config: RenderConfig) -> bool:
+    return config.format == "ipynb" and config.notebook_rollout_mode == "live"
+
+
+def _empty_notebook_result(config: RenderConfig) -> RenderResult:
+    metadata = {
+        "format": config.format,
+        "num_trajs": 0,
+        "requested_num_trajs": config.num_trajs,
+        "max_steps": config.max_steps,
+        "fps": config.fps,
+        "render_backend": config.render_backend,
+        "env_backend": config.env_backend,
+        "notebook_rollout_mode": config.notebook_rollout_mode,
+        "trajectories": [],
+        "warnings": [],
+    }
+    return RenderResult(
+        artifact_path=None,
+        trajectories=[],
+        frame_paths=[],
+        metadata=metadata,
+        warnings=[],
+        frames=[],
+    )

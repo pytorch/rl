@@ -18,6 +18,10 @@ def build_notebook(result: RenderResult, config: RenderConfig) -> dict[str, Any]
     metadata_json = json.dumps(result.metadata, indent=2, sort_keys=True)
     config_payload = config.to_dict()
     config_payload["asset_dir"] = result.metadata.get("asset_dir", ".")
+    if result.metadata.get("asset_dir_absolute") is not None:
+        config_payload["asset_dir_absolute"] = result.metadata["asset_dir_absolute"]
+    if result.metadata.get("working_dir") is not None:
+        config_payload["working_dir"] = result.metadata["working_dir"]
     config_json = json.dumps(config_payload, indent=2, sort_keys=True)
     command = result.metadata.get("command", "rlrender ...")
     cells = [
@@ -31,14 +35,32 @@ def build_notebook(result: RenderResult, config: RenderConfig) -> dict[str, Any]
             "import json\n"
             "import torch\n\n"
             "asset_dir = Path(render_config.get('asset_dir', '.'))\n"
+            "if not (asset_dir / 'metadata.json').exists() and render_config.get('asset_dir_absolute'):\n"
+            "    asset_dir = Path(render_config['asset_dir_absolute'])\n"
             "metadata = json.loads((asset_dir / 'metadata.json').read_text())\n"
             "metadata"
         ),
         _code_cell(
-            "# Reconstruct and rerun the renderer. The import paths execute trusted code.\n"
-            "from torchrl.render import RenderConfig, render_policy\n\n"
-            "cfg = RenderConfig(**{k: v for k, v in render_config.items() if k != 'asset_dir'})\n"
-            "# result = render_policy(cfg)"
+            "# Reconstruct the renderer config. The import paths execute trusted code.\n"
+            "from pathlib import Path\n"
+            "from torchrl.render import RenderConfig\n\n"
+            "def _resolve_file_import_spec(spec):\n"
+            "    if not isinstance(spec, str) or ':' not in spec:\n"
+            "        return spec\n"
+            "    module, attr = spec.split(':', 1)\n"
+            "    path = Path(module)\n"
+            "    if path.is_absolute():\n"
+            "        return spec\n"
+            "    if path.suffix == '.py' or '/' in module or '\\\\' in module:\n"
+            "        candidate = Path(render_config.get('working_dir', '.')) / path\n"
+            "        if candidate.exists():\n"
+            "            return f'{candidate}:{attr}'\n"
+            "    return spec\n\n"
+            "for key in ('policy', 'env'):\n"
+            "    render_config[key] = _resolve_file_import_spec(render_config[key])\n"
+            "runtime_config_keys = {'asset_dir', 'asset_dir_absolute', 'working_dir'}\n"
+            "cfg = RenderConfig(**{k: v for k, v in render_config.items() if k not in runtime_config_keys})\n"
+            "cfg"
         ),
         _code_cell(
             "# Load saved rollouts when present.\n"
@@ -49,6 +71,16 @@ def build_notebook(result: RenderResult, config: RenderConfig) -> dict[str, Any]
             "len(rollouts)"
         ),
     ]
+    if config.notebook_rollout_mode in ("live", "both"):
+        cells.extend(_live_rollout_cells())
+    else:
+        cells.append(
+            _code_cell(
+                "# Rerun the full renderer if you want to regenerate this artifact.\n"
+                "from torchrl.render import render_policy\n\n"
+                "# result = render_policy(cfg)"
+            )
+        )
     video_paths = [path for path in result.frame_paths if path.suffix.lower() == ".mp4"]
     if video_paths:
         rel_paths = [str(path.name) for path in video_paths]
@@ -120,8 +152,8 @@ def _mujoco_wasm_cells() -> list[dict[str, Any]]:
             "## Interactive MuJoCo WASM playback\n\n"
             "This notebook includes a generated local browser viewer for the MJCF "
             "scene. The helper functions live in `torchrl.render.mujoco_wasm` so "
-            "the notebook stays small and reusable. The playback cell sends the "
-            "saved qpos trajectory to the already-displayed iframe."
+            "the notebook stays small and reusable. The playback cell sends a "
+            "saved or live-generated qpos trajectory to the already-displayed iframe."
         ),
         _code_cell(
             "from torchrl.render.mujoco_wasm import (\n"
@@ -142,7 +174,7 @@ def _mujoco_wasm_cells() -> list[dict[str, Any]]:
             "if qpos_key is None:\n"
             "    raise ValueError('Set --mujoco-qpos-key to play saved rollouts in the WASM viewer.')\n"
             "if not rollouts:\n"
-            "    raise ValueError('No saved rollouts found. Generate the notebook with save_rollout=True.')\n\n"
+            "    raise ValueError('No rollouts are available. Run the saved-rollout loading cell or the in-notebook rollout cell first.')\n\n"
             "trajectory = extract_qpos_trajectory(rollouts[0], qpos_key=qpos_key)\n"
             "play_mujoco_wasm_trajectory(\n"
             "    trajectory,\n"
@@ -155,5 +187,37 @@ def _mujoco_wasm_cells() -> list[dict[str, Any]]:
         _code_cell(
             "# Send one pose interactively. The viewer accepts full model qpos vectors.\n"
             "# send_mujoco_wasm_qpos(trajectory[0], port=viewer_port, viewer_origin=viewer_origin, wait=True)\n"
+        ),
+    ]
+
+
+def _live_rollout_cells() -> list[dict[str, Any]]:
+    return [
+        _markdown_cell(
+            "## Generate rollouts in this notebook\n\n"
+            "Run this cell whenever you want fresh trajectories from the checkpoint. "
+            "It constructs the configured environment and policy inside the kernel, "
+            "collects rollouts, and replaces the `rollouts` variable used by the "
+            "playback cells below."
+        ),
+        _code_cell(
+            "from torchrl.render import (\n"
+            "    collect_render_rollouts,\n"
+            "    load_render_policy,\n"
+            "    make_render_env,\n"
+            ")\n\n"
+            "def collect_rollouts_in_notebook(config=None):\n"
+            "    config = cfg if config is None else config\n"
+            "    env = make_render_env(config)\n"
+            "    try:\n"
+            "        policy = load_render_policy(config, env)\n"
+            "        return collect_render_rollouts(env, policy, config)\n"
+            "    finally:\n"
+            "        close = getattr(env, 'close', None)\n"
+            "        if callable(close):\n"
+            "            close()\n\n"
+            "live_result = collect_rollouts_in_notebook()\n"
+            "rollouts = live_result.trajectories\n"
+            "live_result.metadata"
         ),
     ]

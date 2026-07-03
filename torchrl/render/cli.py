@@ -12,11 +12,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from torchrl.render.artifacts import write_render_artifact
+from torchrl.render import render_policy
+
 from torchrl.render.config import parse_nested_key, RenderConfig, RenderFormat
-from torchrl.render.env import make_render_env
-from torchrl.render.policy import load_render_policy
-from torchrl.render.rollout import collect_render_rollouts
 
 _has_yaml = importlib.util.find_spec("yaml") is not None
 _has_tomllib = importlib.util.find_spec("tomllib") is not None
@@ -70,6 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Notebook-only render helper. Use mujoco_wasm to generate a browser "
             "MuJoCo viewer sidecar for saved qpos rollouts."
+        ),
+    )
+    parser.add_argument(
+        "--notebook-rollout-mode",
+        choices=["saved", "live", "both"],
+        help=(
+            "Notebook-only rollout mode. 'saved' collects rollouts before writing "
+            "the notebook, 'live' collects them when notebook cells run, and "
+            "'both' does both."
         ),
     )
     parser.add_argument(
@@ -244,7 +251,7 @@ def config_from_args(args: argparse.Namespace) -> RenderConfig:
                 f"Missing required rlrender option --{required.replace('_', '-')}."
             )
     if data.get("format") == "ipynb" and "save_rollout" not in data:
-        data["save_rollout"] = True
+        data["save_rollout"] = data.get("notebook_rollout_mode", "saved") != "live"
     return RenderConfig(**data)
 
 
@@ -258,15 +265,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.stdout.write(config.to_json(indent=2, sort_keys=True) + "\n")
         if args.dry_run or args.validate_only:
             return 0
-        env = make_render_env(config)
-        try:
-            policy = load_render_policy(config, env)
-            result = collect_render_rollouts(env, policy, config)
-            result = write_render_artifact(result, config)
-        finally:
-            close = getattr(env, "close", None)
-            if callable(close):
-                close()
+        result = render_policy(config)
         if result.artifact_path is not None:
             sys.stdout.write(str(result.artifact_path) + "\n")
         return 0

@@ -18,6 +18,7 @@ RenderFormat = Literal["ipynb", "mp4", "gif", "frames", "npz", "jsonl"]
 CameraLayout = Literal["single", "grid", "horizontal", "vertical", "separate"]
 RenderBackendName = Literal["auto", "pixels", "env", "null"]
 NotebookRenderBackendName = Literal["auto", "static", "mujoco_wasm", "mujoco-wasm"]
+NotebookRolloutMode = Literal["saved", "live", "both"]
 EnvBackendName = Literal[
     "auto", "torchrl", "gym", "gymnasium", "mujoco", "dm_control", "isaaclab"
 ]
@@ -29,6 +30,7 @@ __all__ = [
     "ExplorationMode",
     "FrameBundle",
     "NotebookRenderBackendName",
+    "NotebookRolloutMode",
     "RenderBackendName",
     "RenderConfig",
     "RenderEnvSpec",
@@ -50,6 +52,9 @@ class RenderConfig:
         env: Environment factory or ``"module:object"`` import specification.
         num_trajs: Number of trajectories to render.
         format: Artifact format to write.
+        notebook_rollout_mode: For ``format="ipynb"``, whether rollouts are
+            collected before notebook creation (``"saved"``), inside notebook
+            cells (``"live"``), or both (``"both"``).
 
     Examples:
         >>> from torchrl.render import RenderConfig
@@ -81,6 +86,7 @@ class RenderConfig:
     env_device: torch.device | str | None = None
     render_backend: RenderBackendName = "auto"
     notebook_render_backend: NotebookRenderBackendName = "auto"
+    notebook_rollout_mode: NotebookRolloutMode = "saved"
     env_backend: EnvBackendName = "auto"
     env_kwargs: dict[str, Any] = field(default_factory=dict)
     policy_kwargs: dict[str, Any] = field(default_factory=dict)
@@ -155,6 +161,16 @@ class RenderConfig:
             self.notebook_render_backend,
             {"auto", "static", "mujoco_wasm"},
         )
+        _validate_choice(
+            "notebook_rollout_mode",
+            self.notebook_rollout_mode,
+            {"saved", "live", "both"},
+        )
+        if self.notebook_rollout_mode != "saved" and self.format != "ipynb":
+            raise ValueError(
+                "notebook_rollout_mode='live' or 'both' is only valid for "
+                "format='ipynb'."
+            )
         if self.mujoco_model_path is not None:
             self.mujoco_model_path = Path(self.mujoco_model_path)
         if isinstance(self.mujoco_asset_paths, str):

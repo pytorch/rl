@@ -113,6 +113,30 @@ uv run --frozen --extra rendering python -m torchrl.render \
   --overwrite
 ```
 
+To generate trajectories inside the notebook instead of before notebook
+creation, add `--notebook-rollout-mode live`. The generated notebook will
+construct the configured policy and environment in the kernel, collect fresh
+rollouts when the rollout cell is executed, and then play the resulting `qpos`
+trajectory in the already-open MuJoCo-WASM iframe:
+
+```bash
+uv run --frozen --extra rendering python -m torchrl.render \
+  --ckpt /tmp/torchrl_ppo_inverted_pendulum.pt \
+  --policy sota-implementations/ppo/utils_mujoco.py:make_render_policy \
+  --env sota-implementations/ppo/utils_mujoco.py:make_render_env \
+  --env-kwargs '{"env_name":"InvertedPendulum-v4"}' \
+  --render-backend null \
+  --max-steps 1000 \
+  --num-trajs 1 \
+  --format ipynb \
+  --out /tmp/torchrl_ppo_inverted_pendulum_mujoco_wasm_live.ipynb \
+  --notebook-render-backend mujoco-wasm \
+  --notebook-rollout-mode live \
+  --mujoco-model-path "$MODEL_PATH" \
+  --mujoco-qpos-key qpos \
+  --overwrite
+```
+
 Open the notebook with the locked environment to avoid triggering a fresh
 cross-version dependency resolution:
 

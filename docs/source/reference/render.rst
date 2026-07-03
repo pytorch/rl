@@ -14,9 +14,14 @@ writes a reproducible artifact.
 Notebook artifacts can also include an optional MuJoCo WASM sidecar viewer. In
 that mode, the notebook imports helper functions from ``torchrl.render`` to
 start a local Vite viewer, load an MJCF scene in browser-side MuJoCo, and stream
-saved qpos trajectories into the live iframe. The generated notebook should stay
-thin: reusable display, playback, and acknowledgement helpers live in TorchRL
-rather than being copied into each notebook.
+qpos trajectories into the live iframe. By default, ``rlrender`` collects and
+saves trajectories before writing the notebook. Use
+``--notebook-rollout-mode live`` to write a notebook that constructs the policy
+and environment inside the kernel and generates fresh trajectories when its
+cells are run. Use ``--notebook-rollout-mode both`` to save initial rollouts and
+also keep an in-notebook collection cell. The generated notebook should stay
+thin: reusable display, playback, rollout, and acknowledgement helpers live in
+TorchRL rather than being copied into each notebook.
 
 The MuJoCo WASM viewer requires Node.js and either ``npm`` or ``pnpm``. The
 first viewer launch installs the generated Vite project's pinned JavaScript

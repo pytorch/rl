@@ -156,6 +156,14 @@ def tiny_policy_factory(spec):
     return ZeroPolicy().to(spec.device)
 
 
+def raising_env_factory(spec):
+    raise AssertionError("env factory should not run")
+
+
+def raising_policy_factory(spec):
+    raise AssertionError("policy factory should not run")
+
+
 def test_parse_nested_key_and_import_from_string(tmp_path, monkeypatch):
     module = tmp_path / "render_factories.py"
     module.write_text("VALUE = 3\n", encoding="utf-8")
@@ -244,6 +252,8 @@ def test_config_from_args_accepts_mujoco_wasm_notebook_options(tmp_path):
             "ipynb",
             "--notebook-render-backend",
             "mujoco-wasm",
+            "--notebook-rollout-mode",
+            "live",
             "--mujoco-model-path",
             str(model),
             "--mujoco-asset-paths",
@@ -256,6 +266,8 @@ def test_config_from_args_accepts_mujoco_wasm_notebook_options(tmp_path):
     )
     config = config_from_args(args)
     assert config.notebook_render_backend == "mujoco_wasm"
+    assert config.notebook_rollout_mode == "live"
+    assert config.save_rollout is False
     assert config.mujoco_model_path == model
     assert config.mujoco_asset_paths == [asset_dir]
     assert config.mujoco_qpos_key == ("next", "qpos")
@@ -363,6 +375,32 @@ def test_write_npz_and_notebook_artifacts(tmp_path):
     exec("".join(notebook["cells"][2]["source"]), namespace)
     assert namespace["render_config"]["artifact_dir"] is None
     assert (tmp_path / "report" / "metadata.json").exists()
+
+
+def test_live_notebook_defers_rollout_collection(tmp_path):
+    ckpt = tmp_path / "policy.pt"
+    torch.save({}, ckpt)
+    config = RenderConfig(
+        ckpt=ckpt,
+        policy=raising_policy_factory,
+        env=raising_env_factory,
+        max_steps=2,
+        format="ipynb",
+        out=tmp_path / "live_report.ipynb",
+        notebook_rollout_mode="live",
+        auto_load_policy=False,
+        overwrite=True,
+    )
+    result = render_policy(config)
+    notebook = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    assert "collect_rollouts_in_notebook" in source
+    assert "live_result = collect_rollouts_in_notebook()" in source
+    assert not (tmp_path / "live_report" / "rollouts").exists()
+    metadata = json.loads((tmp_path / "live_report" / "metadata.json").read_text())
+    assert metadata["num_trajs"] == 0
+    assert metadata["requested_num_trajs"] == 1
+    assert metadata["config"]["notebook_rollout_mode"] == "live"
 
 
 def test_mujoco_wasm_viewer_assets_and_notebook_cells(tmp_path):
