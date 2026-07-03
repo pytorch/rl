@@ -98,7 +98,7 @@ notebook = ["jupyterlab"]
 # lerobot requires Python >= 3.12 (and lerobot <= 0.4 cannot resolve against
 # recent torch), so the extra is empty on older interpreters
 vla = ["lerobot>=0.5.0; python_version >= '3.12'", "torchvision>=0.17"]
-rendering = ["moviepy", "pillow", "pyyaml", "torchcodec>=0.10.0"]
+rendering = ["moviepy", "pyyaml", "torchcodec>=0.10.0"]
 tests = [
     "pytest",
     "pyyaml",
