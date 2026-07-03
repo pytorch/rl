@@ -8,11 +8,13 @@ import argparse
 import importlib.util
 import json
 import socket
+from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
 import torchrl.render.mujoco_wasm as mujoco_wasm_module
+from omegaconf import OmegaConf
 from tensordict import TensorDict
 
 from torchrl.data import Composite, Unbounded
@@ -506,6 +508,54 @@ def test_play_mujoco_wasm_trajectory_autoplay_writes_public_asset(
         play_mujoco_wasm_trajectory([[0.0]], fps=0)
     with pytest.raises(ValueError, match="same length"):
         play_mujoco_wasm_trajectory([[0.0], [0.0, 1.0]])
+
+
+def test_dqn_cartpole_checkpoint_render_factories(tmp_path, monkeypatch):
+    dqn_dir = Path("sota-implementations/dqn").resolve()
+    utils_path = dqn_dir / "utils_cartpole.py"
+    make_dqn_model = import_from_string(f"{utils_path}:make_dqn_model")
+    checkpoint_path = tmp_path / "dqn_cartpole.pt"
+    model = make_dqn_model("CartPole-v1", device="cpu")
+    torch.save(
+        {"model_state_dict": model.state_dict(), "env_name": "CartPole-v1"},
+        checkpoint_path,
+    )
+    config = RenderConfig(
+        ckpt=checkpoint_path,
+        policy=f"{utils_path}:make_render_policy",
+        env=f"{utils_path}:make_render_env",
+        from_pixels=True,
+        max_steps=3,
+        num_trajs=1,
+        format="npz",
+        out=tmp_path / "dqn_cartpole.npz",
+        overwrite=True,
+    )
+    env = make_render_env(config)
+    try:
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+    finally:
+        env.close()
+    assert result.frames[0][0].frames["default"].shape == (240, 320, 3)
+    assert result.metadata["trajectories"][0]["num_frames"] > 0
+
+    monkeypatch.syspath_prepend(str(dqn_dir))
+    save_checkpoint = import_from_string(
+        f"{dqn_dir / 'dqn_cartpole.py'}:_save_checkpoint"
+    )
+    saved_path = tmp_path / "saved_dqn.pt"
+    save_checkpoint(
+        saved_path,
+        cfg=OmegaConf.create({"env": {"env_name": "CartPole-v1"}}),
+        model=model,
+        collected_frames=12,
+        metrics={"eval/reward": 10.0},
+    )
+    saved = torch.load(saved_path, weights_only=False)
+    assert saved["frames"] == 12
+    assert saved["env_name"] == "CartPole-v1"
+    assert "model_state_dict" in saved
 
 
 def test_extract_qpos_trajectory():
