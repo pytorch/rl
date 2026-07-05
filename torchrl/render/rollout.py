@@ -4,13 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from typing import Any
 
 import torch
 from tensordict import TensorDictBase
 
+from torchrl._utils import logger as torchrl_logger
 from torchrl.envs import EnvBase
-from torchrl.envs.utils import ExplorationType, set_exploration_type, step_mdp
+from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.render.backends import (
     EnvRenderBackend,
     NullRenderBackend,
@@ -26,6 +29,11 @@ def collect_render_rollouts(
 ) -> RenderResult:
     """Collects sequential render rollouts.
 
+    :class:`~torchrl.envs.EnvBase` environments are rolled out through
+    :meth:`~torchrl.envs.EnvBase.rollout`; other environments fall back to a
+    duck-typed reset/step loop. Captured frames span the initial state through
+    the terminal state of each trajectory.
+
     Args:
         env: Environment returned by :func:`torchrl.render.make_render_env`.
         policy: TensorDict-compatible policy.
@@ -40,31 +48,22 @@ def collect_render_rollouts(
     warnings: list[str] = []
     frame_backends = _make_backends(config)
     exploration = _exploration_type(config)
+    collect = (
+        _collect_env_base_trajectory
+        if isinstance(env, EnvBase)
+        else _collect_duck_typed_trajectory
+    )
     for traj_index in range(config.num_trajs):
-        td = _reset_env(env)
-        trajectory_steps: list[TensorDictBase] = []
-        trajectory_frames: list[FrameBundle] = []
-        for step in range(max_steps):
-            with torch.no_grad(), set_exploration_type(exploration):
-                action_td = policy(td)
-            next_td = _step_env(env, action_td)
-            trajectory_steps.append(_trajectory_step(next_td, config))
-            frame = _capture_frame(
-                frame_backends,
-                env,
-                next_td,
-                config,
-                step=step,
-                trajectory_index=traj_index,
-            )
-            if frame is not None:
-                trajectory_frames.append(frame)
-            if _is_done(next_td, config, env):
-                break
-            td = _step_mdp(next_td, env)
-        if not trajectory_steps:
-            raise RuntimeError("Environment produced an empty rollout.")
-        trajectories.append(torch.stack(trajectory_steps, 0).contiguous())
+        trajectory, trajectory_frames = collect(
+            env,
+            policy,
+            config,
+            max_steps=max_steps,
+            backends=frame_backends,
+            exploration=exploration,
+            trajectory_index=traj_index,
+        )
+        trajectories.append(trajectory)
         all_frames.append(trajectory_frames)
         if not trajectory_frames:
             warnings.append(
@@ -80,6 +79,89 @@ def collect_render_rollouts(
         warnings=warnings,
         frames=all_frames,
     )
+
+
+def _collect_env_base_trajectory(
+    env: EnvBase,
+    policy: Any,
+    config: RenderConfig,
+    *,
+    max_steps: int,
+    backends: list[Any],
+    exploration: Any,
+    trajectory_index: int,
+) -> tuple[TensorDictBase, list[FrameBundle]]:
+    frames: list[FrameBundle] = []
+    capture = _frame_recorder(backends, env, config, frames, trajectory_index)
+    reset_td = env.reset()
+    capture(reset_td)
+    with torch.no_grad(), set_exploration_type(exploration):
+        rollout = env.rollout(
+            max_steps,
+            policy,
+            tensordict=reset_td,
+            auto_reset=False,
+            break_when_any_done=True,
+            return_contiguous=True,
+            callback=lambda _env, tensordict: capture(tensordict),
+        )
+    if rollout.numel() == 0:
+        raise RuntimeError("Environment produced an empty rollout.")
+    # rollout() never invokes the callback on the final step, so the terminal
+    # state is captured from the last step's "next" entry here.
+    capture(rollout[..., -1])
+    return _trajectory_from_rollout(rollout, config), frames
+
+
+def _collect_duck_typed_trajectory(
+    env: Any,
+    policy: Any,
+    config: RenderConfig,
+    *,
+    max_steps: int,
+    backends: list[Any],
+    exploration: Any,
+    trajectory_index: int,
+) -> tuple[TensorDictBase, list[FrameBundle]]:
+    frames: list[FrameBundle] = []
+    capture = _frame_recorder(backends, env, config, frames, trajectory_index)
+    td = _reset_env(env)
+    capture(td)
+    trajectory_steps: list[TensorDictBase] = []
+    for _ in range(max_steps):
+        with torch.no_grad(), set_exploration_type(exploration):
+            action_td = policy(td)
+        next_td = _step_env(env, action_td)
+        trajectory_steps.append(_trajectory_step(next_td, config))
+        capture(next_td)
+        if _is_done(next_td, config, env):
+            break
+        td = _step_mdp(next_td)
+    if not trajectory_steps:
+        raise RuntimeError("Environment produced an empty rollout.")
+    return torch.stack(trajectory_steps, 0), frames
+
+
+def _frame_recorder(
+    backends: list[Any],
+    env: Any,
+    config: RenderConfig,
+    frames: list[FrameBundle],
+    trajectory_index: int,
+) -> Callable[[TensorDictBase], None]:
+    def capture(tensordict: TensorDictBase) -> None:
+        frame = _capture_frame(
+            backends,
+            env,
+            tensordict,
+            config,
+            step=len(frames),
+            trajectory_index=trajectory_index,
+        )
+        if frame is not None:
+            frames.append(frame)
+
+    return capture
 
 
 def _make_backends(config: RenderConfig):
@@ -101,19 +183,43 @@ def _capture_frame(
     step: int,
     trajectory_index: int,
 ) -> FrameBundle | None:
-    for backend in backends:
+    for backend in list(backends):
         if not backend.supports(env, config):
             continue
-        frame = backend.capture(
-            env,
-            tensordict,
-            config,
-            step=step,
-            trajectory_index=trajectory_index,
-        )
+        try:
+            frame = backend.capture(
+                env,
+                tensordict,
+                config,
+                step=step,
+                trajectory_index=trajectory_index,
+            )
+        except Exception as err:
+            if config.render_backend != "auto":
+                raise
+            backends.remove(backend)
+            torchrl_logger.warning(
+                f"rlrender backend {backend.name!r} failed to capture a frame and "
+                f"was disabled for this run: {err}"
+            )
+            continue
         if frame is not None:
             return frame
     return None
+
+
+def _trajectory_from_rollout(
+    rollout: TensorDictBase, config: RenderConfig
+) -> TensorDictBase:
+    trajectory = rollout.get("next").clone()
+    try:
+        action = rollout.get(config.action_key)
+    except Exception:
+        return trajectory
+    trajectory.set(
+        config.action_key, action.clone() if torch.is_tensor(action) else action
+    )
+    return trajectory
 
 
 def _reset_env(env: Any) -> TensorDictBase:
@@ -157,9 +263,7 @@ def _trajectory_step(
     return step
 
 
-def _step_mdp(tensordict: TensorDictBase, env: Any) -> TensorDictBase:
-    if isinstance(env, EnvBase):
-        return step_mdp(tensordict, exclude_reward=False, exclude_done=False)
+def _step_mdp(tensordict: TensorDictBase) -> TensorDictBase:
     next_td = tensordict.get("next", None)
     if isinstance(next_td, TensorDictBase):
         return next_td.clone()
@@ -172,7 +276,7 @@ def _is_done(tensordict: TensorDictBase, config: RenderConfig, env: Any) -> bool
     if done_keys:
         keys.extend(done_keys)
     keys.append(config.done_key)
-    keys.append("done")
+    keys.extend(["done", "terminated", "truncated"])
     for key in keys:
         for candidate in _done_candidates(key):
             try:
@@ -216,13 +320,7 @@ def _exploration_type(config: RenderConfig):
     mode = config.exploration_mode
     if mode is None:
         mode = "deterministic" if config.deterministic else "random"
-    mapping = {
-        "deterministic": ExplorationType.DETERMINISTIC,
-        "mode": ExplorationType.MODE,
-        "mean": ExplorationType.MEAN,
-        "random": ExplorationType.RANDOM,
-    }
-    return mapping[mode]
+    return ExplorationType.from_str(mode)
 
 
 def _rollout_metadata(
@@ -237,7 +335,7 @@ def _rollout_metadata(
         traj_meta.append(
             {
                 "index": index,
-                "num_steps": int(trajectory.shape[0]),
+                "num_steps": int(trajectory.shape[-1]),
                 "return": reward,
                 "num_frames": len(frames[index]),
                 "cameras": sorted(

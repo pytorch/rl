@@ -47,6 +47,7 @@ Core API
     import_from_string
     call_with_supported_kwargs
     load_checkpoint
+    save_render_checkpoint
     checkpoint_hash
     infer_state_dict
     parse_nested_key
@@ -66,7 +67,7 @@ Configuration and results
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_fun.rst
+    :template: rl_template.rst
 
     RenderConfig
     RenderEnvSpec
@@ -82,7 +83,7 @@ Backends
 
 .. autosummary::
     :toctree: generated/
-    :template: rl_template_fun.rst
+    :template: rl_template.rst
 
     RenderBackend
     TensorDictPixelsBackend
