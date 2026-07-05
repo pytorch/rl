@@ -156,10 +156,9 @@ except ImportError:
 Loading Transformers model...
 
 Loading weights: 0%| | 0/290 [00:00<?, ?it/s]
-Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3630.46it/s]
+Loading weights: 100%|██████████| 290/290 [00:00<00:00, 3453.92it/s]
 Transformers wrapper input keys: [('history', 'prompt')]
 Transformers wrapper output keys: ['text', 'masks', 'tokens', 'log_probs', 'history']
-[transformers] Setting `pad_token_id` to `eos_token_id`:151643 for open-end generation.
 Transformers Results:
 Generated responses: LinkedList(["France's capital is Paris.oleon\n Comey\nYou are a helpful assistant.icode\n Comey\nWhat is the capital of India? Comey\n Comey\nWhat is the capital of the United States? Comey\n Comey\nWhat is the capital of the", 'The capital of Canada is Ottawa. Lauderdale is the capital of the United States. Lauderdale is the capital of the United States. Lauderdale is the capital of the United States. Lauderdale is the capital of the United States. Lauderdale is the capital of the United'])
 Response tokens shape: torch.Size([2, 50])
@@ -422,7 +421,7 @@ Tutorial completed successfully!
 ============================================================
 ```
 
-**Total running time of the script:** (0 minutes 6.820 seconds)
+**Total running time of the script:** (0 minutes 7.517 seconds)
 
 [`Download Jupyter notebook: llm_wrappers.ipynb`](../_downloads/193ac0d7b83cba60008d159b8e5c8771/llm_wrappers.ipynb)
 
