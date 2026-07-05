@@ -28,7 +28,8 @@ from torchrl.objectives import ClipPPOLoss, group_optimizers
 from torchrl.objectives.value.advantages import GAE
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
-from utils_mujoco import eval_model, make_env, make_ppo_models
+from torchrl.render import save_render_checkpoint
+from utils_mujoco import eval_model, get_vecnorm_state, make_env, make_ppo_models
 
 torch.set_float32_matmul_precision("high")
 
@@ -40,6 +41,7 @@ def _save_checkpoint(
     model: torch.nn.Module,
     collected_frames: int,
     metrics: dict,
+    train_env=None,
 ) -> Path | None:
     """Saves a PPO checkpoint that can be consumed by ``rlrender``.
 
@@ -49,26 +51,27 @@ def _save_checkpoint(
         model: PPO actor module.
         collected_frames: Number of training frames collected so far.
         metrics: Latest scalar metrics.
+        train_env: Training environment used to extract frozen VecNorm
+            statistics so render environments can reproduce the observation
+            normalization seen during training.
 
     Returns:
         The written checkpoint path, or ``None`` when checkpointing is disabled.
     """
-    if path in (None, ""):
-        return None
-    path = Path(path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "env_name": cfg.env.env_name,
-            "normalize_observation": bool(cfg.env.normalize_observation),
-            "frames": collected_frames,
-            "metrics": dict(metrics),
-            "config": OmegaConf.to_container(cfg, resolve=True),
-        },
+    env_metadata = {
+        "env_name": cfg.env.env_name,
+        "env_backend": cfg.env.get("backend", "gym"),
+        "normalize_observation": bool(cfg.env.normalize_observation),
+        "vecnorm": get_vecnorm_state(train_env) if train_env is not None else None,
+    }
+    return save_render_checkpoint(
         path,
+        model,
+        env_metadata=env_metadata,
+        frames=collected_frames,
+        metrics=metrics,
+        config=OmegaConf.to_container(cfg, resolve=True),
     )
-    return path
 
 
 @hydra.main(config_path="", config_name="config_mujoco", version_base="1.1")
@@ -101,12 +104,13 @@ def main(cfg: DictConfig):
     )
 
     # Create collector
+    train_env = make_env(
+        cfg.env.env_name,
+        device,
+        normalize_observation=cfg.env.normalize_observation,
+    )
     collector = Collector(
-        create_env_fn=make_env(
-            cfg.env.env_name,
-            device,
-            normalize_observation=cfg.env.normalize_observation,
-        ),
+        create_env_fn=train_env,
         policy=actor,
         frames_per_batch=cfg.collector.frames_per_batch,
         total_frames=cfg.collector.total_frames,
@@ -346,6 +350,7 @@ def main(cfg: DictConfig):
                 model=actor,
                 collected_frames=collected_frames,
                 metrics=metrics_to_log,
+                train_env=train_env,
             )
             last_checkpoint_frame = collected_frames
 
@@ -357,6 +362,7 @@ def main(cfg: DictConfig):
         model=actor,
         collected_frames=collected_frames,
         metrics=latest_metrics,
+        train_env=train_env,
     )
     collector.shutdown()
     if not test_env.is_closed:
