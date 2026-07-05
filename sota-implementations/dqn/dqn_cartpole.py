@@ -22,6 +22,7 @@ from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate
 from torchrl.record import VideoRecorder
 from torchrl.record.loggers import generate_exp_name, get_logger
+from torchrl.render import save_render_checkpoint
 from utils_cartpole import eval_model, make_dqn_model, make_env
 
 torch.set_float32_matmul_precision("high")
@@ -47,21 +48,14 @@ def _save_checkpoint(
     Returns:
         The written checkpoint path, or ``None`` when checkpointing is disabled.
     """
-    if path in (None, ""):
-        return None
-    path = Path(path).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "model_state_dict": model.state_dict(),
-            "env_name": cfg.env.env_name,
-            "frames": collected_frames,
-            "metrics": dict(metrics),
-            "config": OmegaConf.to_container(cfg, resolve=True),
-        },
+    return save_render_checkpoint(
         path,
+        model,
+        env_metadata={"env_name": cfg.env.env_name},
+        frames=collected_frames,
+        metrics=metrics,
+        config=OmegaConf.to_container(cfg, resolve=True),
     )
-    return path
 
 
 @hydra.main(config_path="", config_name="config_cartpole", version_base="1.1")
