@@ -4,8 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import torch
+
 from torchrl.render.artifacts import write_render_artifact
-from torchrl.render.checkpoint import checkpoint_hash, infer_state_dict, load_checkpoint
+from torchrl.render.checkpoint import (
+    checkpoint_hash,
+    infer_state_dict,
+    load_checkpoint,
+    save_render_checkpoint,
+)
 from torchrl.render.config import (
     CameraLayout,
     EnvBackendName,
@@ -74,6 +81,7 @@ __all__ = [
     "parse_nested_key",
     "play_mujoco_wasm_trajectory",
     "render_policy",
+    "save_render_checkpoint",
     "send_mujoco_wasm_qpos",
     "seed_env",
     "write_render_artifact",
@@ -92,9 +100,14 @@ def render_policy(config: RenderConfig) -> RenderResult:
     """
     if _defer_rollout_to_notebook(config):
         return write_render_artifact(_empty_notebook_result(config), config)
-    env = make_render_env(config)
+    device = torch.device(config.policy_device or config.device)
+    checkpoint = load_checkpoint(config.ckpt, map_location=device)
+    digest = checkpoint_hash(config.ckpt)
+    env = make_render_env(config, checkpoint=checkpoint)
     try:
-        policy = load_render_policy(config, env)
+        policy = load_render_policy(
+            config, env, checkpoint=checkpoint, checkpoint_digest=digest
+        )
         result = collect_render_rollouts(env, policy, config)
         return write_render_artifact(result, config)
     finally:

@@ -327,7 +327,26 @@ def extract_qpos_trajectory(
         >>> extract_qpos_trajectory(rollout, "qpos")
         [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
     """
-    value = rollout.get(parse_nested_key(qpos_key))
+    # Saved rlrender trajectories store the step's "next" contents at the
+    # root, so a "next"-prefixed key also matches its root-level spelling
+    # (and vice versa).
+    key = parse_nested_key(qpos_key)
+    candidates = [key]
+    if isinstance(key, tuple) and len(key) > 1 and key[0] == "next":
+        candidates.append(key[1] if len(key) == 2 else key[1:])
+    elif isinstance(key, tuple):
+        candidates.append(("next", *key))
+    else:
+        candidates.append(("next", key))
+    value = None
+    for candidate in candidates:
+        value = rollout.get(candidate, None)
+        if value is not None:
+            break
+    if value is None:
+        raise KeyError(
+            f"qpos key {qpos_key!r} was not found in the rollout; tried {candidates}."
+        )
     if not torch.is_tensor(value):
         value = torch.as_tensor(value)
     value = value.detach().cpu()
@@ -1069,7 +1088,7 @@ function buildJointControls(activeModel, activeData) {
     });
     wrapper.append(label, slider);
     jointControlsEl.append(wrapper);
-    jointControls.push({name, qposAddress, slider, output});
+    jointControls.push({name, jointId, qposAddress, slider, output});
   }
 }
 
@@ -1151,7 +1170,7 @@ function applyQposVector(values) {
     for (let i = 0; i < values.length; i++) {
       const control = jointControls[i];
       data.qpos[control.qposAddress] = values[i];
-      setMatchingActuatorCtrl(data, i, values[i]);
+      setMatchingActuatorCtrl(data, control.jointId, values[i]);
     }
   }
   mujoco.mj_forward(model, data);
@@ -1275,7 +1294,14 @@ function updateJointControlValues() {
 }
 
 function setMatchingActuatorCtrl(activeData, jointId, value) {
-  if (activeData.ctrl && jointId < activeData.ctrl.length) activeData.ctrl[jointId] = value;
+  if (!activeData.ctrl || !model) return;
+  const actuatorCount = Number(model.nu ?? 0);
+  for (let actuatorId = 0; actuatorId < actuatorCount; actuatorId++) {
+    const trnType = model.actuator_trntype ? Number(model.actuator_trntype[actuatorId]) : 0;
+    if (trnType !== 0) continue;
+    if (Number(model.actuator_trnid[actuatorId * 2]) !== jointId) continue;
+    if (actuatorId < activeData.ctrl.length) activeData.ctrl[actuatorId] = value;
+  }
 }
 
 function renderOnce(sceneOverride) {
