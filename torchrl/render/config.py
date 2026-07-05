@@ -111,10 +111,6 @@ class RenderConfig:
     metadata: str | Path | None = None
     overwrite: bool = False
     video_codec: str | None = None
-    video_bitrate: str | None = None
-    quality: int | None = None
-    width: int | None = None
-    height: int | None = None
     mujoco_model_path: str | Path | None = None
     mujoco_asset_paths: list[str | Path] = field(default_factory=list)
     mujoco_qpos_key: NestedKey | None = None
@@ -249,6 +245,9 @@ class RenderEnvSpec:
         render_mode: Optional render mode, such as ``"rgb_array"``.
         env_kwargs: Extra keyword arguments supplied by the user.
         config: Full render configuration.
+        checkpoint: Checkpoint payload loaded from ``config.ckpt``, when
+            available. Factories can read checkpointed environment metadata
+            from it (see :func:`~torchrl.render.save_render_checkpoint`).
 
     Examples:
         >>> from torchrl.render import RenderConfig, RenderEnvSpec
@@ -267,9 +266,12 @@ class RenderEnvSpec:
     render_mode: str | None
     env_kwargs: dict[str, Any]
     config: RenderConfig
+    checkpoint: Any | None = None
 
     @classmethod
-    def from_config(cls, config: RenderConfig) -> RenderEnvSpec:
+    def from_config(
+        cls, config: RenderConfig, checkpoint: Any | None = None
+    ) -> RenderEnvSpec:
         """Builds an environment spec from a render config."""
         return cls(
             device=torch.device(config.env_device or config.device),
@@ -281,6 +283,7 @@ class RenderEnvSpec:
             render_mode=config.render_mode,
             env_kwargs=dict(config.env_kwargs),
             config=config,
+            checkpoint=checkpoint,
         )
 
 

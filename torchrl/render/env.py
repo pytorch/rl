@@ -14,11 +14,15 @@ from torchrl.render.import_utils import call_with_supported_kwargs, import_from_
 __all__ = ["add_step_counter", "make_render_env", "normalize_env", "seed_env"]
 
 
-def make_render_env(config: RenderConfig) -> Any:
+def make_render_env(config: RenderConfig, checkpoint: Any | None = None) -> Any:
     """Builds and prepares an environment for rendering.
 
     Args:
         config: Render configuration.
+        checkpoint: Optional checkpoint payload loaded from ``config.ckpt``.
+            Exposed to environment factories so render environments can be
+            rebuilt from checkpointed metadata (see
+            :func:`~torchrl.render.save_render_checkpoint`).
 
     Returns:
         A TorchRL environment when wrapping is possible, otherwise the factory result.
@@ -30,7 +34,7 @@ def make_render_env(config: RenderConfig) -> Any:
         raise TypeError(
             f"Environment factory must be callable, got {type(factory).__name__}."
         )
-    spec = RenderEnvSpec.from_config(config)
+    spec = RenderEnvSpec.from_config(config, checkpoint=checkpoint)
     kwargs = {
         "spec": spec,
         "device": spec.device,
@@ -41,6 +45,7 @@ def make_render_env(config: RenderConfig) -> Any:
         "camera": spec.camera,
         "render_mode": spec.render_mode,
         "env_kwargs": dict(spec.env_kwargs),
+        "checkpoint": checkpoint,
         "config": config,
         **spec.env_kwargs,
     }
