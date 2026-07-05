@@ -9,6 +9,7 @@ from typing import Any
 import torch
 import torch.nn
 import torch.optim
+from tensordict import TensorDictBase
 from torchrl.data import Composite, Unbounded
 from torchrl.envs import RewardSum, StepCounter, Transform, TransformedEnv
 from torchrl.envs.libs.gym import GymEnv
@@ -37,7 +38,12 @@ def make_render_env(spec: Any):
     TorchRL checkout, this factory draws lightweight RGB frames from the
     CartPole state when ``rlrender --from-pixels`` is requested.
     """
-    env_name = spec.env_kwargs.get("env_name", "CartPole-v1")
+    checkpoint = (
+        spec.checkpoint if isinstance(getattr(spec, "checkpoint", None), dict) else {}
+    )
+    env_name = spec.env_kwargs.get(
+        "env_name", checkpoint.get("env_name", "CartPole-v1")
+    )
     env = make_env(env_name, device=spec.device, from_pixels=False)
     if spec.from_pixels:
         env.append_transform(_CartPolePixelTransform())
@@ -97,6 +103,11 @@ class _CartPolePixelTransform(Transform):
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         return _cartpole_pixels(observation, height=self.height, width=self.width)
 
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
+
     def transform_observation_spec(self, observation_spec):
         observation_spec = observation_spec.clone()
         observation_spec["pixels"] = Unbounded(
@@ -107,19 +118,22 @@ class _CartPolePixelTransform(Transform):
         return observation_spec
 
 
+_CARTPOLE_BACKGROUND = torch.tensor([238, 242, 248], dtype=torch.uint8)
+_CARTPOLE_TRACK_COLOR = torch.tensor([90, 100, 120], dtype=torch.uint8)
+_CARTPOLE_CART_COLOR = torch.tensor([40, 90, 180], dtype=torch.uint8)
+_CARTPOLE_POLE_COLOR = torch.tensor([220, 90, 30], dtype=torch.uint8)
+_CARTPOLE_AXLE_COLOR = torch.tensor([30, 30, 30], dtype=torch.uint8)
+
+
 def _cartpole_pixels(
     observation: torch.Tensor, *, height: int, width: int
 ) -> torch.Tensor:
     source_device = observation.device
     flat_observation = observation.detach().cpu().reshape(-1, observation.shape[-1])
     frames = torch.empty(flat_observation.shape[0], height, width, 3, dtype=torch.uint8)
-    frames[..., 0] = 238
-    frames[..., 1] = 242
-    frames[..., 2] = 248
+    frames[:] = _CARTPOLE_BACKGROUND
     track_y = int(0.74 * height)
-    frames[:, track_y : track_y + 2, :, :] = torch.tensor(
-        [90, 100, 120], dtype=torch.uint8
-    )
+    frames[:, track_y : track_y + 2, :, :] = _CARTPOLE_TRACK_COLOR
     world_width = 4.8
     scale = width / world_width
     cart_width = max(8, int(0.50 * scale))
@@ -132,9 +146,7 @@ def _cartpole_pixels(
         cart_bottom = min(track_y + cart_height // 2, height - 1)
         cart_left = max(cart_x - cart_width // 2, 0)
         cart_right = min(cart_x + cart_width // 2, width - 1)
-        frames[index, cart_top:cart_bottom, cart_left:cart_right] = torch.tensor(
-            [40, 90, 180], dtype=torch.uint8
-        )
+        frames[index, cart_top:cart_bottom, cart_left:cart_right] = _CARTPOLE_CART_COLOR
         pole_x = int(round(cart_x + pole_length * torch.sin(row[2]).item()))
         pole_y = int(round(track_y - pole_length * torch.cos(row[2]).item()))
         _draw_line(
@@ -143,10 +155,12 @@ def _cartpole_pixels(
             track_y - cart_height // 2,
             pole_x,
             pole_y,
-            color=(220, 90, 30),
+            color=_CARTPOLE_POLE_COLOR,
             radius=3,
         )
-        _draw_disk(frames[index], cart_x, track_y - cart_height // 2, 5, (30, 30, 30))
+        _draw_disk(
+            frames[index], cart_x, track_y - cart_height // 2, 5, _CARTPOLE_AXLE_COLOR
+        )
     return frames.reshape(*observation.shape[:-1], height, width, 3).to(source_device)
 
 
@@ -157,15 +171,25 @@ def _draw_line(
     x1: int,
     y1: int,
     *,
-    color: tuple[int, int, int],
+    color: torch.Tensor,
     radius: int,
 ) -> None:
     steps = max(abs(x1 - x0), abs(y1 - y0), 1)
-    for step in range(steps + 1):
-        alpha = step / steps
-        x = int(round((1 - alpha) * x0 + alpha * x1))
-        y = int(round((1 - alpha) * y0 + alpha * y1))
-        _draw_disk(frame, x, y, radius, color)
+    alphas = torch.linspace(0.0, 1.0, steps + 1)
+    xs = ((1 - alphas) * x0 + alphas * x1).round().long()
+    ys = ((1 - alphas) * y0 + alphas * y1).round().long()
+    height, width = frame.shape[:2]
+    min_x = max(int(xs.min()) - radius, 0)
+    max_x = min(int(xs.max()) + radius + 1, width)
+    min_y = max(int(ys.min()) - radius, 0)
+    max_y = min(int(ys.max()) + radius + 1, height)
+    if min_x >= max_x or min_y >= max_y:
+        return
+    grid_y = torch.arange(min_y, max_y).view(-1, 1, 1)
+    grid_x = torch.arange(min_x, max_x).view(1, -1, 1)
+    distance_sq = (grid_x - xs.view(1, 1, -1)) ** 2 + (grid_y - ys.view(1, 1, -1)) ** 2
+    mask = (distance_sq <= radius**2).any(-1)
+    frame[min_y:max_y, min_x:max_x][mask] = color
 
 
 def _draw_disk(
@@ -173,13 +197,17 @@ def _draw_disk(
     cx: int,
     cy: int,
     radius: int,
-    color: tuple[int, int, int],
+    color: torch.Tensor,
 ) -> None:
     height, width = frame.shape[:2]
-    for y in range(max(cy - radius, 0), min(cy + radius + 1, height)):
-        for x in range(max(cx - radius, 0), min(cx + radius + 1, width)):
-            if (x - cx) ** 2 + (y - cy) ** 2 <= radius**2:
-                frame[y, x] = torch.tensor(color, dtype=torch.uint8)
+    y0, y1 = max(cy - radius, 0), min(cy + radius + 1, height)
+    x0, x1 = max(cx - radius, 0), min(cx + radius + 1, width)
+    if y0 >= y1 or x0 >= x1:
+        return
+    ys = torch.arange(y0, y1).unsqueeze(1)
+    xs = torch.arange(x0, x1).unsqueeze(0)
+    mask = (xs - cx) ** 2 + (ys - cy) ** 2 <= radius**2
+    frame[y0:y1, x0:x1][mask] = color
 
 
 # ====================================================================

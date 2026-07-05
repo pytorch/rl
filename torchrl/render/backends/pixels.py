@@ -62,13 +62,15 @@ class TensorDictPixelsBackend:
 
 
 def _pixel_key_candidates(config: RenderConfig) -> list[Any]:
+    # The "next" entry holds the post-step frame; the root entry is the
+    # pre-step observation, so it is only used as a fallback (e.g. for
+    # reset tensordicts that carry no "next" entry).
     key = config.pixel_key
-    candidates = [key]
     if isinstance(key, tuple):
-        candidates.append(("next", *key))
+        candidates = [("next", *key), key]
     else:
-        candidates.append(("next", key))
-    candidates.extend(["pixels", ("next", "pixels")])
+        candidates = [("next", key), key]
+    candidates.extend([("next", "pixels"), "pixels"])
     out = []
     for candidate in candidates:
         if candidate not in out:
