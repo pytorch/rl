@@ -1597,6 +1597,52 @@ class TestPPO(LossModuleTestBase):
         assert isinstance(explained_variance, TensorDict)
 
 
+def test_ppo_ess_preserves_feature_shape_for_singleton_batch():
+    class TokenActor(nn.Module):
+        def __init__(self, vocab_size):
+            super().__init__()
+            self.bias = nn.Parameter(torch.zeros(vocab_size))
+            self.in_keys = ["logits"]
+
+        def get_dist(self, tensordict):
+            return torch.distributions.Categorical(
+                logits=tensordict["logits"] + self.bias
+            )
+
+    chunk_size, action_dim, vocab_size = 8, 7, 4
+    actor = TokenActor(vocab_size)
+    loss = ClipPPOLoss(actor, critic_network=None, entropy_bonus=False)
+    loss.set_keys(
+        action="action",
+        sample_log_prob="sample_log_prob",
+        advantage="advantage",
+    )
+
+    ess = []
+    for batch_size in (2, 1):
+        logits = torch.randn(batch_size, chunk_size, action_dim, vocab_size)
+        action = torch.randint(vocab_size, (batch_size, chunk_size, action_dim))
+        sample_log_prob = torch.distributions.Categorical(logits=logits).log_prob(
+            action
+        )
+        data = TensorDict(
+            {
+                "logits": logits,
+                "action": action,
+                "sample_log_prob": sample_log_prob,
+                "advantage": torch.ones(batch_size, chunk_size, action_dim, 1),
+            },
+            batch_size=[batch_size],
+        )
+
+        output = loss(data)
+        assert output["ESS"].shape == (chunk_size, action_dim)
+        torch.testing.assert_close(output["ESS"], torch.ones(chunk_size, action_dim))
+        ess.append(output["ESS"])
+
+    assert torch.stack(ess).shape == (2, chunk_size, action_dim)
+
+
 class TestA2C(LossModuleTestBase):
     seed = 0
 
@@ -2916,3 +2962,7 @@ class TestReinforce(LossModuleTestBase):
             # Test it works with value key
             loss = loss_fn(td)
             assert "loss_value" in loss.keys()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

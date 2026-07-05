@@ -1289,7 +1289,7 @@ class ClipPPOLoss(PPOLoss):
             # In theory, ESS should be computed on particles sampled from the same source. Here we sample according
             # to different, unrelated trajectories, which is not standard. Still, it can give an idea of the weights'
             # dispersion.
-            lw = log_weight.squeeze()
+            lw = log_weight.squeeze(-1)
             ess = (2 * lw.logsumexp(0) - (2 * lw).logsumexp(0)).exp()
             batch = log_weight.shape[0]
 
