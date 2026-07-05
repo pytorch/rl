@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import importlib.util
+import warnings
 from typing import Any, Literal
 
 import torch
 import torch.nn
+from tensordict import TensorDictBase
 from tensordict.nn import AddStateIndependentNormalScale, TensorDictModule
 
 from tensordict.utils import NestedKey
@@ -17,6 +19,7 @@ from torchrl.envs import (
     ClipTransform,
     DoubleToFloat,
     ExplorationType,
+    ObservationNorm,
     RewardSum,
     StepCounter,
     Transform,
@@ -54,6 +57,8 @@ def make_env(
     backend: _EnvBackend = "gym",
     config_overrides: dict[str, Any] | None = None,
     normalize_observation: bool = True,
+    vecnorm_stats: dict[str, torch.Tensor] | None = None,
+    max_episode_steps: int | None = None,
     qpos_key: NestedKey | None = None,
 ):
     if backend == "gym":
@@ -83,13 +88,8 @@ def make_env(
             "Expected 'gym' or 'mujoco_playground'."
         )
     env = TransformedEnv(env)
-    if normalize_observation:
-        env.append_transform(VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2))
-        env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
-    env.append_transform(RewardSum())
-    env.append_transform(StepCounter())
-    if _observation_dtype(env) is torch.float64:
-        env.append_transform(DoubleToFloat(in_keys=["observation"]))
+    # The qpos transform must run before observation normalization so saved
+    # qpos values are raw joint positions rather than whitened observations.
     if qpos_key is not None:
         env.append_transform(
             _MujocoQposTransform(
@@ -97,7 +97,53 @@ def make_env(
                 out_key=qpos_key,
             )
         )
+    if normalize_observation:
+        if vecnorm_stats is not None:
+            env.append_transform(
+                ObservationNorm(
+                    loc=vecnorm_stats["loc"].to(device),
+                    scale=vecnorm_stats["scale"].to(device),
+                    in_keys=["observation"],
+                    out_keys=["observation"],
+                    standard_normal=True,
+                )
+            )
+        else:
+            env.append_transform(
+                VecNorm(in_keys=["observation"], decay=0.99999, eps=1e-2)
+            )
+        env.append_transform(ClipTransform(in_keys=["observation"], low=-10, high=10))
+    env.append_transform(RewardSum())
+    env.append_transform(StepCounter(max_steps=max_episode_steps))
+    if _observation_dtype(env) is torch.float64:
+        env.append_transform(DoubleToFloat(in_keys=["observation"]))
     return env
+
+
+def get_vecnorm_state(env) -> dict[str, torch.Tensor] | None:
+    """Extracts frozen VecNorm observation statistics for rlrender checkpoints.
+
+    Returns ``None`` when the environment holds no reachable VecNorm transform
+    (e.g. observation normalization is disabled).
+    """
+    transform = getattr(env, "transform", None)
+    if transform is None:
+        return None
+    try:
+        transforms = list(transform)
+    except TypeError:
+        transforms = [transform]
+    for item in transforms:
+        if isinstance(item, VecNorm):
+            loc = item.loc.get("observation", None)
+            scale = item.scale.get("observation", None)
+            if loc is None or scale is None:
+                return None
+            return {
+                "loc": loc.detach().cpu().clone(),
+                "scale": scale.detach().cpu().clone(),
+            }
+    return None
 
 
 def _observation_dtype(env) -> torch.dtype | None:
@@ -119,16 +165,41 @@ def _get_mujoco_playground_env() -> type:
 def make_render_env(spec: Any):
     """Builds a MuJoCo environment suitable for ``rlrender``.
 
-    The Gym render factory emits an additional ``qpos`` TensorDict key for
-    simple MuJoCo-WASM playback. ``InvertedPendulum-v4`` is the first supported
-    checkpoint-rendering task and defaults to unnormalized observations so the
-    saved policy can be replayed without a separate VecNorm state checkpoint.
+    Environment defaults (name, backend, observation normalization, frozen
+    VecNorm statistics) are read from the checkpoint metadata written by
+    ``ppo_mujoco.py`` and can be overridden through ``--env-kwargs``. qpos
+    extraction for MuJoCo-WASM playback is enabled automatically for the env
+    names listed in ``_MUJOCO_QPOS_DIMS``.
     """
-    env_name = spec.env_kwargs.get("env_name", "InvertedPendulum-v4")
-    backend = spec.env_kwargs.get("backend", "gym")
-    config_overrides = spec.env_kwargs.get("config_overrides")
-    normalize_observation = bool(spec.env_kwargs.get("normalize_observation", False))
-    qpos_key = spec.env_kwargs.get("qpos_key", "qpos" if backend == "gym" else None)
+    checkpoint = (
+        spec.checkpoint if isinstance(getattr(spec, "checkpoint", None), dict) else {}
+    )
+    env_name = spec.env_kwargs.get(
+        "env_name", checkpoint.get("env_name", "InvertedPendulum-v4")
+    )
+    backend = spec.env_kwargs.get("backend", checkpoint.get("env_backend", "gym"))
+    config_overrides = spec.env_kwargs.get(
+        "config_overrides", checkpoint.get("env_config_overrides")
+    )
+    normalize_observation = bool(
+        spec.env_kwargs.get(
+            "normalize_observation", checkpoint.get("normalize_observation", False)
+        )
+    )
+    vecnorm_stats = checkpoint.get("vecnorm")
+    if normalize_observation and vecnorm_stats is None:
+        warnings.warn(
+            "Rendering with normalize_observation=True but the checkpoint does not "
+            "contain VecNorm statistics under 'vecnorm'. Observations will be "
+            "normalized with freshly initialized running statistics and will not "
+            "match training. Save checkpoints with the updated training script or "
+            "pass normalize_observation=False in --env-kwargs.",
+            stacklevel=2,
+        )
+    default_qpos_key = (
+        "qpos" if backend == "gym" and env_name in _MUJOCO_QPOS_DIMS else None
+    )
+    qpos_key = spec.env_kwargs.get("qpos_key", default_qpos_key)
     return make_env(
         env_name,
         device=spec.device,
@@ -136,6 +207,7 @@ def make_render_env(spec: Any):
         backend=backend,
         config_overrides=config_overrides,
         normalize_observation=normalize_observation,
+        vecnorm_stats=vecnorm_stats,
         qpos_key=qpos_key,
     )
 
@@ -228,6 +300,7 @@ def make_ppo_models(
     backend: _EnvBackend = "gym",
     config_overrides: dict[str, Any] | None = None,
     normalize_observation: bool = True,
+    max_episode_steps: int | None = None,
 ):
     proof_environment = make_env(
         env_name,
@@ -235,6 +308,7 @@ def make_ppo_models(
         backend=backend,
         config_overrides=config_overrides,
         normalize_observation=normalize_observation,
+        max_episode_steps=max_episode_steps,
     )
     actor, critic = make_ppo_models_state(proof_environment, device=device)
     return actor, critic
@@ -273,6 +347,11 @@ class _MujocoQposTransform(Transform):
 
     def _apply_transform(self, observation: torch.Tensor) -> torch.Tensor:
         return observation[..., : self.qpos_dim].clone()
+
+    def _reset(
+        self, tensordict: TensorDictBase, tensordict_reset: TensorDictBase
+    ) -> TensorDictBase:
+        return self._call(tensordict_reset)
 
     def transform_observation_spec(self, observation_spec):
         observation_spec = observation_spec.clone()

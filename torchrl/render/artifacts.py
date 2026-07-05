@@ -57,6 +57,8 @@ def write_render_artifact(result: RenderResult, config: RenderConfig) -> RenderR
                 result.metadata.setdefault("warnings", []).append(warning)
         result.frame_paths = frame_paths
         _write_json(asset_dir / "metadata.json", result.metadata)
+        if config.metadata is not None:
+            _write_json(Path(config.metadata), result.metadata)
         write_render_notebook(result, config, out)
     else:
         raise ValueError(f"Unsupported render format {config.format!r}.")
@@ -136,43 +138,49 @@ def _write_frames(
 def _write_videos(
     frames: list[list[FrameBundle]], out: Path, config: RenderConfig
 ) -> list[Path]:
-    streams = _streams(frames)
-    if not streams:
-        raise RuntimeError("No frames were captured, so no video can be written.")
-    if out.suffix.lower() == ".mp4" and len(streams) == 1:
-        key = next(iter(streams))
-        return [
-            encode_video(streams[key], out, config.fps, video_codec=config.video_codec)
-        ]
-    if out.suffix.lower() == ".mp4":
-        composed = _compose_streams(streams)
-        return [encode_video(composed, out, config.fps, video_codec=config.video_codec)]
-    out.mkdir(parents=True, exist_ok=True)
-    paths = []
-    for (traj_index, camera), stream in streams.items():
-        path = out / f"traj_{traj_index:03d}_{camera}.mp4"
-        paths.append(
-            encode_video(stream, path, config.fps, video_codec=config.video_codec)
-        )
-    return paths
+    def encode(stream, path):
+        return encode_video(stream, path, config.fps, video_codec=config.video_codec)
+
+    return _write_stream_artifacts(frames, out, config, suffix=".mp4", encode=encode)
 
 
 def _write_gif(
     frames: list[list[FrameBundle]], out: Path, config: RenderConfig
 ) -> list[Path]:
+    def encode(stream, path):
+        return encode_gif(stream, path, config.fps)
+
+    return _write_stream_artifacts(frames, out, config, suffix=".gif", encode=encode)
+
+
+def _write_stream_artifacts(
+    frames: list[list[FrameBundle]],
+    out: Path,
+    config: RenderConfig,
+    *,
+    suffix: str,
+    encode,
+) -> list[Path]:
     streams = _streams(frames)
     if not streams:
-        raise RuntimeError("No frames were captured, so no GIF can be written.")
-    if out.suffix.lower() == ".gif" and len(streams) == 1:
+        raise RuntimeError(
+            f"No frames were captured, so no {suffix.lstrip('.')} can be written."
+        )
+    single_file = out.suffix.lower() == suffix and config.camera_layout != "separate"
+    if single_file and len(streams) == 1:
         key = next(iter(streams))
-        return [encode_gif(streams[key], out, config.fps)]
-    if out.suffix.lower() == ".gif":
-        return [encode_gif(_compose_streams(streams), out, config.fps)]
-    out.mkdir(parents=True, exist_ok=True)
+        return [encode(streams[key], out)]
+    if single_file:
+        return [encode(_compose_streams(streams, config.camera_layout), out)]
+    if out.suffix.lower() == suffix:
+        base_dir, stem = out.parent, out.stem + "_"
+    else:
+        out.mkdir(parents=True, exist_ok=True)
+        base_dir, stem = out, ""
     paths = []
     for (traj_index, camera), stream in streams.items():
-        path = out / f"traj_{traj_index:03d}_{camera}.gif"
-        paths.append(encode_gif(stream, path, config.fps))
+        path = base_dir / f"{stem}traj_{traj_index:03d}_{camera}{suffix}"
+        paths.append(encode(stream, path))
     return paths
 
 
@@ -320,7 +328,8 @@ def _streams(
 
 
 def _compose_streams(
-    streams: dict[tuple[int, str], list[np.ndarray]]
+    streams: dict[tuple[int, str], list[np.ndarray]],
+    layout: str = "grid",
 ) -> list[np.ndarray]:
     keys = sorted(streams)
     max_len = max(len(streams[key]) for key in keys)
@@ -330,7 +339,7 @@ def _compose_streams(
         for key in keys:
             stream = streams[key]
             frame_list.append(stream[min(frame_index, len(stream) - 1)])
-        composed.append(compose_frame_grid(frame_list))
+        composed.append(compose_frame_grid(frame_list, layout))
     return composed
 
 
