@@ -12,11 +12,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from torchrl.render.artifacts import write_render_artifact
+from torchrl.render import render_policy
+
 from torchrl.render.config import parse_nested_key, RenderConfig, RenderFormat
-from torchrl.render.env import make_render_env
-from torchrl.render.policy import load_render_policy
-from torchrl.render.rollout import collect_render_rollouts
 
 _has_yaml = importlib.util.find_spec("yaml") is not None
 _has_tomllib = importlib.util.find_spec("tomllib") is not None
@@ -162,18 +160,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-overwrite", dest="overwrite", action="store_false")
     parser.add_argument("--video-codec", help="Codec name forwarded to torchcodec.")
     parser.add_argument(
-        "--quality", type=int, help="Reserved image/video quality setting."
-    )
-    parser.add_argument("--width", type=int, help="Reserved render width.")
-    parser.add_argument("--height", type=int, help="Reserved render height.")
-    parser.add_argument(
         "--dry-run",
+        dest="dry_run",
         action="store_true",
+        default=None,
         help="Validate and print config without rendering.",
     )
     parser.add_argument(
         "--validate-only",
+        dest="validate_only",
         action="store_true",
+        default=None,
         help="Validate config without rendering.",
     )
     parser.add_argument(
@@ -218,19 +215,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         config = config_from_args(args)
-        if args.print_config or args.dry_run:
+        if args.print_config or config.dry_run:
             sys.stdout.write(config.to_json(indent=2, sort_keys=True) + "\n")
-        if args.dry_run or args.validate_only:
+        if config.dry_run or config.validate_only:
             return 0
-        env = make_render_env(config)
-        try:
-            policy = load_render_policy(config, env)
-            result = collect_render_rollouts(env, policy, config)
-            result = write_render_artifact(result, config)
-        finally:
-            close = getattr(env, "close", None)
-            if callable(close):
-                close()
+        result = render_policy(config)
         if result.artifact_path is not None:
             sys.stdout.write(str(result.artifact_path) + "\n")
         return 0
