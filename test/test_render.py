@@ -118,241 +118,251 @@ def tiny_policy_factory(spec):
     return ZeroPolicy().to(spec.device)
 
 
-def test_parse_nested_key_and_import_from_string(tmp_path, monkeypatch):
-    module = tmp_path / "render_factories.py"
-    module.write_text("VALUE = 3\n", encoding="utf-8")
-    file_module = tmp_path / "file_factories.py"
-    file_module.write_text("VALUE = 4\n", encoding="utf-8")
-    monkeypatch.syspath_prepend(str(tmp_path))
-    assert parse_nested_key("agent.action") == ("agent", "action")
-    assert import_from_string("render_factories:VALUE") == 3
-    assert import_from_string(f"{file_module}:VALUE") == 4
-    with pytest.raises(ImportError, match="attribute"):
-        import_from_string("render_factories:MISSING")
-
-    def factory_with_default(task="default"):
-        return task
-
-    assert call_with_supported_kwargs(factory_with_default, object(), {}) == "default"
-    assert (
-        call_with_supported_kwargs(
-            factory_with_default, object(), {"task": "configured"}
-        )
-        == "configured"
-    )
-
-
-def test_checkpoint_helpers(tmp_path):
-    path = tmp_path / "policy.pt"
-    payload = {"model_state_dict": {"bias": torch.ones(1)}}
-    torch.save(payload, path)
-    assert load_checkpoint(path)["model_state_dict"]["bias"].item() == 1
-    assert len(checkpoint_hash(path)) == 64
-    assert infer_state_dict(payload)["bias"].item() == 1
-    with pytest.raises(ValueError, match="Only local checkpoint"):
-        load_checkpoint("https://example.com/policy.pt")
-
-
-def test_config_from_args_infers_format_and_kwargs(tmp_path):
-    args = build_parser().parse_args(
-        [
-            "--ckpt",
-            str(tmp_path / "policy.pt"),
-            "--policy",
-            "project.policy:make_policy",
-            "--env",
-            "project.env:make_env",
-            "--out",
-            str(tmp_path / "report.ipynb"),
-            "--env-kwargs",
-            '{"task": "Tiny"}',
-            "--action-key",
-            "agent.action",
-        ]
-    )
-    config = config_from_args(args)
-    assert config.format == "ipynb"
-    assert config.save_rollout is True
-    assert config.env_kwargs == {"task": "Tiny"}
-    assert config.action_key == ("agent", "action")
-
-
-def test_config_and_cli_validation(tmp_path, capsys):
-    with pytest.raises(ValueError, match="format must be one of"):
-        RenderConfig(
-            tmp_path / "policy.pt",
-            "project.policy:make_policy",
-            "project.env:make_env",
-            format="invalid",
-        )
-    with pytest.raises(SystemExit) as exc_info:
-        cli_main(["--ckpt", str(tmp_path / "policy.pt")])
-    assert exc_info.value.code == 2
-    assert "Missing required rlrender option --policy" in capsys.readouterr().err
-
-
 def tensor_only_policy(obs):
     if not torch.is_tensor(obs):
         raise TypeError("expected a tensor observation")
     return obs + 1
 
 
-def test_tensordict_policy_adapter_nested_action_key():
-    adapter = TensorDictPolicyAdapter(
-        tensor_only_policy,
-        obs_key=("agent", "obs"),
-        action_key=("agent", "action"),
+class TestRenderConfig:
+    def test_parse_nested_key_and_import_from_string(self, tmp_path, monkeypatch):
+        module = tmp_path / "render_factories.py"
+        module.write_text("VALUE = 3\n", encoding="utf-8")
+        file_module = tmp_path / "file_factories.py"
+        file_module.write_text("VALUE = 4\n", encoding="utf-8")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        assert parse_nested_key("agent.action") == ("agent", "action")
+        assert import_from_string("render_factories:VALUE") == 3
+        assert import_from_string(f"{file_module}:VALUE") == 4
+        with pytest.raises(ImportError, match="attribute"):
+            import_from_string("render_factories:MISSING")
+
+        def factory_with_default(task="default"):
+            return task
+
+        assert (
+            call_with_supported_kwargs(factory_with_default, object(), {}) == "default"
+        )
+        assert (
+            call_with_supported_kwargs(
+                factory_with_default, object(), {"task": "configured"}
+            )
+            == "configured"
+        )
+
+
+class TestRenderCLI:
+    def test_config_from_args_infers_format_and_kwargs(self, tmp_path):
+        args = build_parser().parse_args(
+            [
+                "--ckpt",
+                str(tmp_path / "policy.pt"),
+                "--policy",
+                "project.policy:make_policy",
+                "--env",
+                "project.env:make_env",
+                "--out",
+                str(tmp_path / "report.ipynb"),
+                "--env-kwargs",
+                '{"task": "Tiny"}',
+                "--action-key",
+                "agent.action",
+            ]
+        )
+        config = config_from_args(args)
+        assert config.format == "ipynb"
+        assert config.save_rollout is True
+        assert config.env_kwargs == {"task": "Tiny"}
+        assert config.action_key == ("agent", "action")
+
+    def test_config_and_cli_validation(self, tmp_path, capsys):
+        with pytest.raises(ValueError, match="format must be one of"):
+            RenderConfig(
+                tmp_path / "policy.pt",
+                "project.policy:make_policy",
+                "project.env:make_env",
+                format="invalid",
+            )
+        with pytest.raises(SystemExit) as exc_info:
+            cli_main(["--ckpt", str(tmp_path / "policy.pt")])
+        assert exc_info.value.code == 2
+        assert "Missing required rlrender option --policy" in capsys.readouterr().err
+
+
+class TestRenderCheckpoint:
+    def test_checkpoint_helpers(self, tmp_path):
+        path = tmp_path / "policy.pt"
+        payload = {"model_state_dict": {"bias": torch.ones(1)}}
+        torch.save(payload, path)
+        assert load_checkpoint(path)["model_state_dict"]["bias"].item() == 1
+        assert len(checkpoint_hash(path)) == 64
+        assert infer_state_dict(payload)["bias"].item() == 1
+        with pytest.raises(ValueError, match="Only local checkpoint"):
+            load_checkpoint("https://example.com/policy.pt")
+
+
+class TestRenderPolicy:
+    def test_tensordict_policy_adapter_nested_action_key(self):
+        adapter = TensorDictPolicyAdapter(
+            tensor_only_policy,
+            obs_key=("agent", "obs"),
+            action_key=("agent", "action"),
+        )
+        td = TensorDict(
+            {"agent": TensorDict({"obs": torch.zeros(1)}, batch_size=[])}, batch_size=[]
+        )
+        out = adapter(td)
+        assert torch.equal(out.get(("agent", "action")), torch.ones(1))
+
+
+class TestRenderRollouts:
+    def test_make_env_policy_and_collect_rollouts(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        policy = ZeroPolicy()
+        policy.bias.data.fill_(0.5)
+        torch.save({"model_state_dict": policy.state_dict()}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=3,
+            format="jsonl",
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        assert len(result.trajectories) == 1
+        assert result.trajectories[0].shape[0] == 2
+        assert result.frames[0][0].frames["default"].shape == (4, 4, 3)
+        assert result.metadata["trajectories"][0]["return"] == 2.0
+        assert torch.equal(
+            result.trajectories[0].get("action"), torch.full((2, 1), 0.5)
+        )
+
+
+class TestRenderArtifacts:
+    def test_render_policy_writes_jsonl(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        out = tmp_path / "events.jsonl"
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=3,
+            format="jsonl",
+            out=out,
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        result = render_policy(config)
+        assert result.artifact_path == out
+        lines = out.read_text(encoding="utf-8").splitlines()
+        assert json.loads(lines[0])["type"] == "metadata"
+        metadata = json.loads(out.with_suffix(".jsonl.metadata.json").read_text())
+        assert metadata["checkpoint"]["sha256"] == checkpoint_hash(ckpt)
+
+    def test_write_npz_and_notebook_artifacts(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            format="npz",
+            out=tmp_path / "rollouts.npz",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        written = write_render_artifact(result, config)
+        assert written.artifact_path.exists()
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            format="ipynb",
+            out=tmp_path / "report.ipynb",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        env = make_render_env(config)
+        policy = load_render_policy(config, env)
+        result = collect_render_rollouts(env, policy, config)
+        written = write_render_artifact(result, config)
+        notebook = json.loads(written.artifact_path.read_text(encoding="utf-8"))
+        assert notebook["nbformat"] == 4
+        assert (tmp_path / "report" / "metadata.json").exists()
+
+    @pytest.mark.skipif(
+        not _has_pil, reason="Pillow is required for PNG frame artifacts"
     )
-    td = TensorDict(
-        {"agent": TensorDict({"obs": torch.zeros(1)}, batch_size=[])}, batch_size=[]
+    def test_frames_artifact_optional_dependency(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            format="frames",
+            out=tmp_path / "frames",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        result = render_policy(config)
+        assert result.frame_paths
+        assert result.frame_paths[0].suffix == ".png"
+
+    @pytest.mark.skipif(not _has_pil, reason="Pillow is required for GIF artifacts")
+    def test_gif_artifact_optional_dependency(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            format="gif",
+            out=tmp_path / "render.gif",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        result = render_policy(config)
+        assert result.artifact_path.exists()
+
+    @pytest.mark.skipif(
+        not _has_torchcodec, reason="torchcodec is required for MP4 artifacts"
     )
-    out = adapter(td)
-    assert torch.equal(out.get(("agent", "action")), torch.ones(1))
+    def test_mp4_artifact_optional_dependency(self, tmp_path):
+        ckpt = tmp_path / "policy.pt"
+        torch.save({}, ckpt)
+        config = RenderConfig(
+            ckpt=ckpt,
+            policy=tiny_policy_factory,
+            env=tiny_env_factory,
+            max_steps=2,
+            format="mp4",
+            out=tmp_path / "render.mp4",
+            auto_load_policy=False,
+            overwrite=True,
+        )
+        result = render_policy(config)
+        assert result.artifact_path.exists()
 
 
-def test_make_env_policy_and_collect_rollouts(tmp_path):
-    ckpt = tmp_path / "policy.pt"
-    policy = ZeroPolicy()
-    policy.bias.data.fill_(0.5)
-    torch.save({"model_state_dict": policy.state_dict()}, ckpt)
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=3,
-        format="jsonl",
-    )
-    env = make_render_env(config)
-    policy = load_render_policy(config, env)
-    result = collect_render_rollouts(env, policy, config)
-    assert len(result.trajectories) == 1
-    assert result.trajectories[0].shape[0] == 2
-    assert result.frames[0][0].frames["default"].shape == (4, 4, 3)
-    assert result.metadata["trajectories"][0]["return"] == 2.0
-    assert torch.equal(result.trajectories[0].get("action"), torch.full((2, 1), 0.5))
-
-
-def test_render_policy_writes_jsonl(tmp_path):
-    ckpt = tmp_path / "policy.pt"
-    torch.save({}, ckpt)
-    out = tmp_path / "events.jsonl"
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=3,
-        format="jsonl",
-        out=out,
-        auto_load_policy=False,
-        overwrite=True,
-    )
-    result = render_policy(config)
-    assert result.artifact_path == out
-    lines = out.read_text(encoding="utf-8").splitlines()
-    assert json.loads(lines[0])["type"] == "metadata"
-    metadata = json.loads(out.with_suffix(".jsonl.metadata.json").read_text())
-    assert metadata["checkpoint"]["sha256"] == checkpoint_hash(ckpt)
-
-
-def test_write_npz_and_notebook_artifacts(tmp_path):
-    ckpt = tmp_path / "policy.pt"
-    torch.save({}, ckpt)
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=2,
-        format="npz",
-        out=tmp_path / "rollouts.npz",
-        auto_load_policy=False,
-        overwrite=True,
-    )
-    env = make_render_env(config)
-    policy = load_render_policy(config, env)
-    result = collect_render_rollouts(env, policy, config)
-    written = write_render_artifact(result, config)
-    assert written.artifact_path.exists()
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=2,
-        format="ipynb",
-        out=tmp_path / "report.ipynb",
-        auto_load_policy=False,
-        overwrite=True,
-    )
-    env = make_render_env(config)
-    policy = load_render_policy(config, env)
-    result = collect_render_rollouts(env, policy, config)
-    written = write_render_artifact(result, config)
-    notebook = json.loads(written.artifact_path.read_text(encoding="utf-8"))
-    assert notebook["nbformat"] == 4
-    assert (tmp_path / "report" / "metadata.json").exists()
-
-
-def test_frame_normalization_and_grid():
-    frames = normalize_frame_output(torch.zeros(3, 4, 4, dtype=torch.uint8))
-    assert frames["default"].shape == (4, 4, 3)
-    grid = compose_frame_grid([frames["default"], np.ones((4, 4, 3), dtype=np.uint8)])
-    assert grid.shape == (4, 8, 3)
-
-
-@pytest.mark.skipif(not _has_pil, reason="Pillow is required for PNG frame artifacts")
-def test_frames_artifact_optional_dependency(tmp_path):
-    ckpt = tmp_path / "policy.pt"
-    torch.save({}, ckpt)
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=2,
-        format="frames",
-        out=tmp_path / "frames",
-        auto_load_policy=False,
-        overwrite=True,
-    )
-    result = render_policy(config)
-    assert result.frame_paths
-    assert result.frame_paths[0].suffix == ".png"
-
-
-@pytest.mark.skipif(not _has_pil, reason="Pillow is required for GIF artifacts")
-def test_gif_artifact_optional_dependency(tmp_path):
-    ckpt = tmp_path / "policy.pt"
-    torch.save({}, ckpt)
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=2,
-        format="gif",
-        out=tmp_path / "render.gif",
-        auto_load_policy=False,
-        overwrite=True,
-    )
-    result = render_policy(config)
-    assert result.artifact_path.exists()
-
-
-@pytest.mark.skipif(
-    not _has_torchcodec, reason="torchcodec is required for MP4 artifacts"
-)
-def test_mp4_artifact_optional_dependency(tmp_path):
-    ckpt = tmp_path / "policy.pt"
-    torch.save({}, ckpt)
-    config = RenderConfig(
-        ckpt=ckpt,
-        policy=tiny_policy_factory,
-        env=tiny_env_factory,
-        max_steps=2,
-        format="mp4",
-        out=tmp_path / "render.mp4",
-        auto_load_policy=False,
-        overwrite=True,
-    )
-    result = render_policy(config)
-    assert result.artifact_path.exists()
+class TestRenderVideo:
+    def test_frame_normalization_and_grid(self):
+        frames = normalize_frame_output(torch.zeros(3, 4, 4, dtype=torch.uint8))
+        assert frames["default"].shape == (4, 4, 3)
+        grid = compose_frame_grid(
+            [frames["default"], np.ones((4, 4, 3), dtype=np.uint8)]
+        )
+        assert grid.shape == (4, 8, 3)
 
 
 if __name__ == "__main__":
