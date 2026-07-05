@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-04T07:08:27.754560+00:00",
+  "generated_at": "2026-07-05T07:15:25.735459+00:00",
   "analysis_period": {
     "start": "2026-06-23",
     "end": "2026-06-30",
@@ -8,7 +8,7 @@
   "summary": {
     "total_tests": 29446,
     "flaky_count": 17,
-    "new_flaky_count": 17,
+    "new_flaky_count": 0,
     "resolved_count": 0
   },
   "flaky_tests": [
@@ -31,7 +31,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_batched_env_config",
@@ -52,7 +52,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_batched_env_with_one_transform",
@@ -73,7 +73,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_batched_env_with_two_transforms",
@@ -94,7 +94,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_simple_config_instantiation",
@@ -115,7 +115,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_env_parsing",
@@ -136,7 +136,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_env_parsing_with_file",
@@ -157,7 +157,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_collector_parsing_with_file",
@@ -178,7 +178,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_trainer_parsing_with_file",
@@ -199,7 +199,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_dqn_trainer_parsing_with_file",
@@ -220,7 +220,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_dqn_trainer_parsing_with_hook_config",
@@ -241,7 +241,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_dqn_trainer_iql_style_parsing_with_file",
@@ -262,7 +262,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_dqn_trainer_qmix_style_parsing_with_file",
@@ -283,7 +283,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_ddpg_trainer_parsing_with_file",
@@ -304,7 +304,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_iql_trainer_parsing_with_file",
@@ -325,7 +325,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_cql_trainer_parsing_with_file",
@@ -346,7 +346,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     },
     {
       "nodeid": "test/test_configs.py::TestHydraParsing::test_transformed_env_parsing_with_file",
@@ -367,7 +367,7 @@
         "2026-06-27T17:45:50Z"
       ],
       "first_seen_flaky": "2026-06-27T17:45:50Z",
-      "is_new": true
+      "is_new": false
     }
   ],
   "thresholds": {
