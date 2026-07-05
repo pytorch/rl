@@ -12,9 +12,81 @@ from typing import Any
 import torch
 from torch import Tensor
 
-__all__ = ["checkpoint_hash", "infer_state_dict", "load_checkpoint"]
+__all__ = [
+    "checkpoint_hash",
+    "infer_state_dict",
+    "load_checkpoint",
+    "save_render_checkpoint",
+]
 
 _STATE_DICT_KEYS = ("model_state_dict", "policy", "state_dict")
+
+
+def save_render_checkpoint(
+    path: str | Path | None,
+    model: Any,
+    *,
+    env_metadata: Mapping[str, Any] | None = None,
+    frames: int | None = None,
+    metrics: Mapping[str, Any] | None = None,
+    config: Mapping[str, Any] | None = None,
+    extra: Mapping[str, Any] | None = None,
+) -> Path | None:
+    """Writes a checkpoint in the layout expected by rlrender factories.
+
+    The model weights are stored under ``"model_state_dict"`` (the first key
+    probed by :func:`infer_state_dict`) and ``env_metadata`` entries are merged
+    at the top level of the payload so environment and policy factories can
+    rebuild the training setup. Conventional environment metadata keys used by
+    the sota-implementations factories are ``"env_name"``, ``"env_backend"``,
+    ``"env_config_overrides"``, ``"env_num_envs"``, ``"env_batch_mode"``,
+    ``"normalize_observation"``, and ``"vecnorm"`` (frozen observation
+    normalization statistics).
+
+    Args:
+        path: Destination checkpoint path. ``None`` or ``""`` disables
+            checkpointing.
+        model: Module exposing ``state_dict()``, or a ready state-dict mapping.
+        env_metadata: Environment metadata merged into the payload.
+        frames: Number of training frames collected so far.
+        metrics: Latest scalar metrics.
+        config: JSON-serializable training configuration.
+        extra: Additional payload entries merged last.
+
+    Returns:
+        The written checkpoint path, or ``None`` when checkpointing is disabled.
+
+    Examples:
+        >>> import tempfile
+        >>> import torch
+        >>> from torchrl.render import load_checkpoint, save_render_checkpoint
+        >>> module = torch.nn.Linear(2, 2)
+        >>> with tempfile.TemporaryDirectory() as tmpdir:
+        ...     path = save_render_checkpoint(
+        ...         f"{tmpdir}/policy.pt", module, env_metadata={"env_name": "CartPole-v1"}
+        ...     )
+        ...     payload = load_checkpoint(path)
+        >>> payload["env_name"]
+        'CartPole-v1'
+    """
+    if path in (None, ""):
+        return None
+    state_dict = model if isinstance(model, Mapping) else model.state_dict()
+    payload: dict[str, Any] = {"model_state_dict": state_dict}
+    if env_metadata:
+        payload.update(dict(env_metadata))
+    if frames is not None:
+        payload["frames"] = int(frames)
+    if metrics is not None:
+        payload["metrics"] = dict(metrics)
+    if config is not None:
+        payload["config"] = dict(config)
+    if extra:
+        payload.update(dict(extra))
+    path = Path(path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(payload, path)
+    return path
 
 
 def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") -> Any:
