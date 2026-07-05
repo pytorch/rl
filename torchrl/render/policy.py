@@ -61,12 +61,24 @@ class TensorDictPolicyAdapter:
         return tensordict
 
 
-def load_render_policy(config: RenderConfig, env: Any | None = None) -> Any:
+def load_render_policy(
+    config: RenderConfig,
+    env: Any | None = None,
+    *,
+    checkpoint: Any | None = None,
+    checkpoint_digest: str | None = None,
+) -> Any:
     """Builds and prepares a policy for rendering.
 
     Args:
         config: Render configuration.
         env: Optional environment used to expose specs to the policy factory.
+
+    Keyword Args:
+        checkpoint: Checkpoint payload already loaded from ``config.ckpt``.
+            When ``None``, the checkpoint is loaded here.
+        checkpoint_digest: SHA256 digest of the checkpoint file. When ``None``,
+            the digest is computed here.
 
     Returns:
         A TensorDict-compatible policy callable or module.
@@ -81,8 +93,9 @@ def load_render_policy(config: RenderConfig, env: Any | None = None) -> Any:
             f"Policy factory must be callable, got {type(factory).__name__}."
         )
     device = torch.device(config.policy_device or config.device)
-    checkpoint = load_checkpoint(config.ckpt, map_location=device)
-    digest = checkpoint_hash(config.ckpt)
+    if checkpoint is None:
+        checkpoint = load_checkpoint(config.ckpt, map_location=device)
+    digest = checkpoint_digest or checkpoint_hash(config.ckpt)
     env_specs = getattr(env, "specs", None)
     spec = RenderPolicySpec(
         ckpt_path=config.ckpt,

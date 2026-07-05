@@ -8,7 +8,7 @@ import importlib.util
 import math
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -91,15 +91,30 @@ def normalize_frame_output(output: Any) -> dict[str, np.ndarray]:
     return {"default": normalize_frame(output)}
 
 
-def compose_frame_grid(frames: Sequence[np.ndarray]) -> np.ndarray:
-    """Composes multiple frames into a near-square RGB grid."""
+def compose_frame_grid(
+    frames: Sequence[np.ndarray],
+    layout: Literal["single", "grid", "horizontal", "vertical"] = "grid",
+) -> np.ndarray:
+    """Composes multiple frames into one RGB image.
+
+    Args:
+        frames: Frames to compose.
+        layout: ``"grid"`` (and ``"single"``) tile the frames into a
+            near-square grid, ``"horizontal"`` composes one row, and
+            ``"vertical"`` composes one column.
+    """
     if not frames:
         raise ValueError("Cannot compose an empty frame grid.")
     normalized = [normalize_frame(frame) for frame in frames]
     height = max(frame.shape[0] for frame in normalized)
     width = max(frame.shape[1] for frame in normalized)
     count = len(normalized)
-    cols = math.ceil(math.sqrt(count))
+    if layout == "horizontal":
+        cols = count
+    elif layout == "vertical":
+        cols = 1
+    else:
+        cols = math.ceil(math.sqrt(count))
     rows = math.ceil(count / cols)
     grid = np.zeros((rows * height, cols * width, 3), dtype=np.uint8)
     for index, frame in enumerate(normalized):

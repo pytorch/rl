@@ -177,11 +177,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-overwrite", dest="overwrite", action="store_false")
     parser.add_argument("--video-codec", help="Codec name forwarded to torchcodec.")
     parser.add_argument(
-        "--quality", type=int, help="Reserved image/video quality setting."
-    )
-    parser.add_argument("--width", type=int, help="Reserved render width.")
-    parser.add_argument("--height", type=int, help="Reserved render height.")
-    parser.add_argument(
         "--mujoco-model-path",
         help="MJCF/XML model copied into MuJoCo WASM notebook artifacts.",
     )
@@ -204,12 +199,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dry-run",
+        dest="dry_run",
         action="store_true",
+        default=None,
         help="Validate and print config without rendering.",
     )
     parser.add_argument(
         "--validate-only",
+        dest="validate_only",
         action="store_true",
+        default=None,
         help="Validate config without rendering.",
     )
     parser.add_argument(
@@ -261,9 +260,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         config = config_from_args(args)
-        if args.print_config or args.dry_run:
+        if args.print_config or config.dry_run:
             sys.stdout.write(config.to_json(indent=2, sort_keys=True) + "\n")
-        if args.dry_run or args.validate_only:
+        if config.dry_run or config.validate_only:
             return 0
         result = render_policy(config)
         if result.artifact_path is not None:
