@@ -1071,6 +1071,18 @@ class MultiCollector(BaseCollector, metaclass=_MultiCollectorMeta):
             )
         if getattr(storage, "shared_init", False):
             return
+        storage_device = getattr(storage, "device", None)
+        if (
+            storage_device is not None
+            and storage_device != "auto"
+            and torch.device(storage_device).type != "cpu"
+        ):
+            warnings.warn(
+                f"Worker-initialized replay buffers store data in a CPU "
+                f"memory-mapped tensordict; the storage device "
+                f"({storage_device}) cannot be honored and will be reset to "
+                f"'cpu' at initialization time."
+            )
         storage.shared_init = True
         storage._init_lock = mp.Lock()
         storage._init_event = mp.Event()

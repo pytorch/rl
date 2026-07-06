@@ -61,7 +61,10 @@ advantage:
   candidate_selection_max_combinations: 100000
 
 buffer:
-  device: null # null = training device
+  # The collector's worker-init path shares the buffer as a CPU memmap, so
+  # a GPU buffer device cannot be honored; keep it off-GPU (the update loop
+  # moves sampled batches to the training device).
+  device: cpu
   shared_init: false
   capacity_group_waves: 1 # replay capacity as multiples of one target group wave
   consume_after_n_samples: 1 # sampled decisions leave the buffer after one update pass
