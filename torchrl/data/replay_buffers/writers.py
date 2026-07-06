@@ -215,6 +215,36 @@ class RoundRobinWriter(Writer):
         self._mark_update_entities(index)
         return index
 
+    def write_at(self, index: int | torch.Tensor, data: Any) -> int | torch.Tensor:
+        """Writes data at explicit storage indices without moving the cursor."""
+        if _is_int(index):
+            batch_size = 1
+        else:
+            index = torch.as_tensor(index, dtype=torch.long)
+            if hasattr(data, "device") and data.device is not None:
+                index = index.to(data.device)
+            batch_size = index.numel()
+        self._write_count += batch_size
+        self._storage.set(index, data, set_cursor=False)
+        self._update_storage_len_for_write_at(index)
+        index = self._replicate_index(index)
+        self._mark_update_entities(index)
+        return index
+
+    def _update_storage_len_for_write_at(self, index: int | torch.Tensor) -> None:
+        if not hasattr(self._storage, "_len"):
+            return
+        if _is_int(index):
+            max_index = int(index)
+        else:
+            index = torch.as_tensor(index)
+            if index.numel() == 0:
+                return
+            max_index = int(index.max().item())
+        self._storage._len = min(
+            max(len(self._storage), max_index + 1), self._storage.max_size
+        )
+
     def state_dict(self) -> dict[str, Any]:
         return {"_cursor": self._cursor}
 
@@ -357,6 +387,22 @@ class TensorDictRoundRobinWriter(RoundRobinWriter):
         # Other than that, a "flat" (1d) index is ok to write the data
         self._storage.set(index, data)
         index = self._replicate_index(index)
+        self._mark_update_entities(index)
+        return index
+
+    def write_at(self, index: int | torch.Tensor, data: Any) -> int | torch.Tensor:
+        if _is_int(index):
+            batch_size = 1
+            index_tensor = torch.as_tensor(index, device=data.device, dtype=torch.long)
+        else:
+            index_tensor = torch.as_tensor(index, device=data.device, dtype=torch.long)
+            batch_size = index_tensor.numel()
+        self._write_count += batch_size
+        if not is_tensorclass(data):
+            data.set("index", expand_as_right(index_tensor, data))
+        self._storage.set(index_tensor, data, set_cursor=False)
+        self._update_storage_len_for_write_at(index_tensor)
+        index = self._replicate_index(index_tensor)
         self._mark_update_entities(index)
         return index
 

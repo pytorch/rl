@@ -32,6 +32,7 @@ from torchrl.collectors._constants import (
     ExplorationType,
 )
 from torchrl.collectors.utils import (
+    _maybe_normalize_replay_buffer_tensordict_device,
     _TrajectoryPool,
     _validate_traj_format,
     split_trajectories,
@@ -1559,6 +1560,9 @@ class Collector(BaseCollector):
                         self.post_collect_hook(tensordict_out)
                     yield tensordict_out
                 elif self.replay_buffer is not None and not self._ignore_rb:
+                    tensordict_out = _maybe_normalize_replay_buffer_tensordict_device(
+                        tensordict_out, self.replay_buffer
+                    )
                     self.replay_buffer.extend(tensordict_out)
                     yield
                 else:

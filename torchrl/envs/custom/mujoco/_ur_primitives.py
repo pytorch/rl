@@ -20,9 +20,10 @@ how to specialize :class:`~torchrl.envs.transforms.MacroPrimitiveTransform`:
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from enum import IntEnum
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, Protocol, runtime_checkable
 
 import torch
 from tensordict import TensorDictBase
@@ -43,7 +44,91 @@ __all__ = [
 ]
 
 GripperCommand = Literal["keep", "open", "closed"]
-CartesianSolver = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+
+
+@runtime_checkable
+class CartesianSolver(Protocol):
+    r"""Contract of the Cartesian inverse-kinematics hook used by ``movel``.
+
+    A Cartesian solver maps a target end-effector pose to a low-level
+    joint-position action. It is the sanctioned extension point for custom
+    inverse-kinematics behavior in the macro-action stack: pass one to
+    :class:`~torchrl.envs.URScriptPrimitiveTransform` via the
+    ``cartesian_solver`` argument, or let the transform fall back to a parent
+    environment's ``_cartesian_pose_to_joint_target`` hook (e.g.
+    :class:`~torchrl.envs.CubeBowlEnv`).
+
+    The call signature is::
+
+        solver(target_pose, start_action, *, orientation_mask=None, waypoints=None)
+
+    Args:
+        target_pose (torch.Tensor): target end-effector pose of shape
+            ``(*batch, 7)``: three position coordinates followed by a
+            ``(w, x, y, z)`` unit quaternion, all in the world frame. A zero
+            (or otherwise invalid) quaternion means "position only": all three
+            rotational degrees of freedom are free.
+        start_action (torch.Tensor): current low-level action of shape
+            ``(*batch, action_dim)``. The leading ``action_dim - 1`` entries
+            are joint positions used to seed the solve; the trailing entry is
+            the gripper command and must be copied through unchanged.
+
+    Keyword Args:
+        orientation_mask (torch.Tensor, optional): per-axis weights of shape
+            ``(*batch, 3)`` applied to the world-frame rotation error. A zero
+            entry leaves rotation about that world axis unconstrained; e.g.
+            ``(1.0, 1.0, 0.0)`` constrains rotations about the world x and y
+            axes (keep a tool axis parallel to world z, i.e. "stay level")
+            while leaving the spin about world z free. Non-finite entries mean
+            "no mask" for that batch element. Solvers that only support the
+            position-only / full-6D endpoints may omit this parameter from
+            their signature; the transform then raises when a macro action
+            requests a partial constraint.
+        waypoints (int, optional): when provided, solve the inverse kinematics
+            along a straight-line Cartesian path from the current end-effector
+            pose to ``target_pose`` and return the whole joint-space sequence
+            of shape ``(*batch, waypoints, action_dim)`` instead of a single
+            endpoint of shape ``(*batch, action_dim)``. Constraints (full or
+            partial orientation) must hold at every waypoint, not only at the
+            endpoint. Solvers that do not support per-waypoint solving may
+            omit this parameter; the transform then raises when a macro action
+            requests ``path="cartesian"``.
+
+    Returns:
+        torch.Tensor: the low-level action(s) realizing the target pose:
+        ``(*batch, action_dim)`` without ``waypoints``, or
+        ``(*batch, waypoints, action_dim)`` with it.
+
+    A plain two-argument callable ``(target_pose, start_action) -> action`` is
+    a valid (endpoint-only, fully-constrained-or-free) solver;
+    :class:`~torchrl.envs.URScriptPrimitiveTransform` inspects the signature
+    and only forwards the keyword arguments the solver declares.
+
+    Examples:
+        >>> import torch
+        >>> def keep_level_solver(target_pose, start_action, *, orientation_mask=None, waypoints=None):
+        ...     # A stub that ignores kinematics and returns the seed action:
+        ...     # a real solver would run damped least squares, weighting the
+        ...     # world-frame rotation error rows by ``orientation_mask``.
+        ...     if waypoints is not None:
+        ...         return start_action.unsqueeze(-2).expand(
+        ...             *start_action.shape[:-1], waypoints, start_action.shape[-1]
+        ...         ).clone()
+        ...     return start_action.clone()
+        >>> from torchrl.envs import CartesianSolver
+        >>> isinstance(keep_level_solver, CartesianSolver)
+        True
+    """
+
+    def __call__(
+        self,
+        target_pose: torch.Tensor,
+        start_action: torch.Tensor,
+        *,
+        orientation_mask: torch.Tensor | None = None,
+        waypoints: int | None = None,
+    ) -> torch.Tensor:
+        ...
 
 
 class URScriptPrimitive(IntEnum):
@@ -132,6 +217,27 @@ def _gripper_code(gripper: GripperCommand) -> int:
     )
 
 
+def _unsupported_solver_kwargs(
+    solver: CartesianSolver | Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    kwargs: dict[str, Any],
+) -> set[str]:
+    """Return the keyword arguments in ``kwargs`` that ``solver`` cannot accept."""
+    try:
+        signature = inspect.signature(solver)
+    except (TypeError, ValueError):
+        return set()
+    parameters = signature.parameters.values()
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters):
+        return set()
+    names = {
+        p.name
+        for p in parameters
+        if p.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+    return {name for name in kwargs if name not in names}
+
+
 def _batch_size(batch_size: torch.Size | tuple[int, ...] | None) -> torch.Size:
     if batch_size is None:
         return torch.Size([1])
@@ -176,10 +282,14 @@ class RobotMacroAction(MacroAction):
     joints: torch.Tensor
     gripper: torch.Tensor
     gripper_command: torch.Tensor
+    orientation_mask: torch.Tensor | None = None
+    path: torch.Tensor | None = None
 
     GRIPPER_KEEP: ClassVar[int] = -1
     GRIPPER_OPEN: ClassVar[int] = 0
     GRIPPER_CLOSED: ClassVar[int] = 1
+    PATH_JOINT: ClassVar[int] = 0
+    PATH_CARTESIAN: ClassVar[int] = 1
     RESET: ClassVar[_RobotMacroActionReset]
 
     @classmethod
@@ -188,23 +298,69 @@ class RobotMacroAction(MacroAction):
         *,
         position: torch.Tensor,
         quaternion: torch.Tensor | None = None,
+        orientation_mask: torch.Tensor | tuple[float, float, float] | None = None,
+        path: Literal["joint", "cartesian"] = "joint",
         gripper: GripperCommand = "keep",
         gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
         settle_steps: int = 0,
     ) -> RobotMacroAction:
-        """Ask the end effector to reach a Cartesian pose."""
+        """Ask the end effector to reach a Cartesian pose.
+
+        Args:
+            position: target position, shape ``(*batch, 3)``.
+            quaternion: optional target orientation as a ``(w, x, y, z)``
+                quaternion, shape ``(*batch, 4)``. When omitted, all three
+                rotational degrees of freedom are free.
+
+        Keyword Args:
+            orientation_mask: optional per-axis weights of shape
+                ``(*batch, 3)`` (or a 3-tuple) applied to the world-frame
+                rotation error during the inverse-kinematics solve. A zero
+                entry leaves rotation about that world axis free; e.g.
+                ``(1.0, 1.0, 0.0)`` keeps the tool axis aligned with the
+                target orientation while leaving the spin about the world
+                z axis unconstrained ("keep the gripper level"). Requires a
+                solver honoring the :class:`~torchrl.envs.CartesianSolver`
+                ``orientation_mask`` keyword.
+            path: ``"joint"`` (default) interpolates in joint space between
+                the current configuration and the endpoint inverse-kinematics
+                solution; ``"cartesian"`` re-solves the inverse kinematics at
+                every interpolation waypoint along the straight-line Cartesian
+                path so pose constraints hold along the whole macro action.
+                Requires a solver honoring the
+                :class:`~torchrl.envs.CartesianSolver` ``waypoints`` keyword.
+            gripper: gripper command (``"keep"``, ``"open"`` or ``"closed"``).
+            gripper_command: optional raw low-level gripper command override.
+            steps: number of interpolated low-level actions.
+            settle_steps: number of repeated final actions.
+        """
         position = _as_batch(position, 3)
         if quaternion is None:
-            quaternion = _identity_quaternion_like(position)
+            quaternion = torch.zeros(
+                position.shape[:-1] + (4,),
+                dtype=position.dtype,
+                device=position.device,
+            )
         else:
             quaternion = _as_batch(quaternion, 4).to(
                 dtype=position.dtype, device=position.device
             )
+        if orientation_mask is not None:
+            orientation_mask = _as_batch(
+                torch.as_tensor(
+                    orientation_mask, dtype=position.dtype, device=position.device
+                ),
+                3,
+            )
+        if path not in ("joint", "cartesian"):
+            raise ValueError(f"path must be 'joint' or 'cartesian', got {path!r}.")
         return cls._make(
             RobotMacroActionMode.REACH_POSE,
             position=position,
             quaternion=quaternion,
+            orientation_mask=orientation_mask,
+            path=cls.PATH_CARTESIAN if path == "cartesian" else cls.PATH_JOINT,
             gripper=gripper,
             gripper_command=gripper_command,
             steps=steps,
@@ -377,6 +533,8 @@ class RobotMacroAction(MacroAction):
         position: torch.Tensor | None = None,
         quaternion: torch.Tensor | None = None,
         joints: torch.Tensor | None = None,
+        orientation_mask: torch.Tensor | None = None,
+        path: int = 0,
         gripper: GripperCommand = "keep",
         gripper_command: float | torch.Tensor | None = None,
         steps: int = 16,
@@ -406,11 +564,23 @@ class RobotMacroAction(MacroAction):
             quaternion = _as_batch(quaternion, 4).to(dtype=dtype, device=device)
         if joints is None:
             joints = torch.zeros(batch_size + (6,), dtype=dtype, device=device)
+        if orientation_mask is None:
+            orientation_mask = torch.full(
+                batch_size + (3,), float("nan"), dtype=dtype, device=device
+            )
+        else:
+            orientation_mask = orientation_mask.to(dtype=dtype, device=device).expand(
+                batch_size + (3,)
+            )
 
         return cls(
             position=position,
             quaternion=quaternion,
             joints=joints,
+            orientation_mask=orientation_mask,
+            path=torch.full(
+                batch_size + (1,), int(path), dtype=torch.long, device=device
+            ),
             gripper=torch.full(
                 batch_size + (1,),
                 _gripper_code(gripper),
@@ -454,9 +624,15 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         macro_steps: interpolated low-level actions per primitive.
         settle_steps: repeated final actions appended per primitive.
         action_dim: low-level action dimension (six joints + one gripper).
-        cartesian_solver: optional callable mapping ``(target_pose,
-            start_action)`` to a low-level action. When omitted, the transform
-            uses a parent env's ``_cartesian_pose_to_joint_target`` hook.
+        cartesian_solver: optional :class:`~torchrl.envs.CartesianSolver`
+            mapping ``(target_pose, start_action)`` to a low-level action.
+            A plain two-argument callable is accepted; the optional
+            ``orientation_mask`` and ``waypoints`` keyword arguments are only
+            forwarded when the solver declares them (they are required for
+            :meth:`RobotMacroAction.reach_pose` partial orientation
+            constraints and ``path="cartesian"`` respectively). When omitted,
+            the transform uses a parent env's
+            ``_cartesian_pose_to_joint_target`` hook.
         open_gripper_ctrl: low-level gripper command for an open gripper.
         close_gripper_ctrl: low-level gripper command for a closed gripper.
 
@@ -494,7 +670,9 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         macro_steps: int = 16,
         settle_steps: int = 0,
         action_dim: int = 7,
-        cartesian_solver: CartesianSolver | None = None,
+        cartesian_solver: CartesianSolver
+        | Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+        | None = None,
         open_gripper_ctrl: float = 0.0,
         close_gripper_ctrl: float = 255.0,
     ) -> None:
@@ -731,8 +909,13 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
         gripper = self._structured_gripper(action, start, batch_shape, dtype, device)
 
         pose = torch.cat([position, quaternion], dim=-1)
+        orientation_mask = self._action_orientation_mask(
+            action, batch_shape, dtype, device
+        )
         movej_target = self.low_level_action(joints)
-        movel_target = self._solve_cartesian(pose, start)
+        movel_target = self._solve_cartesian(
+            pose, start, orientation_mask=orientation_mask
+        )
 
         target = start.clone()
         target = torch.where(primitive_id == int(lib.MOVEJ), movej_target, target)
@@ -768,13 +951,136 @@ class URScriptPrimitiveTransform(MacroPrimitiveTransform):
             )
         return start, target, steps, settle_steps
 
-    def _solve_cartesian(self, pose: torch.Tensor, start: torch.Tensor) -> torch.Tensor:
-        if self.cartesian_solver is not None:
-            return self.cartesian_solver(pose, start)
-        env = self._find_parent_env_with("_cartesian_pose_to_joint_target")
-        if env is None:
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+        action = tensordict.get(self.action_key, default=None)
+        start, target, steps, settle_steps = self._resolve(tensordict, action)
+        sequence = self._interpolate_sequence(start, target, steps, settle_steps)
+        structured = _unwrap_robot_macro_action(action)
+        if isinstance(structured, (TensorDictBase, MacroAction)):
+            sequence = self._apply_cartesian_path(
+                tensordict, structured, start, sequence, steps
+            )
+        return tensordict.set(self.action_key, sequence)
+
+    def _apply_cartesian_path(
+        self,
+        tensordict: TensorDictBase,
+        action: TensorDictBase,
+        start: torch.Tensor,
+        sequence: torch.Tensor,
+        steps: int,
+    ) -> torch.Tensor:
+        """Replace joint-interpolated ``movel`` segments with per-waypoint solves.
+
+        When a macro action requests ``path="cartesian"``, the Cartesian solver
+        is asked for the full joint-space sequence along the straight-line
+        Cartesian path (``waypoints=steps``) so pose constraints hold at every
+        waypoint instead of only at the endpoint.
+        """
+        keys = action.keys(True, True)
+        if "path" not in keys or "mode" not in keys:
+            return sequence
+        batch_shape = tensordict.batch_size
+        device = start.device
+        dtype = start.dtype
+        mode = action.get("mode").to(torch.long).reshape(batch_shape + (1,))
+        path = action.get("path").to(torch.long).reshape(batch_shape + (1,))
+        cartesian = (mode == int(self.primitive_enum.MOVEL)) & (
+            path == RobotMacroAction.PATH_CARTESIAN
+        )
+        if not cartesian.any():
+            return sequence
+        position = self._field(action, "position", batch_shape, dtype, device, 3)
+        quaternion_default = torch.zeros(batch_shape + (4,), dtype=dtype, device=device)
+        quaternion_default[..., 0] = 1.0
+        quaternion = self._field(
+            action, "quaternion", batch_shape, dtype, device, 4, quaternion_default
+        )
+        pose = torch.cat([position, quaternion], dim=-1)
+        orientation_mask = self._action_orientation_mask(
+            action, batch_shape, dtype, device
+        )
+        waypoint_actions = self._solve_cartesian(
+            pose, start, orientation_mask=orientation_mask, waypoints=steps
+        )
+        joint_dim = self.action_dim - 1
+        select = cartesian.unsqueeze(-2)
+        out = sequence.clone()
+        out[..., :steps, :joint_dim] = torch.where(
+            select, waypoint_actions[..., :joint_dim], out[..., :steps, :joint_dim]
+        )
+        if out.shape[-2] > steps:
+            out[..., steps:, :joint_dim] = torch.where(
+                select,
+                waypoint_actions[..., -1:, :joint_dim],
+                out[..., steps:, :joint_dim],
+            )
+        return out
+
+    @staticmethod
+    def _action_orientation_mask(
+        action: TensorDictBase,
+        batch_shape: torch.Size,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor | None:
+        if "orientation_mask" not in action.keys(True, True):
+            return None
+        mask = action.get("orientation_mask")
+        if mask is None:
+            return None
+        mask = mask.to(dtype=dtype, device=device).reshape(batch_shape + (3,))
+        if not torch.isfinite(mask).any():
+            return None
+        return mask
+
+    def _solve_cartesian(
+        self,
+        pose: torch.Tensor,
+        start: torch.Tensor,
+        *,
+        orientation_mask: torch.Tensor | None = None,
+        waypoints: int | None = None,
+    ) -> torch.Tensor:
+        kwargs: dict[str, Any] = {}
+        if orientation_mask is not None:
+            kwargs["orientation_mask"] = orientation_mask
+        if waypoints is not None:
+            kwargs["waypoints"] = waypoints
+
+        solver = self.cartesian_solver
+        if solver is None:
+            env = self._find_parent_env_with("_cartesian_pose_to_joint_target")
+            if env is not None:
+                solver = env._cartesian_pose_to_joint_target
+        if solver is None:
+            if kwargs:
+                features = {
+                    "orientation_mask": "RobotMacroAction.reach_pose(orientation_mask=...)",
+                    "waypoints": "RobotMacroAction.reach_pose(path='cartesian')",
+                }
+                requested = " and ".join(features[name] for name in sorted(kwargs))
+                raise TypeError(
+                    "No Cartesian solver is configured, but "
+                    f"{requested} requires one implementing the documented "
+                    "torchrl.envs.CartesianSolver contract."
+                )
             return start
-        return env._cartesian_pose_to_joint_target(pose, start)
+        if kwargs:
+            unsupported = _unsupported_solver_kwargs(solver, kwargs)
+            if unsupported:
+                features = {
+                    "orientation_mask": "RobotMacroAction.reach_pose(orientation_mask=...)",
+                    "waypoints": "RobotMacroAction.reach_pose(path='cartesian')",
+                }
+                requested = " and ".join(features[name] for name in sorted(unsupported))
+                raise TypeError(
+                    f"The configured Cartesian solver does not accept the keyword "
+                    f"argument(s) {sorted(unsupported)} required by {requested}. "
+                    "Extend the solver signature to the documented "
+                    "torchrl.envs.CartesianSolver contract."
+                )
+        return solver(pose, start, **kwargs)
 
     # ------------------------------------------------------------------ #
     # Specs

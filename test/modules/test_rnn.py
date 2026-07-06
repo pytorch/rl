@@ -74,12 +74,19 @@ from torchrl.testing.mocking_classes import (
 )
 
 _has_hoptorch = importlib.util.find_spec("hoptorch") is not None
+_vmap = None
 
-if _has_functorch:
-    try:
-        from torch import vmap
-    except ImportError:
-        from functorch import vmap
+
+def _get_vmap():
+    global _vmap
+    if _vmap is None:
+        if hasattr(torch, "vmap"):
+            _vmap = torch.vmap
+        else:
+            from functorch import vmap
+
+            _vmap = vmap
+    return _vmap
 
 
 @pytest.mark.parametrize("device", get_default_devices())
@@ -552,7 +559,6 @@ class TestLSTMModule:
     def _test_lstm_parallel_env(
         self, python_based, parallel, heterogeneous, within, maybe_fork_ParallelEnv
     ):
-
         torch.manual_seed(0)
         num_envs = 3
         device = "cuda" if torch.cuda.device_count() else "cpu"
@@ -654,6 +660,8 @@ class TestLSTMModule:
         not _has_functorch, reason="vmap can only be used with functorch"
     )
     def test_lstm_vmap_complex_model(self):
+        vmap = _get_vmap()
+
         # Tests that all ops in GRU are compatible with VMAP (when build using
         # the PT backend).
         # This used to fail when splitting the input based on the is_init mask.
@@ -2512,6 +2520,8 @@ class TestGRUModule:
         not _has_functorch, reason="vmap can only be used with functorch"
     )
     def test_gru_vmap_complex_model(self):
+        vmap = _get_vmap()
+
         # Tests that all ops in GRU are compatible with VMAP (when build using
         # the PT backend).
         # This used to fail when splitting the input based on the is_init mask.
@@ -3286,7 +3296,6 @@ class TestGRUModule:
 
 
 def test_get_primers_from_module():
-
     # No primers in the model
     module = MLP(in_features=10, out_features=10, num_cells=[])
     transform = get_primers_from_module(module)

@@ -95,6 +95,7 @@ from .vecnorm import VecNormV2
 from .vip import VIPRewardTransform, VIPTransform
 
 _UR_PRIMITIVE_EXPORTS = {
+    "CartesianSolver",
     "RobotMacroAction",
     "RobotMacroActionMode",
     "URScriptPrimitive",
@@ -138,6 +139,7 @@ __all__ = [
     "BatchSizeTransform",
     "BinarizeReward",
     "BurnInTransform",
+    "CartesianSolver",
     "CatFrames",
     "CatTensors",
     "CenterCrop",

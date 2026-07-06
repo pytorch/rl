@@ -218,6 +218,7 @@ class _AsyncLLMEngine:
             prompt_token_ids: Alternative to prompts - token IDs for generation.
             use_tqdm: Whether to show progress bar (not used in async engine).
             lora_request: LoRA request for adapter-based generation.
+            prompt_adapter_request: prompt adapter request forwarded to vLLM.
             guided_options_request: Guided decoding options.
             timeout_seconds: Timeout for generation in seconds.
 
