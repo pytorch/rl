@@ -11,6 +11,7 @@ import argparse
 import os
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -49,6 +50,9 @@ from torchrl.envs.custom.mujoco._math import (
 )
 from torchrl.envs.utils import check_env_specs, step_mdp
 
+if _has_mujoco:
+    import mujoco
+
 _AVAILABLE_BACKENDS: list[str] = []
 if _has_mujoco_torch:
     _AVAILABLE_BACKENDS.append("mujoco-torch")
@@ -75,6 +79,17 @@ class TestMujoco:
             )
         return {"menagerie_path": menagerie_path}
 
+    @staticmethod
+    def _index_cases(n: int, device: torch.device | None):
+        rows = torch.arange(min(2, n), device=device)
+        return [
+            (0, torch.tensor([0], device=device)),
+            (-1, torch.tensor([n - 1], device=device)),
+            (slice(0, min(2, n)), rows),
+            (np.arange(min(2, n)), rows),
+            (torch.arange(min(2, n), device=device), rows),
+        ]
+
     # ------------------------------------------------------------------
     # Spec / rollout coverage across all available backends.
     # ------------------------------------------------------------------
@@ -100,6 +115,19 @@ class TestMujoco:
         reward = td.get(("next", "reward"))
         assert reward.shape[-1] == 1
         assert torch.isfinite(reward).all()
+
+    @pytest.mark.skipif(not _has_mujoco_torch, reason="mujoco-torch not installed")
+    def test_torch_backend_rollout_partial_reset(self):
+        env = HopperEnv(
+            backend="mujoco-torch",
+            num_envs=15,
+            seed=0,
+            max_episode_steps=3,
+        )
+        td = env.rollout(max_steps=10, break_when_any_done=False)
+        assert td.batch_size == torch.Size([15, 10])
+        assert torch.isfinite(td.get(("next", "reward"))).all()
+        env.close()
 
     # ------------------------------------------------------------------
     # Satellite: spec, dim sanity, finite singularity reward.
@@ -895,6 +923,81 @@ class TestMujoco:
         assert isinstance(env, HopperEnv)
         assert env.batch_size == torch.Size([1])
 
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_locomotion_snapshot_indexing_and_writeback(self, backend):
+        n = 1 if backend == "mujoco" else 3
+        env = HopperEnv(num_envs=n, seed=0, backend=backend)
+        env.reset()
+        env.step(env.rand_action())
+
+        for item, rows in self._index_cases(n, env.device):
+            rows = rows.to(env._backend.qpos.device)
+            expected_qpos = env._backend.qpos.index_select(0, rows).clone()
+            parent_qpos = env._backend.qpos.clone()
+            parent_step_count = env._step_count.clone()
+
+            indexed_env = env[item]
+            assert isinstance(indexed_env, HopperEnv)
+            assert indexed_env.num_envs == rows.numel()
+            assert indexed_env.batch_size == torch.Size([rows.numel()])
+            assert indexed_env.action_spec.shape[0] == rows.numel()
+            torch.testing.assert_close(indexed_env._backend.qpos, expected_qpos)
+
+            indexed_env.step(indexed_env.rand_action())
+            indexed_env.step(indexed_env.rand_action())
+            torch.testing.assert_close(env._backend.qpos, parent_qpos)
+            torch.testing.assert_close(env._step_count, parent_step_count)
+
+            env[item] = indexed_env
+            torch.testing.assert_close(
+                env._backend.qpos.index_select(0, rows),
+                indexed_env._backend.qpos,
+            )
+            torch.testing.assert_close(
+                env._step_count.index_select(0, rows),
+                indexed_env._step_count,
+            )
+        env.close()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_mujoco_indexing_rejects_bool_masks(self, backend):
+        n = 1 if backend == "mujoco" else 2
+        env = HopperEnv(num_envs=n, seed=0, backend=backend)
+        env.reset()
+        with pytest.raises(NotImplementedError, match="Boolean masks"):
+            env[np.ones(n, dtype=bool)]
+        with pytest.raises(NotImplementedError, match="Boolean masks"):
+            env[torch.ones(n, dtype=torch.bool, device=env.device)]
+        env.close()
+
+    @pytest.mark.parametrize("backend", _AVAILABLE_BACKENDS)
+    def test_satellite_snapshot_indexing_extra_state_writeback(self, backend):
+        n = 1 if backend == "mujoco" else 3
+        env = SatelliteEnv(num_cmgs=4, num_envs=n, seed=0, backend=backend)
+        env.reset()
+        item = 0 if n == 1 else torch.tensor([0, 2], device=env.device)
+        rows = torch.tensor([0], device=env.device) if n == 1 else item
+        indexed_env = env[item]
+        indexed_env._target_quat = torch.zeros_like(indexed_env._target_quat)
+        indexed_env._target_quat[..., 0] = 1.0
+        indexed_env._last_manip = torch.arange(
+            indexed_env.num_envs,
+            dtype=env.dtype,
+            device=env.device,
+        ).unsqueeze(-1)
+
+        env[item] = indexed_env
+
+        torch.testing.assert_close(
+            env._target_quat.index_select(0, rows.to(env._target_quat.device)),
+            indexed_env._target_quat,
+        )
+        torch.testing.assert_close(
+            env._last_manip.index_select(0, rows.to(env._last_manip.device)),
+            indexed_env._last_manip,
+        )
+        env.close()
+
     # ------------------------------------------------------------------
     # Compile / unknown-backend / custom XML.
     # ------------------------------------------------------------------
@@ -989,6 +1092,19 @@ class TestMujoco:
 
         td = env.rollout(2)
         assert torch.isfinite(td.get(("next", "reward"))).all()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_snapshot_indexing_extra_state_writeback(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        env.reset()
+        indexed_env = env[0]
+        indexed_env._bowl_target_pos = indexed_env._bowl_target_pos + torch.tensor(
+            [[0.01, 0.0, 0.0]], dtype=env.dtype, device=env.device
+        )
+
+        env[0] = indexed_env
+
+        torch.testing.assert_close(env._bowl_target_pos, indexed_env._bowl_target_pos)
 
     @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
     def test_cube_bowl_sparse_coordinate_reward(self):
@@ -1422,6 +1538,120 @@ class TestMujoco:
 
         out = env.step(td)
         assert torch.isfinite(out.get(("next", "reward"))).all()
+
+    @staticmethod
+    def _cube_bowl_pinch_fk(env, qpos6):
+        model = env._backend._m
+        data = mujoco.MjData(model)
+        data.qpos[:] = env._backend._d.qpos.copy()
+        q = data.qpos.copy()
+        q[list(env._robot_qpos_indices)] = np.asarray(qpos6, dtype=np.float64)
+        data.qpos[:] = q
+        mujoco.mj_forward(model, data)
+        return (
+            data.site_xpos[env._pinch_site_id].copy(),
+            data.site_xmat[env._pinch_site_id].reshape(3, 3).copy(),
+        )
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_partial_orientation_ik(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        td = env.reset()
+        start_action = torch.zeros(1, 7, dtype=env.dtype)
+        start_action[0, :6] = td["robot_qpos"][0]
+        pinch_quat = env._pinch_quat()
+        target_pos = env._pinch_pos() + torch.tensor(
+            [[0.10, 0.0, -0.05]], dtype=env.dtype
+        )
+        pose = CubeBowlEnv.pose_at(target_pos, pinch_quat)
+
+        out = env._cartesian_pose_to_joint_target(
+            pose,
+            start_action,
+            iterations=200,
+            orientation_mask=(1.0, 1.0, 0.0),
+        )
+        assert out.shape == torch.Size([1, 7])
+        pos, rot = self._cube_bowl_pinch_fk(env, out[0, :6].cpu().numpy())
+        assert np.linalg.norm(pos - target_pos[0].cpu().numpy()) < 1e-3
+        target_mat = np.zeros(9)
+        mujoco.mju_quat2Mat(target_mat, pinch_quat[0].double().cpu().numpy())
+        target_mat = target_mat.reshape(3, 3)
+        # the constrained axes hold: solved tool z-axis parallel to the target
+        # tool z-axis even though the spin about world z is left free
+        assert float(rot[:, 2] @ target_mat[:, 2]) > 1.0 - 1e-4
+        env.close()
+
+    @pytest.mark.skipif(not _has_mujoco, reason="CubeBowlEnv uses MuJoCo C bindings.")
+    def test_cube_bowl_cartesian_waypoint_ik(self):
+        env = CubeBowlEnv(**self._cube_bowl_kwargs(), seed=0, max_episode_steps=3)
+        td = env.reset()
+        start_action = torch.zeros(1, 7, dtype=env.dtype)
+        start_action[0, :6] = td["robot_qpos"][0]
+        pinch_quat = env._pinch_quat()
+        target_pos = env._pinch_pos() + torch.tensor(
+            [[0.10, 0.0, -0.05]], dtype=env.dtype
+        )
+        pose = CubeBowlEnv.pose_at(target_pos, pinch_quat)
+        waypoints = 8
+
+        seq = env._cartesian_pose_to_joint_target(
+            pose,
+            start_action,
+            iterations=100,
+            orientation_mask=(1.0, 1.0, 0.0),
+            waypoints=waypoints,
+        )
+        assert seq.shape == torch.Size([1, waypoints, 7])
+
+        start_pos, _ = self._cube_bowl_pinch_fk(env, start_action[0, :6].cpu().numpy())
+        line = target_pos[0].cpu().numpy() - start_pos
+        line_dir = line / np.linalg.norm(line)
+
+        def max_lateral_deviation(joint_rows):
+            deviation = 0.0
+            for qpos6 in joint_rows:
+                pos, _ = self._cube_bowl_pinch_fk(env, qpos6)
+                offset = pos - start_pos
+                lateral = offset - (offset @ line_dir) * line_dir
+                deviation = max(deviation, float(np.linalg.norm(lateral)))
+            return deviation
+
+        cartesian_deviation = max_lateral_deviation(seq[0, :, :6].cpu().numpy())
+        # joint-space interpolation between the same endpoints drifts off the
+        # straight-line path; the per-waypoint solve must not
+        endpoint = env._cartesian_pose_to_joint_target(
+            pose,
+            start_action,
+            iterations=200,
+            orientation_mask=(1.0, 1.0, 0.0),
+        )
+        alphas = np.linspace(1.0 / waypoints, 1.0, waypoints)[:, None]
+        joint_rows = (1.0 - alphas) * start_action[0, :6].cpu().numpy()[
+            None
+        ] + alphas * endpoint[0, :6].cpu().numpy()[None]
+        joint_deviation = max_lateral_deviation(joint_rows)
+        assert cartesian_deviation < 5e-4
+        assert cartesian_deviation < joint_deviation
+
+        # end-to-end through the transform: reach_pose(path="cartesian")
+        transform = env.make_urscript_transform(
+            macro_steps=waypoints, execute=False, ik_kwargs={"iterations": 100}
+        )
+        macro_td = td.clone()
+        macro_td["action"] = RobotMacroAction.reach_pose(
+            position=target_pos,
+            quaternion=pinch_quat,
+            orientation_mask=(1.0, 1.0, 0.0),
+            path="cartesian",
+            steps=waypoints,
+        )
+        expanded = transform.inv(macro_td)["action"]
+        assert expanded.shape == torch.Size([1, waypoints, 7])
+        torch.testing.assert_close(
+            expanded[..., :6].double(), seq[..., :6].double(), atol=1e-6, rtol=0
+        )
+        env.close()
 
     def test_xml_path_kwarg_overrides_class_attr(self, tmp_path):
         """Custom ``xml_path=`` overrides the class-level :attr:`XML_PATH`."""
