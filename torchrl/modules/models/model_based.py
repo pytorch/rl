@@ -259,17 +259,14 @@ class ObsDecoder(nn.Module):
         latent = self.state_to_latent(torch.cat([state, rnn_hidden], dim=-1))
         *batch_sizes, D = latent.shape
         # Flatten batch dimensions and reshape for conv
-        latent = (
-            latent.flatten(0, len(batch_sizes) - 1 if batch_sizes else 0)
-            .unsqueeze(-1)
-            .unsqueeze(-1)
-            .contiguous()
-        )
+        latent = latent.reshape(-1, D, 1, 1).contiguous()
         obs_decoded = self.decoder(latent)
         _, C, H, W = obs_decoded.shape
         # Unflatten back to original batch dims
         obs_decoded = (
-            obs_decoded.unflatten(0, batch_sizes) if batch_sizes else obs_decoded
+            obs_decoded.unflatten(0, batch_sizes)
+            if batch_sizes
+            else obs_decoded.squeeze(0)
         )
         return obs_decoded.contiguous()
 
