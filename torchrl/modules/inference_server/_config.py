@@ -22,6 +22,9 @@ class InferenceDeviceConfig:
     This config separates the devices used by the environment, the remote
     policy, the actor-side action TensorDict, and the returned collector batch.
 
+    All fields accept :class:`torch.device`, ``str``, or ``None`` and are
+    normalized to ``torch.device | None`` at construction time.
+
     Args:
         policy_device (torch.device or str, optional): device that owns the
             policy and receives batched server inputs.
@@ -92,9 +95,26 @@ class InferenceServerConfig:
             for percentile stats. Defaults to ``1024``.
 
     Examples:
-        >>> from torchrl.modules.inference_server import InferenceServerConfig
+        >>> import torch
+        >>> import torch.nn as nn
+        >>> from tensordict import TensorDict
+        >>> from tensordict.nn import TensorDictModule
+        >>> from torchrl.modules.inference_server import (
+        ...     InferenceServer,
+        ...     InferenceServerConfig,
+        ...     ThreadingTransport,
+        ... )
+        >>> policy = TensorDictModule(
+        ...     nn.Linear(4, 2), in_keys=["observation"], out_keys=["action"]
+        ... )
+        >>> transport = ThreadingTransport()
         >>> config = InferenceServerConfig(max_batch_size=8, timeout=0.001)
-        >>> config.max_batch_size
+        >>> with InferenceServer(policy, transport, server_config=config) as server:
+        ...     client = transport.client()
+        ...     result = client(TensorDict({"observation": torch.randn(4)}))
+        >>> result["action"].shape
+        torch.Size([2])
+        >>> server.max_batch_size
         8
     """
 

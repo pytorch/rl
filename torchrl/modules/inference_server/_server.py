@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from torchrl.modules.inference_server._config import (
     InferenceServerConfig,
 )
 from torchrl.modules.inference_server._transport import InferenceTransport
+from torchrl.weight_update import SharedMemWeightSyncScheme, WeightSyncScheme
 
 
 class InferenceServer:
@@ -74,11 +76,17 @@ class InferenceServer:
             initialising the weight sync scheme on the receiver side.
             Default: ``"policy"``.
         server_config (InferenceServerConfig, optional): structured server
-            configuration. Mutually exclusive with non-default batching and
-            stats keyword arguments.
+            configuration. Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, ``timeout``, ``collect_stats``, and
+            ``stats_window_size`` keyword arguments (passing any of them
+            alongside a config raises, even when the value equals the
+            default).
         device_config (InferenceDeviceConfig, optional): structured device
             placement configuration. Mutually exclusive with ``device``,
-            ``policy_device``, and ``output_device``.
+            ``policy_device``, and ``output_device``. The server consumes
+            ``policy_device`` and ``output_device`` only; ``env_device`` is
+            used as a fallback for ``output_device`` and ``storing_device``
+            is rejected (it is a collector-level setting).
         policy_version (int, optional): initial behavior-policy version
             attached to inference outputs. Defaults to ``0``.
         policy_version_key (NestedKey or None, optional): TensorDict key used
@@ -108,15 +116,15 @@ class InferenceServer:
         model: nn.Module,
         transport: InferenceTransport,
         *,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        timeout: float | None = None,
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
         policy_device: torch.device | str | None = None,
         output_device: torch.device | str | None = None,
-        collect_stats: bool = True,
-        stats_window_size: int = 1024,
+        collect_stats: bool | None = None,
+        stats_window_size: int | None = None,
         weight_sync=None,
         weight_sync_model_id: str = "policy",
         server_config: InferenceServerConfig | None = None,
@@ -125,23 +133,36 @@ class InferenceServer:
         policy_version: int = 0,
         policy_version_key: NestedKey | None = "policy_version",
     ):
-        if server_config is not None:
-            if (
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (
                 max_batch_size,
                 min_batch_size,
                 timeout,
                 collect_stats,
                 stats_window_size,
-            ) != (64, 1, 0.01, True, 1024):
-                raise ValueError(
-                    "server_config is mutually exclusive with non-default "
-                    "batching and stats keyword arguments."
-                )
-            max_batch_size = server_config.max_batch_size
-            min_batch_size = server_config.min_batch_size
-            timeout = server_config.timeout
-            collect_stats = server_config.collect_stats
-            stats_window_size = server_config.stats_window_size
+            )
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, timeout, collect_stats, and stats_window_size "
+                "keyword arguments."
+            )
+        # Unset kwargs fall back to the (given or default) config values, so
+        # the signature carries no duplicated default literals.
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if timeout is None:
+            timeout = _server_defaults.timeout
+        if collect_stats is None:
+            collect_stats = _server_defaults.collect_stats
+        if stats_window_size is None:
+            stats_window_size = _server_defaults.stats_window_size
         if device_config is not None:
             if (
                 device is not None
@@ -151,6 +172,14 @@ class InferenceServer:
                 raise ValueError(
                     "device_config is mutually exclusive with device, "
                     "policy_device, and output_device."
+                )
+            if device_config.storing_device is not None:
+                raise ValueError(
+                    "storing_device is a collector-level setting that the "
+                    "server does not consume. The server only uses "
+                    "policy_device and output_device (with env_device as a "
+                    "fallback for output_device). Pass storing_device to the "
+                    "collector instead."
                 )
             policy_device = device_config.policy_device
             output_device = device_config.server_output_device()
@@ -171,6 +200,9 @@ class InferenceServer:
         self.weight_sync = weight_sync
         self._weight_sync_model_id = weight_sync_model_id
         self._policy_version = int(policy_version)
+        # Optional multiprocessing.Value mirror so a parent process can read
+        # the live version of a server running in a child process.
+        self._policy_version_shared = None
         self.policy_version_key = policy_version_key
         self.collect_stats = collect_stats
         self.stats_window_size = stats_window_size
@@ -272,6 +304,20 @@ class InferenceServer:
         with self._stats_lock:
             self._policy_version += 1
             self._num_weight_updates += 1
+            if self._policy_version_shared is not None:
+                self._policy_version_shared.value = self._policy_version
+
+    def update_policy_weights_(self, model_id=None, policy_or_weights=None, **kwargs):
+        """Weight-sync cascade hook: record an applied weight update.
+
+        Weight-sync schemes cascade to their ``context`` after applying
+        weights to the registered model. The server installs itself as the
+        scheme context (when none is set) so that the policy version is
+        bumped exactly when weights are actually applied -- including
+        shared-memory schemes whose background receiver thread applies
+        weights outside the server's polling loop.
+        """
+        self._mark_weight_update()
 
     # -- lifecycle ------------------------------------------------------------
 
@@ -322,15 +368,28 @@ class InferenceServer:
             )
         if not ws.synchronized_on_receiver:
             ws.connect(worker_idx=0)
+        # Ride the scheme's post-application cascade so the version is bumped
+        # when weights are actually applied (see update_policy_weights_).
+        if isinstance(ws, WeightSyncScheme) and ws.context is None:
+            ws.context = self
 
     def _poll_weight_update(self) -> None:
         """Non-blocking check for fresh weights from the trainer."""
         ws = self.weight_sync
         if ws is None:
             return
+        if isinstance(ws, SharedMemWeightSyncScheme):
+            # Shared-memory schemes apply weights in place through a
+            # background receiver thread started at connect() time; polling
+            # receive() here would re-apply and re-count the same shared
+            # buffer on every server iteration. Version bumps arrive through
+            # the update_policy_weights_ cascade instead.
+            return
         with self._model_lock:
             weights = ws.receive(timeout=0.0)
-        if weights is not None:
+        if weights is not None and getattr(ws, "context", None) is not self:
+            # When the server is the scheme context, receive() already
+            # cascaded into update_policy_weights_; do not count twice.
             self._mark_weight_update()
 
     def _set_policy_version(self, result_batch: TensorDictBase) -> TensorDictBase:
@@ -390,10 +449,6 @@ class InferenceServer:
                         callbacks.extend(more_cbs)
                         submitted_at.extend(more_submitted_at)
 
-                batch = self.collate_fn(items)
-                if self.policy_device is not None:
-                    batch = batch.to(self.policy_device)
-
                 try:
                     now = time.monotonic()
                     queue_wait_ms = [
@@ -401,6 +456,9 @@ class InferenceServer:
                         for item_submitted_at in submitted_at
                         if item_submitted_at is not None
                     ]
+                    batch = self.collate_fn(items)
+                    if self.policy_device is not None:
+                        batch = batch.to(self.policy_device)
                     forward_start = time.monotonic()
                     with self._model_lock:
                         result_batch = self.model(batch)
@@ -456,6 +514,7 @@ def _process_server_entry(
     server_kwargs: dict,
     shutdown_event: MPEvent,
     ready_queue,
+    policy_version_value=None,
 ) -> None:
     """Run an :class:`InferenceServer` loop inside a child process."""
     try:
@@ -466,11 +525,17 @@ def _process_server_entry(
             shutdown_event=shutdown_event,
             **server_kwargs,
         )
-        ready_queue.put((True, None))
-        server._run()
+        # Mirror the live policy version into shared memory so the parent's
+        # ProcessInferenceServer.policy_version stays accurate.
+        server._policy_version_shared = policy_version_value
     except BaseException as exc:
+        # The ready queue is only used for the startup handshake. Failures
+        # after a successful handshake propagate through the child's exit
+        # code instead, so that a restart cannot pick up a stale sentinel.
         ready_queue.put((False, repr(exc)))
         raise
+    ready_queue.put((True, None))
+    server._run()
 
 
 class ProcessInferenceServer:
@@ -501,11 +566,13 @@ class ProcessInferenceServer:
         weight_sync: optional weight synchronization scheme.
         weight_sync_model_id (str, optional): model id for weight sync.
         server_config (InferenceServerConfig, optional): structured server
-            configuration. Mutually exclusive with non-default batching and
-            stats keyword arguments.
+            configuration. Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, ``timeout``, ``collect_stats``, and
+            ``stats_window_size`` keyword arguments.
         device_config (InferenceDeviceConfig, optional): structured device
             placement configuration. Mutually exclusive with ``device``,
-            ``policy_device``, and ``output_device``.
+            ``policy_device``, and ``output_device``. Same field subset as
+            :class:`InferenceServer`: ``storing_device`` is rejected.
         policy_version (int, optional): initial behavior-policy version
             attached to inference outputs. Defaults to ``0``.
         policy_version_key (NestedKey or None, optional): TensorDict key used
@@ -513,6 +580,10 @@ class ProcessInferenceServer:
             annotations. Defaults to ``"policy_version"``.
         mp_context: multiprocessing context or start-method name. Defaults to
             ``"spawn"``.
+        startup_timeout (float, optional): seconds :meth:`start` waits for the
+            child process to build the policy and report readiness. Increase
+            this when the policy factory loads a large checkpoint. Defaults to
+            ``300.0``.
 
     Examples:
         >>> import multiprocessing as mp
@@ -540,15 +611,15 @@ class ProcessInferenceServer:
         *,
         policy_factory: Callable[[], nn.Module],
         transport: InferenceTransport,
-        max_batch_size: int = 64,
-        min_batch_size: int = 1,
-        timeout: float = 0.01,
+        max_batch_size: int | None = None,
+        min_batch_size: int | None = None,
+        timeout: float | None = None,
         collate_fn: Callable | None = None,
         device: torch.device | str | None = None,
         policy_device: torch.device | str | None = None,
         output_device: torch.device | str | None = None,
-        collect_stats: bool = True,
-        stats_window_size: int = 1024,
+        collect_stats: bool | None = None,
+        stats_window_size: int | None = None,
         weight_sync=None,
         weight_sync_model_id: str = "policy",
         server_config: InferenceServerConfig | None = None,
@@ -556,24 +627,36 @@ class ProcessInferenceServer:
         policy_version: int = 0,
         policy_version_key: NestedKey | None = "policy_version",
         mp_context: str | mp.context.BaseContext | None = None,
+        startup_timeout: float = 300.0,
     ) -> None:
-        if server_config is not None:
-            if (
+        if server_config is not None and any(
+            kwarg is not None
+            for kwarg in (
                 max_batch_size,
                 min_batch_size,
                 timeout,
                 collect_stats,
                 stats_window_size,
-            ) != (64, 1, 0.01, True, 1024):
-                raise ValueError(
-                    "server_config is mutually exclusive with non-default "
-                    "batching and stats keyword arguments."
-                )
-            max_batch_size = server_config.max_batch_size
-            min_batch_size = server_config.min_batch_size
-            timeout = server_config.timeout
-            collect_stats = server_config.collect_stats
-            stats_window_size = server_config.stats_window_size
+            )
+        ):
+            raise ValueError(
+                "server_config is mutually exclusive with the max_batch_size, "
+                "min_batch_size, timeout, collect_stats, and stats_window_size "
+                "keyword arguments."
+            )
+        _server_defaults = (
+            server_config if server_config is not None else InferenceServerConfig()
+        )
+        if max_batch_size is None:
+            max_batch_size = _server_defaults.max_batch_size
+        if min_batch_size is None:
+            min_batch_size = _server_defaults.min_batch_size
+        if timeout is None:
+            timeout = _server_defaults.timeout
+        if collect_stats is None:
+            collect_stats = _server_defaults.collect_stats
+        if stats_window_size is None:
+            stats_window_size = _server_defaults.stats_window_size
         if device_config is not None:
             if (
                 device is not None
@@ -584,10 +667,19 @@ class ProcessInferenceServer:
                     "device_config is mutually exclusive with device, "
                     "policy_device, and output_device."
                 )
+            if device_config.storing_device is not None:
+                raise ValueError(
+                    "storing_device is a collector-level setting that the "
+                    "server does not consume. The server only uses "
+                    "policy_device and output_device (with env_device as a "
+                    "fallback for output_device). Pass storing_device to the "
+                    "collector instead."
+                )
             policy_device = device_config.policy_device
             output_device = device_config.server_output_device()
         self.policy_factory = policy_factory
         self.transport = transport
+        self.startup_timeout = startup_timeout
         if isinstance(mp_context, str):
             self._ctx = mp.get_context(mp_context)
         elif mp_context is None:
@@ -612,6 +704,13 @@ class ProcessInferenceServer:
             "policy_version": policy_version,
             "policy_version_key": policy_version_key,
         }
+        # Live mirror of the child's policy version ("q" = signed 64-bit).
+        self._policy_version_value = self._ctx.Value("q", int(policy_version))
+
+    @property
+    def policy_version(self) -> int:
+        """The live behavior-policy version of the child server."""
+        return int(self._policy_version_value.value)
 
     def start(self) -> ProcessInferenceServer:
         """Start the child process and wait until the policy is initialized."""
@@ -626,12 +725,21 @@ class ProcessInferenceServer:
                 "server_kwargs": self._server_kwargs,
                 "shutdown_event": self._shutdown_event,
                 "ready_queue": self._ready_queue,
+                "policy_version_value": self._policy_version_value,
             },
             daemon=True,
             name="ProcessInferenceServer",
         )
         self._process.start()
-        ok, payload = self._ready_queue.get(timeout=30.0)
+        try:
+            ok, payload = self._ready_queue.get(timeout=self.startup_timeout)
+        except queue.Empty:
+            self.shutdown(timeout=1.0)
+            raise TimeoutError(
+                f"ProcessInferenceServer did not report readiness within "
+                f"{self.startup_timeout} seconds. If the policy factory loads a "
+                f"large checkpoint, increase startup_timeout."
+            ) from None
         if not ok:
             self.shutdown(timeout=1.0)
             raise RuntimeError(f"ProcessInferenceServer failed to start: {payload}")
