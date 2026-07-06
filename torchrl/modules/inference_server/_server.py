@@ -550,26 +550,37 @@ def _process_server_entry(
                     "InferenceServer serve loop died inside the server process."
                 )
             try:
-                request_id, command, kwargs = control_queue.get(timeout=0.05)
+                request = control_queue.get(timeout=0.05)
             except queue.Empty:
                 continue
+            # Control messages follow the generic command-channel shape --
+            # request: {"id", "verb", "payload"}; reply: {"id", "ok",
+            # "payload"} -- so this control plane can migrate onto a shared
+            # CommandChannel abstraction without a wire-format change.
+            request_id = request["id"]
+            verb = request["verb"]
+            payload_in = request["payload"]
             try:
-                if command == "stats":
-                    payload = server.stats(**kwargs)
-                elif command == "health":
+                if verb == "stats":
+                    payload = server.stats(**payload_in)
+                elif verb == "health":
                     payload = {
                         "alive": server.is_alive,
                         "policy_version": server.policy_version,
                     }
-                elif command == "shutdown":
+                elif verb == "shutdown":
                     shutdown_event.set()
                     payload = {"accepted": True}
                 else:
-                    raise RuntimeError(f"Unknown process-server command: {command}")
+                    raise RuntimeError(f"Unknown process-server verb: {verb}")
             except Exception as exc:
-                control_response_queue.put((request_id, False, repr(exc)))
+                control_response_queue.put(
+                    {"id": request_id, "ok": False, "payload": repr(exc)}
+                )
             else:
-                control_response_queue.put((request_id, True, payload))
+                control_response_queue.put(
+                    {"id": request_id, "ok": True, "payload": payload}
+                )
     finally:
         # Join the serve loop without a deadline: its shutdown path drains
         # and rejects pending requests, which must not be skipped even when
@@ -795,10 +806,16 @@ class ProcessInferenceServer:
 
     def _request_control(
         self,
-        command: Literal["stats", "health", "shutdown"],
-        kwargs: dict | None = None,
+        verb: Literal["stats", "health", "shutdown"],
+        payload: dict | None = None,
         timeout: float = 5.0,
     ):
+        """One control-plane round trip: verb + payload out, reply back.
+
+        Messages use the generic command-channel shape (request ``{"id",
+        "verb", "payload"}``, reply ``{"id", "ok", "payload"}``) so this can
+        later ride a shared CommandChannel abstraction unchanged.
+        """
         if self._process is None:
             raise RuntimeError("ProcessInferenceServer is not running.")
         if not self._process.is_alive():
@@ -812,31 +829,32 @@ class ProcessInferenceServer:
         with self._control_lock:
             request_id = self._next_control_request_id
             self._next_control_request_id += 1
-            self._control_queue.put((request_id, command, kwargs or {}))
+            self._control_queue.put(
+                {"id": request_id, "verb": verb, "payload": payload or {}}
+            )
             deadline = time.monotonic() + timeout
             while True:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise TimeoutError(
-                        f"Timed out waiting for ProcessInferenceServer {command!r}."
+                        f"Timed out waiting for ProcessInferenceServer {verb!r}."
                     )
                 try:
-                    response_id, ok, payload = self._control_response_queue.get(
-                        timeout=remaining
-                    )
+                    reply = self._control_response_queue.get(timeout=remaining)
                 except queue.Empty:
                     raise TimeoutError(
-                        f"Timed out waiting for ProcessInferenceServer {command!r}."
+                        f"Timed out waiting for ProcessInferenceServer {verb!r}."
                     ) from None
-                if response_id != request_id:
+                if reply["id"] != request_id:
                     # Stale reply from an earlier timed-out request; calls are
                     # serialized by the lock, so it can be safely discarded.
                     continue
-                if not ok:
+                if not reply["ok"]:
                     raise RuntimeError(
-                        f"ProcessInferenceServer {command!r} failed: {payload}"
+                        f"ProcessInferenceServer {verb!r} failed: "
+                        f"{reply['payload']}"
                     )
-                return payload
+                return reply["payload"]
 
     def shutdown(self, timeout: float | None = 5.0) -> None:
         """Signal the child process to stop and wait for it to exit."""
