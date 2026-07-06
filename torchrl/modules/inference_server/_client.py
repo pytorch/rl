@@ -146,12 +146,18 @@ class PolicyClientModule(TensorDictModuleBase):
         raising in the consumer.
 
     .. note::
-        The server-side version counter is independent from the
+        The default ``"policy_version"`` key is shared on purpose with the
         :class:`~torchrl.envs.llm.transforms.PolicyVersion` transform and the
-        collectors' ``track_policy_version`` mechanism, but it uses the same
-        default ``"policy_version"`` key. When combining an inference-server
-        client with an env that carries the ``PolicyVersion`` transform, set
-        distinct keys to avoid one writer overwriting the other.
+        collectors' ``track_policy_version`` mechanism: they stamp the same
+        concept (the behavior-policy version that produced the data), so
+        consumers such as
+        :class:`~torchrl.envs.transforms.PolicyAgeFilter` can read it without
+        caring which component wrote it. Both counters are driven by the same
+        weight-update cascade (``update_policy_weights_``), so they agree when
+        wired through a weight-sync scheme. Keep a single authoritative writer
+        per data stream -- in a policy-server topology that is the server,
+        which owns the weights; do not stack an independently-initialized
+        ``PolicyVersion`` transform on top of server-stamped data.
 
     Examples:
         >>> import torch
