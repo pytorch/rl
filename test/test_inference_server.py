@@ -1125,9 +1125,8 @@ class TestAsyncBatchedCollector:
             policy_factory=_make_counting_policy,
             frames_per_batch=10,
             total_frames=20,
-            max_batch_size=2,
             env_backend="threading",
-            server_backend="process",
+            server_config=InferenceServerConfig(backend="process", max_batch_size=2),
         )
         total = 0
         for batch in collector:
@@ -1136,13 +1135,8 @@ class TestAsyncBatchedCollector:
         assert total >= 20
 
     def test_invalid_server_backend_raises(self):
-        with pytest.raises(ValueError, match="server_backend"):
-            AsyncBatchedCollector(
-                create_env_fn=[_counting_env_factory] * 2,
-                policy_factory=_make_counting_policy,
-                frames_per_batch=10,
-                server_backend="proces",
-            )
+        with pytest.raises(ValueError, match="backend"):
+            InferenceServerConfig(backend="proces")
 
     def test_server_death_raises_instead_of_hanging(self):
         """Killing the server process surfaces an error in the iterator."""
@@ -1151,9 +1145,8 @@ class TestAsyncBatchedCollector:
             policy_factory=_make_counting_policy,
             frames_per_batch=10,
             total_frames=-1,
-            max_batch_size=2,
             env_backend="threading",
-            server_backend="process",
+            server_config=InferenceServerConfig(backend="process", max_batch_size=2),
         )
         try:
             iterator = iter(collector)
