@@ -16,11 +16,7 @@ from .mean_action_selector import MeanActionSelector
 from .module import ModuleTransform
 from .r3m import R3MTransform
 from .ray_service import RayTransform
-from .rb_transforms import (
-    MultiStepTransform,
-    NextStateReconstructor,
-    PolicyAgeFilter,
-)
+from .rb_transforms import MultiStepTransform, NextStateReconstructor, PolicyAgeFilter
 from .rnd import RNDTransform, RunningMeanStd
 from .transforms import (
     ActionChunkTransform,
