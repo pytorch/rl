@@ -1594,6 +1594,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.MultiAction.html">MultiAction</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NoopResetEnv.html">NoopResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationNorm.html">ObservationNorm</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationTransform.html">ObservationTransform</a></li>
@@ -1837,7 +1838,11 @@ document.write(`
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../modules_inference_server.html">Inference Server</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceServer.html">InferenceServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceServerConfig.html">InferenceServerConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceDeviceConfig.html">InferenceDeviceConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessInferenceServer.html">ProcessInferenceServer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceClient.html">InferenceClient</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.PolicyClientModule.html">PolicyClientModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceTransport.html">InferenceTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ThreadingTransport.html">ThreadingTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
@@ -2348,18 +2353,22 @@ document.write(`
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.envs.transforms.SuccessReward">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.envs.transforms.</span></span><span class="sig-name descname"><span class="pre">SuccessReward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">success_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'success'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward_key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">NestedKey</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'reward'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/envs/transforms/_reward.html#SuccessReward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.envs.transforms.SuccessReward" title="Link to this definition">#</a></dt>
-<dd><p>Sparse 0/1 success reward for reinforcement fine-tuning.</p>
+<dd><p>Sparse reward from a binary success signal.</p>
 <p>Reads a boolean (or 0/1) success signal and writes a sparse reward
-(<code class="docutils literal notranslate"><span class="pre">scale</span></code> on success, <code class="docutils literal notranslate"><span class="pre">0</span></code> otherwise). This is the trajectory-level
-success reward used by SimpleVLA-RL / RL4VLA-style VLA RL, where a binary
-task-completion signal is the only reward, but it is a general transform:
-sparse task-completion rewards are ubiquitous in goal-conditioned RL.</p>
+(<code class="docutils literal notranslate"><span class="pre">scale</span></code> on success, <code class="docutils literal notranslate"><span class="pre">0</span></code> otherwise). This transform is useful for
+environments that expose task completion separately from reward, such as
+goal-conditioned tasks or sparse robotics benchmarks.</p>
 <p>It is a standard leaf transform: it can be appended to a
 <code class="xref py py-class docutils literal notranslate"><span class="pre">TransformedEnv</span></code> (it overwrites the step reward from the
 env’s success signal) or applied to sampled data in a replay buffer. When
 attached to an environment, the reward spec is rewritten to a
 <a class="reference internal" href="torchrl.data.Bounded.html#torchrl.data.Bounded" title="torchrl.data.Bounded"><code class="xref py py-class docutils literal notranslate"><span class="pre">Bounded</span></code></a> spec over <code class="docutils literal notranslate"><span class="pre">{0,</span> <span class="pre">scale}</span></code> (shaped like the
 success entry); the reward is written at step time only, never at reset.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This transform can be used in any setup with a binary completion
+signal, including VLA-style robot manipulation recipes.</p>
+</div>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2773,7 +2782,7 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">&quot;s
        "headline": "SuccessReward",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.envs.transforms.SuccessReward.html",
-       "articleBody": "SuccessReward# class torchrl.envs.transforms.SuccessReward(success_key: NestedKey = \u0027success\u0027, reward_key: NestedKey = \u0027reward\u0027, *, scale: float = 1.0)[source]# Sparse 0/1 success reward for reinforcement fine-tuning. Reads a boolean (or 0/1) success signal and writes a sparse reward (scale on success, 0 otherwise). This is the trajectory-level success reward used by SimpleVLA-RL / RL4VLA-style VLA RL, where a binary task-completion signal is the only reward, but it is a general transform: sparse task-completion rewards are ubiquitous in goal-conditioned RL. It is a standard leaf transform: it can be appended to a TransformedEnv (it overwrites the step reward from the env\u2019s success signal) or applied to sampled data in a replay buffer. When attached to an environment, the reward spec is rewritten to a Bounded spec over {0, scale} (shaped like the success entry); the reward is written at step time only, never at reset. Parameters: success_key (NestedKey) \u2013 the boolean success signal to read. Defaults to \"success\". reward_key (NestedKey) \u2013 the reward to write. Defaults to \"reward\". Keyword Arguments: scale (float) \u2013 the reward value on success. Defaults to 1.0. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torchrl.envs.transforms import SuccessReward \u003e\u003e\u003e t = SuccessReward(scale=1.0) \u003e\u003e\u003e td = TensorDict({\"success\": torch.tensor([[True], [False]])}, batch_size=[2]) \u003e\u003e\u003e t(td)[\"reward\"].squeeze(-1).tolist() [1.0, 0.0] transform_reward_spec(reward_spec: TensorSpec) \u2192 TensorSpec[source]# Transforms the reward spec such that the resulting spec matches transform mapping. Parameters: reward_spec (TensorSpec) \u2013 spec before the transform Returns: expected spec after the transform",
+       "articleBody": "SuccessReward# class torchrl.envs.transforms.SuccessReward(success_key: NestedKey = \u0027success\u0027, reward_key: NestedKey = \u0027reward\u0027, *, scale: float = 1.0)[source]# Sparse reward from a binary success signal. Reads a boolean (or 0/1) success signal and writes a sparse reward (scale on success, 0 otherwise). This transform is useful for environments that expose task completion separately from reward, such as goal-conditioned tasks or sparse robotics benchmarks. It is a standard leaf transform: it can be appended to a TransformedEnv (it overwrites the step reward from the env\u2019s success signal) or applied to sampled data in a replay buffer. When attached to an environment, the reward spec is rewritten to a Bounded spec over {0, scale} (shaped like the success entry); the reward is written at step time only, never at reset. Note This transform can be used in any setup with a binary completion signal, including VLA-style robot manipulation recipes. Parameters: success_key (NestedKey) \u2013 the boolean success signal to read. Defaults to \"success\". reward_key (NestedKey) \u2013 the reward to write. Defaults to \"reward\". Keyword Arguments: scale (float) \u2013 the reward value on success. Defaults to 1.0. Examples \u003e\u003e\u003e import torch \u003e\u003e\u003e from tensordict import TensorDict \u003e\u003e\u003e from torchrl.envs.transforms import SuccessReward \u003e\u003e\u003e t = SuccessReward(scale=1.0) \u003e\u003e\u003e td = TensorDict({\"success\": torch.tensor([[True], [False]])}, batch_size=[2]) \u003e\u003e\u003e t(td)[\"reward\"].squeeze(-1).tolist() [1.0, 0.0] transform_reward_spec(reward_spec: TensorSpec) \u2192 TensorSpec[source]# Transforms the reward spec such that the resulting spec matches transform mapping. Parameters: reward_spec (TensorSpec) \u2013 spec before the transform Returns: expected spec after the transform",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

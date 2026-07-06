@@ -45,6 +45,20 @@ writers can complete one logical group. Ray replay buffers already execute
 their transform inside the replay-buffer actor; use [`RayMCAdvantage`](torchrl.objectives.llm.RayMCAdvantage.html#torchrl.objectives.llm.RayMCAdvantage)
 when only the grouping transform state should be centralized in Ray.
 
+Note
+
+Setting the environment variable
+`TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES=1` turns `share_memory_()`
+into a no-op: the grouping queues and counters stay process-local
+instead of being moved to a multiprocessing manager. Use this to skip
+the manager round-trips when a single process writes to the replay
+buffer, or when every trajectory of a group is guaranteed to be
+produced by the same writer process. Caveat: with multiple writer
+processes, a GRPO group whose trajectories span several workers can
+never complete - each worker only sees its local fraction of the
+group, so those trajectories are held in memory forever and never
+written to the buffer.
+
 Warning
 
 This transform will flatten the input tensordicts and therefore is not compatible yet with replay
@@ -220,6 +234,10 @@ Return an iterator over immediate children modules.
 Yields:
 
 *Module* - a child module
+
+clear_queues() → None[[source]](../../_modules/torchrl/objectives/llm/grpo.html#MCAdvantage.clear_queues)
+
+Clear incomplete Monte-Carlo trajectory groups.
 
 close()
 
@@ -471,6 +489,10 @@ Raises:
 **AttributeError** - If the target string references an invalid
  path or resolves to something that is not an
  `nn.Parameter`
+
+get_stats() → dict[str, float | int][[source]](../../_modules/torchrl/objectives/llm/grpo.html#MCAdvantage.get_stats)
+
+Return a serializable snapshot of counters and pending queues.
 
 get_submodule(*target: str*) → [Module](https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module)
 

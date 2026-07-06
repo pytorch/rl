@@ -30,7 +30,8 @@ Examples
 >>> tokens = tok.encode(torch.tensor([-1.0, 0.0, 1.0]))
 >>> tokens
 tensor([ 0, 128, 255])
->>> torch.allclose(tok.decode(tokens), torch.tensor([-0.998, 0.002, 0.998]), atol=1e-2)
+>>> expected = torch.tensor([-0.998, 0.002, 0.998])
+>>> torch.allclose(tok.decode(tokens), expected, atol=1e-2)
 True
 >>> tok.vocab_size
 256
@@ -55,7 +56,7 @@ Map continuous actions `[..., action_dim]` to token ids (`long`).
 
 *classmethod*from_metadata(*metadata: [RobotDatasetMetadata](torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata)*, *num_bins: int*) → UniformActionTokenizer[[source]](../../_modules/torchrl/data/vla/tokenizers.html#UniformActionTokenizer.from_metadata)
 
-Build from the `action_low`/`action_high` of a [`RobotDatasetMetadata`](torchrl.data.vla.RobotDatasetMetadata.html#torchrl.data.vla.RobotDatasetMetadata).
+Build from the action bounds of a dataset metadata object.
 
 *property*vocab_size*: int*
 

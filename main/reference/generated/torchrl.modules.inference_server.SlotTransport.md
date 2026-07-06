@@ -45,6 +45,10 @@ drain(*max_items: int*) → tuple[list[[TensorDictBase](https://docs.pytorch.org
 
 Sweep slots and return (observations, slot_ids) for ready ones.
 
+drain_with_timing(*max_items: int*) → tuple[list[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], list[int], list[float | None]][[source]](../../_modules/torchrl/modules/inference_server/_slot.html#SlotTransport.drain_with_timing)
+
+Sweep slots and include actor-side submission timestamps.
+
 resolve(*callback: int*, *result: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_slot.html#SlotTransport.resolve)
 
 Write the action into the slot and wake the waiting env thread.

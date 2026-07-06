@@ -43,6 +43,9 @@ the forward otherwise follows the ambient
 - **mode** (*str**,**optional*) - backward-compatible alias for
 `default_interaction_type`. Defaults to `None`.
 - **device** (*DEVICE_TYPING**,**optional*) - device to move the parameters to.
+- **return_vla_action_container** (*bool*) - whether to write the structured
+VLAAction container in addition to its TensorDict fields. Defaults
+to `True`.
 
 Examples
 

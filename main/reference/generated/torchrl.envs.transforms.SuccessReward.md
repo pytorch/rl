@@ -2,13 +2,12 @@
 
 *class*torchrl.envs.transforms.SuccessReward(*success_key: NestedKey = 'success'*, *reward_key: NestedKey = 'reward'*, ***, *scale: float = 1.0*)[[source]](../../_modules/torchrl/envs/transforms/_reward.html#SuccessReward)
 
-Sparse 0/1 success reward for reinforcement fine-tuning.
+Sparse reward from a binary success signal.
 
 Reads a boolean (or 0/1) success signal and writes a sparse reward
-(`scale` on success, `0` otherwise). This is the trajectory-level
-success reward used by SimpleVLA-RL / RL4VLA-style VLA RL, where a binary
-task-completion signal is the only reward, but it is a general transform:
-sparse task-completion rewards are ubiquitous in goal-conditioned RL.
+(`scale` on success, `0` otherwise). This transform is useful for
+environments that expose task completion separately from reward, such as
+goal-conditioned tasks or sparse robotics benchmarks.
 
 It is a standard leaf transform: it can be appended to a
 `TransformedEnv` (it overwrites the step reward from the
@@ -16,6 +15,11 @@ env's success signal) or applied to sampled data in a replay buffer. When
 attached to an environment, the reward spec is rewritten to a
 [`Bounded`](torchrl.data.Bounded.html#torchrl.data.Bounded) spec over `{0, scale}` (shaped like the
 success entry); the reward is written at step time only, never at reset.
+
+Note
+
+This transform can be used in any setup with a binary completion
+signal, including VLA-style robot manipulation recipes.
 
 Parameters:
 

@@ -1,6 +1,6 @@
 # ActionTokenizerTransform
 
-*class*torchrl.envs.transforms.ActionTokenizerTransform(*tokenizer: [ActionTokenizerBase](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase)*, ***, *in_key: NestedKey = 'action'*, *out_key: NestedKey = ('vla_action', 'tokens')*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionTokenizerTransform)
+*class*torchrl.envs.transforms.ActionTokenizerTransform(*tokenizer: [ActionTokenizerBase](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase)*, ***, *in_key: NestedKey = 'action'*, *out_key: NestedKey = ('vla_action', 'tokens')*, *mode: Literal['encode', 'decode'] = 'encode'*)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionTokenizerTransform)
 
 Encode and decode actions with an [`ActionTokenizerBase`](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase).
 
@@ -9,24 +9,32 @@ bins live in the tokenizer; no environment is needed to construct it).
 Like any TorchRL transform it plugs onto a replay buffer or an environment
 interchangeably:
 
-- **forward** (`encode`): maps the continuous action (or action chunk) at
-`in_key` to discrete token ids at `out_key` - e.g. building the token
-training target for an autoregressive (RT-2 / OpenVLA-style) token VLA on
-the replay-buffer sample path.
-- **inverse** (`decode`): maps token ids at `out_key` back to a continuous
-action at `in_key` - e.g. decoding the tokens a token-head policy emits,
-on the environment action-input path, before the base env consumes them.
-On a replay buffer the inverse is a no-op when the token entry is
-absent, so extending with raw (untokenized) data is safe; attached to an
+- **forward encode mode** (`mode="encode"`, the default): maps the
+continuous action (or action chunk) at `in_key` to discrete token ids at
+`out_key` - e.g. building the token training target for an
+autoregressive (RT-2 / OpenVLA-style) token VLA on the replay-buffer
+sample path.
+- **inverse encode mode**: maps token ids at `out_key` back to a
+continuous action at `in_key` - e.g. decoding the tokens a token-head
+policy emits, on the environment action-input path, before the base env
+consumes them.
+- **forward decode mode** (`mode="decode"`): maps token ids at
+`out_key` to continuous actions at `in_key`. This is useful on the
+policy side, for instance as a module after a token VLA policy in a
+[`TensorDictSequential`](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.nn.TensorDictSequential.html#tensordict.nn.TensorDictSequential), so CPU environments can
+receive decoded actions without owning tokenizer buffers.
+
+On a replay buffer the inverse is a no-op when the token entry is absent,
+so extending with raw (untokenized) data is safe; attached to an
 environment, missing tokens on the step path raise instead.
 
-When attached to an environment, the policy-facing action spec is rewritten
-to a [`Categorical`](torchrl.data.Categorical.html#torchrl.data.Categorical) over the tokenizer's vocabulary, so
-the env advertises the token interface the policy is expected to produce
-(the decoded continuous action is consumed by the base env internally).
-Using the same tokenizer instance on the replay buffer (encode) and on the
-env (decode) guarantees that training targets and execution share the exact
-same binning.
+When attached to an environment in encode mode, the policy-facing action
+spec is rewritten to a [`Categorical`](torchrl.data.Categorical.html#torchrl.data.Categorical) over the
+tokenizer's vocabulary, so the env advertises the token interface the
+policy is expected to produce (the decoded continuous action is consumed by
+the base env internally). Using the same tokenizer instance on the replay
+buffer (encode) and on the env (decode through the inverse path) guarantees
+that training targets and execution share the exact same binning.
 
 Parameters:
 
@@ -38,6 +46,9 @@ Keyword Arguments:
 - **out_key** (*NestedKey*) - the discrete token ids. Defaults to
 `("vla_action", "tokens")`. Pass `"action_tokens"` for the
 flat compatibility key.
+- **mode** (*str**,**optional*) - `"encode"` makes `forward()` encode
+actions into tokens and `inv()` decode tokens into actions.
+`"decode"` swaps these directions. Defaults to `"encode"`.
 
 Examples
 
@@ -54,6 +65,11 @@ tensor([[ 0, 128, 255]])
 >>> # the inverse decodes tokens back to a continuous action
 >>> back = t.inv(TensorDict({("vla_action", "tokens"): td["vla_action", "tokens"]}, batch_size=[1]))
 >>> back["action"].shape
+torch.Size([1, 3])
+>>> # policy-side decode: token policy -> decoded continuous action
+>>> decode = ActionTokenizerTransform(tok, mode="decode")
+>>> policy_td = TensorDict({("vla_action", "tokens"): td["vla_action", "tokens"]}, batch_size=[1])
+>>> decode(policy_td)["action"].shape
 torch.Size([1, 3])
 >>> # on a replay buffer: raw actions written through extend are stored
 >>> # as-is and tokenized on the sample path
@@ -132,6 +148,19 @@ Transforms the input spec such that the resulting spec matches transform mapping
 Parameters:
 
 **input_spec** ([*TensorSpec*](torchrl.data.TensorSpec.html#torchrl.data.TensorSpec)) - spec before the transform
+
+Returns:
+
+expected spec after the transform
+
+transform_output_spec(*output_spec: [Composite](torchrl.data.Composite.html#torchrl.data.Composite)*) → [Composite](torchrl.data.Composite.html#torchrl.data.Composite)[[source]](../../_modules/torchrl/envs/transforms/_action.html#ActionTokenizerTransform.transform_output_spec)
+
+Transforms the output spec such that the resulting spec matches transform mapping.
+
+This method should generally be left untouched. Changes should be implemented using
+`transform_observation_spec()`, `transform_reward_spec()` and `transform_full_done_spec()`.
+:param output_spec: spec before the transform
+:type output_spec: TensorSpec
 
 Returns:
 

@@ -1594,6 +1594,7 @@ document.write(`
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.MultiAction.html">MultiAction</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextObservationDelta.html">NextObservationDelta</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NextStateReconstructor.html">NextStateReconstructor</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.PolicyAgeFilter.html">PolicyAgeFilter</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.NoopResetEnv.html">NoopResetEnv</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationNorm.html">ObservationNorm</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.envs.transforms.ObservationTransform.html">ObservationTransform</a></li>
@@ -1837,7 +1838,11 @@ document.write(`
 </details></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../modules_inference_server.html">Inference Server</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceServer.html">InferenceServer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceServerConfig.html">InferenceServerConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceDeviceConfig.html">InferenceDeviceConfig</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ProcessInferenceServer.html">ProcessInferenceServer</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceClient.html">InferenceClient</a></li>
+<li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.PolicyClientModule.html">PolicyClientModule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.InferenceTransport.html">InferenceTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.ThreadingTransport.html">ThreadingTransport</a></li>
 <li class="toctree-l3"><a class="reference internal" href="torchrl.modules.inference_server.SlotTransport.html">SlotTransport</a></li>
@@ -2347,7 +2352,7 @@ document.write(`
 <h1>MPTransport<a class="headerlink" href="#mptransport" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="torchrl.modules.inference_server.MPTransport">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.inference_server.</span></span><span class="sig-name descname"><span class="pre">MPTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">BaseContext</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MPTransport" title="Link to this definition">#</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">torchrl.modules.inference_server.</span></span><span class="sig-name descname"><span class="pre">MPTransport</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">BaseContext</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_manager</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MPTransport" title="Link to this definition">#</a></dt>
 <dd><p>Cross-process transport using <code class="xref py py-mod docutils literal notranslate"><span class="pre">multiprocessing</span></code> queues.</p>
 <p>Response routing uses per-actor queues (one per <a class="reference internal" href="#torchrl.modules.inference_server.MPTransport.client" title="torchrl.modules.inference_server.MPTransport.client"><code class="xref py py-meth docutils literal notranslate"><span class="pre">client()</span></code></a> call) so
 that no <code class="docutils literal notranslate"><span class="pre">mp.Queue</span></code> object is ever serialised through another queue.
@@ -2355,8 +2360,14 @@ Clients must be created with <a class="reference internal" href="#torchrl.module
 processes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ctx</strong> – a multiprocessing context (e.g. <code class="docutils literal notranslate"><span class="pre">mp.get_context(&quot;spawn&quot;)</span></code>).
-Defaults to <code class="docutils literal notranslate"><span class="pre">mp.get_context(&quot;spawn&quot;)</span></code>.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ctx</strong> – a multiprocessing context (e.g. <code class="docutils literal notranslate"><span class="pre">mp.get_context(&quot;spawn&quot;)</span></code>).
+Defaults to <code class="docutils literal notranslate"><span class="pre">mp.get_context(&quot;spawn&quot;)</span></code>.</p></li>
+<li><p><strong>use_manager</strong> (<em>bool</em><em>, </em><em>optional</em>) – if <code class="docutils literal notranslate"><span class="pre">True</span></code>, back the request and
+response queues with a multiprocessing manager. This is useful
+when clients are forwarded through another spawned process.
+Defaults to <code class="docutils literal notranslate"><span class="pre">False</span></code>.</p></li>
+</ul>
 </dd>
 </dl>
 <p class="rubric">Example</p>
@@ -2371,13 +2382,28 @@ Defaults to <code class="docutils literal notranslate"><span class="pre">mp.get_
 <dt class="sig sig-object py" id="torchrl.modules.inference_server.MPTransport.client">
 <span class="sig-name descname"><span class="pre">client</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">_QueueInferenceClient</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport.client"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MPTransport.client" title="Link to this definition">#</a></dt>
 <dd><p>Create an actor-side client with a dedicated response queue.</p>
-<p>Must be called in the parent process <strong>before</strong> spawning children.</p>
+<p>Must be called in the parent process <strong>before</strong> spawning children.
+In particular, a manager-backed transport (<code class="docutils literal notranslate"><span class="pre">use_manager=True</span></code>)
+loses its manager handle when pickled, so calling this on an
+unpickled copy raises a <code class="xref py py-class docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>A <code class="xref py py-class docutils literal notranslate"><span class="pre">_QueueInferenceClient</span></code> that can be passed to a child
 process as an argument to <code class="xref py py-class docutils literal notranslate"><span class="pre">multiprocessing.Process</span></code>.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="torchrl.modules.inference_server.MPTransport.close">
+<span class="sig-name descname"><span class="pre">close</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="../../_modules/torchrl/modules/inference_server/_mp.html#MPTransport.close"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#torchrl.modules.inference_server.MPTransport.close" title="Link to this definition">#</a></dt>
+<dd><p>Release transport resources.</p>
+<p>Shuts down the multiprocessing manager backing the request/response
+queues when the transport was built with <code class="docutils literal notranslate"><span class="pre">use_manager=True</span></code>
+(a no-op otherwise). The process that owns the transport must call
+this once the server and all clients are done with it:
+<a class="reference internal" href="torchrl.modules.inference_server.ProcessInferenceServer.html#torchrl.modules.inference_server.ProcessInferenceServer" title="torchrl.modules.inference_server.ProcessInferenceServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ProcessInferenceServer</span></code></a>
+does not close the transport on <code class="docutils literal notranslate"><span class="pre">shutdown()</span></code>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2503,6 +2529,7 @@ process as an argument to <code class="xref py py-class docutils literal notrans
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.modules.inference_server.MPTransport"><code class="docutils literal notranslate"><span class="pre">MPTransport</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.modules.inference_server.MPTransport.client"><code class="docutils literal notranslate"><span class="pre">MPTransport.client()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#torchrl.modules.inference_server.MPTransport.close"><code class="docutils literal notranslate"><span class="pre">MPTransport.close()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -2757,7 +2784,7 @@ process as an argument to <code class="xref py py-class docutils literal notrans
        "headline": "MPTransport",
        "description": "PyTorch Documentation. Explore PyTorch, an open-source machine learning library that accelerates the path from research prototyping to production deployment.",
        "url": "/reference/generated/torchrl.modules.inference_server.MPTransport.html",
-       "articleBody": "MPTransport# class torchrl.modules.inference_server.MPTransport(ctx: BaseContext | None = None)[source]# Cross-process transport using multiprocessing queues. Response routing uses per-actor queues (one per client() call) so that no mp.Queue object is ever serialised through another queue. Clients must be created with client() before spawning child processes. Parameters: ctx \u2013 a multiprocessing context (e.g. mp.get_context(\"spawn\")). Defaults to mp.get_context(\"spawn\"). Example \u003e\u003e\u003e import multiprocessing as mp \u003e\u003e\u003e transport = MPTransport() \u003e\u003e\u003e client = transport.client() # creates response queue \u003e\u003e\u003e p = mp.Process(target=actor_fn, args=(client,)) \u003e\u003e\u003e p.start() # queue inherited client() \u2192 _QueueInferenceClient[source]# Create an actor-side client with a dedicated response queue. Must be called in the parent process before spawning children. Returns: A _QueueInferenceClient that can be passed to a child process as an argument to multiprocessing.Process.",
+       "articleBody": "MPTransport# class torchrl.modules.inference_server.MPTransport(ctx: BaseContext | None = None, *, use_manager: bool = False)[source]# Cross-process transport using multiprocessing queues. Response routing uses per-actor queues (one per client() call) so that no mp.Queue object is ever serialised through another queue. Clients must be created with client() before spawning child processes. Parameters: ctx \u2013 a multiprocessing context (e.g. mp.get_context(\"spawn\")). Defaults to mp.get_context(\"spawn\"). use_manager (bool, optional) \u2013 if True, back the request and response queues with a multiprocessing manager. This is useful when clients are forwarded through another spawned process. Defaults to False. Example \u003e\u003e\u003e import multiprocessing as mp \u003e\u003e\u003e transport = MPTransport() \u003e\u003e\u003e client = transport.client() # creates response queue \u003e\u003e\u003e p = mp.Process(target=actor_fn, args=(client,)) \u003e\u003e\u003e p.start() # queue inherited client() \u2192 _QueueInferenceClient[source]# Create an actor-side client with a dedicated response queue. Must be called in the parent process before spawning children. In particular, a manager-backed transport (use_manager=True) loses its manager handle when pickled, so calling this on an unpickled copy raises a RuntimeError. Returns: A _QueueInferenceClient that can be passed to a child process as an argument to multiprocessing.Process. close() \u2192 None[source]# Release transport resources. Shuts down the multiprocessing manager backing the request/response queues when the transport was built with use_manager=True (a no-op otherwise). The process that owns the transport must call this once the server and all clients are done with it: ProcessInferenceServer does not close the transport on shutdown().",
        "author": {
          "@type": "Organization",
          "name": "PyTorch Contributors",

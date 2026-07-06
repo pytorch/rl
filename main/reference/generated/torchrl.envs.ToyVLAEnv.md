@@ -77,6 +77,10 @@ the group. This is the init-state control GRPO-style group
 advantages require (n rollouts per initial state, e.g. grouped by
 [`MCAdvantage`](torchrl.objectives.llm.MCAdvantage.html#torchrl.objectives.llm.MCAdvantage)). Defaults to
 `None` (a fresh target every episode, no `group_id` entry).
+- **group_id_offset** (*int**,**optional*) - offset added to grouped rollout ids.
+This lets several single ToyVLAEnv instances collect grouped
+rollouts in parallel without mixing unrelated initial states in the
+downstream group-advantage transform. Defaults to `0`.
 - **batch_size** ([*torch.Size*](https://docs.pytorch.org/docs/stable/size.html#torch.Size)*,**optional*) - number of vectorized copies.
 Defaults to `torch.Size([])` (a single environment).
 - **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*,**optional*) - device of the specs.

@@ -26,9 +26,12 @@ use raw language-model token ids,
 Optionally, dataset statistics (the `norm_stats` shipped with OpenVLA
 checkpoints) un-normalize decoded actions to the environment's action
 space - and normalize actions before encoding - via the affine q01/q99
-map `a_env = 0.5 * (a + 1) * (q99 - q01) + q01` applied to the
+map `a_env = 0.5 * (a + 1) * (q99 - q01 + 1e-8) + q01` applied to the
 dimensions selected by `mask` (the gripper dimension is typically
-excluded). See `from_norm_stats()`.
+excluded). To reproduce the reference MuJoCo action path exactly, decoding
+with normalization statistics is performed in NumPy float64 on CPU; the
+result is cast back to `float32` on the input tokens' device. See
+`from_norm_stats()` and `decode()`.
 
 Parameters:
 
@@ -87,6 +90,17 @@ plain bin-index codec used by toy token policies.
 decode(*tokens: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/vla/tokenizers.html#VocabTailActionTokenizer.decode)
 
 Map token ids back to continuous actions `[..., action_dim]`.
+
+When normalization statistics are set (see `from_norm_stats()`),
+the de-tokenization and the q01/q99 un-normalization are computed in
+NumPy float64 on CPU for bit-exact parity with the OpenVLA-OFT
+reference implementation. This incurs a device-to-host round-trip
+(and a host sync) on every call when `tokens` lives on an
+accelerator; the result is moved back to `tokens.device` and cast
+to the tokenizer's working dtype (`float32`).
+
+Without statistics, decoding runs entirely on `tokens.device` and
+returns bin centers in `[-1, 1]`.
 
 encode(*actions: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*) → [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)[[source]](../../_modules/torchrl/data/vla/tokenizers.html#VocabTailActionTokenizer.encode)
 

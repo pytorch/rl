@@ -295,6 +295,7 @@ Available Transforms
     MultiAction
     NextObservationDelta
     NextStateReconstructor
+    PolicyAgeFilter
     NoopResetEnv
     ObservationNorm
     ObservationTransform

@@ -15,6 +15,10 @@ drain(*max_items: int*) → tuple[list[[TensorDictBase](https://docs.pytorch.org
 
 Dequeue up to *max_items* pending requests.
 
+drain_with_timing(*max_items: int*) → tuple[list[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], list[Future], list[float]][[source]](../../_modules/torchrl/modules/inference_server/_threading.html#ThreadingTransport.drain_with_timing)
+
+Dequeue requests with actor-side submission timestamps.
+
 resolve(*callback: Future*, *result: [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)*) → None[[source]](../../_modules/torchrl/modules/inference_server/_threading.html#ThreadingTransport.resolve)
 
 Set the result on the actor's Future.

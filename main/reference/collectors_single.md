@@ -8,7 +8,7 @@ TorchRL provides several collector classes for single-node data collection, each
 | --- | --- |
 | [`Collector`](generated/torchrl.collectors.Collector.html#torchrl.collectors.Collector)(create_env_fn[, policy, ...]) | Generic data collector for RL problems. |
 | [`AsyncCollector`](generated/torchrl.collectors.AsyncCollector.html#torchrl.collectors.AsyncCollector)(*args[, sync]) | Runs a single DataCollector on a separate process. |
-| [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector)(create_env_fn, *[, ...]) | Asynchronous collector that pairs per-env threads with an [`AsyncEnvPool`](generated/torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) and an `InferenceServer`. |
+| [`AsyncBatchedCollector`](generated/torchrl.collectors.AsyncBatchedCollector.html#torchrl.collectors.AsyncBatchedCollector)(create_env_fn, *[, ...]) | Asynchronous collector with env slots and a policy server. |
 | [`MultiCollector`](generated/torchrl.collectors.MultiCollector.html#torchrl.collectors.MultiCollector)(*args[, sync]) | Runs a given number of DataCollectors on separate processes. |
 | [`MultiSyncCollector`](generated/torchrl.collectors.MultiSyncCollector.html#torchrl.collectors.MultiSyncCollector)(*args[, sync]) | Runs a given number of DataCollectors on separate processes synchronously. |
 | [`MultiAsyncCollector`](generated/torchrl.collectors.MultiAsyncCollector.html#torchrl.collectors.MultiAsyncCollector)(*args[, sync]) | Runs a given number of DataCollectors on separate processes asynchronously. |

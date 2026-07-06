@@ -300,6 +300,7 @@ to be able to create this other composition:
 | [`MultiAction`](generated/torchrl.envs.transforms.MultiAction.html#torchrl.envs.transforms.MultiAction)(*[, dim, stack_rewards, ...]) | A transform to execute multiple actions in the parent environment. |
 | [`NextObservationDelta`](generated/torchrl.envs.transforms.NextObservationDelta.html#torchrl.envs.transforms.NextObservationDelta)([in_keys, delta_dtype, ...]) | Stores `("next", obs)` as a low-precision delta in a sibling key. |
 | [`NextStateReconstructor`](generated/torchrl.envs.transforms.NextStateReconstructor.html#torchrl.envs.transforms.NextStateReconstructor)([keys, traj_key, ...]) | Re-hydrate `("next", obs)` keys at sampling time by shifting along the batch. |
+| [`PolicyAgeFilter`](generated/torchrl.envs.transforms.PolicyAgeFilter.html#torchrl.envs.transforms.PolicyAgeFilter)(current_version, ...[, ...]) | Filter out data produced by a behavior policy that is too old. |
 | [`NoopResetEnv`](generated/torchrl.envs.transforms.NoopResetEnv.html#torchrl.envs.transforms.NoopResetEnv)([noops, random]) | Runs a series of random actions when an environment is reset. |
 | [`ObservationNorm`](generated/torchrl.envs.transforms.ObservationNorm.html#torchrl.envs.transforms.ObservationNorm)([loc, scale, in_keys, ...]) | Observation affine transformation layer. |
 | [`ObservationTransform`](generated/torchrl.envs.transforms.ObservationTransform.html#torchrl.envs.transforms.ObservationTransform)([in_keys, out_keys, ...]) | Abstract class for transformations of the observations. |
@@ -322,7 +323,7 @@ to be able to create this other composition:
 | [`SqueezeTransform`](generated/torchrl.envs.transforms.SqueezeTransform.html#torchrl.envs.transforms.SqueezeTransform)(*args, **kwargs) | Removes a dimension of size one at the specified position. |
 | [`Stack`](generated/torchrl.envs.transforms.Stack.html#torchrl.envs.transforms.Stack)(in_keys, out_key[, in_key_inv, ...]) | Stacks tensors and tensordicts. |
 | [`StepCounter`](generated/torchrl.envs.transforms.StepCounter.html#torchrl.envs.transforms.StepCounter)([max_steps, truncated_key, ...]) | Counts the steps from a reset and optionally sets the truncated state to `True` after a certain number of steps. |
-| [`SuccessReward`](generated/torchrl.envs.transforms.SuccessReward.html#torchrl.envs.transforms.SuccessReward)([success_key, reward_key, scale]) | Sparse 0/1 success reward for reinforcement fine-tuning. |
+| [`SuccessReward`](generated/torchrl.envs.transforms.SuccessReward.html#torchrl.envs.transforms.SuccessReward)([success_key, reward_key, scale]) | Sparse reward from a binary success signal. |
 | [`TargetReturn`](generated/torchrl.envs.transforms.TargetReturn.html#torchrl.envs.transforms.TargetReturn)(target_return[, mode, in_keys, ...]) | Sets a target return for the agent to achieve in the environment. |
 | [`TensorDictPrimer`](generated/torchrl.envs.transforms.TensorDictPrimer.html#torchrl.envs.transforms.TensorDictPrimer)([primers, random, ...]) | A primer for TensorDict initialization at reset time. |
 | [`TerminateTransform`](generated/torchrl.envs.transforms.TerminateTransform.html#torchrl.envs.transforms.TerminateTransform)(stop, *[, write_done]) | Terminate a rollout when a user-supplied predicate becomes true. |

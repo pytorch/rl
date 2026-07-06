@@ -1,8 +1,12 @@
 # AsyncBatchedCollector
 
-*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int = 64*, *min_batch_size: int = 1*, *server_timeout: float = 0.01*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
+*class*torchrl.collectors.AsyncBatchedCollector(*create_env_fn: list[Callable[[], [EnvBase](torchrl.envs.EnvBase.html#torchrl.envs.EnvBase)]]*, ***, *policy: Callable | None = None*, *policy_factory: Callable[[], Callable] | None = None*, *frames_per_batch: int*, *total_frames: int = -1*, *max_batch_size: int | None = None*, *min_batch_size: int | None = None*, *server_timeout: float | None = None*, *transport: [InferenceTransport](torchrl.modules.inference_server.InferenceTransport.html#torchrl.modules.inference_server.InferenceTransport) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | str | None = None*, *backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] = 'threading'*, *env_backend: Literal['threading', 'multiprocessing'] | None = None*, *policy_backend: Literal['threading', 'multiprocessing', 'ray', 'monarch'] | None = None*, *reset_at_each_iter: bool = False*, *postproc: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], [TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)] | None = None*, *yield_completed_trajectories: bool = False*, *weight_sync=None*, *weight_sync_model_id: str = 'policy'*, *verbose: bool = False*, *create_env_kwargs: dict | list[dict] | None = None*, *server_config: [InferenceServerConfig](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig) | None = None*, *device_config: [InferenceDeviceConfig](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig) | None = None*, *policy_version: int = 0*, *policy_version_key: NestedKey | None = 'policy_version'*)[[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector)
 
-Asynchronous collector that pairs per-env threads with an [`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) and an `InferenceServer`.
+Asynchronous collector with env slots and a policy server.
+
+The collector pairs per-env coordinator threads with an
+[`AsyncEnvPool`](torchrl.envs.AsyncEnvPool.html#torchrl.envs.AsyncEnvPool) and an
+`InferenceServer`.
 
 Unlike [`Collector`](torchrl.collectors.Collector.html#torchrl.collectors.Collector), this collector fully
 decouples environment stepping from policy inference:
@@ -58,8 +62,24 @@ before dispatching a partial batch. Defaults to `0.01`.
 object. When provided, it takes precedence over
 `policy_backend`. When `None` (default) a transport is
 created automatically from the resolved `policy_backend`.
-- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference.
-Passed to the inference server. Defaults to `None`.
+- **device** ([*torch.device*](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device)*or**str**,**optional*) - device for policy inference
+(shorthand for `InferenceDeviceConfig(policy_device=...)`).
+Defaults to `None`.
+- **server_config** ([*InferenceServerConfig*](torchrl.modules.inference_server.InferenceServerConfig.html#torchrl.modules.inference_server.InferenceServerConfig)*,**optional*) - structured server
+configuration: execution `backend` (`"thread"` runs the serve
+loop in this process, `"process"` a dedicated server process
+requiring `policy_factory`), batching, and stats settings.
+Mutually exclusive with the `max_batch_size`,
+`min_batch_size`, and `server_timeout` keyword arguments.
+- **device_config** ([*InferenceDeviceConfig*](torchrl.modules.inference_server.InferenceDeviceConfig.html#torchrl.modules.inference_server.InferenceDeviceConfig)*,**optional*) - structured device
+placement (`policy_device`, `output_device`, `env_device`,
+`storing_device`) for the whole collection pipeline. Mutually
+exclusive with `device`.
+- **policy_version** (*int**,**optional*) - initial behavior-policy version
+attached to server outputs. Defaults to `0`.
+- **policy_version_key** (*NestedKey**or**None**,**optional*) - TensorDict key used
+for behavior-policy version annotations. `None` disables
+annotations. Defaults to `"policy_version"`.
 - **backend** (*str**,**optional*) - global default backend for both
 environments and policy inference. Specific overrides
 `env_backend` and `policy_backend` take precedence when set.
@@ -317,6 +337,13 @@ Context manager that pauses the collector if it is running free.
 
 The policy passed to the inference server.
 
+With `InferenceServerConfig(backend="process")` the policy only exists inside the
+server process, so this returns the `policy_factory` instead.
+
+*property*policy_version*: int*
+
+The live behavior-policy version of the inference server.
+
 *property*post_collect_hook*: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*
 
 Get the post-collection hook.
@@ -415,6 +442,10 @@ Keyword Arguments:
 
 **synchronize_weights** (*bool**,**optional*) - If True, synchronize weights immediately after registering the schemes.
 Defaults to True.
+
+server_stats(***, *reset: bool = False*) → dict[str, float | int][[source]](../../_modules/torchrl/collectors/_async_batched.html#AsyncBatchedCollector.server_stats)
+
+Return inference-server statistics when available.
 
 set_post_collect_hook(*hook: Callable[[[TensorDictBase](https://docs.pytorch.org/tensordict/stable/reference/generated/tensordict.TensorDictBase.html#tensordict.TensorDictBase)], None] | None*) → None
 

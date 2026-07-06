@@ -21,6 +21,10 @@ reads a [`VLAObservation`](torchrl.data.vla.VLAObservation.html#torchrl.data.vla
 - **output_mode** (*str**,**optional*) - `"chunk"`, `"tokens"` or `"both"`.
 Defaults to `"chunk"` for continuous heads and `"tokens"` for
 token heads.
+- **return_vla_action_container** (*bool*) - whether to write the structured
+[`VLAAction`](torchrl.data.vla.VLAAction.html#torchrl.data.vla.VLAAction) object at the VLA action root
+key. When `False`, only its plain TensorDict fields are written.
+Defaults to `True`.
 - **vocab_size** (*int**,**optional*) - Number of action-token bins, required for
 token heads.
 - **action_tokenizer** ([*ActionTokenizerBase*](torchrl.data.vla.ActionTokenizerBase.html#torchrl.data.vla.ActionTokenizerBase)*,**optional*) - Token/chunk codec used
