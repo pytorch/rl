@@ -102,8 +102,9 @@ class InferenceServerConfig:
         max_inflight_per_env (int, optional): maximum unresolved remote-policy
             requests each environment coordinator may have inflight (consumed
             by :class:`~torchrl.collectors.AsyncBatchedCollector` when
-            building its clients); ``None`` disables the guard. Defaults to
-            ``1``.
+            building its clients). Defaults to ``None`` (unbounded), so the
+            guard never throttles by surprise; set an explicit bound when
+            backpressure is wanted.
 
     Examples:
         >>> import torch
@@ -135,7 +136,7 @@ class InferenceServerConfig:
     timeout: float = 0.01
     collect_stats: bool = True
     stats_window_size: int = 1024
-    max_inflight_per_env: int | None = 1
+    max_inflight_per_env: int | None = None
 
     def __post_init__(self) -> None:
         if self.backend not in ("thread", "process"):
