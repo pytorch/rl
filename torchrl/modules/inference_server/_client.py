@@ -38,6 +38,13 @@ class PolicyClientModule(TensorDictModuleBase):
     TensorDict produced by the remote policy. It can be passed anywhere a
     TensorDict policy module is expected.
 
+    This class is the reference implementation of TorchRL's service *client*
+    contract: it duck-types the domain interface (a policy client IS a
+    TensorDict policy, so consumer code cannot tell local from remote), it is
+    cheap and picklable (it can be handed to spawned workers), and it carries
+    no lifecycle rights -- clients can call the service but never start or
+    shut it down; only the owner that constructed the server can.
+
     .. note::
         Unlike a local :class:`~tensordict.nn.TensorDictModule`, the result
         crosses a transport boundary, so :meth:`forward` returns a *new*
@@ -66,6 +73,14 @@ class PolicyClientModule(TensorDictModuleBase):
             server's ``policy_version_key``; a mismatch triggers a one-time
             warning when the staleness guard is enabled. ``None`` disables the
             guard. Defaults to ``"policy_version"``.
+
+    .. note::
+        Version tracking is an instance of the generic *service-stamped
+        metadata* pattern: a service may stamp every response with metadata
+        describing the state it was served from (here: the behavior-policy
+        version), and clients may enforce freshness constraints on that
+        metadata (here: bounded staleness through ``max_policy_lag``). Other
+        services can reuse the same shape for their own response metadata.
 
     .. note::
         The server-side version counter is independent from the
@@ -186,6 +201,3 @@ class PolicyClientModule(TensorDictModuleBase):
         result = self.submit(tensordict).result()
         self._check_policy_lag(result)
         return result
-
-
-RemotePolicy = PolicyClientModule
