@@ -20,10 +20,15 @@ from tensordict.nn import TensorDictModule
 
 from torchrl.modules.inference_server import (
     InferenceClient,
+    InferenceDeviceConfig,
     InferenceServer,
+    InferenceServerConfig,
     InferenceTransport,
     MPTransport,
+    PolicyClientModule,
+    ProcessInferenceServer,
     RayTransport,
+    RemotePolicy,
     SlotTransport,
     ThreadingTransport,
 )
@@ -185,6 +190,30 @@ class TestInferenceServerCore:
         assert len(calls) >= 1
         assert sum(calls) == 4  # all 4 items processed
 
+    def test_collate_error_resolves_futures_and_server_survives(self):
+        """A collate failure must reject the affected futures, not kill the loop."""
+
+        def fragile_collate(items):
+            if any("poison" in item.keys() for item in items):
+                raise ValueError("cannot collate poisoned batch")
+            return lazy_stack(items)
+
+        transport = _MockTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy, transport, max_batch_size=1, collate_fn=fragile_collate
+        ) as server:
+            bad = transport.submit(
+                TensorDict({"observation": torch.randn(4), "poison": torch.ones(1)})
+            )
+            with pytest.raises(ValueError, match="poisoned"):
+                bad.result(timeout=5.0)
+            # The serve loop must still be alive and processing requests
+            good = transport.submit(TensorDict({"observation": torch.randn(4)}))
+            result = good.result(timeout=5.0)
+            assert "action" in result.keys()
+            assert server.is_alive
+
     def test_max_batch_size_respected(self):
         """The collate_fn should never receive more than max_batch_size items."""
         max_bs = 4
@@ -214,6 +243,163 @@ class TestInferenceServerCore:
         for s in seen_sizes:
             assert s <= max_bs
 
+    def test_policy_and_output_device_handoff(self):
+        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=4,
+            policy_device=device,
+            output_device="cpu",
+        ):
+            client = transport.client()
+            td = TensorDict({"observation": torch.randn(4)}, device="cpu")
+            result = client(td)
+        assert result["action"].device.type == "cpu"
+        assert next(policy.parameters()).device.type == torch.device(device).type
+
+    def test_stats_accounting(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        n = 8
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=n,
+            min_batch_size=4,
+            timeout=0.5,
+        ) as server:
+            client = transport.client()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=n) as pool:
+                futs = [
+                    pool.submit(
+                        lambda: client(TensorDict({"observation": torch.randn(4)}))
+                    )
+                    for _ in range(n)
+                ]
+                for fut in futs:
+                    fut.result(timeout=5.0)
+            stats = server.stats()
+        assert stats["requests"] == n
+        assert stats["batches"] >= 1
+        assert stats["avg_batch_size"] > 0
+        assert stats["p95_forward_ms"] >= 0
+        assert stats["policy_version"] == 0
+
+    def test_structured_config(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server_config = InferenceServerConfig(max_batch_size=2, timeout=0.001)
+        device_config = InferenceDeviceConfig(policy_device="cpu", output_device="cpu")
+        with InferenceServer(
+            policy,
+            transport,
+            server_config=server_config,
+            device_config=device_config,
+        ) as server:
+            # The config values must actually land on the server
+            assert server.max_batch_size == 2
+            assert server.timeout == 0.001
+            assert server.policy_device == torch.device("cpu")
+            assert server.output_device == torch.device("cpu")
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+            stats = server.stats()
+        assert result["action"].device.type == "cpu"
+        assert stats["requests"] == 1
+
+    def test_server_config_exclusive_even_at_default_values(self):
+        """Passing an explicit kwarg equal to the default still raises."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            InferenceServer(
+                policy,
+                transport,
+                max_batch_size=64,
+                server_config=InferenceServerConfig(max_batch_size=8),
+            )
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            InferenceServer(
+                policy,
+                transport,
+                device="cpu",
+                device_config=InferenceDeviceConfig(policy_device="cpu"),
+            )
+
+    def test_device_config_env_device_fallback_and_storing_device_rejected(self):
+        config = InferenceDeviceConfig(env_device="cpu")
+        assert config.server_output_device() == torch.device("cpu")
+        config = InferenceDeviceConfig(env_device="cpu", output_device="meta")
+        assert config.server_output_device() == torch.device("meta")
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with pytest.raises(ValueError, match="storing_device is a collector-level"):
+            InferenceServer(
+                policy,
+                transport,
+                device_config=InferenceDeviceConfig(storing_device="cpu"),
+            )
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_device_config_cuda_roundtrip(self):
+        """device_config must actually drive the policy and output moves."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        seen_devices = []
+        inner_forward = policy.module.forward
+
+        def recording_forward(x):
+            seen_devices.append(x.device)
+            return inner_forward(x)
+
+        policy.module.forward = recording_forward
+        with InferenceServer(
+            policy,
+            transport,
+            device_config=InferenceDeviceConfig(
+                policy_device="cuda:0", output_device="cpu"
+            ),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}, device="cpu"))
+        assert result["action"].device.type == "cpu"
+        assert all(device.type == "cuda" for device in seen_devices)
+        assert next(policy.parameters()).device.type == "cuda"
+
+    def test_policy_version_is_returned(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy,
+            transport,
+            policy_version=12,
+            policy_version_key=("meta", "policy_version"),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+        assert result["meta", "policy_version"].item() == 12
+
+    @pytest.mark.gpu
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+    def test_cuda_policy_cpu_output(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy,
+            transport,
+            max_batch_size=4,
+            policy_device="cuda:0",
+            output_device="cpu",
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}, device="cpu"))
+        assert result["action"].device.type == "cpu"
+        assert next(policy.parameters()).device.type == "cuda"
+
 
 class TestInferenceClient:
     def test_sync_call(self):
@@ -235,6 +421,238 @@ class TestInferenceClient:
             assert isinstance(fut, concurrent.futures.Future)
             result = fut.result(timeout=5.0)
             assert "action" in result.keys()
+
+
+class TestPolicyClientModule:
+    def test_remote_policy_alias(self):
+        assert RemotePolicy is PolicyClientModule
+
+    def test_forward_as_tensordict_module(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(
+                transport,
+                in_keys=["observation"],
+                out_keys=["action"],
+                max_inflight=1,
+            )
+            td = TensorDict({"observation": torch.randn(4)})
+            result = remote_policy(td)
+        assert result["action"].shape == (2,)
+        assert remote_policy.in_keys == ["observation"]
+        assert remote_policy.out_keys == ["action"]
+
+    def test_submit(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(transport)
+            future = remote_policy.submit(TensorDict({"observation": torch.randn(4)}))
+            result = future.result(timeout=5.0)
+        assert "action" in result.keys()
+
+    def test_nested_keys(self):
+        """in_keys/out_keys accept nested keys end to end."""
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            nn.Linear(4, 2),
+            in_keys=[("agents", "observation")],
+            out_keys=[("agents", "action")],
+        )
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(
+                transport,
+                in_keys=[("agents", "observation")],
+                out_keys=[("agents", "action")],
+            )
+            td = TensorDict({("agents", "observation"): torch.randn(4)})
+            result = remote_policy(td)
+        assert result["agents", "action"].shape == (2,)
+        assert remote_policy.in_keys == [("agents", "observation")]
+        assert remote_policy.out_keys == [("agents", "action")]
+
+    def test_plain_callable_client_defers_errors(self):
+        """A plain-callable client defers exceptions to result()."""
+
+        def failing_client(td):
+            raise ValueError("local policy failure")
+
+        remote_policy = PolicyClientModule(failing_client)
+        future = remote_policy.submit(TensorDict({}))
+        assert future.done()
+        with pytest.raises(ValueError, match="local policy failure"):
+            future.result()
+
+    def test_bounded_staleness_raises(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, policy_version=1):
+            remote_policy = PolicyClientModule(
+                transport,
+                target_policy_version=3,
+                max_policy_lag=1,
+            )
+            with pytest.raises(RuntimeError, match="too stale"):
+                remote_policy(TensorDict({"observation": torch.randn(4)}))
+
+    def test_bounded_staleness_with_callable_target(self):
+        """target_policy_version accepts a live callable source."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, policy_version=5) as server:
+            remote_policy = PolicyClientModule(
+                transport,
+                target_policy_version=lambda: server.policy_version,
+                max_policy_lag=0,
+            )
+            # version == target -> lag 0, passes
+            remote_policy(TensorDict({"observation": torch.randn(4)}))
+            server._mark_weight_update()
+            server._mark_weight_update()
+            # server is now at version 7; a fresh result carries 7 -> passes
+            remote_policy(TensorDict({"observation": torch.randn(4)}))
+            assert server.policy_version == 7
+
+    def test_staleness_guard_warns_on_missing_version_key(self, caplog):
+        """A configured guard warns (once) if results carry no version."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        # Server does not annotate versions; client expects them
+        with InferenceServer(policy, transport, policy_version_key=None):
+            remote_policy = PolicyClientModule(
+                transport,
+                target_policy_version=3,
+                max_policy_lag=1,
+            )
+            with caplog.at_level("WARNING", logger="torchrl"):
+                remote_policy(TensorDict({"observation": torch.randn(4)}))
+                remote_policy(TensorDict({"observation": torch.randn(4)}))
+        warnings_seen = [
+            rec for rec in caplog.records if "staleness guard is inactive" in rec.message
+        ]
+        assert len(warnings_seen) == 1
+
+    def test_update_policy_weights_cascade_bumps_version(self):
+        """The weight-sync cascade hook increments the policy version."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server = InferenceServer(policy, transport, policy_version=0)
+        assert server.policy_version == 0
+        server.update_policy_weights_()
+        assert server.policy_version == 1
+
+    def test_max_inflight_validation(self):
+        with pytest.raises(ValueError, match="max_inflight must be at least 1"):
+            PolicyClientModule(lambda td: td, max_inflight=0)
+        with pytest.raises(ValueError, match="max_inflight must be at least 1"):
+            PolicyClientModule(lambda td: td, max_inflight=-3)
+
+    def test_max_inflight_blocks_until_completion(self):
+        """The guard blocks a second submit and frees on completion (not result())."""
+
+        class _ManualClient:
+            def __init__(self):
+                self.futures = []
+
+            def submit(self, td):
+                fut = concurrent.futures.Future()
+                self.futures.append(fut)
+                return fut
+
+        client = _ManualClient()
+        remote = PolicyClientModule(client, max_inflight=1)
+        remote.submit(TensorDict({}))
+        second_done = threading.Event()
+
+        def _second_submit():
+            remote.submit(TensorDict({}))
+            second_done.set()
+
+        t = threading.Thread(target=_second_submit, daemon=True)
+        t.start()
+        time.sleep(0.2)
+        assert not second_done.is_set()  # guard enforced
+        # Completing the first request frees the slot even though result()
+        # is never called on it (done-callback release).
+        client.futures[0].set_result(TensorDict({}))
+        assert second_done.wait(timeout=5.0)
+        t.join(timeout=5.0)
+
+    def test_max_inflight_releases_on_error(self):
+        """A failed request frees its slot; the guard cannot deadlock."""
+
+        class _ManualClient:
+            def __init__(self):
+                self.futures = []
+
+            def submit(self, td):
+                fut = concurrent.futures.Future()
+                self.futures.append(fut)
+                return fut
+
+        client = _ManualClient()
+        remote = PolicyClientModule(client, max_inflight=1)
+        fut = remote.submit(TensorDict({}))
+        client.futures[0].set_exception(ValueError("boom"))
+        with pytest.raises(ValueError, match="boom"):
+            fut.result(timeout=5.0)
+        # Slot was released; this would deadlock otherwise.
+        fut2 = remote.submit(TensorDict({}))
+        client.futures[1].set_result(TensorDict({}))
+        assert fut2.result(timeout=5.0) is not None
+
+    def test_max_inflight_timeout_keeps_slot(self):
+        """A result() timeout must not free the slot of a running request."""
+
+        class _PullFuture:
+            """Pull-based future without add_done_callback support."""
+
+            def __init__(self):
+                self._event = threading.Event()
+                self._result = None
+
+            def done(self):
+                return self._event.is_set()
+
+            def result(self, timeout=None):
+                if not self._event.wait(timeout=timeout):
+                    raise TimeoutError("still running")
+                return self._result
+
+            def set_result(self, result):
+                self._result = result
+                self._event.set()
+
+        class _PullClient:
+            def __init__(self):
+                self.futures = []
+
+            def submit(self, td):
+                fut = _PullFuture()
+                self.futures.append(fut)
+                return fut
+
+        client = _PullClient()
+        remote = PolicyClientModule(client, max_inflight=1)
+        fut = remote.submit(TensorDict({}))
+        with pytest.raises(TimeoutError):
+            fut.result(timeout=0.05)
+        second_done = threading.Event()
+
+        def _second_submit():
+            remote.submit(TensorDict({}))
+            second_done.set()
+
+        t = threading.Thread(target=_second_submit, daemon=True)
+        t.start()
+        time.sleep(0.2)
+        # The request is still inflight: its slot must still be held.
+        assert not second_done.is_set()
+        client.futures[0].set_result(TensorDict({}))
+        assert fut.result(timeout=5.0) is not None
+        assert second_done.wait(timeout=5.0)
+        t.join(timeout=5.0)
 
 
 # =============================================================================
@@ -640,6 +1058,8 @@ class TestWeightSyncIntegration:
             result_after = client(td)
             # With zero weights the linear output should be zero (bias=0 too)
             assert torch.allclose(result_after["action"], torch.zeros(2), atol=1e-6)
+            assert result_after["policy_version"].item() == 1
+            assert server.stats()["weight_updates"] == 1
 
     def test_inference_continues_after_weight_update(self):
         """The server keeps serving after a weight update."""
@@ -713,6 +1133,130 @@ def _make_counting_policy():
     return _BatchCountingPolicy()
 
 
+class _BadProcessPolicy(nn.Module):
+    def forward(self, td: TensorDictBase) -> TensorDictBase:
+        raise RuntimeError("process model crash")
+
+
+def _make_bad_process_policy():
+    return _BadProcessPolicy()
+
+
+def _make_slow_policy():
+    time.sleep(30.0)
+    return _make_counting_policy()
+
+
+class TestProcessInferenceServer:
+    def test_process_server_start_shutdown(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        with ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            max_batch_size=4,
+            mp_context=ctx,
+        ) as server:
+            assert server.is_alive
+            result = client(TensorDict({"observation": torch.ones(1)}))
+            stats = server.stats()
+            health = server.health()
+        assert "action" in result.keys()
+        assert result["action"].shape == (1,)
+        assert stats["requests"] == 1
+        assert stats["avg_batch_size"] == 1
+        assert health["process_alive"]
+        assert not server.is_alive
+
+    def test_process_server_exception_propagates(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_bad_process_policy,
+            transport=transport,
+            max_batch_size=4,
+            mp_context=ctx,
+        )
+        server.start()
+        try:
+            with pytest.raises(RuntimeError, match="process model crash"):
+                client(TensorDict({"observation": torch.ones(1)}))
+        finally:
+            server.shutdown()
+
+    def test_startup_timeout(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_slow_policy,
+            transport=transport,
+            mp_context=ctx,
+            startup_timeout=0.5,
+        )
+        with pytest.raises(TimeoutError, match="did not report readiness"):
+            server.start()
+        assert not server.is_alive
+
+    def test_control_plane_thread_safe(self):
+        """Concurrent stats()/health() callers must not steal replies."""
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        transport.client()
+        errors = []
+
+        def _hammer(server, fn_name):
+            try:
+                for _ in range(10):
+                    result = getattr(server, fn_name)()
+                    assert isinstance(result, dict)
+            except Exception as exc:
+                errors.append(exc)
+
+        with ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            mp_context=ctx,
+        ) as server:
+            threads = [
+                threading.Thread(target=_hammer, args=(server, fn_name))
+                for fn_name in ("stats", "health", "stats", "health")
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30.0)
+        assert not errors
+
+    def test_stats_reset_and_dead_server_errors(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            mp_context=ctx,
+        )
+        server.start()
+        try:
+            client(TensorDict({"observation": torch.ones(1)}))
+            stats = server.stats(reset=True)
+            assert stats["requests"] == 1
+            stats = server.stats()
+            assert stats["requests"] == 0
+            with pytest.raises(RuntimeError, match="Unknown process-server command"):
+                server._request_control("bogus")
+        finally:
+            server.shutdown()
+        with pytest.raises(RuntimeError, match="not running|not alive"):
+            server.stats()
+        # health() degrades instead of raising
+        health = server.health()
+        assert not health["process_alive"]
+
+
 class TestAsyncBatchedCollector:
     """Tests for :class:`AsyncBatchedCollector`."""
 
@@ -735,8 +1279,10 @@ class TestAsyncBatchedCollector:
         for batch in collector:
             assert batch is not None
             total_collected += batch.numel()
+        stats = collector.server_stats()
         collector.shutdown()
         assert total_collected >= total_frames
+        assert stats["requests"] > 0
 
     def test_policy_factory(self):
         """policy_factory is called to create the policy."""
@@ -864,6 +1410,141 @@ class TestAsyncBatchedCollector:
             pass
         collector.shutdown()
         assert called["count"] >= 1
+
+    @pytest.mark.parametrize("env_backend", ["threading", "multiprocessing"])
+    def test_env_backend_smoke(self, env_backend):
+        """Thread and multiprocessing env backends collect data."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            max_batch_size=2,
+            env_backend=env_backend,
+        )
+        total = 0
+        for batch in collector:
+            total += batch.numel()
+        collector.shutdown()
+        assert total >= 20
+
+    def test_process_server_backend_smoke(self):
+        """Dedicated process server works through AsyncBatchedCollector."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            frames_per_batch=10,
+            total_frames=20,
+            max_batch_size=2,
+            env_backend="threading",
+            server_backend="process",
+        )
+        total = 0
+        for batch in collector:
+            total += batch.numel()
+        collector.shutdown()
+        assert total >= 20
+
+    def test_max_policy_lag_wiring(self):
+        """max_policy_lag reaches the clients with a live version source."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            max_batch_size=2,
+            env_backend="threading",
+            max_policy_lag=3,
+        )
+        total = 0
+        for batch in collector:
+            total += batch.numel()
+        assert collector.policy_version == 0
+        clients = collector._clients
+        collector.shutdown()
+        assert total >= 20
+        assert all(c.max_policy_lag == 3 for c in clients)
+        assert all(callable(c.target_policy_version) for c in clients)
+
+    def test_max_policy_lag_requires_version_key(self):
+        with pytest.raises(ValueError, match="max_policy_lag requires"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy=_make_counting_policy(),
+                frames_per_batch=10,
+                max_policy_lag=1,
+                policy_version_key=None,
+            )
+
+    def test_policy_version_key_none_disables_annotations(self):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=10,
+            max_batch_size=2,
+            env_backend="threading",
+            policy_version_key=None,
+        )
+        for batch in collector:
+            assert "policy_version" not in batch.keys()
+        collector.shutdown()
+
+    def test_invalid_server_backend_raises(self):
+        with pytest.raises(ValueError, match="server_backend"):
+            AsyncBatchedCollector(
+                create_env_fn=[_counting_env_factory] * 2,
+                policy_factory=_make_counting_policy,
+                frames_per_batch=10,
+                server_backend="proces",
+            )
+
+    def test_server_death_raises_instead_of_hanging(self):
+        """Killing the server process surfaces an error in the iterator."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy_factory=_make_counting_policy,
+            frames_per_batch=10,
+            total_frames=-1,
+            max_batch_size=2,
+            env_backend="threading",
+            server_backend="process",
+        )
+        try:
+            iterator = iter(collector)
+            next(iterator)
+            collector._server._process.kill()
+            with pytest.raises(RuntimeError, match="inference server died"):
+                # A couple of batches may still drain from already-queued
+                # transitions before the watchdog trips.
+                for _ in range(10):
+                    next(iterator)
+        finally:
+            collector.shutdown(timeout=0.5)
+
+    def test_device_config_and_server_config(self):
+        """Collector accepts structured device and server config objects."""
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=20,
+            server_config=InferenceServerConfig(max_batch_size=2),
+            device_config=InferenceDeviceConfig(
+                policy_device="cpu",
+                output_device="cpu",
+                env_device="cpu",
+                storing_device="cpu",
+            ),
+        )
+        total = 0
+        for batch in collector:
+            assert batch.device is None or batch.device.type == "cpu"
+            total += batch.numel()
+        stats = collector.server_stats()
+        collector.shutdown()
+        assert total >= 20
+        assert stats["requests"] > 0
 
 
 # =============================================================================
@@ -1046,3 +1727,7 @@ class TestWorkerCrashPropagation:
             for _ in collector:
                 pass
         collector.shutdown()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
