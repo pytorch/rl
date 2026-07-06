@@ -171,29 +171,19 @@ class AsyncBatchedCollector(BaseCollector):
             object.  When provided, it takes precedence over
             ``policy_backend``.  When ``None`` (default) a transport is
             created automatically from the resolved ``policy_backend``.
-        device (torch.device or str, optional): device for policy inference.
-            Kept as an alias for ``policy_device``.  Defaults to ``None``.
-        policy_device (torch.device or str, optional): device used by the
-            inference server for policy execution.  If omitted, ``device`` is
-            used.
-        output_device (torch.device or str, optional): device where action
-            TensorDicts are moved before being sent back to env workers.
-            When ``None`` and ``env_device`` is set, ``env_device`` is used.
+        device (torch.device or str, optional): device for policy inference
+            (shorthand for ``InferenceDeviceConfig(policy_device=...)``).
             Defaults to ``None``.
-        env_device (torch.device or str, optional): device used by env workers
-            for action TensorDicts before stepping. Also acts as the fallback
-            for ``output_device``. Defaults to ``None``.
-        storing_device (torch.device or str, optional): device used for
-            collected transitions yielded by this collector. Defaults to
-            ``None``.
         server_config (InferenceServerConfig, optional): structured server
-            batching and stats configuration. Mutually exclusive with the
-            ``max_batch_size``, ``min_batch_size``, and ``server_timeout``
-            keyword arguments.
+            configuration: execution ``backend`` (``"thread"`` runs the serve
+            loop in this process, ``"process"`` a dedicated server process
+            requiring ``policy_factory``), batching, and stats settings.
+            Mutually exclusive with the ``max_batch_size``,
+            ``min_batch_size``, and ``server_timeout`` keyword arguments.
         device_config (InferenceDeviceConfig, optional): structured device
-            placement configuration. Mutually exclusive with ``device``,
-            ``policy_device``, ``output_device``, ``env_device``, and
-            ``storing_device``.
+            placement (``policy_device``, ``output_device``, ``env_device``,
+            ``storing_device``) for the whole collection pipeline. Mutually
+            exclusive with ``device``.
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -210,11 +200,6 @@ class AsyncBatchedCollector(BaseCollector):
             ``"threading"``, ``"multiprocessing"``, ``"ray"``, or
             ``"monarch"``.  Falls back to ``backend`` when ``None``.
             Defaults to ``None``.
-        server_backend (str, optional): execution backend for the policy
-            server itself. ``"thread"`` runs the server loop in a background
-            thread in this process. ``"process"`` runs a dedicated process and
-            requires ``policy_factory`` with a multiprocessing policy
-            transport. Defaults to ``"thread"``.
         reset_at_each_iter (bool, optional): whether to reset all envs at the
             start of every collection batch.  Defaults to ``False``.
         postproc (Callable, optional): post-processing transform applied to
@@ -284,28 +269,13 @@ class AsyncBatchedCollector(BaseCollector):
         weight_sync_model_id: str = "policy",
         verbose: bool = False,
         create_env_kwargs: dict | list[dict] | None = None,
-        policy_device: torch.device | str | None = None,
-        output_device: torch.device | str | None = None,
-        env_device: torch.device | str | None = None,
-        storing_device: torch.device | str | None = None,
         server_config: InferenceServerConfig | None = None,
         device_config: InferenceDeviceConfig | None = None,
-        server_backend: Literal["thread", "process"] = "thread",
     ):
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
         if policy is None and policy_factory is None:
             raise TypeError("One of policy or policy_factory must be provided.")
-        if server_backend not in ("thread", "process"):
-            raise ValueError(
-                f"server_backend={server_backend!r} is not supported. "
-                "Expected 'thread' or 'process'."
-            )
-        if server_backend == "process" and policy_factory is None:
-            raise TypeError(
-                "server_backend='process' requires policy_factory so the policy "
-                "can be constructed inside the server process."
-            )
         if server_config is not None and any(
             kwarg is not None
             for kwarg in (max_batch_size, min_batch_size, server_timeout)
@@ -317,6 +287,13 @@ class AsyncBatchedCollector(BaseCollector):
         _server_defaults = (
             server_config if server_config is not None else InferenceServerConfig()
         )
+        server_backend = _server_defaults.backend
+        if server_backend == "process" and policy_factory is None:
+            raise TypeError(
+                "InferenceServerConfig(backend='process') requires "
+                "policy_factory so the policy can be constructed inside the "
+                "server process."
+            )
         if max_batch_size is None:
             max_batch_size = _server_defaults.max_batch_size
         if min_batch_size is None:
@@ -324,26 +301,19 @@ class AsyncBatchedCollector(BaseCollector):
         if server_timeout is None:
             server_timeout = _server_defaults.timeout
         if device_config is not None:
-            if (
-                device is not None
-                or policy_device is not None
-                or output_device is not None
-                or env_device is not None
-                or storing_device is not None
-            ):
+            if device is not None:
                 raise ValueError(
-                    "device_config is mutually exclusive with device, "
-                    "policy_device, output_device, env_device, and "
-                    "storing_device."
+                    "device_config is mutually exclusive with device."
                 )
             policy_device = device_config.policy_device
             output_device = device_config.server_output_device()
             env_device = device_config.env_device
             storing_device = device_config.storing_device
         else:
-            policy_device = device if policy_device is None else policy_device
-            if output_device is None and env_device is not None:
-                output_device = env_device
+            policy_device = device
+            output_device = None
+            env_device = None
+            storing_device = None
         self._env_device = torch.device(env_device) if env_device is not None else None
         self._storing_device = (
             torch.device(storing_device) if storing_device is not None else None
@@ -377,8 +347,8 @@ class AsyncBatchedCollector(BaseCollector):
         if server_backend == "process":
             if policy_backend not in (None, "multiprocessing"):
                 raise ValueError(
-                    "server_backend='process' requires policy_backend=None or "
-                    "'multiprocessing'."
+                    "InferenceServerConfig(backend='process') requires "
+                    "policy_backend=None or 'multiprocessing'."
                 )
             effective_policy_backend = "multiprocessing"
         self._policy_backend = effective_policy_backend
@@ -402,12 +372,8 @@ class AsyncBatchedCollector(BaseCollector):
                 output_device=output_device,
                 weight_sync=weight_sync,
                 weight_sync_model_id=weight_sync_model_id,
-                collect_stats=(
-                    True if server_config is None else server_config.collect_stats
-                ),
-                stats_window_size=(
-                    1024 if server_config is None else server_config.stats_window_size
-                ),
+                collect_stats=_server_defaults.collect_stats,
+                stats_window_size=_server_defaults.stats_window_size,
             )
         else:
             self._server = InferenceServer(
@@ -420,12 +386,8 @@ class AsyncBatchedCollector(BaseCollector):
                 output_device=output_device,
                 weight_sync=weight_sync,
                 weight_sync_model_id=weight_sync_model_id,
-                collect_stats=(
-                    True if server_config is None else server_config.collect_stats
-                ),
-                stats_window_size=(
-                    1024 if server_config is None else server_config.stats_window_size
-                ),
+                collect_stats=_server_defaults.collect_stats,
+                stats_window_size=_server_defaults.stats_window_size,
             )
 
         # ---- collector settings -----------------------------------------------
@@ -516,7 +478,7 @@ class AsyncBatchedCollector(BaseCollector):
     def policy(self) -> Callable:
         """The policy passed to the inference server.
 
-        With ``server_backend="process"`` the policy only exists inside the
+        With ``InferenceServerConfig(backend="process")`` the policy only exists inside the
         server process, so this returns the ``policy_factory`` instead.
         """
         if self._policy is not None:
