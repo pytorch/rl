@@ -108,8 +108,11 @@ class SlotTransport(InferenceTransport):
             self._obs_buffer[slot_id].update_(td)
         else:
             self._obs[slot_id] = td
-        self._obs_ready[slot_id] = True
+        # The ready flag is the release signal for the lock-free server-side
+        # read: write the timestamp first so the server never observes a
+        # ready slot with a stale timestamp.
         self._submitted_at[slot_id] = time.monotonic()
+        self._obs_ready[slot_id] = True
         with self._work_cond:
             self._work_cond.notify()
 
