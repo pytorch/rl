@@ -13,6 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from multiprocessing.synchronize import Event as MPEvent
 from statistics import mean
+from typing import Literal
 
 import torch
 from tensordict import lazy_stack
@@ -514,6 +515,8 @@ def _process_server_entry(
     server_kwargs: dict,
     shutdown_event: MPEvent,
     ready_queue,
+    control_queue,
+    control_response_queue,
     policy_version_value=None,
 ) -> None:
     """Run an :class:`InferenceServer` loop inside a child process."""
@@ -528,6 +531,7 @@ def _process_server_entry(
         # Mirror the live policy version into shared memory so the parent's
         # ProcessInferenceServer.policy_version stays accurate.
         server._policy_version_shared = policy_version_value
+        server.start()
     except BaseException as exc:
         # The ready queue is only used for the startup handshake. Failures
         # after a successful handshake propagate through the child's exit
@@ -535,7 +539,54 @@ def _process_server_entry(
         ready_queue.put((False, repr(exc)))
         raise
     ready_queue.put((True, None))
-    server._run()
+    try:
+        while not shutdown_event.is_set():
+            if not server.is_alive:
+                # The serve loop died (its own finally already drained and
+                # rejected pending requests). Exit with an error so the
+                # parent sees a dead process instead of a healthy control
+                # plane fronting a dead server.
+                raise RuntimeError(
+                    "InferenceServer serve loop died inside the server process."
+                )
+            try:
+                request = control_queue.get(timeout=0.05)
+            except queue.Empty:
+                continue
+            # Control messages follow the generic command-channel shape --
+            # request: {"id", "verb", "payload"}; reply: {"id", "ok",
+            # "payload"} -- so this control plane can migrate onto a shared
+            # CommandChannel abstraction without a wire-format change.
+            request_id = request["id"]
+            verb = request["verb"]
+            payload_in = request["payload"]
+            try:
+                if verb == "stats":
+                    payload = server.stats(**payload_in)
+                elif verb == "health":
+                    payload = {
+                        "alive": server.is_alive,
+                        "policy_version": server.policy_version,
+                    }
+                elif verb == "shutdown":
+                    shutdown_event.set()
+                    payload = {"accepted": True}
+                else:
+                    raise RuntimeError(f"Unknown process-server verb: {verb}")
+            except Exception as exc:
+                control_response_queue.put(
+                    {"id": request_id, "ok": False, "payload": repr(exc)}
+                )
+            else:
+                control_response_queue.put(
+                    {"id": request_id, "ok": True, "payload": payload}
+                )
+    finally:
+        # Join the serve loop without a deadline: its shutdown path drains
+        # and rejects pending requests, which must not be skipped even when
+        # a slow forward pass is in flight (clients would hang forever).
+        # The parent enforces the hard deadline via process.join/terminate.
+        server.shutdown(timeout=None)
 
 
 class ProcessInferenceServer:
@@ -688,6 +739,12 @@ class ProcessInferenceServer:
             self._ctx = mp_context
         self._shutdown_event = self._ctx.Event()
         self._ready_queue = self._ctx.Queue()
+        self._control_queue = self._ctx.Queue()
+        self._control_response_queue = self._ctx.Queue()
+        self._next_control_request_id = 0
+        # Serializes control round trips across caller threads (see
+        # _request_control).
+        self._control_lock = threading.Lock()
         self._process: mp.Process | None = None
         self._server_kwargs = {
             "max_batch_size": max_batch_size,
@@ -725,6 +782,8 @@ class ProcessInferenceServer:
                 "server_kwargs": self._server_kwargs,
                 "shutdown_event": self._shutdown_event,
                 "ready_queue": self._ready_queue,
+                "control_queue": self._control_queue,
+                "control_response_queue": self._control_response_queue,
                 "policy_version_value": self._policy_version_value,
             },
             daemon=True,
@@ -745,8 +804,65 @@ class ProcessInferenceServer:
             raise RuntimeError(f"ProcessInferenceServer failed to start: {payload}")
         return self
 
+    def _request_control(
+        self,
+        verb: Literal["stats", "health", "shutdown"],
+        payload: dict | None = None,
+        timeout: float = 5.0,
+    ):
+        """One control-plane round trip: verb + payload out, reply back.
+
+        Messages use the generic command-channel shape (request ``{"id",
+        "verb", "payload"}``, reply ``{"id", "ok", "payload"}``) so this can
+        later ride a shared CommandChannel abstraction unchanged.
+        """
+        if self._process is None:
+            raise RuntimeError("ProcessInferenceServer is not running.")
+        if not self._process.is_alive():
+            raise RuntimeError(
+                "ProcessInferenceServer process is not alive "
+                f"(exitcode={self._process.exitcode})."
+            )
+        # The response queue is shared, so the whole request/response cycle
+        # is serialized: without the lock, two threads calling stats()/
+        # health() concurrently could pop and discard each other's replies.
+        with self._control_lock:
+            request_id = self._next_control_request_id
+            self._next_control_request_id += 1
+            self._control_queue.put(
+                {"id": request_id, "verb": verb, "payload": payload or {}}
+            )
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"Timed out waiting for ProcessInferenceServer {verb!r}."
+                    )
+                try:
+                    reply = self._control_response_queue.get(timeout=remaining)
+                except queue.Empty:
+                    raise TimeoutError(
+                        f"Timed out waiting for ProcessInferenceServer {verb!r}."
+                    ) from None
+                if reply["id"] != request_id:
+                    # Stale reply from an earlier timed-out request; calls are
+                    # serialized by the lock, so it can be safely discarded.
+                    continue
+                if not reply["ok"]:
+                    raise RuntimeError(
+                        f"ProcessInferenceServer {verb!r} failed: "
+                        f"{reply['payload']}"
+                    )
+                return reply["payload"]
+
     def shutdown(self, timeout: float | None = 5.0) -> None:
         """Signal the child process to stop and wait for it to exit."""
+        if self.is_alive:
+            try:
+                self._request_control("shutdown", timeout=timeout or 5.0)
+            except Exception:
+                pass
         self._shutdown_event.set()
         process = self._process
         if process is None:
@@ -762,13 +878,54 @@ class ProcessInferenceServer:
         """Whether the child process is alive."""
         return self._process is not None and self._process.is_alive()
 
-    def stats(self, *, reset: bool = False) -> dict[str, float | int]:
-        """Return process-server stats.
+    def stats(
+        self, *, reset: bool = False, timeout: float = 5.0
+    ) -> dict[str, float | int]:
+        """Return process-server stats from the child process.
 
-        Live stats are not shared across processes yet, so this currently
-        returns an empty dictionary.
+        This is a blocking control-plane round trip: it can take up to
+        ``timeout`` seconds and raises :class:`TimeoutError` when the child
+        does not answer in time, or :class:`RuntimeError` when the child is
+        not running.
+
+        Args:
+            reset (bool, optional): if ``True``, reset counters in the child
+                process after taking the snapshot.
+            timeout (float, optional): seconds to wait for the child's
+                answer. Defaults to ``5.0``.
         """
-        return {}
+        return self._request_control("stats", {"reset": reset}, timeout=timeout)
+
+    def health(self, *, timeout: float = 5.0) -> dict[str, int | bool | None]:
+        """Return a lightweight child-process health snapshot.
+
+        Never raises on a dead or unresponsive child; degraded fields are
+        reported in the returned dictionary instead (``process_alive`` /
+        ``control_error``), so this is safe to call from monitoring loops.
+
+        Args:
+            timeout (float, optional): seconds to wait for the child's
+                answer. Defaults to ``5.0``.
+        """
+        process = self._process
+        result = {
+            "process_alive": process.is_alive() if process is not None else False,
+            "pid": process.pid if process is not None else None,
+            "exitcode": process.exitcode if process is not None else None,
+        }
+        if process is not None and process.is_alive():
+            try:
+                result.update(self._request_control("health", timeout=timeout))
+            except (RuntimeError, TimeoutError) as exc:
+                # The child may have died between the liveness check and the
+                # control round trip; a health probe reports that instead of
+                # raising.
+                result["process_alive"] = (
+                    process.is_alive() if process is not None else False
+                )
+                result["exitcode"] = process.exitcode if process is not None else None
+                result["control_error"] = repr(exc)
+        return result
 
     def __enter__(self) -> ProcessInferenceServer:
         return self.start()

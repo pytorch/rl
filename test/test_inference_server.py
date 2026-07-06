@@ -1013,10 +1013,14 @@ class TestProcessInferenceServer:
             mp_context=ctx,
         ) as server:
             assert server.is_alive
-            assert server.stats() == {}
             result = client(TensorDict({"observation": torch.ones(1)}))
+            stats = server.stats()
+            health = server.health()
         assert "action" in result.keys()
         assert result["action"].shape == (1,)
+        assert stats["requests"] == 1
+        assert stats["avg_batch_size"] == 1
+        assert health["process_alive"]
         assert not server.is_alive
 
     def test_process_server_exception_propagates(self):
@@ -1049,6 +1053,62 @@ class TestProcessInferenceServer:
         with pytest.raises(TimeoutError, match="did not report readiness"):
             server.start()
         assert not server.is_alive
+
+    def test_control_plane_thread_safe(self):
+        """Concurrent stats()/health() callers must not steal replies."""
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        transport.client()
+        errors = []
+
+        def _hammer(server, fn_name):
+            try:
+                for _ in range(10):
+                    result = getattr(server, fn_name)()
+                    assert isinstance(result, dict)
+            except Exception as exc:
+                errors.append(exc)
+
+        with ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            mp_context=ctx,
+        ) as server:
+            threads = [
+                threading.Thread(target=_hammer, args=(server, fn_name))
+                for fn_name in ("stats", "health", "stats", "health")
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30.0)
+        assert not errors
+
+    def test_stats_reset_and_dead_server_errors(self):
+        ctx = mp.get_context("spawn")
+        transport = MPTransport(ctx=ctx)
+        client = transport.client()
+        server = ProcessInferenceServer(
+            policy_factory=_make_counting_policy,
+            transport=transport,
+            mp_context=ctx,
+        )
+        server.start()
+        try:
+            client(TensorDict({"observation": torch.ones(1)}))
+            stats = server.stats(reset=True)
+            assert stats["requests"] == 1
+            stats = server.stats()
+            assert stats["requests"] == 0
+            with pytest.raises(RuntimeError, match="Unknown process-server verb"):
+                server._request_control("bogus")
+        finally:
+            server.shutdown()
+        with pytest.raises(RuntimeError, match="not running|not alive"):
+            server.stats()
+        # health() degrades instead of raising
+        health = server.health()
+        assert not health["process_alive"]
 
 
 class TestAsyncBatchedCollector:
