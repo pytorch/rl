@@ -85,6 +85,8 @@ class PairwiseDataset:
             from_disk (bool, optional): if ``True``, :func:`datasets.load_from_disk`
                 will be used. Otherwise, :func:`datasets.load_dataset` will be used.
                 Defaults to ``False``.
+            num_workers (int, optional): number of workers to use when processing
+                the dataset. Defaults to ``None``.
 
         Returns: a :class:`PairwiseDataset` instance containing a memory-mapped
             version of the required dataset.

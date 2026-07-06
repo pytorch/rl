@@ -464,6 +464,22 @@ print("Running policy:", policy_module(env.reset()))
 print("Running value:", value_module(env.reset()))
 
 ######################################################################
+# Model mode
+# ----------
+#
+# We keep the policy and value modules in ``eval`` mode during PPO training.
+# This controls PyTorch module behavior, such as dropout and batch
+# normalization, but it is independent from TorchRL's exploration/interaction
+# mode and from autograd context managers such as ``torch.no_grad()``. See
+# :ref:`rl_execution_modes` for details.
+#
+# Set the mode before constructing the collector: some collectors may wrap,
+# move, or copy the policy during initialization.
+#
+policy_module.eval()
+value_module.eval()
+
+######################################################################
 # Data collector
 # --------------
 #
@@ -590,7 +606,11 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 #
 # * Repeat
 #
-
+# .. note::
+#     This tutorial keeps the policy and value networks in ``eval`` mode during
+#     both data collection and optimization. The collector's exploration mode
+#     still controls whether actions are sampled randomly during collection.
+#
 
 logs = defaultdict(list)
 pbar = tqdm(total=total_frames)
@@ -640,20 +660,20 @@ for i, tensordict_data in enumerate(collector):
         # number of steps (1000, which is our ``env`` horizon).
         # The ``rollout`` method of the ``env`` can take a policy as argument:
         # it will then execute this policy at each step.
+        # The context manager below changes the action-selection mode only; it
+        # does not switch the module between train and eval modes.
         with set_exploration_type(ExplorationType.DETERMINISTIC), torch.no_grad():
             # execute a rollout with the trained policy
             eval_rollout = env.rollout(1000, policy_module)
-            logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
-            logs["eval reward (sum)"].append(
-                eval_rollout["next", "reward"].sum().item()
-            )
-            logs["eval step_count"].append(eval_rollout["step_count"].max().item())
-            eval_str = (
-                f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
-                f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
-                f"eval step-count: {logs['eval step_count'][-1]}"
-            )
-            del eval_rollout
+        logs["eval reward"].append(eval_rollout["next", "reward"].mean().item())
+        logs["eval reward (sum)"].append(eval_rollout["next", "reward"].sum().item())
+        logs["eval step_count"].append(eval_rollout["step_count"].max().item())
+        eval_str = (
+            f"eval cumulative reward: {logs['eval reward (sum)'][-1]: 4.4f} "
+            f"(init: {logs['eval reward (sum)'][0]: 4.4f}), "
+            f"eval step-count: {logs['eval step_count'][-1]}"
+        )
+        del eval_rollout
     pbar.set_description(", ".join([eval_str, cum_reward_str, stepcount_str, lr_str]))
 
     # We're also using a learning rate scheduler. Like the gradient clipping,
