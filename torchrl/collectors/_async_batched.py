@@ -515,10 +515,21 @@ class AsyncBatchedCollector(BaseCollector):
     # Rollout: drain the result queue
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _check_worker_result(item):
-        """Re-raise exceptions propagated from coordinator threads."""
+    def _check_worker_result(self, item):
+        """Re-raise exceptions propagated from coordinator threads.
+
+        Worker threads may observe a dying server before the liveness
+        watchdog does (their transport read errors out first); attribute the
+        failure to the server in that case so the caller gets a
+        deterministic error regardless of which path wins the race.
+        """
         if isinstance(item, BaseException):
+            if not self._server.is_alive:
+                raise RuntimeError(
+                    "The inference server died while the collector was "
+                    "waiting for transitions. Check the server process "
+                    "logs (e.g. OOM kills or exceptions in the policy)."
+                ) from item
             raise RuntimeError(
                 "A collector worker thread raised an exception."
             ) from item
@@ -571,6 +582,7 @@ class AsyncBatchedCollector(BaseCollector):
                     td = rq.get_nowait()
                 except queue.Empty:
                     break
+                self._check_worker_result(td)
                 transitions.append(td)
                 collected += td.numel()
             if self.verbose:
