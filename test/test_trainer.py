@@ -18,13 +18,7 @@ import pytest
 import torch
 from torch import nn
 
-try:
-    from tensorboard.backend.event_processing import event_accumulator
-    from torchrl.record.loggers.tensorboard import TensorboardLogger
-
-    _has_tb = True
-except ImportError:
-    _has_tb = False
+_has_tb = importlib.util.find_spec("tensorboard") is not None
 
 from tensordict import TensorDict
 from torchrl.data import (
@@ -901,6 +895,9 @@ class TestRecorder:
         return args
 
     def test_recorder(self, N=8):
+        from tensorboard.backend.event_processing import event_accumulator
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         args = self._get_args()
         with tempfile.TemporaryDirectory() as folder:
             logger = TensorboardLogger(exp_name=folder)
@@ -926,7 +923,7 @@ class TestRecorder:
             for _ in range(N):
                 recorder(None)
 
-            for (_, _, filenames) in walk(folder):
+            for _, _, filenames in walk(folder):
                 filename = filenames[0]
                 break
 
@@ -954,6 +951,8 @@ class TestRecorder:
         ],
     )
     def test_recorder_load(self, backend, N=8):
+        from torchrl.record.loggers.tensorboard import TensorboardLogger
+
         if not _has_ts and backend == "torchsnapshot":
             pytest.skip("torchsnapshot not found")
 
@@ -1089,7 +1088,10 @@ class TestCountFrames:
 
         frame_skip = 3
         batch = 10
-        with tempfile.TemporaryDirectory() as tmpdirname, tempfile.TemporaryDirectory() as tmpdirname2:
+        with (
+            tempfile.TemporaryDirectory() as tmpdirname,
+            tempfile.TemporaryDirectory() as tmpdirname2,
+        ):
             trainer, count_frames, file = _make_countframe_and_trainer(tmpdirname)
             td = TensorDict(
                 {

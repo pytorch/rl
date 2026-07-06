@@ -82,6 +82,40 @@ storage entries.
     >>> rb.write_all(data)
     >>> assert (rb[:] == data).all()
 
+Consuming replay buffers
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Replay buffers can consume items as they are sampled by passing
+``consume_after_n_samples``. This is useful in online loops where a collector
+keeps writing new data while the trainer should avoid reusing old samples after
+they have contributed to an update.
+
+    >>> import torch
+    >>> from torchrl.data import ListStorage, ReplayBuffer
+    >>> rb = ReplayBuffer(
+    ...     storage=ListStorage(8),
+    ...     batch_size=2,
+    ...     consume_after_n_samples=1,
+    ... )
+    >>> rb.extend([torch.tensor(i) for i in range(3)])
+    tensor([0, 1, 2])
+    >>> batch = rb.sample()
+    >>> assert len(batch) == 2
+    >>> assert len(rb) == 1
+    >>> rb.extend([torch.tensor(3), torch.tensor(4)])
+    tensor([3, 4])
+    >>> assert len(rb) == 3
+
+The consumed entries remain in physical storage until they are overwritten, but
+they are removed from the sampleable set and are not returned by future calls to
+:meth:`~torchrl.data.ReplayBuffer.sample`. New writes reuse consumed slots before
+falling back to the writer's normal cursor, so consumed data behaves as freed
+capacity without scanning the full storage on every write. This mode supports
+1-dimensional ``ListStorage``,
+``TensorStorage``, ``LazyTensorStorage`` and ``LazyMemmapStorage`` with uniform
+random sampling. Prefetching, prioritized replay and multidimensional storages
+are rejected explicitly.
+
 TED-format conversion
 ~~~~~~~~~~~~~~~~~~~~~
 
