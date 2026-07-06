@@ -284,6 +284,7 @@ Available Transforms
     MacroPrimitive
     MacroPrimitiveTransform
     TargetMacroAction
+    CartesianSolver
     RobotMacroAction
     RobotMacroActionMode
     SatelliteMacroAction

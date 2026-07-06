@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
+import multiprocessing as mp
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from functools import partial
 from itertools import combinations
 from math import comb
 from typing import Literal, TypeVar
@@ -30,10 +33,13 @@ from tensordict.nn import (
 from tensordict.utils import expand_as_right
 from torch import distributions as d
 from torchrl._utils import logger as torchrl_logger, VERBOSE
+from torchrl.envs.transforms.ray_service import _maybe_clear_device, _maybe_to_device
 from torchrl.envs.transforms.transforms import Transform
 from torchrl.modules.llm import LLMWrapperBase
 from torchrl.objectives.common import LossModule
 from torchrl.objectives.utils import _sum_td_features, _validate_clip_epsilon
+
+_has_ray = importlib.util.find_spec("ray") is not None
 
 
 class LLMLossOutput(TensorClass["nocast"]):
@@ -56,6 +62,78 @@ class LLMLossOutput(TensorClass["nocast"]):
 
 
 LLMOutputType = TypeVar("LLMOutputType", bound=LLMLossOutput)
+
+_MCADVANTAGE_STATS = (
+    "completed_trajectories",
+    "completed_decisions",
+    "trajectory_return_sum",
+    "trajectory_return_max",
+    "successful_trajectories",
+    "completed_groups",
+    "written_groups",
+    "dropped_groups",
+    "rescued_groups",
+    "selected_trajectories",
+    "unselected_trajectories",
+)
+
+
+def _make_mcadvantage_queue(candidate_group_size: int) -> deque:
+    return deque(maxlen=candidate_group_size)
+
+
+def _get_ray():
+    if not _has_ray:
+        raise RuntimeError(
+            "RayMCAdvantage requires ray, but ray is not installed. "
+            "Install it with `pip install ray`."
+        )
+    import ray
+
+    return ray
+
+
+class _MCAdvantageSharedQueues:
+    def __init__(
+        self,
+        manager,
+        candidate_group_size: int,
+        initial_queues: dict | None = None,
+    ) -> None:
+        self.candidate_group_size = int(candidate_group_size)
+        self._queues = manager.dict()
+        if initial_queues is not None:
+            for group, queue in initial_queues.items():
+                self._queues[group] = list(queue)[-self.candidate_group_size :]
+
+    def append(self, group, tensordict: TensorDictBase) -> None:
+        queue = list(self._queues.get(group, ()))
+        queue.append(tensordict)
+        self._queues[group] = queue[-self.candidate_group_size :]
+
+    def values(self) -> list[list[TensorDictBase]]:
+        return [list(queue) for queue in self._queues.values()]
+
+    def list(self, group) -> list[TensorDictBase]:
+        return list(self._queues[group])
+
+    def clear(self) -> None:
+        self._queues.clear()
+
+    def __bool__(self) -> bool:
+        return bool(len(self))
+
+    def __contains__(self, group) -> bool:
+        return group in self._queues
+
+    def __delitem__(self, group) -> None:
+        del self._queues[group]
+
+    def __getitem__(self, group) -> list[TensorDictBase]:
+        return self.list(group)
+
+    def __len__(self) -> int:
+        return len(self._queues)
 
 
 class GRPOLossOutput(LLMLossOutput):
@@ -976,6 +1054,14 @@ class MCAdvantage(Transform):
     are executed with completed trajectories (i.e., trajectories that end up with a done state). If this is not the
     case, an exception is raised.
 
+    When the transform is attached to a replay buffer shared across several
+    writer processes, :meth:`share_memory_` is called automatically by
+    :meth:`~torchrl.data.ReplayBuffer.share`. This centralizes the incomplete
+    group queues and counters so that trajectories produced by different
+    writers can complete one logical group. Ray replay buffers already execute
+    their transform inside the replay-buffer actor; use :class:`RayMCAdvantage`
+    when only the grouping transform state should be centralized in Ray.
+
     .. warning:: This transform will flatten the input tensordicts and therefore is not compatible yet with replay
         buffers hosting storages of more than one dimension.
 
@@ -1042,6 +1128,8 @@ class MCAdvantage(Transform):
         True
 
     """
+
+    requires_shared_write_state = True
 
     def __init__(
         self,
@@ -1127,28 +1215,64 @@ class MCAdvantage(Transform):
         self.grpo_size = grpo_size
         self.candidate_group_size = candidate_group_size
         self.candidate_selection_min_size = candidate_selection_min_size
-        self.queues = defaultdict(lambda: deque(maxlen=candidate_group_size))
+        self.queues = defaultdict(
+            partial(_make_mcadvantage_queue, candidate_group_size)
+        )
         self.candidate_selector = (
             MCAdvantageSelector() if candidate_selector is None else candidate_selector
         )
         self.verbose = verbose
         self.trajectory_return = trajectory_return
         self.keep_return_bounds = keep_return_bounds
+        self._stats = {}
+        self._state_lock = contextlib.nullcontext()
+        self._shared_manager = None
         self.reset_stats()
+
+    @property
+    def is_shared(self) -> bool:
+        """Whether grouping queues and counters are backed by shared state."""
+        return isinstance(self.queues, _MCAdvantageSharedQueues)
+
+    def share_memory_(self) -> MCAdvantage:
+        """Move replay-buffer write state to multiprocessing-shared objects."""
+        if self.is_shared:
+            return self
+        manager = mp.Manager()
+        queues = {group: list(queue) for group, queue in self.queues.items()}
+        self.queues = _MCAdvantageSharedQueues(
+            manager, self.candidate_group_size, queues
+        )
+        self._stats = manager.dict(dict(self._stats))
+        self._state_lock = manager.RLock()
+        self._shared_manager = manager
+        return self
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state["_shared_manager"] = None
+        return state
+
+    def _get_stat(self, name: str):
+        return self._stats[name]
+
+    def _set_stat(self, name: str, value) -> None:
+        self._stats[name] = value
 
     def reset_stats(self) -> None:
         """Reset counters tracking replay-buffer write decisions."""
-        self.completed_trajectories = 0
-        self.completed_decisions = 0
-        self.trajectory_return_sum = 0.0
-        self.trajectory_return_max = float("-inf")
-        self.successful_trajectories = 0
-        self.completed_groups = 0
-        self.written_groups = 0
-        self.dropped_groups = 0
-        self.rescued_groups = 0
-        self.selected_trajectories = 0
-        self.unselected_trajectories = 0
+        with self._state_lock:
+            self.completed_trajectories = 0
+            self.completed_decisions = 0
+            self.trajectory_return_sum = 0.0
+            self.trajectory_return_max = float("-inf")
+            self.successful_trajectories = 0
+            self.completed_groups = 0
+            self.written_groups = 0
+            self.dropped_groups = 0
+            self.rescued_groups = 0
+            self.selected_trajectories = 0
+            self.unselected_trajectories = 0
 
     @property
     def queued_groups(self) -> int:
@@ -1164,6 +1288,20 @@ class MCAdvantage(Transform):
     def max_queued_trajectories_per_group(self) -> int:
         """Largest number of incomplete trajectories queued for one group."""
         return max((len(queue) for queue in self.queues.values()), default=0)
+
+    def _queue_append(self, group, tensordict: TensorDictBase) -> None:
+        if isinstance(self.queues, _MCAdvantageSharedQueues):
+            self.queues.append(group, tensordict)
+        else:
+            self.queues[group].append(tensordict)
+
+    def _queue_list(self, group) -> list[TensorDictBase]:
+        if isinstance(self.queues, _MCAdvantageSharedQueues):
+            return self.queues.list(group)
+        return list(self.queues[group])
+
+    def _queue_delete(self, group) -> None:
+        del self.queues[group]
 
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         return tensordict
@@ -1186,77 +1324,8 @@ class MCAdvantage(Transform):
                 tensordicts = [td for td in tensordicts if td is not None]
                 return torch.cat(tensordicts) if tensordicts else None
             # Then we have a single trajectory
-            if not tensordict[-1][self.done_key].all():
-                raise RuntimeError("Expected the trajectory to be done.")
-            group = tensordict[0][self.prompt_key]
-            if isinstance(group, torch.Tensor):
-                # tensor group identifiers (e.g. an integer group id stamped
-                # by the collector) are grouped by value
-                group = (
-                    group.item()
-                    if group.numel() == 1
-                    else tuple(group.reshape(-1).tolist())
-                )
-            elif not isinstance(group, str):
-                raise TypeError(
-                    f"Expected a string or tensor as group identifier, got {type(group)=}"
-                )
-            self.completed_trajectories += 1
-            self.completed_decisions += tensordict.numel()
-            reward = None
-            if self.trajectory_return is not None:
-                reward = tensordict.get(self.rewards_key, None)
-            if reward is not None:
-                trajectory_return = float(reward.sum())
-                self.trajectory_return_sum += trajectory_return
-                self.trajectory_return_max = max(
-                    self.trajectory_return_max, trajectory_return
-                )
-                self.successful_trajectories += int(trajectory_return > 0.0)
-            self.queues[group].append(tensordict)
-            queue_len = len(self.queues[group])
-            if self.trajectory_return is not None:
-                if queue_len < self.candidate_selection_min_size:
-                    return
-                if self.verbose:
-                    torchrl_logger.info(
-                        "Trying trajectory-level advantage for %s with %d/%d "
-                        "candidate trajectories.",
-                        group,
-                        queue_len,
-                        self.candidate_group_size,
-                    )
-                trajs = list(self.queues[group])
-                tds = self._trajectory_advantage(trajs)
-                if tds is not None:
-                    del self.queues[group]
-                    self.completed_groups += 1
-                    self.written_groups += 1
-                    return tds
-                if queue_len == self.candidate_group_size:
-                    del self.queues[group]
-                    self.completed_groups += 1
-                    self.dropped_groups += 1
-                return
-            if queue_len == self.candidate_group_size:
-                if self.verbose:
-                    torchrl_logger.info(f"Computing advantage for {group=}")
-                trajs = list(self.queues[group])
-                del self.queues[group]
-                self.completed_groups += 1
-                # Cat is the most robust way to combine the trajs
-                tds = torch.cat(trajs, -1)
-                # Collect rewards
-                reward = tds.get(self.rewards_key, as_nested_tensor=True)
-                reward_mean = reward.values().mean()
-                reward_scale = reward.values().std()
-                advantage = (reward - reward_mean) / reward_scale.clamp_min(1e-6)
-                if self.verbose:
-                    torchrl_logger.info(f"Advantage: {reward_mean=} {reward_scale=}")
-                tds.set(self.advantage_key, advantage)
-                self.written_groups += 1
-                return tds
-            return
+            with self._state_lock:
+                return self._inv_call_single(tensordict)
         elif tensordict.ndim > 2:
             # keep the time dim at the end
             tensordict = tensordict.flatten(0, -2)
@@ -1271,6 +1340,88 @@ class MCAdvantage(Transform):
         if result:
             return torch.cat(result, 0)
         return
+
+    def _inv_call_single(self, tensordict: TensorDictBase) -> TensorDictBase | None:
+        """Process a single complete trajectory.
+
+        This method is called under ``self._state_lock`` so queue mutation,
+        candidate selection and stat updates are serialized across shared
+        replay-buffer writers.
+        """
+        if tensordict.ndim != 1:
+            raise RuntimeError(
+                f"Expected a single flat trajectory, got {tensordict.shape}."
+            )
+        if not tensordict[-1][self.done_key].all():
+            raise RuntimeError("Expected the trajectory to be done.")
+        group = tensordict[0][self.prompt_key]
+        if isinstance(group, torch.Tensor):
+            # tensor group identifiers (e.g. an integer group id stamped
+            # by the collector) are grouped by value
+            group = (
+                group.item()
+                if group.numel() == 1
+                else tuple(group.reshape(-1).tolist())
+            )
+        elif not isinstance(group, str):
+            raise TypeError(
+                f"Expected a string or tensor as group identifier, got {type(group)=}"
+            )
+        self.completed_trajectories += 1
+        self.completed_decisions += tensordict.numel()
+        reward = None
+        if self.trajectory_return is not None:
+            reward = tensordict.get(self.rewards_key, None)
+        if reward is not None:
+            trajectory_return = float(reward.sum())
+            self.trajectory_return_sum += trajectory_return
+            self.trajectory_return_max = max(
+                self.trajectory_return_max, trajectory_return
+            )
+            self.successful_trajectories += int(trajectory_return > 0.0)
+        self._queue_append(group, tensordict)
+        queue_len = len(self.queues[group])
+        if self.trajectory_return is not None:
+            if queue_len < self.candidate_selection_min_size:
+                return
+            if self.verbose:
+                torchrl_logger.info(
+                    "Trying trajectory-level advantage for %s with %d/%d "
+                    "candidate trajectories.",
+                    group,
+                    queue_len,
+                    self.candidate_group_size,
+                )
+            trajs = self._queue_list(group)
+            tds = self._trajectory_advantage(trajs)
+            if tds is not None:
+                self._queue_delete(group)
+                self.completed_groups += 1
+                self.written_groups += 1
+                return tds
+            if queue_len == self.candidate_group_size:
+                self._queue_delete(group)
+                self.completed_groups += 1
+                self.dropped_groups += 1
+            return
+        if queue_len == self.candidate_group_size:
+            if self.verbose:
+                torchrl_logger.info(f"Computing advantage for {group=}")
+            trajs = self._queue_list(group)
+            self._queue_delete(group)
+            self.completed_groups += 1
+            # Cat is the most robust way to combine the trajs
+            tds = torch.cat(trajs, -1)
+            # Collect rewards
+            reward = tds.get(self.rewards_key, as_nested_tensor=True)
+            reward_mean = reward.values().mean()
+            reward_scale = reward.values().std()
+            advantage = (reward - reward_mean) / reward_scale.clamp_min(1e-6)
+            if self.verbose:
+                torchrl_logger.info(f"Advantage: {reward_mean=} {reward_scale=}")
+            tds.set(self.advantage_key, advantage)
+            self.written_groups += 1
+            return tds
 
     def _trajectory_returns(self, rewards: list[torch.Tensor]) -> torch.Tensor:
         if self.trajectory_return == "sum":
@@ -1343,3 +1494,328 @@ class MCAdvantage(Transform):
         for traj, reward, adv in zip(trajs, rewards, advantage.unbind(0)):
             traj.set(self.advantage_key, adv.expand(reward.shape).clone())
         return torch.cat(trajs, -1)
+
+
+class _MCAdvantageRayActor:
+    def __init__(self, *args, **kwargs) -> None:
+        self.transform = MCAdvantage(*args, **kwargs)
+
+    def _inv_call(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if tensordict is None:
+            return None
+        return self.transform._inv_call(tensordict)
+
+    def inv(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if tensordict is None:
+            return None
+        return self.transform.inv(tensordict)
+
+    def forward(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        if tensordict is None:
+            return None
+        return self.transform.forward(tensordict)
+
+    def clear_queues(self) -> None:
+        self.transform.queues.clear()
+
+    def queued_groups(self) -> int:
+        return self.transform.queued_groups
+
+    def queued_trajectories(self) -> int:
+        return self.transform.queued_trajectories
+
+    def max_queued_trajectories_per_group(self) -> int:
+        return self.transform.max_queued_trajectories_per_group
+
+    def queues_values(self) -> list[list[TensorDictBase]]:
+        return [list(queue) for queue in self.transform.queues.values()]
+
+    def reset_stats(self) -> None:
+        self.transform.reset_stats()
+
+    def get_stat(self, name: str):
+        return getattr(self.transform, name)
+
+    def set_stat(self, name: str, value) -> None:
+        setattr(self.transform, name, value)
+
+    def __repr__(self) -> str:
+        return repr(self.transform)
+
+
+class _RayMCAdvantageQueues:
+    def __init__(self, transform: RayMCAdvantage) -> None:
+        self._transform = transform
+
+    def clear(self) -> None:
+        self._transform._ray.get(self._transform._actor.clear_queues.remote())
+
+    def values(self) -> list[list[TensorDictBase]]:
+        return self._transform._ray.get(self._transform._actor.queues_values.remote())
+
+    def __bool__(self) -> bool:
+        return bool(len(self))
+
+    def __len__(self) -> int:
+        return self._transform.queued_groups
+
+
+class RayMCAdvantage(Transform):
+    """Ray actor-backed :class:`MCAdvantage`.
+
+    ``RayMCAdvantage`` mirrors :class:`MCAdvantage` but stores grouping queues
+    and counters in a Ray actor. This is useful when multiple writers should
+    share only the Monte-Carlo advantage grouping state. If the whole replay
+    buffer is already a :class:`~torchrl.data.RayReplayBuffer`, prefer passing
+    ``transform_factory=MCAdvantage`` to the replay buffer: the transform then
+    already runs inside the replay-buffer actor and is centralized there.
+
+    Args:
+        grpo_size (int): Number of trajectories to keep in memory for the
+            advantage computation.
+        prompt_key (NestedKey): Key to the group identifier in the tensordict.
+            Defaults to ``"query"``.
+        rewards_key (NestedKey): Key to the rewards in the tensordict.
+            Defaults to ``("next", "reward")``.
+        advantage_key (NestedKey): Key to the advantage in the tensordict.
+            Defaults to ``"advantage"``.
+        done_key (NestedKey): Key to the done state in the tensordict.
+            Defaults to ``("next", "done")``.
+        verbose (bool): Whether to log verbose information. Defaults to
+            ``False``.
+
+    Keyword Args:
+        trajectory_return (str, optional): See :class:`MCAdvantage`.
+        keep_return_bounds (tuple of float, optional): See :class:`MCAdvantage`.
+        candidate_group_size (int, optional): See :class:`MCAdvantage`.
+        candidate_selection_min_size (int, optional): See :class:`MCAdvantage`.
+        candidate_selector (MCAdvantageSelector, optional): See
+            :class:`MCAdvantage`.
+        ray_init_config (dict, optional): Keyword arguments for
+            :func:`ray.init` when Ray is not initialized yet.
+        remote_config (dict, optional): Keyword arguments for
+            :func:`ray.remote` when creating the actor. Defaults to
+            ``{"num_cpus": 1}``.
+        actor_name (str, optional): Ray actor name. If an actor with this name
+            already exists, it is reused.
+
+    Examples:
+        >>> import importlib.util
+        >>> import torch
+        >>> from tensordict import TensorDict
+        >>> from torchrl.objectives.llm import RayMCAdvantage
+        >>> def traj(group_id, rewards):
+        ...     T = len(rewards)
+        ...     return TensorDict(
+        ...         group_id=torch.full((T,), group_id),
+        ...         next=TensorDict(
+        ...             reward=torch.tensor(rewards).reshape(T, 1),
+        ...             done=torch.tensor([False] * (T - 1) + [True]).reshape(T, 1),
+        ...             batch_size=[T],
+        ...         ),
+        ...         batch_size=[T],
+        ...     )
+        >>> if importlib.util.find_spec("ray") is not None:
+        ...     t = RayMCAdvantage(
+        ...         grpo_size=2,
+        ...         prompt_key="group_id",
+        ...         trajectory_return="sum",
+        ...         ray_init_config={"ignore_reinit_error": True},
+        ...     )
+        ...     t.inv(traj(0, [0.0])) is None
+        ...     out = t.inv(traj(0, [1.0]))
+        ...     t.close()
+        ...     out["advantage"].squeeze(-1)
+        tensor([-0.7071,  0.7071])
+
+    """
+
+    requires_shared_write_state = True
+
+    @property
+    def _ray(self):
+        ray = self.__dict__.get("_ray_module", None)
+        if ray is None:
+            ray = _get_ray()
+            self.__dict__["_ray_module"] = ray
+        return ray
+
+    @_ray.setter
+    def _ray(self, value) -> None:
+        self.__dict__["_ray_module"] = value
+
+    def __init__(
+        self,
+        grpo_size: int,
+        prompt_key: NestedKey = "query",
+        rewards_key: NestedKey = ("next", "reward"),
+        advantage_key: NestedKey = "advantage",
+        done_key: NestedKey = ("next", "done"),
+        verbose: bool = False,
+        *,
+        trajectory_return: Literal["sum", "max", "mean"] | None = None,
+        keep_return_bounds: tuple[float, float] | None = None,
+        candidate_group_size: int | None = None,
+        candidate_selection_min_size: int | None = None,
+        candidate_selector: MCAdvantageSelector | None = None,
+        ray_init_config: dict | None = None,
+        remote_config: dict | None = None,
+        actor_name: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.in_keys = [prompt_key, rewards_key, done_key]
+        self.out_keys = [advantage_key]
+        self.prompt_key = prompt_key
+        self.rewards_key = rewards_key
+        self.advantage_key = advantage_key
+        self.done_key = done_key
+        self.grpo_size = grpo_size
+        self.candidate_group_size = (
+            grpo_size if candidate_group_size is None else int(candidate_group_size)
+        )
+        self.candidate_selection_min_size = (
+            grpo_size
+            if candidate_selection_min_size is None
+            else int(candidate_selection_min_size)
+        )
+        self.candidate_selector = candidate_selector
+        self.verbose = verbose
+        self.trajectory_return = trajectory_return
+        self.keep_return_bounds = keep_return_bounds
+        self._actor_name = actor_name
+        self._owns_actor = actor_name is None
+        self._remote_config = (
+            {"num_cpus": 1} if remote_config is None else dict(remote_config)
+        )
+        self._ray = _get_ray()
+        if not self._ray.is_initialized():
+            self._ray.init(**({} if ray_init_config is None else ray_init_config))
+        self._actor = self._make_actor()
+
+    @property
+    def is_shared(self) -> bool:
+        """Whether grouping queues and counters are backed by shared state."""
+        return True
+
+    @property
+    def queues(self) -> _RayMCAdvantageQueues:
+        """Proxy exposing queue inspection and clearing on the Ray actor."""
+        return _RayMCAdvantageQueues(self)
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state.pop("_ray_module", None)
+        return state
+
+    def _make_actor(self):
+        args, kwargs = self._mcadvantage_args
+        if self._actor_name is not None:
+            try:
+                return self._ray.get_actor(self._actor_name)
+            except ValueError:
+                self._owns_actor = False
+        remote_actor = self._ray.remote(**self._remote_config)(_MCAdvantageRayActor)
+        if self._actor_name is None:
+            return remote_actor.remote(*args, **kwargs)
+        return remote_actor.options(name=self._actor_name).remote(*args, **kwargs)
+
+    @property
+    def _mcadvantage_args(self):
+        return (
+            self.grpo_size,
+            self.prompt_key,
+            self.rewards_key,
+            self.advantage_key,
+            self.done_key,
+            self.verbose,
+        ), {
+            "trajectory_return": self.trajectory_return,
+            "keep_return_bounds": self.keep_return_bounds,
+            "candidate_group_size": self.candidate_group_size,
+            "candidate_selection_min_size": self.candidate_selection_min_size,
+            "candidate_selector": self.candidate_selector,
+        }
+
+    def _remote_call(self, method: str, tensordict: TensorDictBase | None):
+        if tensordict is None:
+            return None
+        device = tensordict.device
+        tensordict = _maybe_clear_device(tensordict)
+        result = self._ray.get(getattr(self._actor, method).remote(tensordict))
+        if device is not None:
+            return _maybe_to_device(result, device)
+        return _maybe_clear_device(result)
+
+    def share_memory_(self) -> RayMCAdvantage:
+        """Return ``self`` because Ray already centralizes the write state."""
+        return self
+
+    def reset_stats(self) -> None:
+        """Reset counters tracking replay-buffer write decisions."""
+        self._ray.get(self._actor.reset_stats.remote())
+
+    @property
+    def queued_groups(self) -> int:
+        """Number of incomplete groups currently held by the Ray actor."""
+        return self._ray.get(self._actor.queued_groups.remote())
+
+    @property
+    def queued_trajectories(self) -> int:
+        """Number of incomplete trajectories currently held by the Ray actor."""
+        return self._ray.get(self._actor.queued_trajectories.remote())
+
+    @property
+    def max_queued_trajectories_per_group(self) -> int:
+        """Largest number of incomplete trajectories queued for one group."""
+        return self._ray.get(self._actor.max_queued_trajectories_per_group.remote())
+
+    def _get_stat(self, name: str):
+        return self._ray.get(self._actor.get_stat.remote(name))
+
+    def _set_stat(self, name: str, value) -> None:
+        self._ray.get(self._actor.set_stat.remote(name, value))
+
+    def forward(self, tensordict: TensorDictBase) -> TensorDictBase:
+        return tensordict
+
+    def _inv_call(self, tensordict: TensorDictBase | None) -> TensorDictBase | None:
+        return self._remote_call("_inv_call", tensordict)
+
+    def close(self) -> None:
+        """Terminate the anonymous Ray actor owned by this transform."""
+        actor = getattr(self, "_actor", None)
+        if actor is not None and self._owns_actor:
+            try:
+                self._ray.kill(actor)
+            except (RuntimeError, ValueError):
+                pass
+        self._actor = None
+
+    def __repr__(self) -> str:
+        if getattr(self, "_actor", None) is None:
+            return "RayMCAdvantage(actor=None)"
+        return self._ray.get(self._actor.__repr__.remote())
+
+
+def _mcadvantage_stat_property(name: str) -> property:
+    def getter(self):
+        return self._get_stat(name)
+
+    def setter(self, value) -> None:
+        self._set_stat(name, value)
+
+    return property(getter, setter)
+
+
+for _mcadvantage_stat_name in _MCADVANTAGE_STATS:
+    setattr(
+        MCAdvantage,
+        _mcadvantage_stat_name,
+        _mcadvantage_stat_property(_mcadvantage_stat_name),
+    )
+    setattr(
+        RayMCAdvantage,
+        _mcadvantage_stat_name,
+        _mcadvantage_stat_property(_mcadvantage_stat_name),
+    )
+del _mcadvantage_stat_name

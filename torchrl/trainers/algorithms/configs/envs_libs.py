@@ -150,6 +150,34 @@ class MujocoPlaygroundEnvConfig(EnvLibsConfig):
 
 
 @dataclass
+class MJLabEnvConfig(EnvLibsConfig):
+    """Configuration for MJLabEnv environment.
+
+    Hydra configuration for :class:`~torchrl.envs.MJLabEnv`.
+    """
+
+    task_id: str = MISSING
+    cfg: Any = None
+    play: bool = False
+    num_envs: int | None = None
+    from_pixels: bool = False
+    pixels_only: bool = False
+    pixels_key: str = "pixels"
+    pixels_sensor: str | None = None
+    render_mode: str | None = None
+    native_autoreset: bool = False
+    device: str | None = None
+    batch_size: list[int] | None = None
+    allow_done_after_reset: bool = False
+    num_workers: int = 1
+    _target_: str = "torchrl.envs.libs.mjlab.MJLabEnv"
+
+    def __post_init__(self) -> None:
+        """Post-initialization hook for MJLabEnv configuration."""
+        super().__post_init__()
+
+
+@dataclass
 class DMControlEnvConfig(EnvLibsConfig):
     """Configuration for DMControlEnv environment."""
 

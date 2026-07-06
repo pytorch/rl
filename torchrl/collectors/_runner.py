@@ -23,6 +23,7 @@ from torchrl.collectors.utils import (
     _cast,
     _make_policy_factory,
     _map_to_cpu_if_needed,
+    _maybe_normalize_replay_buffer_tensordict_device,
     _TrajectoryPool,
 )
 from torchrl.data import ReplayBuffer
@@ -313,6 +314,9 @@ def _main_async_collector(
             if replay_buffer is not None:
                 if extend_buffer and next_data is not None:
                     next_data.names = None
+                    next_data = _maybe_normalize_replay_buffer_tensordict_device(
+                        next_data, replay_buffer
+                    )
                     replay_buffer.extend(next_data)
 
                 if run_free:
