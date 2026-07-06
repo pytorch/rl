@@ -848,6 +848,7 @@ class History(TensorClass["nocast"]):
         Args:
             text (str | list[str]): The chat template to invert.
             chat_template_name (str, optional): The name of the chat template to use.
+            chat_template (str, optional): The chat template string to use.
             tokenizer (transformers.AutoTokenizer | transformers.AutoProcessor, optional): The tokenizer to use.
 
         Returns:

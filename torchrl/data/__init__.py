@@ -34,6 +34,7 @@ from .postprocs import DensifyReward, MultiStep
 from .replay_buffers import (
     CompressedListStorage,
     CompressedListStorageCheckpointer,
+    ConsumingSampler,
     Flat2TED,
     FlatStorageCheckpointer,
     H5Combine,
@@ -124,6 +125,7 @@ __all__ = [
     "CompressedListStorageCheckpointer",
     "ConstantKLController",
     "ContentBase",
+    "ConsumingSampler",
     "DEVICE_TYPING",
     "DensifyReward",
     "Flat2TED",

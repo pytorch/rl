@@ -868,6 +868,7 @@ class Mixer(nn.Module):
 
         Args:
             chosen_action_value: Tensor of shape [*B, n_agents]
+            state: State tensor used by the mixer.
 
         Returns:
             chosen_action_value: Tensor of shape [*B]
