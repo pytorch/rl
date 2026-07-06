@@ -25,6 +25,7 @@ from .replay_buffers import (
     TensorDictReplayBuffer,
 )
 from .samplers import (
+    ConsumingSampler,
     PrioritizedSampler,
     PrioritizedSliceSampler,
     RandomSampler,
@@ -75,6 +76,7 @@ __all__ = [
     "ReplayBufferEnsemble",
     "TensorDictPrioritizedReplayBuffer",
     "TensorDictReplayBuffer",
+    "ConsumingSampler",
     "PrioritizedSampler",
     "PrioritizedSliceSampler",
     "RandomSampler",

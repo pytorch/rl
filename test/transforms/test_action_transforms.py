@@ -49,6 +49,7 @@ from torchrl.data.vla import (
 from torchrl.envs import (
     ActionMask,
     ActionScaling,
+    CartesianSolver,
     Compose,
     ConditionalPolicySwitch,
     ConditionalSkip,
@@ -1275,6 +1276,221 @@ class TestMacroPrimitiveTransform:
         )
         action = transform.inv(td)["action"]
         torch.testing.assert_close(action[..., -1], torch.full((1, 4), 154.0))
+
+    @staticmethod
+    def _recording_ik_solver(calls):
+        def solver(
+            target_pose,
+            start_action,
+            *,
+            orientation_mask=None,
+            waypoints=None,
+        ):
+            calls.append(
+                {
+                    "target_pose": target_pose,
+                    "orientation_mask": orientation_mask,
+                    "waypoints": waypoints,
+                }
+            )
+            if waypoints is not None:
+                out = (
+                    start_action.unsqueeze(-2)
+                    .expand(
+                        start_action.shape[:-1] + (waypoints, start_action.shape[-1])
+                    )
+                    .clone()
+                )
+                out[..., :6] = torch.arange(1, waypoints + 1, dtype=out.dtype).reshape(
+                    (1,) * (start_action.ndim - 1) + (waypoints, 1)
+                )
+                return out
+            out = start_action.clone()
+            out[..., :3] = target_pose[..., :3]
+            return out
+
+        return solver
+
+    def test_cartesian_solver_protocol(self):
+        calls = []
+        assert isinstance(self._ik_solver(), CartesianSolver)
+        assert isinstance(self._recording_ik_solver(calls), CartesianSolver)
+
+    def test_reach_pose_orientation_mask_passed_to_solver(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    orientation_mask=(1.0, 1.0, 0.0),
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        transform.inv(td)
+        assert len(calls) == 1
+        torch.testing.assert_close(
+            calls[0]["orientation_mask"], torch.tensor([[1.0, 1.0, 0.0]])
+        )
+        torch.testing.assert_close(
+            calls[0]["target_pose"][..., 3:],
+            torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+        )
+        assert calls[0]["waypoints"] is None
+
+    def test_reach_pose_without_mask_passes_none(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]), steps=2
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        transform.inv(td)
+        assert calls[0]["orientation_mask"] is None
+        torch.testing.assert_close(calls[0]["target_pose"][..., 3:], torch.zeros(1, 4))
+
+    @pytest.mark.parametrize(
+        ("reach_pose_kwargs", "match"),
+        [
+            ({"orientation_mask": (1.0, 1.0, 0.0)}, "orientation_mask"),
+            ({"path": "cartesian"}, "path='cartesian'"),
+        ],
+    )
+    def test_reach_pose_constraint_without_solver_raises(
+        self, reach_pose_kwargs, match
+    ):
+        transform = URScriptPrimitiveTransform(macro_steps=2)
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    steps=2,
+                    **reach_pose_kwargs,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match=match):
+            transform.inv(td)
+
+    def test_reach_pose_orientation_mask_legacy_solver_raises(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    quaternion=torch.tensor([[1.0, 0.0, 0.0, 0.0]]),
+                    orientation_mask=(1.0, 1.0, 0.0),
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match="orientation_mask"):
+            transform.inv(td)
+
+    def test_reach_pose_cartesian_path_uses_waypoints(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            macro_steps=3, cartesian_solver=self._recording_ik_solver(calls)
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    path="cartesian",
+                    gripper="closed",
+                    steps=3,
+                    settle_steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)["action"]
+        assert action.shape == torch.Size([1, 5, 7])
+        # the endpoint solve plus the per-waypoint solve
+        assert [call["waypoints"] for call in calls] == [None, 3]
+        # arm columns follow the solver-provided waypoints, and the settle
+        # segment holds the final waypoint
+        torch.testing.assert_close(
+            action[0, :, 0], torch.tensor([1.0, 2.0, 3.0, 3.0, 3.0])
+        )
+        # the gripper column still follows the interpolated gripper command
+        torch.testing.assert_close(action[0, -1, -1], torch.tensor(255.0))
+
+    def test_reach_pose_cartesian_path_legacy_solver_raises(self):
+        transform = URScriptPrimitiveTransform(
+            macro_steps=2, cartesian_solver=self._ik_solver()
+        )
+        td = TensorDict(
+            {
+                "action": RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    path="cartesian",
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        with pytest.raises(TypeError, match="waypoints"):
+            transform.inv(td)
+
+    def test_reach_pose_invalid_path_raises(self):
+        with pytest.raises(ValueError, match="path must be"):
+            RobotMacroAction.reach_pose(position=torch.zeros(1, 3), path="linear")
+
+    def test_reach_pose_cartesian_path_nested_action_key(self):
+        calls = []
+        transform = URScriptPrimitiveTransform(
+            action_key=("agent", "action"),
+            macro_steps=2,
+            cartesian_solver=self._recording_ik_solver(calls),
+        )
+        td = TensorDict(
+            {
+                ("agent", "action"): RobotMacroAction.reach_pose(
+                    position=torch.tensor([[1.0, 2.0, 3.0]]),
+                    orientation_mask=(0.0, 1.0, 1.0),
+                    path="cartesian",
+                    steps=2,
+                ),
+                "robot_qpos": torch.zeros(1, 6),
+                "gripper_qpos": torch.zeros(1, 2),
+            },
+            batch_size=[1],
+        )
+        action = transform.inv(td)[("agent", "action")]
+        assert action.shape == torch.Size([1, 2, 7])
+        assert calls[-1]["waypoints"] == 2
+        torch.testing.assert_close(
+            calls[-1]["orientation_mask"], torch.tensor([[0.0, 1.0, 1.0]])
+        )
+        torch.testing.assert_close(action[0, :, 0], torch.tensor([1.0, 2.0]))
 
     def test_close_gripper_keeps_arm(self):
         transform = URScriptPrimitiveTransform(macro_steps=4)

@@ -33,13 +33,6 @@ def _has_triton_backend() -> bool:
 _has_triton = _has_triton_backend()
 _triton_skip_reason = "requires triton (>= 2.2) and CUDA"
 
-_has_functorch = False
-try:
-    try:
-        from torch import vmap as vmap  # noqa: F401
-    except ImportError:
-        from functorch import vmap as vmap  # noqa: F401
-
-    _has_functorch = True
-except ImportError:
-    pass
+_has_functorch = (
+    hasattr(torch, "vmap") or importlib.util.find_spec("functorch") is not None
+)
