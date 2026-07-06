@@ -22,9 +22,15 @@ sequence.
 - **macro_steps** - interpolated low-level actions per primitive.
 - **settle_steps** - repeated final actions appended per primitive.
 - **action_dim** - low-level action dimension (six joints + one gripper).
-- **cartesian_solver** - optional callable mapping `(target_pose,
-start_action)` to a low-level action. When omitted, the transform
-uses a parent env's `_cartesian_pose_to_joint_target` hook.
+- **cartesian_solver** - optional `CartesianSolver`
+mapping `(target_pose, start_action)` to a low-level action.
+A plain two-argument callable is accepted; the optional
+`orientation_mask` and `waypoints` keyword arguments are only
+forwarded when the solver declares them (they are required for
+[`RobotMacroAction.reach_pose()`](torchrl.envs.transforms.RobotMacroAction.html#torchrl.envs.transforms.RobotMacroAction.reach_pose) partial orientation
+constraints and `path="cartesian"` respectively). When omitted,
+the transform uses a parent env's
+`_cartesian_pose_to_joint_target` hook.
 - **open_gripper_ctrl** - low-level gripper command for an open gripper.
 - **close_gripper_ctrl** - low-level gripper command for a closed gripper.
 

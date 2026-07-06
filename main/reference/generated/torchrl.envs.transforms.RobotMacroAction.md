@@ -1,6 +1,6 @@
 # RobotMacroAction
 
-*class*torchrl.envs.transforms.RobotMacroAction(*mode: 'torch.Tensor'*, *steps: 'torch.Tensor'*, *settle_steps: 'torch.Tensor'*, *position: 'torch.Tensor'*, *quaternion: 'torch.Tensor'*, *joints: 'torch.Tensor'*, *gripper: 'torch.Tensor'*, *gripper_command: 'torch.Tensor'*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/envs/custom/mujoco/_ur_primitives.html#RobotMacroAction)
+*class*torchrl.envs.transforms.RobotMacroAction(*mode: 'torch.Tensor'*, *steps: 'torch.Tensor'*, *settle_steps: 'torch.Tensor'*, *position: 'torch.Tensor'*, *quaternion: 'torch.Tensor'*, *joints: 'torch.Tensor'*, *gripper: 'torch.Tensor'*, *gripper_command: 'torch.Tensor'*, *orientation_mask: 'torch.Tensor | None' = None*, *path: 'torch.Tensor | None' = None*, ***, *batch_size*, *device=None*, *names=None*)[[source]](../../_modules/torchrl/envs/custom/mujoco/_ur_primitives.html#RobotMacroAction)
 
 cat(*dim: int = 0*, ***, *out=None*)
 
@@ -821,9 +821,39 @@ Open the gripper while keeping the current arm state.
 
 Ask the arm to reach a six-joint UR configuration.
 
-*classmethod*reach_pose(***, *position: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *quaternion: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *gripper: Literal['keep', 'open', 'closed'] = 'keep'*, *gripper_command: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *steps: int = 16*, *settle_steps: int = 0*) → RobotMacroAction[[source]](../../_modules/torchrl/envs/custom/mujoco/_ur_primitives.html#RobotMacroAction.reach_pose)
+*classmethod*reach_pose(***, *position: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor)*, *quaternion: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *orientation_mask: [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | tuple[float, float, float] | None = None*, *path: Literal['joint', 'cartesian'] = 'joint'*, *gripper: Literal['keep', 'open', 'closed'] = 'keep'*, *gripper_command: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *steps: int = 16*, *settle_steps: int = 0*) → RobotMacroAction[[source]](../../_modules/torchrl/envs/custom/mujoco/_ur_primitives.html#RobotMacroAction.reach_pose)
 
 Ask the end effector to reach a Cartesian pose.
+
+Parameters:
+
+- **position** - target position, shape `(*batch, 3)`.
+- **quaternion** - optional target orientation as a `(w, x, y, z)`
+quaternion, shape `(*batch, 4)`. When omitted, all three
+rotational degrees of freedom are free.
+
+Keyword Arguments:
+
+- **orientation_mask** - optional per-axis weights of shape
+`(*batch, 3)` (or a 3-tuple) applied to the world-frame
+rotation error during the inverse-kinematics solve. A zero
+entry leaves rotation about that world axis free; e.g.
+`(1.0, 1.0, 0.0)` keeps the tool axis aligned with the
+target orientation while leaving the spin about the world
+z axis unconstrained ("keep the gripper level"). Requires a
+solver honoring the `CartesianSolver`
+`orientation_mask` keyword.
+- **path** - `"joint"` (default) interpolates in joint space between
+the current configuration and the endpoint inverse-kinematics
+solution; `"cartesian"` re-solves the inverse kinematics at
+every interpolation waypoint along the straight-line Cartesian
+path so pose constraints hold along the whole macro action.
+Requires a solver honoring the
+`CartesianSolver` `waypoints` keyword.
+- **gripper** - gripper command (`"keep"`, `"open"` or `"closed"`).
+- **gripper_command** - optional raw low-level gripper command override.
+- **steps** - number of interpolated low-level actions.
+- **settle_steps** - number of repeated final actions.
 
 *classmethod*reset(***, *gripper: Literal['keep', 'open', 'closed'] = 'open'*, *gripper_command: float | [Tensor](https://docs.pytorch.org/docs/stable/tensors.html#torch.Tensor) | None = None*, *steps: int = 16*, *settle_steps: int = 0*, *batch_size: [Size](https://docs.pytorch.org/docs/stable/size.html#torch.Size) | tuple[int, ...] | None = None*, *dtype: [dtype](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) | None = None*, *device: [device](https://docs.pytorch.org/docs/stable/tensor_attributes.html#torch.device) | None = None*) → RobotMacroAction[[source]](../../_modules/torchrl/envs/custom/mujoco/_ur_primitives.html#RobotMacroAction.reset)
 

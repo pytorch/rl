@@ -285,6 +285,7 @@
 - [BatchSizeTransform](reference/generated/torchrl.envs.transforms.BatchSizeTransform.md)
 - [BinarizeReward](reference/generated/torchrl.envs.transforms.BinarizeReward.md)
 - [BurnInTransform](reference/generated/torchrl.envs.transforms.BurnInTransform.md)
+- [CartesianSolver](reference/generated/torchrl.envs.transforms.CartesianSolver.md)
 - [CatFrames](reference/generated/torchrl.envs.transforms.CatFrames.md)
 - [CatTensors](reference/generated/torchrl.envs.transforms.CatTensors.md)
 - [CenterCrop](reference/generated/torchrl.envs.transforms.CenterCrop.md)
