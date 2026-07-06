@@ -325,6 +325,7 @@ Environment Library Configurations
     JumanjiEnvConfig
     MeltingpotEnvConfig
     MOGymEnvConfig
+    MJLabEnvConfig
     MultiThreadedEnvConfig
     OpenMLEnvConfig
     OpenSpielEnvConfig
@@ -454,6 +455,7 @@ Replay Buffer and Storage Configurations
 
     ReplayBufferConfig
     TensorDictReplayBufferConfig
+    ConsumingSamplerConfig
     RandomSamplerConfig
     SamplerWithoutReplacementConfig
     PrioritizedSamplerConfig

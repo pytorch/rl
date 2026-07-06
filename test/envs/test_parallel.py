@@ -7,6 +7,7 @@ from __future__ import annotations
 import gc
 import os
 
+import numpy as np
 import pytest
 import torch
 
@@ -72,6 +73,16 @@ class TestParallel:
         def __init__(self):
             super().__init__()
             self.nested = TestParallel._NestedObject()
+
+    @staticmethod
+    def _batched_count(env):
+        return torch.stack([count.detach().cpu().clone() for count in env.count], 0)
+
+    @staticmethod
+    def _ones_action(env):
+        tensordict = env.full_action_spec.zero()
+        tensordict[env.action_key] = env.action_spec.one()
+        return tensordict
 
     def test_create_env_fn(self, maybe_fork_ParallelEnv):
         def make_env():
@@ -190,6 +201,128 @@ class TestParallel:
             rollout = env.rollout(3)
             assert rollout.shape[0] == 2
         finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    @pytest.mark.parametrize("use_buffers", [False, True])
+    def test_batched_env_indexing_returns_live_view(
+        self, parallel, use_buffers, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        expected_cls = ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv, use_buffers=use_buffers)
+        try:
+            index_cases = [
+                (2, [2]),
+                (-1, [3]),
+                (slice(1, 3), [1, 2]),
+                (np.array([0, 3]), [0, 3]),
+                (torch.tensor([1, 3]), [1, 3]),
+            ]
+            for item, selected in index_cases:
+                env.reset()
+                indexed_env = env[item]
+                try:
+                    assert isinstance(indexed_env, expected_cls)
+                    assert indexed_env.num_workers == len(selected)
+                    assert indexed_env.batch_size == torch.Size([len(selected)])
+                    if isinstance(item, slice):
+                        indexed_env.check_env_specs()
+                        env.reset()
+
+                    indexed_env.step(self._ones_action(indexed_env))
+
+                    expected = torch.zeros(4, 1, dtype=torch.int32)
+                    expected[selected] = 1
+                    torch.testing.assert_close(self._batched_count(env), expected)
+                    torch.testing.assert_close(
+                        self._batched_count(indexed_env), expected[selected]
+                    )
+                finally:
+                    indexed_env.close(raise_if_closed=False)
+
+                assert not env.is_closed
+
+            env.rand_step()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_indexed_view_close_semantics(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+
+        env = cls(4, CountingEnv)
+        try:
+            env.reset()
+            indexed_env = env[1:]
+            indexed_env.close()
+            assert indexed_env.is_closed
+            assert not env.is_closed
+            env.rand_step()
+            with pytest.raises(RuntimeError, match="closed indexed"):
+                indexed_env.reset()
+        finally:
+            env.close(raise_if_closed=False)
+
+        env = cls(4, CountingEnv)
+        env.reset()
+        indexed_env = env[1:]
+        env.close()
+        assert env.is_closed
+        with pytest.raises(RuntimeError, match="parent environment has been closed"):
+            indexed_env.reset()
+        indexed_env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_indexed_view_keeps_parent_alive(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv)
+        env.reset()
+
+        env = env[:1]
+        try:
+            assert env.num_workers == 1
+            assert env.batch_size == torch.Size([1])
+            env.rand_step()
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    @pytest.mark.parametrize(
+        "item", [np.ones(4, dtype=bool), torch.ones(4, dtype=torch.bool)]
+    )
+    def test_batched_env_indexing_rejects_bool_masks(
+        self, parallel, item, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(4, CountingEnv)
+        try:
+            env.reset()
+            with pytest.raises(NotImplementedError, match="Boolean masks"):
+                env[item]
+        finally:
+            env.close(raise_if_closed=False)
+
+    @pytest.mark.parametrize("parallel", [False, True])
+    def test_batched_env_unsupported_worker_writeback_raises(
+        self, parallel, maybe_fork_ParallelEnv
+    ):
+        cls = maybe_fork_ParallelEnv if parallel else SerialEnv
+        env = cls(2, CountingEnv)
+        source = CountingEnv()
+        try:
+            env.reset()
+            source.reset()
+            with pytest.raises(NotImplementedError, match="snapshot writeback"):
+                env[0] = source
+            env.rand_step()
+            assert not env.is_closed
+        finally:
+            source.close(raise_if_closed=False)
             env.close(raise_if_closed=False)
 
     @pytest.mark.parametrize("num_parallel_env", [1, 10])

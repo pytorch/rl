@@ -27,6 +27,7 @@ from .custom.mujoco._satellite_primitives import (
     SatelliteMacroAction,
 )
 from .custom.mujoco._ur_primitives import (
+    CartesianSolver,
     RobotMacroAction,
     RobotMacroActionMode,
     URScriptPrimitive,
@@ -54,6 +55,8 @@ from .libs import (
     LiberoWrapper,
     MeltingpotEnv,
     MeltingpotWrapper,
+    MJLabEnv,
+    MJLabWrapper,
     MOGymEnv,
     MOGymWrapper,
     MujocoPlaygroundAgentMapping,
@@ -204,6 +207,7 @@ __all__ = [
     "BraxEnv",
     "BraxWrapper",
     "BurnInTransform",
+    "CartesianSolver",
     "CatFrames",
     "CatTensors",
     "CenterCrop",
@@ -254,6 +258,8 @@ __all__ = [
     "LineariseRewards",
     "MOGymEnv",
     "MOGymWrapper",
+    "MJLabEnv",
+    "MJLabWrapper",
     "MacroAction",
     "MacroPrimitive",
     "MacroPrimitiveTransform",
