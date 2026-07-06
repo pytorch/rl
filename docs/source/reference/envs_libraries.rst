@@ -100,6 +100,8 @@ Available wrappers
     MeltingpotWrapper
     MOGymEnv
     MOGymWrapper
+    MJLabEnv
+    MJLabWrapper
     MujocoPlaygroundEnv
     MujocoPlaygroundWrapper
     MujocoPlaygroundAgentMapping

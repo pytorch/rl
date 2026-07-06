@@ -67,6 +67,13 @@ repos:
       files: ^docs/.*\.rst$
       pass_filenames: true
       description: Ensure Sphinx section underline lengths match section titles.
+    - id: check-docstring-args
+      name: Check docstring argument descriptions
+      entry: ./scripts/check-docstring-args
+      language: script
+      files: ^torchrl/.*\.py$
+      pass_filenames: true
+      description: Ensure Args and Keyword Args sections document signature arguments.
     - id: forbid-version-file
       name: Forbid committing _version.py
       entry: bash -c 'git diff --cached --diff-filter=ACM --name-only | grep -qE "(^|/)_version\.py$" && { echo "ERROR - _version.py is auto-generated and must not be committed"; exit 1; } || exit 0'

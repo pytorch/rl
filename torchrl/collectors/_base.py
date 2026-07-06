@@ -18,7 +18,12 @@ from tensordict.base import NO_DEFAULT
 from tensordict.nn import TensorDictModule, TensorDictModuleBase
 from torch import nn as nn
 from torch.utils.data import IterableDataset
-from torchrl.collectors.utils import _map_weight, _traj_emit, _traj_ingest
+from torchrl.collectors.utils import (
+    _map_weight,
+    _maybe_normalize_replay_buffer_tensordict_device,
+    _traj_emit,
+    _traj_ingest,
+)
 
 from torchrl.collectors.weight_update import WeightUpdaterBase
 from torchrl.weight_update.utils import _resolve_attr
@@ -1377,9 +1382,13 @@ class BaseCollector(IterableDataset, metaclass=abc.ABCMeta):
                         trajs = complete_trajs[:trajs_per_write]
                         del complete_trajs[:trajs_per_write]
                         if len(trajs) == 1:
-                            rb.extend(trajs[0])
+                            trajs = trajs[0]
                         else:
-                            rb.extend(torch.cat(trajs, dim=0))
+                            trajs = torch.cat(trajs, dim=0)
+                        trajs = _maybe_normalize_replay_buffer_tensordict_device(
+                            trajs, rb
+                        )
+                        rb.extend(trajs)
                     yield
                 else:
                     while len(complete_trajs) >= self.trajs_per_batch:

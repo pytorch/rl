@@ -654,7 +654,10 @@ def main(cfg):  # noqa: F821
                     micro_batches += 1
                     losses.append(loss_vals["loss_objective"].detach())
                     clip_fractions.append(loss_vals["clip_fraction"])
-                    ess.append(loss_vals["ESS"].detach())
+                    # Token-level ESS retains action feature dimensions. Reduce
+                    # each minibatch before aggregation so partial batches do
+                    # not make the diagnostic shapes heterogeneous.
+                    ess.append(loss_vals["ESS"].detach().mean())
                     if micro_batches % accumulate == 0:
                         optimizer_step()
             if micro_batches % accumulate:
