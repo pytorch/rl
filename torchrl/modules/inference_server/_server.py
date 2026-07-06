@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -309,10 +310,6 @@ class InferenceServer:
                         callbacks.extend(more_cbs)
                         submitted_at.extend(more_submitted_at)
 
-                batch = self.collate_fn(items)
-                if self.policy_device is not None:
-                    batch = batch.to(self.policy_device)
-
                 try:
                     now = time.monotonic()
                     queue_wait_ms = [
@@ -320,6 +317,9 @@ class InferenceServer:
                         for item_submitted_at in submitted_at
                         if item_submitted_at is not None
                     ]
+                    batch = self.collate_fn(items)
+                    if self.policy_device is not None:
+                        batch = batch.to(self.policy_device)
                     forward_start = time.monotonic()
                     with self._model_lock:
                         result_batch = self.model(batch)
@@ -384,11 +384,14 @@ def _process_server_entry(
             shutdown_event=shutdown_event,
             **server_kwargs,
         )
-        ready_queue.put((True, None))
-        server._run()
     except BaseException as exc:
+        # The ready queue is only used for the startup handshake. Failures
+        # after a successful handshake propagate through the child's exit
+        # code instead, so that a restart cannot pick up a stale sentinel.
         ready_queue.put((False, repr(exc)))
         raise
+    ready_queue.put((True, None))
+    server._run()
 
 
 class ProcessInferenceServer:
@@ -419,6 +422,10 @@ class ProcessInferenceServer:
         weight_sync_model_id (str, optional): model id for weight sync.
         mp_context: multiprocessing context or start-method name. Defaults to
             ``"spawn"``.
+        startup_timeout (float, optional): seconds :meth:`start` waits for the
+            child process to build the policy and report readiness. Increase
+            this when the policy factory loads a large checkpoint. Defaults to
+            ``300.0``.
 
     Examples:
         >>> import multiprocessing as mp
@@ -458,9 +465,11 @@ class ProcessInferenceServer:
         weight_sync=None,
         weight_sync_model_id: str = "policy",
         mp_context: str | mp.context.BaseContext | None = None,
+        startup_timeout: float = 300.0,
     ) -> None:
         self.policy_factory = policy_factory
         self.transport = transport
+        self.startup_timeout = startup_timeout
         if isinstance(mp_context, str):
             self._ctx = mp.get_context(mp_context)
         elif mp_context is None:
@@ -502,7 +511,15 @@ class ProcessInferenceServer:
             name="ProcessInferenceServer",
         )
         self._process.start()
-        ok, payload = self._ready_queue.get(timeout=30.0)
+        try:
+            ok, payload = self._ready_queue.get(timeout=self.startup_timeout)
+        except queue.Empty:
+            self.shutdown(timeout=1.0)
+            raise TimeoutError(
+                f"ProcessInferenceServer did not report readiness within "
+                f"{self.startup_timeout} seconds. If the policy factory loads a "
+                f"large checkpoint, increase startup_timeout."
+            ) from None
         if not ok:
             self.shutdown(timeout=1.0)
             raise RuntimeError(f"ProcessInferenceServer failed to start: {payload}")
