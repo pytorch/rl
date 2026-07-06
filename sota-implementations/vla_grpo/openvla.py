@@ -10,6 +10,11 @@ The token wrapper covers the vendored SimpleVLA-RL token-OFT model (see
 autoregressive loop), sampled from the 256-way categorical over the
 action-token window at the tail of the LLaMA-2 vocabulary.
 
+The module also provides a separate continuous L1-head wrapper for the official
+OpenVLA-OFT checkpoint family. That path is deterministic and intended for
+reference/evaluation rollouts; the token GRPO training semantics stay
+unchanged.
+
 The wrappers own ALL model-side preprocessing (prompt construction, image
 transforms) and, for token heads, the temperature scaling. Both rollout and
 loss-time recomputation go through the same :meth:`get_dist`, so with
@@ -29,6 +34,7 @@ import torch
 from tensordict import TensorDictBase
 from tensordict.nn import InteractionType, TensorDictSequential
 from tensordict.utils import NestedKey, unravel_key
+from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from torchrl.data.vla import (
@@ -72,6 +78,73 @@ _JPEG_QUALITY = 95
 _OPENVLA_INPUT_IDS_KEY = ("openvla", "input_ids")
 _OPENVLA_ATTENTION_MASK_KEY = ("openvla", "attention_mask")
 _OPENVLA_PIXEL_VALUES_KEY = ("openvla", "pixel_values")
+
+
+class _MLPResNetBlock(nn.Module):
+    """Residual MLP block used by the OpenVLA-OFT L1 action head."""
+
+    def __init__(self, dim: int) -> None:
+        super().__init__()
+        self.ffn = nn.Sequential(nn.LayerNorm(dim), nn.Linear(dim, dim), nn.ReLU())
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.ffn(x) + x
+
+
+class _MLPResNet(nn.Module):
+    """Small residual MLP used by the OpenVLA-OFT L1 action head."""
+
+    def __init__(
+        self,
+        *,
+        num_blocks: int,
+        input_dim: int,
+        hidden_dim: int,
+        output_dim: int,
+    ) -> None:
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(input_dim)
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
+        self.relu = nn.ReLU()
+        self.mlp_resnet_blocks = nn.ModuleList(
+            [_MLPResNetBlock(hidden_dim) for _ in range(num_blocks)]
+        )
+        self.layer_norm2 = nn.LayerNorm(hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.relu(self.fc1(self.layer_norm1(x)))
+        for block in self.mlp_resnet_blocks:
+            x = block(x)
+        return self.fc2(self.layer_norm2(x))
+
+
+class _L1RegressionActionHead(nn.Module):
+    """Continuous OpenVLA-OFT L1 action head."""
+
+    def __init__(
+        self,
+        *,
+        input_dim: int = 4096,
+        hidden_dim: int = 4096,
+        action_dim: int = 7,
+    ) -> None:
+        super().__init__()
+        from openvla_oft.constants import ACTION_DIM, NUM_ACTIONS_CHUNK
+
+        self.action_dim = int(action_dim)
+        self.chunk_size = int(NUM_ACTIONS_CHUNK)
+        self.model = _MLPResNet(
+            num_blocks=2,
+            input_dim=input_dim * ACTION_DIM,
+            hidden_dim=hidden_dim,
+            output_dim=action_dim,
+        )
+
+    def predict_action(self, actions_hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size = actions_hidden_states.shape[0]
+        rearranged = actions_hidden_states.reshape(batch_size, self.chunk_size, -1)
+        return self.model(rearranged)
 
 
 def _hf_hub_download_fn():
@@ -1000,6 +1073,284 @@ class OpenVLAOFTWrapper(VLAWrapperBase):
         if hasattr(action, "chunk"):
             action.chunk = chunk
         return out
+
+
+class OpenVLAOFTL1Wrapper(OpenVLAOFTWrapper):
+    """Continuous L1-head OpenVLA-OFT policy for reference/evaluation rollouts.
+
+    This wrapper targets the official OpenVLA-OFT LIBERO checkpoints that use
+    two camera images and an 8-D proprio vector. It reads the canonical TorchRL
+    LIBERO observation, converts the default 9-D quaternion state to the
+    OpenVLA 8-D axis-angle state when needed, normalizes proprio using the
+    checkpoint statistics, and writes a continuous ``("vla_action", "chunk")``.
+    """
+
+    def __init__(
+        self,
+        model,
+        processor,
+        action_head: nn.Module,
+        proprio_projector: nn.Module | None,
+        *,
+        unnorm_key: str | None = None,
+        default_interaction_type: InteractionType = InteractionType.DETERMINISTIC,
+        use_proprio: bool = True,
+        use_wrist_image: bool = True,
+        center_crop: bool = True,
+        image_backend: Literal["torchvision", "pil", "tensorflow"] = "torchvision",
+        gripper_binarize: bool = True,
+        gripper_binarize_threshold: float = 0.0,
+        gripper_invert: bool = True,
+        return_vla_action_container: bool = True,
+    ) -> None:
+        from openvla_oft.constants import ACTION_DIM, NUM_ACTIONS_CHUNK
+
+        if unnorm_key is None and model.norm_stats is not None:
+            if len(model.norm_stats) != 1:
+                raise ValueError(
+                    "the checkpoint carries statistics for several datasets; "
+                    f"pass unnorm_key explicitly (options: {sorted(model.norm_stats)})."
+                )
+            unnorm_key = next(iter(model.norm_stats))
+        if model.norm_stats is not None and unnorm_key not in model.norm_stats:
+            no_noops_key = f"{unnorm_key}_no_noops"
+            if no_noops_key in model.norm_stats:
+                unnorm_key = no_noops_key
+        VLAWrapperBase.__init__(
+            self,
+            action_dim=ACTION_DIM,
+            chunk_size=NUM_ACTIONS_CHUNK,
+            action_head="continuous",
+            use_state=use_proprio,
+            default_interaction_type=default_interaction_type,
+            return_vla_action_container=return_vla_action_container,
+        )
+        self.model = model
+        self.processor = processor
+        self.action_head_module = action_head
+        self.proprio_projector = proprio_projector
+        self.unnorm_key = unnorm_key
+        self.use_proprio = bool(use_proprio)
+        self.use_wrist_image = bool(use_wrist_image)
+        self.center_crop = bool(center_crop)
+        self.image_backend = image_backend
+        self.gripper_binarize = bool(gripper_binarize)
+        self.gripper_binarize_threshold = float(gripper_binarize_threshold)
+        self.gripper_invert = bool(gripper_invert)
+        device = next(model.parameters()).device
+        dtype = next(model.parameters()).dtype
+        self.input_transform = OpenVLAInputTransform(
+            processor,
+            use_wrist_image=use_wrist_image,
+            center_crop=center_crop,
+            image_backend=image_backend,
+            image_key=self.tensor_keys.image,
+            wrist_image_key=self.tensor_keys.wrist_image,
+            instruction_key=self.tensor_keys.instruction,
+            device=device,
+            dtype=dtype,
+        )
+        self.gripper_postprocess = GripperPostProcessTransform(
+            action_key=self.tensor_keys.action_chunk,
+            rescale=True,
+            binarize=gripper_binarize,
+            threshold=gripper_binarize_threshold,
+            invert=gripper_invert,
+        )
+        self._prompt_cache = self.input_transform._prompt_cache
+        self._image_preprocessor = self.input_transform._image_preprocessor
+        self.image_backend = self.input_transform.image_backend
+        if self.use_wrist_image:
+            self.in_keys = [*self.in_keys, ("observation", "wrist_image")]
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str,
+        *,
+        torch_dtype: torch.dtype = torch.bfloat16,
+        device: torch.device | str | None = None,
+        dataset_statistics: str | None = None,
+        action_head_file: str = "action_head--150000_checkpoint.pt",
+        proprio_projector_file: str = "proprio_projector--150000_checkpoint.pt",
+        use_proprio: bool = True,
+        num_images_in_input: int = 2,
+        **kwargs,
+    ) -> OpenVLAOFTL1Wrapper:
+        """Load an official continuous-head OpenVLA-OFT checkpoint."""
+        from openvla_oft.constants import ACTION_DIM
+        from openvla_oft.modeling_prismatic import (
+            OpenVLAForActionPrediction,
+            ProprioProjector,
+        )
+        from openvla_oft.processing_prismatic import PrismaticProcessor
+        from openvla_oft.train_utils import load_component_state_dict
+        from transformers import AutoConfig
+
+        register_openvla_oft()
+        config = AutoConfig.from_pretrained(
+            pretrained_model_name_or_path, trust_remote_code=False
+        )
+        config.use_proprio = False
+        config.proprio_dim = 8
+        model = OpenVLAForActionPrediction.from_pretrained(
+            pretrained_model_name_or_path,
+            config=config,
+            torch_dtype=torch_dtype,
+            low_cpu_mem_usage=True,
+            trust_remote_code=False,
+            attn_implementation="eager",
+        )
+        model.vision_backbone.set_num_images_in_input(int(num_images_in_input))
+        if dataset_statistics is not None:
+            model.norm_stats = _load_dataset_statistics(dataset_statistics)
+        if device is not None:
+            model = model.to(device)
+        model.eval()
+        processor = PrismaticProcessor.from_pretrained(
+            pretrained_model_name_or_path, trust_remote_code=False
+        )
+        device = next(model.parameters()).device
+        dtype = next(model.parameters()).dtype
+        action_head = _L1RegressionActionHead(
+            input_dim=model.llm_dim,
+            hidden_dim=model.llm_dim,
+            action_dim=ACTION_DIM,
+        ).to(device=device, dtype=dtype)
+        action_head.load_state_dict(
+            load_component_state_dict(
+                _resolve_component_checkpoint(
+                    pretrained_model_name_or_path,
+                    action_head_file,
+                    "action_head",
+                )
+            )
+        )
+        action_head.eval()
+        proprio_projector = None
+        if use_proprio:
+            proprio_projector = ProprioProjector(
+                llm_dim=model.llm_dim, proprio_dim=8
+            ).to(device=device, dtype=dtype)
+            proprio_projector.load_state_dict(
+                load_component_state_dict(
+                    _resolve_component_checkpoint(
+                        pretrained_model_name_or_path,
+                        proprio_projector_file,
+                        "proprio_projector",
+                    )
+                )
+            )
+            proprio_projector.eval()
+        return cls(
+            model,
+            processor,
+            action_head,
+            proprio_projector,
+            use_proprio=use_proprio,
+            **kwargs,
+        )
+
+    def _openvla_state(self, state: torch.Tensor) -> torch.Tensor:
+        if state.shape[-1] == 8:
+            return state
+        if state.shape[-1] != 9:
+            raise ValueError(
+                "OpenVLA L1 proprio expects an 8-D axis-angle state or the "
+                f"default 9-D LIBERO quaternion state, got shape {state.shape}."
+            )
+        position = state[..., :3]
+        quat = state[..., 3:7]
+        gripper = state[..., 7:]
+        xyz = quat[..., :3]
+        w = quat[..., 3].clamp(-1.0, 1.0)
+        den = (1.0 - w.square()).clamp_min(0.0).sqrt()
+        angle = 2.0 * torch.acos(w)
+        axis_angle = torch.where(
+            den.unsqueeze(-1) > 1e-6,
+            xyz * angle.unsqueeze(-1) / den.clamp_min(1e-6).unsqueeze(-1),
+            torch.zeros_like(xyz),
+        )
+        return torch.cat((position, axis_angle, gripper), dim=-1)
+
+    def _normalize_proprio(self, state: torch.Tensor) -> np.ndarray:
+        if not self.use_proprio:
+            raise RuntimeError("OpenVLA L1 proprio normalization requires state input.")
+        stats = self.model.norm_stats[self.unnorm_key]["proprio"]
+        if "q01" in stats:
+            low = torch.as_tensor(stats["q01"], dtype=state.dtype, device=state.device)
+            high = torch.as_tensor(stats["q99"], dtype=state.dtype, device=state.device)
+        else:
+            low = torch.as_tensor(stats["min"], dtype=state.dtype, device=state.device)
+            high = torch.as_tensor(stats["max"], dtype=state.dtype, device=state.device)
+        mask = torch.as_tensor(
+            stats.get("mask", np.ones(low.shape, dtype=bool)),
+            dtype=torch.bool,
+            device=state.device,
+        )
+        normalized = 2.0 * (state - low) / (high - low).clamp_min(1e-8) - 1.0
+        normalized = torch.where(mask, normalized, state)
+        return normalized.clamp(-1.0, 1.0).detach().cpu().numpy().astype(np.float32)
+
+    def _sort_padding_for_predict_action(self, input_ids, attention_mask):
+        pad_token_id = self.processor.tokenizer.pad_token_id
+        padding_mask = (~input_ids.ne(pad_token_id)).int()
+        sorted_indices = torch.argsort(
+            padding_mask, dim=1, descending=True, stable=True
+        )
+        return (
+            torch.gather(input_ids, 1, sorted_indices),
+            torch.gather(attention_mask, 1, sorted_indices),
+        )
+
+    def _postprocess_actions(self, actions: torch.Tensor) -> torch.Tensor:
+        return self.gripper_postprocess.postprocess(actions)
+
+    def _predict_chunk(self, tensordict: TensorDictBase) -> torch.Tensor:
+        images = tensordict.get(self.tensor_keys.image)
+        batch_dims = images.shape[:-3]
+        images = images.reshape(-1, *images.shape[-3:])
+        wrist_images = None
+        if self.use_wrist_image:
+            wrist_images = tensordict.get(("observation", "wrist_image"))
+            wrist_images = wrist_images.reshape(-1, *wrist_images.shape[-3:])
+        instructions = self._instructions(tensordict, images.shape[0])
+        input_ids, attention_mask, pixel_values = self._preprocess(
+            images, wrist_images, instructions
+        )
+        input_ids, attention_mask = self._sort_padding_for_predict_action(
+            input_ids, attention_mask
+        )
+        proprio = None
+        if self.use_proprio:
+            state = self._get_state(tensordict).reshape(images.shape[0], -1).float()
+            proprio = self._normalize_proprio(self._openvla_state(state))
+        chunks = []
+        for index in range(images.shape[0]):
+            row_proprio = None if proprio is None else proprio[index : index + 1]
+            with torch.no_grad():
+                actions, _ = self.model.predict_action(
+                    input_ids=input_ids[index : index + 1],
+                    pixel_values=pixel_values[index : index + 1],
+                    attention_mask=attention_mask[index : index + 1],
+                    unnorm_key=self.unnorm_key,
+                    proprio=row_proprio,
+                    proprio_projector=self.proprio_projector,
+                    action_head=self.action_head_module,
+                    noisy_action_projector=None,
+                    use_film=False,
+                )
+            actions = np.asarray(actions, dtype=np.float32)
+            if actions.ndim == 3 and actions.shape[0] == 1:
+                actions = actions[0]
+            chunks.append(torch.as_tensor(actions, device=images.device))
+        chunk = torch.stack(chunks, dim=0).reshape(
+            *batch_dims, self.chunk_size, self.action_dim
+        )
+        return self._postprocess_actions(chunk)
+
+    def _predict(self, tensordict: TensorDictBase) -> torch.Tensor:
+        return self._predict_chunk(tensordict).flatten(-2)
 
 
 def _resolve_component_checkpoint(

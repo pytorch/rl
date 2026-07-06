@@ -43,7 +43,11 @@ _has_deps = all(
 )
 
 if _has_deps:
-    from openvla import GripperPostProcessTransform, OpenVLAOFTWrapper
+    from openvla import (
+        GripperPostProcessTransform,
+        OpenVLAOFTL1Wrapper,
+        OpenVLAOFTWrapper,
+    )
     from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
 
 CHUNK, ACT_DIM, N_BINS = 8, 7, 256
@@ -278,6 +282,44 @@ if _has_deps:
 
         def get_input_embeddings(self):
             return self.embed
+
+    class _TinyL1OFT(nn.Module):
+        """Tiny deterministic stand-in for the continuous OpenVLA-OFT head."""
+
+        def __init__(self):
+            super().__init__()
+            self.param = nn.Parameter(torch.zeros(()))
+            self.norm_stats = {
+                "libero_spatial_no_noops": {
+                    "proprio": {
+                        "q01": [-1.0] * 8,
+                        "q99": [1.0] * 8,
+                        "mask": [True] * 8,
+                    }
+                }
+            }
+            self.proprios = []
+            self.pixel_shapes = []
+
+        def predict_action(
+            self,
+            *,
+            input_ids,
+            pixel_values,
+            attention_mask,
+            unnorm_key,
+            proprio,
+            proprio_projector,
+            action_head,
+            noisy_action_projector,
+            use_film,
+        ):
+            self.pixel_shapes.append(tuple(pixel_values.shape))
+            self.proprios.append(None if proprio is None else proprio.copy())
+            action = np.zeros((CHUNK, ACT_DIM), dtype=np.float32)
+            action[:, :-1] = 0.25
+            action[:, -1] = 1.0
+            return action, None
 
 
 class _FakeProcessor:
@@ -686,6 +728,16 @@ class TestReplayBufferFactory:
 
 
 class TestTokenizerAndTransforms:
+    def test_make_action_tokenizer_returns_none_for_l1_openvla(self):
+        cfg = SimpleNamespace(
+            policy=SimpleNamespace(backend="openvla", mode="l1"),
+            tokenizer=SimpleNamespace(vocab_size=16),
+        )
+        assert (
+            utils.make_action_tokenizer(cfg, SimpleNamespace(action_tokenizer=None))
+            is None
+        )
+
     def test_chunk_transform_without_tokenizer_consumes_vla_chunk(self):
         cfg = SimpleNamespace(env=SimpleNamespace(max_outer_steps=1))
 
@@ -1007,6 +1059,39 @@ class TestOpenVLAOFTWrapper:
         assert (actions[..., -1].abs() <= 1.0 + 1e-5).all()
         # decode -> encode is the identity on emitted tokens
         torch.testing.assert_close(tokenizer.encode(actions), out[ACTION_TOKENS_KEY])
+
+    def test_l1_forward_uses_wrist_image_and_quaternion_proprio(self):
+        model = _TinyL1OFT()
+        policy = OpenVLAOFTL1Wrapper(
+            model,
+            _BatchProcessor(),
+            nn.Identity(),
+            nn.Identity(),
+            use_proprio=True,
+            use_wrist_image=True,
+            center_crop=False,
+            image_backend="pil",
+        )
+        obs = _make_obs(batch=2)
+        obs["observation", "wrist_image"] = torch.randint(
+            0, 256, (2, 3, 32, 32), dtype=torch.uint8
+        )
+        state = torch.zeros(2, 9)
+        state[:, 6] = 1.0  # identity quaternion in xyzw convention
+        obs["observation", "state"] = state
+
+        out = policy(obs)
+
+        assert out[ACTION_CHUNK_KEY].shape == (2, CHUNK, ACT_DIM)
+        assert model.pixel_shapes == [(1, 6, 224, 224), (1, 6, 224, 224)]
+        assert len(model.proprios) == 2
+        for proprio in model.proprios:
+            assert proprio.shape == (1, 8)
+            np.testing.assert_allclose(proprio[0, 3:6], np.zeros(3))
+        torch.testing.assert_close(
+            out[ACTION_CHUNK_KEY][..., -1],
+            -torch.ones(2, CHUNK),
+        )
 
     @pytest.mark.parametrize("ratio_level", ["sequence", "token"])
     def test_clip_ppo_loss_integration(self, ratio_level):
