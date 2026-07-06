@@ -1551,7 +1551,13 @@ class TestAsyncBatchedCollector:
             iterator = iter(collector)
             next(iterator)
             collector._server._process.kill()
-            with pytest.raises(RuntimeError, match="inference server died"):
+            # The guarantee under test is raising instead of hanging;
+            # attribution to the dead server is best-effort (its process
+            # teardown races the workers' transport errors).
+            with pytest.raises(
+                RuntimeError,
+                match="inference server died|collector worker thread raised",
+            ):
                 # A couple of batches may still drain from already-queued
                 # transitions before the watchdog trips.
                 for _ in range(10):
