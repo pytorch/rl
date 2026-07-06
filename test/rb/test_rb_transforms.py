@@ -535,9 +535,7 @@ class TestPolicyAgeFilter:
         current = {"version": 3}
         rb = ReplayBuffer(
             storage=LazyTensorStorage(100),
-            transform=PolicyAgeFilter(
-                lambda: current["version"], max_policy_lag=1
-            ),
+            transform=PolicyAgeFilter(lambda: current["version"], max_policy_lag=1),
         )
         rb.extend(self._data([2, 2, 3, 3]))
         assert len(rb) == 4
