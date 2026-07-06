@@ -214,8 +214,20 @@ class LatencyHead(nn.Module):
 class PolicyFactory:
     action_dim: int = ACTION_DIM
     delay_s: float = 0.0
+    from_pixels: bool = True
 
     def __call__(self) -> TensorDictModule:
+        if not self.from_pixels:
+            mlp = MLP(
+                activation_class=nn.ReLU,
+                out_features=self.action_dim,
+                num_cells=[256, 256],
+            )
+            return TensorDictModule(
+                LatencyHead(mlp, delay_s=self.delay_s),
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
         cnn = ConvNet(
             activation_class=nn.ReLU,
             num_cells=[16, 32, 32],
@@ -480,7 +492,7 @@ def main() -> None:
     env_factory = EnvFactory(
         env=args.env,
         gym_id=args.gym_id,
-        from_pixels=args.from_pixels or args.env in ("fake-pixels", "gym-mujoco"),
+        from_pixels=args.from_pixels or args.env == "fake-pixels",
         step_latency_s=args.env_step_latency_ms / 1000.0,
     )
     available, reason, action_dim = _check_optional_env(env_factory)
@@ -488,6 +500,7 @@ def main() -> None:
     policy_factory = PolicyFactory(
         action_dim=action_dim,
         delay_s=args.policy_delay_ms / 1000.0,
+        from_pixels=env_factory.from_pixels,
     )
 
     results: list[BenchmarkResult] = []
