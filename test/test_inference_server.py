@@ -286,6 +286,7 @@ class TestInferenceServerCore:
         assert stats["batches"] >= 1
         assert stats["avg_batch_size"] > 0
         assert stats["p95_forward_ms"] >= 0
+        assert stats["policy_version"] == 0
 
     def test_structured_config(self):
         transport = ThreadingTransport()
@@ -368,6 +369,19 @@ class TestInferenceServerCore:
         assert result["action"].device.type == "cpu"
         assert all(device.type == "cuda" for device in seen_devices)
         assert next(policy.parameters()).device.type == "cuda"
+
+    def test_policy_version_is_returned(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(
+            policy,
+            transport,
+            policy_version=12,
+            policy_version_key=("meta", "policy_version"),
+        ):
+            client = transport.client()
+            result = client(TensorDict({"observation": torch.randn(4)}))
+        assert result["meta", "policy_version"].item() == 12
 
     @pytest.mark.gpu
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
@@ -484,6 +498,15 @@ class TestPolicyClientModule:
         assert future.done()
         with pytest.raises(ValueError, match="local policy failure"):
             future.result()
+
+    def test_update_policy_weights_cascade_bumps_version(self):
+        """The weight-sync cascade hook increments the policy version."""
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        server = InferenceServer(policy, transport, policy_version=0)
+        assert server.policy_version == 0
+        server.update_policy_weights_()
+        assert server.policy_version == 1
 
 
 # =============================================================================
@@ -889,6 +912,8 @@ class TestWeightSyncIntegration:
             result_after = client(td)
             # With zero weights the linear output should be zero (bias=0 too)
             assert torch.allclose(result_after["action"], torch.zeros(2), atol=1e-6)
+            assert result_after["policy_version"].item() == 1
+            assert server.stats()["weight_updates"] == 1
 
     def test_inference_continues_after_weight_update(self):
         """The server keeps serving after a weight update."""
@@ -1212,6 +1237,20 @@ class TestAsyncBatchedCollector:
             total += batch.numel()
         collector.shutdown()
         assert total >= 20
+
+    def test_policy_version_key_none_disables_annotations(self):
+        collector = AsyncBatchedCollector(
+            create_env_fn=[_counting_env_factory] * 2,
+            policy=_make_counting_policy(),
+            frames_per_batch=10,
+            total_frames=10,
+            max_batch_size=2,
+            env_backend="threading",
+            policy_version_key=None,
+        )
+        for batch in collector:
+            assert "policy_version" not in batch.keys()
+        collector.shutdown()
 
     def test_invalid_server_backend_raises(self):
         with pytest.raises(ValueError, match="backend"):

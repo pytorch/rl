@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterator, Sequence
 from typing import Literal
 
 import torch
-from tensordict import lazy_stack, TensorDictBase
+from tensordict import lazy_stack, NestedKey, TensorDictBase
 
 from torchrl._utils import _maybe_record_function_decorator, logger as torchrl_logger
 from torchrl.collectors._base import BaseCollector
@@ -184,6 +184,11 @@ class AsyncBatchedCollector(BaseCollector):
             placement (``policy_device``, ``output_device``, ``env_device``,
             ``storing_device``) for the whole collection pipeline. Mutually
             exclusive with ``device``.
+        policy_version (int, optional): initial behavior-policy version
+            attached to server outputs. Defaults to ``0``.
+        policy_version_key (NestedKey or None, optional): TensorDict key used
+            for behavior-policy version annotations. ``None`` disables
+            annotations. Defaults to ``"policy_version"``.
         backend (str, optional): global default backend for both
             environments and policy inference.  Specific overrides
             ``env_backend`` and ``policy_backend`` take precedence when set.
@@ -271,6 +276,8 @@ class AsyncBatchedCollector(BaseCollector):
         create_env_kwargs: dict | list[dict] | None = None,
         server_config: InferenceServerConfig | None = None,
         device_config: InferenceDeviceConfig | None = None,
+        policy_version: int = 0,
+        policy_version_key: NestedKey | None = "policy_version",
     ):
         if policy is not None and policy_factory is not None:
             raise TypeError("policy and policy_factory are mutually exclusive.")
@@ -372,6 +379,8 @@ class AsyncBatchedCollector(BaseCollector):
                 weight_sync_model_id=weight_sync_model_id,
                 collect_stats=_server_defaults.collect_stats,
                 stats_window_size=_server_defaults.stats_window_size,
+                policy_version=policy_version,
+                policy_version_key=policy_version_key,
             )
         else:
             self._server = InferenceServer(
@@ -386,7 +395,10 @@ class AsyncBatchedCollector(BaseCollector):
                 weight_sync_model_id=weight_sync_model_id,
                 collect_stats=_server_defaults.collect_stats,
                 stats_window_size=_server_defaults.stats_window_size,
+                policy_version=policy_version,
+                policy_version_key=policy_version_key,
             )
+        self._policy_version_key = policy_version_key
 
         # ---- collector settings -----------------------------------------------
         self.requested_frames_per_batch = frames_per_batch
@@ -489,6 +501,11 @@ class AsyncBatchedCollector(BaseCollector):
         if stats is None:
             return {}
         return stats(reset=reset)
+
+    @property
+    def policy_version(self) -> int:
+        """The live behavior-policy version of the inference server."""
+        return self._server.policy_version
 
     # ------------------------------------------------------------------
     # Rollout: drain the result queue

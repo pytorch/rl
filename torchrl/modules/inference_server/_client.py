@@ -60,6 +60,30 @@ class PolicyClientModule(TensorDictModuleBase):
         out_keys (sequence of NestedKey, optional): output keys advertised by
             the module.
 
+    .. note::
+        Version tracking is an instance of the generic *service-stamped
+        metadata* pattern: a service may stamp every response with metadata
+        describing the state it was served from (here: the behavior-policy
+        version), and the data pipeline may enforce freshness constraints on
+        that metadata. Bounded-staleness enforcement lives in the replay
+        buffer through :class:`~torchrl.envs.transforms.PolicyAgeFilter`,
+        which silently drops too-old elements on extend or sample instead of
+        raising in the consumer.
+
+    .. note::
+        The default ``"policy_version"`` key is shared on purpose with the
+        :class:`~torchrl.envs.llm.transforms.PolicyVersion` transform and the
+        collectors' ``track_policy_version`` mechanism: they stamp the same
+        concept (the behavior-policy version that produced the data), so
+        consumers such as
+        :class:`~torchrl.envs.transforms.PolicyAgeFilter` can read it without
+        caring which component wrote it. Both counters are driven by the same
+        weight-update cascade (``update_policy_weights_``), so they agree when
+        wired through a weight-sync scheme. Keep a single authoritative writer
+        per data stream -- in a policy-server topology that is the server,
+        which owns the weights; do not stack an independently-initialized
+        ``PolicyVersion`` transform on top of server-stamped data.
+
     Examples:
         >>> import torch
         >>> import torch.nn as nn

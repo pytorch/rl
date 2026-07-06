@@ -121,10 +121,19 @@ TensorDict policy but inference should be served by the policy server:
     remote_policy = PolicyClientModule(
         transport,
         in_keys=["observation"],
-        out_keys=["action"],
+        out_keys=["action", "policy_version"],
     )
 
     data = remote_policy(data)
+
+The server writes ``policy_version`` by default so asynchronous collectors can
+track behavior-policy lag. This is the general *service-stamped metadata*
+pattern: any service may stamp its responses with metadata about the state it
+served them from, and the data pipeline may enforce freshness constraints on
+it. Bounded staleness is enforced by the replay buffer through
+:class:`~torchrl.envs.transforms.PolicyAgeFilter`, which drops elements whose
+stamped version lags the live version by more than ``max_policy_lag`` --
+either at extension time or dynamically at sampling time.
 
 Weight Synchronisation
 ^^^^^^^^^^^^^^^^^^^^^^
