@@ -23,6 +23,10 @@ class MPTransport(QueueBasedTransport):
     Args:
         ctx: a multiprocessing context (e.g. ``mp.get_context("spawn")``).
             Defaults to ``mp.get_context("spawn")``.
+        use_manager (bool, optional): if ``True``, back the request and
+            response queues with a multiprocessing manager. This is useful
+            when clients are forwarded through another spawned process.
+            Defaults to ``False``.
 
     Example:
         >>> import multiprocessing as mp
@@ -32,14 +36,32 @@ class MPTransport(QueueBasedTransport):
         >>> p.start()                             # queue inherited
     """
 
-    def __init__(self, ctx: mp.context.BaseContext | None = None):
+    def __init__(
+        self, ctx: mp.context.BaseContext | None = None, *, use_manager: bool = False
+    ):
         super().__init__()
         self._ctx = ctx if ctx is not None else mp.get_context("spawn")
-        self._request_queue: mp.Queue = self._ctx.Queue()
-        self._response_queues: dict[int, mp.Queue] = {}
+        self._manager = self._ctx.Manager() if use_manager else None
+        if self._manager is None:
+            self._request_queue: mp.Queue = self._ctx.Queue()
+            self._response_queues: dict[int, mp.Queue] = {}
+        else:
+            self._request_queue = self._manager.Queue()
+            self._response_queues = self._manager.dict()
 
     def _make_response_queue(self) -> mp.Queue:
-        return self._ctx.Queue()
+        if self._manager is None:
+            return self._ctx.Queue()
+        return self._manager.Queue()
+
+    def __getstate__(self) -> dict:
+        state = super().__getstate__()
+        state["_manager"] = None
+        return state
+
+    def close(self) -> None:
+        if self._manager is not None:
+            self._manager.shutdown()
 
     def client(self) -> _QueueInferenceClient:
         """Create an actor-side client with a dedicated response queue.

@@ -15,22 +15,22 @@ modules. No checkpoint download is involved. Run from this directory:
 Requires ``transformers``, ``timm`` and ``Pillow`` (the vendored modeling
 module imports them).
 """
+
 from __future__ import annotations
 
 import argparse
 import importlib.util
 import os
 import sys
-import warnings
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
 from tensordict import NonTensorStack, TensorDict
-from tensordict.nn import InteractionType
+from tensordict.nn import InteractionType, TensorDictModule
 from torch import nn
-from torchrl.data.vla import ACTION_TOKENS_KEY
+from torchrl.data.vla import ACTION_CHUNK_KEY, ACTION_TOKENS_KEY
 from torchrl.objectives import ClipPPOLoss
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -43,12 +43,150 @@ _has_deps = all(
 )
 
 if _has_deps:
-    from openvla import OpenVLAOFTWrapper
+    from openvla import (
+        GripperPostProcessTransform,
+        OpenVLAOFTL1Wrapper,
+        OpenVLAOFTWrapper,
+    )
     from openvla_oft.modeling_prismatic import OpenVLAForActionPrediction
 
 CHUNK, ACT_DIM, N_BINS = 8, 7, 256
 TRUE_VOCAB, PADDED_VOCAB, DIM = 32000, 32064, 16
 LOG_PROBS_KEY = ("vla_action", "log_probs")
+_REAL_CHECKPOINT = os.environ.get("TORCHRL_OPENVLA_TEST_CHECKPOINT")
+_REAL_OBSERVATIONS = os.environ.get("TORCHRL_OPENVLA_TEST_OBSERVATIONS")
+
+
+def _fake_token_policy():
+    return TensorDictModule(
+        lambda action_tokens: action_tokens,
+        in_keys=[ACTION_TOKENS_KEY],
+        out_keys=[ACTION_TOKENS_KEY],
+    )
+
+
+def test_local_advantage_worker_metrics_and_reset(monkeypatch):
+    monkeypatch.setenv("TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES", "1")
+    advantage = utils.MCAdvantage(
+        grpo_size=2,
+        prompt_key="group_id",
+        trajectory_return="sum",
+    )
+
+    class FakeCollector:
+        def __init__(self):
+            self.calls = []
+
+        def map_fn(self, method_name):
+            self.calls.append(method_name)
+            if method_name.endswith("get_stats"):
+                stats = advantage.get_stats()
+                stats.update(
+                    completed_groups=2,
+                    written_groups=1,
+                    dropped_groups=1,
+                    completed_trajectories=4,
+                    completed_decisions=12,
+                    successful_trajectories=1,
+                    trajectory_return_sum=1.0,
+                    trajectory_return_max=1.0,
+                )
+                return [stats]
+            return [None]
+
+    collector = FakeCollector()
+    metrics = utils.advantage_metrics(advantage, collector)
+    assert metrics["buffer/complete_groups"] == 2
+    assert metrics["buffer/kept_groups"] == 1
+    assert metrics["buffer/skipped_groups"] == 1
+    assert metrics["collector/completed_trajectories"] == 4
+    assert metrics["collector/successful_trajectories"] == 1
+
+    utils.reset_collection_state(advantage, collector)
+    assert collector.calls[-3:] == [
+        "replay_buffer._transform[0].clear_queues",
+        "replay_buffer._transform[0].reset_stats",
+        "reset",
+    ]
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+@pytest.mark.skipif(not _has_deps, reason="OpenVLA dependencies are missing")
+@pytest.mark.skipif(
+    not (_REAL_CHECKPOINT and _REAL_OBSERVATIONS),
+    reason="set the real OpenVLA checkpoint and observation fixture paths",
+)
+def test_real_checkpoint_microbatch_tokens_and_actions_match():
+    """Exercise microbatch equivalence with a real checkpoint when configured."""
+    cfg = SimpleNamespace(
+        policy=SimpleNamespace(
+            backend="openvla",
+            mode="tokens",
+            checkpoint=_REAL_CHECKPOINT,
+            unnorm_key="libero_spatial_no_noops",
+            dataset_statistics=os.environ.get(
+                "TORCHRL_OPENVLA_TEST_DATASET_STATISTICS",
+                "moojink/openvla-7b-oft-finetuned-libero-spatial",
+            ),
+            dtype="bfloat16",
+            temperature=0.7,
+            top_k=None,
+            use_wrist_image=False,
+            center_crop=True,
+            image_backend="tensorflow",
+            gripper_binarize=True,
+            gripper_binarize_threshold=0.0,
+            gripper_invert=True,
+            lora_rank=32,
+            lora_target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        ),
+        loss=SimpleNamespace(ratio_level="token"),
+    )
+    fixture = torch.load(_REAL_OBSERVATIONS, map_location="cpu", weights_only=False)
+    rows = TensorDict(
+        {
+            "observation": {"image": fixture["images"][:8]},
+            "language_instruction": NonTensorStack(*fixture["instructions"][:8]),
+        },
+        batch_size=[8],
+    )
+    policy = utils.make_policy(cfg, torch.device("cuda:0"))
+    policy.eval()
+    logits = {}
+    try:
+        with torch.inference_mode():
+            for microbatch in (1, 2, 4, 8):
+                policy.model_transform.micro_batch_size = microbatch
+                logits[microbatch] = policy._action_logits(rows.clone(False))
+        reference = logits[1]
+        generator = torch.Generator(device=reference.device).manual_seed(1234)
+        uniform = torch.rand(
+            reference.shape,
+            generator=generator,
+            device=reference.device,
+        ).clamp_(1e-7, 1.0 - 1e-7)
+        gumbel = -torch.log(-torch.log(uniform))
+        reference_tokens = (reference + gumbel).argmax(-1)
+        reference_log_probs = reference.log_softmax(-1).gather(
+            -1, reference_tokens.unsqueeze(-1)
+        )
+        reference_actions = policy.action_tokenizer.decode(reference_tokens.cpu())
+        reference_actions = policy.gripper_postprocess.postprocess(reference_actions)
+        for microbatch in (2, 4, 8):
+            assert torch.equal(reference, logits[microbatch])
+            tokens = (logits[microbatch] + gumbel).argmax(-1)
+            assert torch.equal(reference_tokens, tokens)
+            log_probs = (
+                logits[microbatch].log_softmax(-1).gather(-1, tokens.unsqueeze(-1))
+            )
+            assert torch.equal(reference_log_probs, log_probs)
+            actions = policy.action_tokenizer.decode(tokens.cpu())
+            actions = policy.gripper_postprocess.postprocess(actions)
+            assert torch.equal(reference_actions, actions)
+    finally:
+        del policy
+        torch.cuda.empty_cache()
 
 
 class _TinyVision(nn.Module):
@@ -140,6 +278,44 @@ if _has_deps:
 
         def get_input_embeddings(self):
             return self.embed
+
+    class _TinyL1OFT(nn.Module):
+        """Tiny deterministic stand-in for the continuous OpenVLA-OFT head."""
+
+        def __init__(self):
+            super().__init__()
+            self.param = nn.Parameter(torch.zeros(()))
+            self.norm_stats = {
+                "libero_spatial_no_noops": {
+                    "proprio": {
+                        "q01": [-1.0] * 8,
+                        "q99": [1.0] * 8,
+                        "mask": [True] * 8,
+                    }
+                }
+            }
+            self.proprios = []
+            self.pixel_shapes = []
+
+        def predict_action(
+            self,
+            *,
+            input_ids,
+            pixel_values,
+            attention_mask,
+            unnorm_key,
+            proprio,
+            proprio_projector,
+            action_head,
+            noisy_action_projector,
+            use_film,
+        ):
+            self.pixel_shapes.append(tuple(pixel_values.shape))
+            self.proprios.append(None if proprio is None else proprio.copy())
+            action = np.zeros((CHUNK, ACT_DIM), dtype=np.float32)
+            action[:, :-1] = 0.25
+            action[:, -1] = 1.0
+            return action, None
 
 
 class _FakeProcessor:
@@ -240,302 +416,241 @@ def policy():
     )
 
 
-def test_make_collector_casts_deviceless_env_to_cpu(monkeypatch):
+def _complete_collector_cfg(**collector_overrides):
+    collector = {
+        "groups_per_iter": 4,
+        "group_size": 2,
+        "candidate_group_size": None,
+        "num_collectors": 2,
+        "envs_per_collector": 4,
+        "server_max_batch_size": 1,
+        "server_min_batch_size": 1,
+        "server_timeout": 0.01,
+        "server_collect_stats": True,
+        "server_stats_window_size": 1024,
+        "policy_micro_batch_size": None,
+        "max_inflight_per_env": 1,
+        "num_threads": 1,
+        "env_sub_threads": 1,
+        "storing_device": "cpu",
+        "use_buffers": None,
+    }
+    collector.update(collector_overrides)
+    return SimpleNamespace(**collector)
+
+
+def _complete_toy_env_cfg(**env_overrides):
+    env = {
+        "backend": "toy",
+        "action_dim": 2,
+        "state_dim": 4,
+        "image_shape": (3, 8, 8),
+        "render_size": 16,
+        "success_steps": 2,
+        "success_tol": 0.25,
+        "max_outer_steps": 3,
+        "num_envs": 4,
+        "eval_num_envs": 1,
+        "seed": 0,
+        "parallel_group_repeats": True,
+        "train_init_state_mode": "cycle",
+        "render_backend": None,
+        "render_gpu_ids": [2, 3],
+        "eval_render_gpu_ids": None,
+        "render_gpu_device_zero_fallback": True,
+        "env_kwargs": None,
+    }
+    env.update(env_overrides)
+    return SimpleNamespace(**env)
+
+
+def _complete_logger_cfg(**logger_overrides):
+    logger = {
+        "eval_episodes": 4,
+        "eval_backend": "thread",
+        "eval_busy_policy": "skip",
+    }
+    logger.update(logger_overrides)
+    return SimpleNamespace(**logger)
+
+
+def test_make_collector_uses_multicollector_policy_server(monkeypatch):
     captured = {}
 
-    class _FakeCollector:
+    class _FakeMultiCollector:
         def __init__(self, *args, **kwargs):
-            captured["kwargs"] = kwargs
+            captured["multi_args"] = args
+            captured["multi_kwargs"] = kwargs
 
-    class _FakeEnv:
-        batch_size = torch.Size([2])
-        device = None
+    class _FakeServer:
+        def __init__(self, **kwargs):
+            captured["server_kwargs"] = kwargs
+            self.transport = kwargs["transport"]
 
+        def start(self):
+            captured["server_started"] = True
+            return self
+
+    class _FakeTransport:
+        def __init__(self, **kwargs):
+            captured["transport_kwargs"] = kwargs
+            self.clients = []
+
+        def client(self):
+            client = object()
+            self.clients.append(client)
+            return client
+
+    policy = _fake_token_policy()
     cfg = SimpleNamespace(
-        collector=SimpleNamespace(groups_per_iter=2, group_size=1),
-        env=SimpleNamespace(max_outer_steps=3),
-    )
-    monkeypatch.setattr(utils, "Collector", _FakeCollector)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        collector = utils.make_collector(
-            cfg, _FakeEnv(), object(), torch.device("cuda:0")
-        )
-
-    assert isinstance(collector, _FakeCollector)
-    assert captured["kwargs"]["policy_device"] == torch.device("cuda:0")
-    assert captured["kwargs"]["env_device"] == torch.device("cpu")
-
-
-def test_make_collector_parallel_groups_use_logical_worker_count(monkeypatch):
-    captured = {}
-
-    class _FakeCollector:
-        def __init__(self, *args, **kwargs):
-            captured["kwargs"] = kwargs
-
-    class _FakeEnv:
-        batch_size = torch.Size([32])
-        device = torch.device("cpu")
-
-    cfg = SimpleNamespace(
-        collector=SimpleNamespace(groups_per_iter=16, group_size=8),
-        env=SimpleNamespace(max_outer_steps=3, parallel_group_repeats=True),
-    )
-    monkeypatch.setattr(utils, "Collector", _FakeCollector)
-
-    with pytest.warns(UserWarning, match="parallel_group_repeats=true"):
-        collector = utils.make_collector(
-            cfg, _FakeEnv(), object(), torch.device("cuda:0")
-        )
-
-    assert isinstance(collector, _FakeCollector)
-    assert captured["kwargs"]["trajs_per_batch"] == 16 * 8
-    assert captured["kwargs"]["frames_per_batch"] == 32 * 3
-
-
-def test_make_collector_parallel_group_wave_has_no_warning(monkeypatch):
-    captured = {}
-
-    class _FakeCollector:
-        def __init__(self, *args, **kwargs):
-            captured["kwargs"] = kwargs
-
-    class _FakeEnv:
-        batch_size = torch.Size([32])
-        device = torch.device("cpu")
-
-    cfg = SimpleNamespace(
-        collector=SimpleNamespace(groups_per_iter=4, group_size=8),
-        env=SimpleNamespace(max_outer_steps=3, parallel_group_repeats=True),
-    )
-    monkeypatch.setattr(utils, "Collector", _FakeCollector)
-
-    collector = utils.make_collector(cfg, _FakeEnv(), object(), torch.device("cuda:0"))
-
-    assert isinstance(collector, _FakeCollector)
-    assert captured["kwargs"]["trajs_per_batch"] == 4 * 8
-    assert captured["kwargs"]["frames_per_batch"] == 32 * 3
-
-
-def test_make_collector_can_write_to_replay_buffer(monkeypatch):
-    captured = {}
-
-    class _FakeCollector:
-        def __init__(self, *args, **kwargs):
-            captured["kwargs"] = kwargs
-
-    class _FakeEnv:
-        batch_size = torch.Size([4])
-        device = torch.device("cpu")
-
-    cfg = SimpleNamespace(
-        collector=SimpleNamespace(groups_per_iter=4, group_size=2),
-        env=SimpleNamespace(max_outer_steps=3),
+        collector=_complete_collector_cfg(policy_micro_batch_size=1),
+        env=_complete_toy_env_cfg(),
     )
     replay_buffer = object()
 
-    def hook(_):
-        return None
+    monkeypatch.setattr(utils, "MultiCollector", _FakeMultiCollector)
+    monkeypatch.setattr(utils, "ProcessInferenceServer", _FakeServer)
+    monkeypatch.setattr(utils, "MPTransport", _FakeTransport)
 
-    monkeypatch.setattr(utils, "Collector", _FakeCollector)
-
-    collector = utils.make_collector(
+    collector, server, eval_policy = utils.make_collector(
         cfg,
-        _FakeEnv(),
-        object(),
+        policy,
         torch.device("cpu"),
+        tokenizer=utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
         replay_buffer=replay_buffer,
-        post_collect_hook=hook,
     )
 
-    assert isinstance(collector, _FakeCollector)
-    assert captured["kwargs"]["replay_buffer"] is replay_buffer
-    assert captured["kwargs"]["post_collect_hook"] is hook
-    assert captured["kwargs"]["trajs_per_batch"] == 4 * 2
-    assert captured["kwargs"]["frames_per_batch"] == 4
+    assert isinstance(collector, _FakeMultiCollector)
+    assert server is not None
+    assert isinstance(eval_policy, utils.PolicyClientModule)
+    assert captured["transport_kwargs"]["use_manager"]
+    assert captured["server_started"]
+    assert captured["server_kwargs"]["server_config"].max_batch_size == 1
+    assert (
+        captured["server_kwargs"]["policy_factory"].keywords["policy_micro_batch_size"]
+        == 1
+    )
+    env_factories = captured["multi_args"][0]
+    assert [factory.keywords["render_gpu_device_id"] for factory in env_factories] == [
+        2,
+        3,
+    ]
+    assert [factory.keywords["worker_idx_offset"] for factory in env_factories] == [
+        0,
+        4,
+    ]
+    assert captured["multi_kwargs"]["policy"] is None
+    assert len(captured["multi_kwargs"]["policy_factory"]) == 2
+    assert captured["multi_kwargs"]["replay_buffer"] is replay_buffer
+    assert captured["multi_kwargs"]["trajs_per_batch"] == 1
+    assert captured["multi_kwargs"]["traj_format"] == "cat"
+    assert captured["multi_kwargs"]["storing_device"] == torch.device("cpu")
 
 
-def test_make_collector_async_env_uses_async_batched_collector(monkeypatch):
-    captured = {}
-
-    class _FakeAsyncCollector:
-        def __init__(self, *args, **kwargs):
-            captured["args"] = args
-            captured["kwargs"] = kwargs
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            raise StopIteration
-
-        def server_stats(self, *, reset=False):
-            return {"requests": 0}
-
-        def shutdown(self):
-            captured["shutdown"] = True
-
-    class _FakeEnv:
-        batch_size = torch.Size([1])
-        device = torch.device("cpu")
-
+def test_make_collector_rejects_cross_subcollector_parallel_groups_without_shared_rb():
+    policy = _fake_token_policy()
     cfg = SimpleNamespace(
-        collector=SimpleNamespace(
-            groups_per_iter=4,
-            group_size=2,
-            async_env=True,
-            async_policy=True,
-            server_min_batch_size=2,
+        collector=_complete_collector_cfg(
+            num_collectors=4,
+            envs_per_collector=20,
+            group_size=8,
+            groups_per_iter=10,
         ),
-        env=SimpleNamespace(
-            backend="toy",
-            action_dim=2,
-            state_dim=4,
-            image_shape=(3, 8, 8),
-            render_size=16,
-            success_steps=2,
-            success_tol=0.25,
-            max_outer_steps=3,
-            num_envs=4,
-            seed=0,
-        ),
+        env=_complete_toy_env_cfg(parallel_group_repeats=True),
     )
-    monkeypatch.setattr(utils, "AsyncBatchedCollector", _FakeAsyncCollector)
 
-    collector = utils.make_collector(
-        cfg,
-        _FakeEnv(),
-        object(),
-        torch.device("cpu"),
-        tokenizer=object(),
-        replay_buffer=object(),
-    )
-    collector._ensure_collector()
-
-    assert len(captured["kwargs"]["create_env_fn"]) == 4
-    assert captured["kwargs"]["yield_completed_trajectories"]
-    server_config = captured["kwargs"]["server_config"]
-    assert server_config.max_batch_size == 4
-    assert server_config.min_batch_size == 2
+    with pytest.raises(ValueError, match="collector.envs_per_collector"):
+        utils.make_collector(
+            cfg,
+            policy,
+            torch.device("cpu"),
+            tokenizer=utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
+            replay_buffer=SimpleNamespace(shared=False),
+        )
 
 
-def test_make_collector_async_env_without_policy_batching(monkeypatch):
+def test_make_collector_allows_cross_subcollector_groups_with_shared_rb(monkeypatch):
     captured = {}
 
-    class _FakeAsyncCollector:
+    class _FakeMultiCollector:
         def __init__(self, *args, **kwargs):
-            captured["kwargs"] = kwargs
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            raise StopIteration
-
-        def server_stats(self, *, reset=False):
-            return {}
-
-        def shutdown(self):
-            pass
-
-    class _FakeEnv:
-        batch_size = torch.Size([1])
-        device = torch.device("cpu")
-
-    cfg = SimpleNamespace(
-        collector=SimpleNamespace(
-            groups_per_iter=2,
-            group_size=2,
-            async_env=True,
-            async_policy=False,
-        ),
-        env=SimpleNamespace(
-            backend="toy",
-            action_dim=2,
-            state_dim=4,
-            image_shape=(3, 8, 8),
-            render_size=16,
-            success_steps=2,
-            success_tol=0.25,
-            max_outer_steps=3,
-            num_envs=2,
-            seed=0,
-        ),
-    )
-    monkeypatch.setattr(utils, "AsyncBatchedCollector", _FakeAsyncCollector)
-
-    collector = utils.make_collector(
-        cfg,
-        _FakeEnv(),
-        object(),
-        torch.device("cpu"),
-        tokenizer=object(),
-    )
-    collector._ensure_collector()
-
-    server_config = captured["kwargs"]["server_config"]
-    assert server_config.max_batch_size == 1
-    assert server_config.timeout == 0.0
-
-
-def test_make_collector_sync_env_can_use_policy_server(monkeypatch):
-    captured = {}
-
-    class _FakeCollector:
-        def __init__(self, *args, **kwargs):
-            captured["collector_args"] = args
-            captured["collector_kwargs"] = kwargs
-            self.requested_frames_per_batch = kwargs["frames_per_batch"]
-
-        def shutdown(self, *args, **kwargs):
-            captured["collector_shutdown"] = True
-
-        def reset(self, *args, **kwargs):
-            captured["collector_reset"] = True
+            captured["multi_args"] = args
+            captured["multi_kwargs"] = kwargs
 
     class _FakeServer:
-        def __init__(self, *args, **kwargs):
-            captured["server_args"] = args
-            captured["server_kwargs"] = kwargs
+        def __init__(self, **kwargs):
+            self.transport = kwargs["transport"]
 
         def start(self):
             return self
 
-        def shutdown(self):
-            captured["server_shutdown"] = True
+    class _FakeTransport:
+        def __init__(self, **kwargs):
+            pass
 
-        def stats(self, *, reset=False):
-            return {"requests": 0}
+        def client(self):
+            return object()
 
-    class _FakeEnv:
-        batch_size = torch.Size([2])
-        device = None
-
-    policy = SimpleNamespace(
-        in_keys=["observation"], out_keys=[("vla_action", "tokens")]
-    )
+    policy = _fake_token_policy()
     cfg = SimpleNamespace(
-        collector=SimpleNamespace(
-            groups_per_iter=2,
-            group_size=1,
-            async_policy=True,
+        collector=_complete_collector_cfg(
+            num_collectors=4,
+            envs_per_collector=20,
+            group_size=8,
+            groups_per_iter=10,
         ),
-        env=SimpleNamespace(max_outer_steps=3),
+        env=_complete_toy_env_cfg(parallel_group_repeats=True),
     )
-    monkeypatch.setattr(utils, "Collector", _FakeCollector)
-    monkeypatch.setattr(utils, "InferenceServer", _FakeServer)
+    replay_buffer = SimpleNamespace(shared=True)
 
-    collector = utils.make_collector(cfg, _FakeEnv(), policy, torch.device("cpu"))
+    monkeypatch.setattr(utils, "MultiCollector", _FakeMultiCollector)
+    monkeypatch.setattr(utils, "ProcessInferenceServer", _FakeServer)
+    monkeypatch.setattr(utils, "MPTransport", _FakeTransport)
 
-    assert isinstance(collector, utils._ServerBackedCollector)
-    assert isinstance(captured["collector_args"][1], utils.PolicyClientModule)
-    assert captured["server_kwargs"]["server_config"].max_batch_size == 2
-    assert captured["collector_kwargs"]["policy_device"] == torch.device("cpu")
-    assert captured["collector_kwargs"]["trust_policy"] is True
-    collector.shutdown()
-    assert captured["server_shutdown"]
+    collector, _, _ = utils.make_collector(
+        cfg,
+        policy,
+        torch.device("cpu"),
+        tokenizer=utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
+        replay_buffer=replay_buffer,
+    )
+
+    assert isinstance(collector, _FakeMultiCollector)
+    assert len(captured["multi_args"][0]) == 4
+
+
+def test_make_evaluator_process_backend_uses_factories(monkeypatch):
+    captured = {}
+
+    class _FakeEvaluator:
+        def __init__(self, env, policy=None, policy_factory=None, **kwargs):
+            captured["env"] = env
+            captured["policy"] = policy
+            captured["policy_factory"] = policy_factory
+            captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(utils, "Evaluator", _FakeEvaluator)
+
+    policy = _fake_token_policy()
+    cfg = SimpleNamespace(
+        env=_complete_toy_env_cfg(),
+        logger=_complete_logger_cfg(eval_backend="process"),
+    )
+    evaluator = utils.make_evaluator(
+        cfg,
+        utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
+        policy,
+        logger=object(),
+        device=torch.device("cpu"),
+    )
+
+    assert isinstance(evaluator, _FakeEvaluator)
+    assert callable(captured["env"])
+    assert captured["policy"] is None
+    assert captured["policy_factory"]() is policy
+    assert not captured["kwargs"]["dump_video"]
+    assert captured["kwargs"]["backend"] == "process"
+    assert captured["kwargs"]["max_steps"] == 0
 
 
 def test_make_replay_buffer_scales_capacity_with_overcollection():
@@ -543,19 +658,29 @@ def test_make_replay_buffer_scales_capacity_with_overcollection():
         collector=SimpleNamespace(
             groups_per_iter=2,
             group_size=3,
-            max_collect_batches_per_iter=4,
+            candidate_group_size=None,
         ),
         env=SimpleNamespace(max_outer_steps=5),
         advantage=SimpleNamespace(
             trajectory_return="sum",
             keep_return_bounds=None,
+            candidate_selection="balanced",
+            candidate_selection_min_size=None,
+            candidate_selection_max_combinations=100000,
         ),
         loss=SimpleNamespace(mini_batch_size=2),
+        buffer=SimpleNamespace(
+            shared_init=True,
+            capacity_group_waves=4,
+            consume_after_n_samples=1,
+        ),
     )
 
     replay_buffer, _ = utils.make_replay_buffer(cfg, torch.device("cpu"))
 
     assert replay_buffer._storage.max_size == 2 * 3 * 5 * 4
+    assert replay_buffer._storage.shared_init
+    assert replay_buffer.shared
 
 
 def test_make_replay_buffer_scales_capacity_with_candidate_group_size():
@@ -564,7 +689,6 @@ def test_make_replay_buffer_scales_capacity_with_candidate_group_size():
             groups_per_iter=2,
             group_size=3,
             candidate_group_size=6,
-            max_collect_batches_per_iter=4,
         ),
         env=SimpleNamespace(max_outer_steps=5),
         advantage=SimpleNamespace(
@@ -572,8 +696,14 @@ def test_make_replay_buffer_scales_capacity_with_candidate_group_size():
             keep_return_bounds=None,
             candidate_selection="balanced",
             candidate_selection_min_size=4,
+            candidate_selection_max_combinations=100000,
         ),
         loss=SimpleNamespace(mini_batch_size=2),
+        buffer=SimpleNamespace(
+            shared_init=False,
+            capacity_group_waves=4,
+            consume_after_n_samples=1,
+        ),
     )
 
     replay_buffer, advantage = utils.make_replay_buffer(cfg, torch.device("cpu"))
@@ -584,13 +714,55 @@ def test_make_replay_buffer_scales_capacity_with_candidate_group_size():
     assert advantage.candidate_selection_min_size == 4
 
 
+def test_make_action_tokenizer_returns_none_for_l1_openvla():
+    cfg = SimpleNamespace(
+        policy=SimpleNamespace(backend="openvla", mode="l1"),
+        tokenizer=SimpleNamespace(vocab_size=16),
+    )
+    assert (
+        utils.make_action_tokenizer(cfg, SimpleNamespace(action_tokenizer=None)) is None
+    )
+
+
+def test_chunk_transform_without_tokenizer_consumes_vla_chunk():
+    cfg = SimpleNamespace(env=SimpleNamespace(max_outer_steps=1))
+
+    transform = utils._chunk_transform(cfg, None)
+
+    assert transform[0].out_keys_inv == [ACTION_CHUNK_KEY]
+
+
+def test_chunk_transform_openvla_tokens_decodes_then_postprocesses():
+    cfg = SimpleNamespace(
+        env=SimpleNamespace(max_outer_steps=1),
+        policy=SimpleNamespace(
+            backend="openvla",
+            mode="tokens",
+            gripper_binarize=True,
+            gripper_binarize_threshold=0.0,
+            gripper_invert=True,
+        ),
+    )
+
+    transform = utils._chunk_transform(
+        cfg,
+        utils.UniformActionTokenizer(16, low=-1.0, high=1.0),
+    )
+
+    assert transform[0].__class__.__name__ == "MultiAction"
+    assert transform[1].__class__.__name__ == "GripperPostProcessTransform"
+    assert transform[2].__class__.__name__ == "ActionTokenizerTransform"
+    assert transform[1].in_keys_inv == ["action"]
+    assert transform[1].out_keys_inv == ["action"]
+
+
 def test_libero_worker_assignment_serial_and_parallel_groups():
     class _EnvCfg(dict):
         def __getattr__(self, name):
             return self[name]
 
     cfg = SimpleNamespace(
-        collector=SimpleNamespace(group_size=8),
+        collector=SimpleNamespace(group_size=8, candidate_group_size=None),
         env=_EnvCfg(
             {
                 "task_ids": [10, 11, 12],
@@ -636,13 +808,17 @@ def test_make_libero_worker_parallel_groups_by_init_state(monkeypatch):
             task_ids=[0, 1],
             camera_height=64,
             camera_width=64,
+            render_backend="egl",
             render_gpu_ids=[2, 3],
             eval_render_gpu_ids=None,
+            render_gpu_device_zero_fallback=True,
+            env_kwargs=None,
             max_env_steps=512,
             train_init_state_mode="cycle",
+            train_init_state_id=3,
             parallel_group_repeats=True,
         ),
-        collector=SimpleNamespace(group_size=8),
+        collector=SimpleNamespace(group_size=8, candidate_group_size=None),
         policy=SimpleNamespace(use_wrist_image=False),
     )
     monkeypatch.setattr(utils, "LiberoEnv", _fake_libero_env)
@@ -654,6 +830,7 @@ def test_make_libero_worker_parallel_groups_by_init_state(monkeypatch):
     assert captured["kwargs"]["group_repeats"] == 1
     assert captured["kwargs"]["group_id_offset"] == 0
     assert captured["kwargs"]["group_id_mode"] == "init_state"
+    assert captured["kwargs"]["init_state_id"] == 3
     assert captured["kwargs"]["env_kwargs"]["render_gpu_device_id"] == 3
 
 
@@ -665,6 +842,74 @@ class TestOpenVLAOFTWrapper:
         assert out[ACTION_TOKENS_KEY].min() >= 0
         assert out[ACTION_TOKENS_KEY].max() < N_BINS
         assert out[LOG_PROBS_KEY].shape == (2,)
+
+    def test_forward_nested_batch_shapes(self, policy):
+        out = policy(_make_obs(batch=8).reshape(1, 8))
+        assert out[ACTION_TOKENS_KEY].shape == (1, 8, CHUNK, ACT_DIM)
+        assert out[LOG_PROBS_KEY].shape == (1, 8)
+
+    def test_policy_stack_matches_action_logits(self, policy):
+        obs = _make_obs()
+
+        with torch.no_grad():
+            stacked = policy.policy_stack(obs.clone())
+            logits = policy._action_logits(obs.clone())
+
+        torch.testing.assert_close(
+            stacked.get(policy.tensor_keys.action_logits),
+            logits,
+        )
+        assert stacked.get(policy.input_transform.input_ids_key).shape[0] == 2
+        assert stacked.get(policy.input_transform.pixel_values_key).shape[0] == 2
+
+    def test_gripper_postprocess_matches_simplevla_order(self):
+        transform = GripperPostProcessTransform(
+            action_key="action",
+            rescale=True,
+            binarize=True,
+            threshold=0.0,
+            invert=True,
+        )
+        actions = torch.zeros(2, CHUNK, ACT_DIM)
+        actions[0, :, -1] = 0.25
+        actions[1, :, -1] = 0.75
+
+        out = transform(TensorDict({"action": actions}, batch_size=[2]))["action"]
+
+        torch.testing.assert_close(out[0, :, -1], torch.ones(CHUNK))
+        torch.testing.assert_close(out[1, :, -1], -torch.ones(CHUNK))
+
+    def test_decode_stack_applies_tokenizer_then_gripper_postprocess(self):
+        policy = OpenVLAOFTWrapper(
+            _TinyOFT(),
+            _FakeProcessor(),
+            output_mode="both",
+            gripper_binarize=True,
+            gripper_invert=True,
+        )
+        obs = _make_obs()
+
+        with torch.no_grad():
+            out = policy(obs)
+
+        decoded = policy.action_tokenizer.decode(out[ACTION_TOKENS_KEY])
+        expected = policy.gripper_postprocess.postprocess(decoded)
+        torch.testing.assert_close(out[ACTION_CHUNK_KEY], expected)
+
+        decoded_td = policy.decode_stack(
+            TensorDict(
+                {ACTION_TOKENS_KEY: out[ACTION_TOKENS_KEY]},
+                batch_size=out.batch_size,
+            )
+        )
+        torch.testing.assert_close(decoded_td[ACTION_CHUNK_KEY], expected)
+
+    def test_gripper_postprocess_skips_observation_forward_path(self):
+        transform = GripperPostProcessTransform(action_key="action")
+        observation = TensorDict({"observation": torch.zeros(3)}, batch_size=[])
+        out = transform(observation)
+        assert "action" not in out
+        torch.testing.assert_close(out["observation"], torch.zeros(3))
 
     def test_temperature_contract_ratio_one(self, policy):
         # the go/no-go contract: with identical weights, the log-probs written
@@ -729,6 +974,20 @@ class TestOpenVLAOFTWrapper:
                     msg=f"row {row} differs between batched and single forward",
                 )
 
+    def test_model_microbatch_matches_sequential(self):
+        policy = OpenVLAOFTWrapper(_TinyOFT(), _FakeProcessor(), micro_batch_size=1)
+        obs = _make_obs(batch=3)
+        with torch.no_grad():
+            microbatched = policy._action_logits(obs.clone())
+            sequential = torch.cat(
+                [policy._action_logits(obs[row : row + 1].clone()) for row in range(3)],
+                dim=0,
+            )
+        torch.testing.assert_close(microbatched, sequential)
+        assert policy.model_transform.micro_batch_size == 1
+        with pytest.raises(ValueError, match="micro_batch_size"):
+            OpenVLAOFTWrapper(_TinyOFT(), _FakeProcessor(), micro_batch_size=0)
+
     def test_token_log_probs_mode(self):
         torch.manual_seed(0)
         policy = OpenVLAOFTWrapper(_TinyOFT(), _FakeProcessor(), log_probs_mode="token")
@@ -787,6 +1046,39 @@ class TestOpenVLAOFTWrapper:
         assert (actions[..., -1].abs() <= 1.0 + 1e-5).all()
         # decode -> encode is the identity on emitted tokens
         torch.testing.assert_close(tokenizer.encode(actions), out[ACTION_TOKENS_KEY])
+
+    def test_l1_forward_uses_wrist_image_and_quaternion_proprio(self):
+        model = _TinyL1OFT()
+        policy = OpenVLAOFTL1Wrapper(
+            model,
+            _BatchProcessor(),
+            nn.Identity(),
+            nn.Identity(),
+            use_proprio=True,
+            use_wrist_image=True,
+            center_crop=False,
+            image_backend="pil",
+        )
+        obs = _make_obs(batch=2)
+        obs["observation", "wrist_image"] = torch.randint(
+            0, 256, (2, 3, 32, 32), dtype=torch.uint8
+        )
+        state = torch.zeros(2, 9)
+        state[:, 6] = 1.0  # identity quaternion in xyzw convention
+        obs["observation", "state"] = state
+
+        out = policy(obs)
+
+        assert out[ACTION_CHUNK_KEY].shape == (2, CHUNK, ACT_DIM)
+        assert model.pixel_shapes == [(1, 6, 224, 224), (1, 6, 224, 224)]
+        assert len(model.proprios) == 2
+        for proprio in model.proprios:
+            assert proprio.shape == (1, 8)
+            np.testing.assert_allclose(proprio[0, 3:6], np.zeros(3))
+        torch.testing.assert_close(
+            out[ACTION_CHUNK_KEY][..., -1],
+            -torch.ones(2, CHUNK),
+        )
 
     @pytest.mark.parametrize("ratio_level", ["sequence", "token"])
     def test_clip_ppo_loss_integration(self, ratio_level):

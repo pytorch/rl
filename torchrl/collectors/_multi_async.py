@@ -212,7 +212,7 @@ class MultiAsyncCollector(MultiCollector):
         else:
             idx = new_data
         out = self.out_tensordicts[idx]
-        if not self.replay_buffer and (j == 0 or use_buffers):
+        if self.replay_buffer is None and (j == 0 or use_buffers):
             # we clone the data to make sure that we'll be working with a fixed copy
             out = out.clone()
         return idx, j, out

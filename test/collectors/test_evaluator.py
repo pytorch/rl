@@ -718,6 +718,25 @@ class TestEvaluatorBatchedMetrics:
         finally:
             evaluator.shutdown()
 
+    def test_cat_traj_format_metrics(self):
+        """Evaluator metrics support flat trajectory batches."""
+        env = _make_batched_env(num_envs=4, max_steps=5)
+        policy = _make_policy(env)
+        evaluator = Evaluator(
+            env,
+            policy,
+            max_steps=20,
+            num_trajectories=3,
+            collector_kwargs={"traj_format": "cat"},
+        )
+        try:
+            metrics = evaluator.evaluate(step=0)
+            assert metrics["eval/num_episodes"] == 3
+            assert "eval/reward" in metrics
+            assert "eval/episode_length" in metrics
+        finally:
+            evaluator.shutdown()
+
     def test_episode_length_from_step_count(self):
         """With StepCounter, episode_length should come from step_count at done."""
         env = _make_batched_env(num_envs=4, max_steps=5)

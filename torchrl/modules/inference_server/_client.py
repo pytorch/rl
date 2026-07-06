@@ -11,9 +11,19 @@ from typing import Any
 import torch
 from tensordict.base import TensorDictBase
 from tensordict.nn import TensorDictModuleBase
+from tensordict.nn.probabilistic import interaction_type
 from tensordict.utils import NestedKey
 
 from torchrl.modules.inference_server._transport import InferenceTransport
+
+_REMOTE_INTERACTION_TYPE_KEY = "_torchrl_inference_interaction_type"
+_INTERACTION_TYPE_TO_CODE = {
+    "mode": 0,
+    "median": 1,
+    "mean": 2,
+    "random": 3,
+    "deterministic": 4,
+}
 
 
 class _ImmediateFuture:
@@ -82,6 +92,10 @@ class PolicyClientModule(TensorDictModuleBase):
         policy_version_key (NestedKey, optional): key that contains the
             behavior policy version returned by the server. Defaults to
             ``"policy_version"``.
+        propagate_interaction_type (bool, optional): if ``True``, the active
+            :func:`tensordict.nn.interaction_type` is attached to each request
+            so the server can execute the remote policy under the caller's
+            exploration context. Defaults to ``False``.
 
     Examples:
         >>> import torch
@@ -117,6 +131,7 @@ class PolicyClientModule(TensorDictModuleBase):
         target_policy_version: int | None = None,
         max_policy_lag: int | None = None,
         policy_version_key: NestedKey = "policy_version",
+        propagate_interaction_type: bool = False,
     ) -> None:
         super().__init__()
         if isinstance(client, InferenceTransport):
@@ -128,6 +143,7 @@ class PolicyClientModule(TensorDictModuleBase):
         self.target_policy_version = target_policy_version
         self.max_policy_lag = max_policy_lag
         self.policy_version_key = policy_version_key
+        self.propagate_interaction_type = bool(propagate_interaction_type)
         self._inflight_sem = (
             threading.BoundedSemaphore(max_inflight)
             if max_inflight is not None
@@ -168,6 +184,19 @@ class PolicyClientModule(TensorDictModuleBase):
         Returns:
             Future-like object whose ``result()`` method returns a TensorDict.
         """
+        if self.propagate_interaction_type:
+            current_interaction_type = interaction_type()
+            if current_interaction_type is not None:
+                tensordict = tensordict.clone(recurse=False)
+                tensordict.set(
+                    _REMOTE_INTERACTION_TYPE_KEY,
+                    torch.full(
+                        tensordict.batch_size,
+                        _INTERACTION_TYPE_TO_CODE[current_interaction_type.value],
+                        dtype=torch.int8,
+                        device=tensordict.device or torch.device("cpu"),
+                    ),
+                )
         release = self._acquire_inflight()
         submit = getattr(self.client, "submit", None)
         if submit is None:

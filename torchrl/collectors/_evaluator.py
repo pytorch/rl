@@ -706,25 +706,36 @@ def _extract_metrics_from_trajectories(
 ) -> dict[str, Any]:
     """Extract evaluation metrics from a trajectory batch produced by a collector.
 
-    *traj_batch* has shape ``(num_trajectories, max_traj_len)`` with a
-    ``("collector", "mask")`` boolean field marking valid timesteps.
+    *traj_batch* can be padded with a ``("collector", "mask")`` boolean field
+    or flat (``traj_format="cat"``) with ``("collector", "traj_ids")``.
     """
-    mask = traj_batch.get(("collector", "mask"))  # [N, T]
-    num_trajectories = traj_batch.shape[0]
-
     episode_rewards = []
     episode_lengths = []
     total_frames = 0
 
-    ep_reward_td = traj_batch.get(_EPISODE_REWARD_KEY, None)
-    step_count_td = traj_batch.get(("next", "step_count"), None)
-    reward_td = traj_batch.get(reward_keys, None)
+    mask = traj_batch.get(("collector", "mask"), None)
+    if mask is not None:
+        trajectories = []
+        for i in range(traj_batch.shape[0]):
+            traj_mask = mask[i]
+            if traj_mask.ndim > 1:
+                traj_mask = traj_mask.squeeze(-1)
+            valid_len = int(traj_mask.sum().item())
+            if valid_len:
+                trajectories.append(traj_batch[i, :valid_len])
+    else:
+        traj_ids = traj_batch.get(("collector", "traj_ids"), None)
+        if traj_ids is None:
+            trajectories = [traj_batch]
+        else:
+            traj_ids = traj_ids.reshape(-1)
+            trajectories = [
+                traj_batch[traj_ids == traj_id]
+                for traj_id in traj_ids.unique(sorted=True)
+            ]
 
-    for i in range(num_trajectories):
-        traj_mask = mask[i]  # [T]
-        if traj_mask.ndim > 1:
-            traj_mask = traj_mask.squeeze(-1)
-        valid_len = traj_mask.sum().item()
+    for trajectory in trajectories:
+        valid_len = trajectory.shape[0]
         if valid_len == 0:
             continue
         total_frames += int(valid_len)
@@ -732,21 +743,25 @@ def _extract_metrics_from_trajectories(
         # Last valid index
         last_idx = int(valid_len) - 1
 
+        ep_reward_td = trajectory.get(_EPISODE_REWARD_KEY, None)
+        step_count_td = trajectory.get(("next", "step_count"), None)
+        reward_td = trajectory.get(reward_keys, None)
+
         if ep_reward_td is not None:
             # Prefer episode_reward from RewardSum (cumulative return)
-            r = ep_reward_td[i, last_idx]
+            r = ep_reward_td[last_idx]
             if r.ndim > 0:
                 r = r.squeeze(-1)
             episode_rewards.append(r.item())
         elif reward_td is not None:
             # Fallback: sum raw rewards over valid trajectory steps
-            valid_rewards = reward_td[i, : int(valid_len)]
+            valid_rewards = reward_td
             if valid_rewards.ndim > 1:
                 valid_rewards = valid_rewards.squeeze(-1)
             episode_rewards.append(valid_rewards.sum().item())
 
         if step_count_td is not None:
-            ep_len = step_count_td[i, last_idx]
+            ep_len = step_count_td[last_idx]
             if ep_len.ndim > 0:
                 ep_len = ep_len.squeeze(-1)
             episode_lengths.append(ep_len.item())

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 from __future__ import annotations
 
+import contextlib
 import multiprocessing as mp
 import queue
 import threading
@@ -12,18 +13,72 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from multiprocessing.synchronize import Event as MPEvent
 from statistics import mean
+from typing import Any
 
 import torch
 from tensordict import lazy_stack
 from tensordict.base import TensorDictBase
+from tensordict.nn.probabilistic import InteractionType, set_interaction_type
 from tensordict.utils import NestedKey
 from torch import nn
 
+from torchrl.modules.inference_server._client import _REMOTE_INTERACTION_TYPE_KEY
 from torchrl.modules.inference_server._config import (
     InferenceDeviceConfig,
     InferenceServerConfig,
 )
 from torchrl.modules.inference_server._transport import InferenceTransport
+from torchrl.weight_update import WeightStrategy
+
+_CODE_TO_INTERACTION_TYPE = {
+    0: InteractionType.MODE,
+    1: InteractionType.MEDIAN,
+    2: InteractionType.MEAN,
+    3: InteractionType.RANDOM,
+    4: InteractionType.DETERMINISTIC,
+}
+
+
+def _normalize_tensordict_device_metadata(data: TensorDictBase) -> TensorDictBase:
+    target_device = data.device
+    if target_device is not None:
+        target_device = torch.device(target_device)
+    for value in data.values(include_nested=True, leaves_only=True):
+        value_device = getattr(value, "device", None)
+        if value_device is None:
+            continue
+        value_device = torch.device(value_device)
+        if target_device is None:
+            target_device = value_device
+        elif value_device != target_device:
+            return data
+
+    if target_device is None:
+        return data
+
+    needs_normalization = data.device != target_device
+    if not needs_normalization:
+        for value in data.values(include_nested=True, leaves_only=False):
+            if isinstance(value, TensorDictBase) and value.device != target_device:
+                needs_normalization = True
+                break
+    if not needs_normalization:
+        return data
+
+    data = data.copy()
+    data.clear_device_()
+    return data.to(target_device)
+
+
+def _default_collate(items: list[TensorDictBase]) -> TensorDictBase:
+    return lazy_stack(
+        [
+            _normalize_tensordict_device_metadata(item)
+            if isinstance(item, TensorDictBase)
+            else item
+            for item in items
+        ]
+    )
 
 
 class InferenceServer:
@@ -159,7 +214,7 @@ class InferenceServer:
         self.max_batch_size = max_batch_size
         self.min_batch_size = min_batch_size
         self.timeout = timeout
-        self.collate_fn = collate_fn if collate_fn is not None else lazy_stack
+        self.collate_fn = collate_fn if collate_fn is not None else _default_collate
         policy_device = device if policy_device is None else policy_device
         self.policy_device = (
             torch.device(policy_device) if policy_device is not None else None
@@ -273,6 +328,30 @@ class InferenceServer:
             self._policy_version += 1
             self._num_weight_updates += 1
 
+    def update_model(
+        self,
+        update_fn: Callable[[nn.Module], Any],
+        *,
+        mark_weight_update: bool = True,
+    ) -> Any:
+        """Apply an in-place update to the served model under the model lock.
+
+        Args:
+            update_fn (Callable): function called with ``self.model`` while
+                inference is blocked by the server's model lock.
+            mark_weight_update (bool, optional): if ``True``, increment the
+                behavior-policy version and weight-update counter after
+                ``update_fn`` succeeds. Defaults to ``True``.
+
+        Returns:
+            The value returned by ``update_fn``.
+        """
+        with self._model_lock:
+            result = update_fn(self.model)
+            if mark_weight_update:
+                self._mark_weight_update()
+        return result
+
     # -- lifecycle ------------------------------------------------------------
 
     def start(self) -> InferenceServer:
@@ -330,8 +409,8 @@ class InferenceServer:
             return
         with self._model_lock:
             weights = ws.receive(timeout=0.0)
-        if weights is not None:
-            self._mark_weight_update()
+            if weights is not None:
+                self._mark_weight_update()
 
     def _set_policy_version(self, result_batch: TensorDictBase) -> TensorDictBase:
         """Annotate inference outputs with the behavior policy version."""
@@ -347,6 +426,30 @@ class InferenceServer:
             device=device,
         )
         return result_batch.set(self.policy_version_key, version)
+
+    def _interaction_type_context(self, batch: TensorDictBase):
+        code = batch.get(_REMOTE_INTERACTION_TYPE_KEY, default=None)
+        if code is None:
+            return contextlib.nullcontext(), batch
+        if not isinstance(code, torch.Tensor):
+            interaction_type_value = _CODE_TO_INTERACTION_TYPE[int(code)]
+        else:
+            flat_code = code.reshape(-1)
+            if flat_code.numel() == 0:
+                return contextlib.nullcontext(), batch.exclude(
+                    _REMOTE_INTERACTION_TYPE_KEY, inplace=False
+                )
+            interaction_code = int(flat_code[0].item())
+            if not flat_code.eq(interaction_code).all():
+                raise RuntimeError(
+                    "InferenceServer received a mixed interaction-type batch. "
+                    "Use homogeneous server requests or a smaller max_batch_size."
+                )
+            interaction_type_value = _CODE_TO_INTERACTION_TYPE[interaction_code]
+        return (
+            set_interaction_type(interaction_type_value),
+            batch.exclude(_REMOTE_INTERACTION_TYPE_KEY, inplace=False),
+        )
 
     @torch.no_grad()
     def _run(self) -> None:
@@ -403,10 +506,14 @@ class InferenceServer:
                     ]
                     forward_start = time.monotonic()
                     with self._model_lock:
-                        result_batch = self.model(batch)
-                    if self.output_device is not None:
-                        result_batch = result_batch.to(self.output_device)
-                    result_batch = self._set_policy_version(result_batch)
+                        interaction_context, batch = self._interaction_type_context(
+                            batch
+                        )
+                        with interaction_context:
+                            result_batch = self.model(batch)
+                        if self.output_device is not None:
+                            result_batch = result_batch.to(self.output_device)
+                        result_batch = self._set_policy_version(result_batch)
                     forward_ms = (time.monotonic() - forward_start) * 1000.0
                     self._record_batch_stats(
                         batch_size=len(callbacks),
@@ -484,6 +591,22 @@ def _process_server_entry(
                         "alive": server.is_alive,
                         "policy_version": server.policy_version,
                     }
+                elif command == "update_model_weights":
+                    weights = kwargs["weights"]
+                    mark_weight_update = kwargs.get("mark_weight_update", True)
+                    with server._model_lock:
+                        if hasattr(server.model, "load_policy_weights"):
+                            server.model.load_policy_weights(weights)
+                        else:
+                            WeightStrategy(extract_as="tensordict").apply_weights(
+                                server.model,
+                                weights.to(server.policy_device)
+                                if server.policy_device is not None
+                                else weights,
+                            )
+                        if mark_weight_update:
+                            server._mark_weight_update()
+                    payload = {"accepted": True}
                 elif command == "shutdown":
                     shutdown_event.set()
                     payload = {"accepted": True}
@@ -690,9 +813,14 @@ class ProcessInferenceServer:
                 raise TimeoutError(
                     f"Timed out waiting for ProcessInferenceServer {command!r}."
                 )
-            response_id, ok, payload = self._control_response_queue.get(
-                timeout=remaining
-            )
+            try:
+                response_id, ok, payload = self._control_response_queue.get(
+                    timeout=remaining
+                )
+            except queue.Empty as exc:
+                raise TimeoutError(
+                    f"Timed out waiting for ProcessInferenceServer {command!r}."
+                ) from exc
             if response_id != request_id:
                 continue
             if not ok:
@@ -731,6 +859,16 @@ class ProcessInferenceServer:
                 process after taking the snapshot.
         """
         return self._request_control("stats", {"reset": reset})
+
+    def update_model_weights(
+        self, weights: TensorDictBase, *, mark_weight_update: bool = True
+    ) -> dict[str, bool]:
+        """Apply TensorDict weights to the model hosted by the child process."""
+        return self._request_control(
+            "update_model_weights",
+            {"weights": weights, "mark_weight_update": mark_weight_update},
+            timeout=300.0,
+        )
 
     def health(self) -> dict[str, int | bool | None]:
         """Return a lightweight child-process health snapshot."""

@@ -216,6 +216,8 @@ class QueueBasedTransport(InferenceTransport):
                 item = self._request_queue.get(block=False)
             except Exception:
                 break
+            if item is None:
+                continue
             if len(item) == 4:
                 actor_id, req_id, item_submitted_at, td = item
             else:
@@ -231,9 +233,11 @@ class QueueBasedTransport(InferenceTransport):
         if self._peeked is not None:
             return
         try:
-            self._peeked = self._request_queue.get(timeout=timeout)
+            peeked = self._request_queue.get(timeout=timeout)
         except Exception:
-            pass
+            return
+        if peeked is not None:
+            self._peeked = peeked
 
     def resolve(self, callback: tuple[int, int], result: TensorDictBase) -> None:
         """Route the result to the correct actor's response queue."""

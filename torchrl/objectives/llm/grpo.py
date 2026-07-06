@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import multiprocessing as mp
+import os
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -1238,6 +1239,8 @@ class MCAdvantage(Transform):
         """Move replay-buffer write state to multiprocessing-shared objects."""
         if self.is_shared:
             return self
+        if os.environ.get("TORCHRL_MC_ADVANTAGE_LOCAL_QUEUES") == "1":
+            return self
         manager = mp.Manager()
         queues = {group: list(queue) for group, queue in self.queues.items()}
         self.queues = _MCAdvantageSharedQueues(
@@ -1274,6 +1277,24 @@ class MCAdvantage(Transform):
             self.selected_trajectories = 0
             self.unselected_trajectories = 0
 
+    def clear_queues(self) -> None:
+        """Clear incomplete Monte-Carlo trajectory groups."""
+        with self._state_lock:
+            self.queues.clear()
+
+    def get_stats(self) -> dict[str, float | int]:
+        """Return a serializable snapshot of counters and pending queues."""
+        with self._state_lock:
+            stats = {name: self._get_stat(name) for name in _MCADVANTAGE_STATS}
+            stats.update(
+                queued_groups=self.queued_groups,
+                queued_trajectories=self.queued_trajectories,
+                max_queued_trajectories_per_group=(
+                    self.max_queued_trajectories_per_group
+                ),
+            )
+            return stats
+
     @property
     def queued_groups(self) -> int:
         """Number of incomplete groups currently held in memory."""
@@ -1306,7 +1327,33 @@ class MCAdvantage(Transform):
     def forward(self, tensordict: TensorDictBase) -> GRPOLossOutput:
         return tensordict
 
-    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase:
+    @staticmethod
+    def _concrete_if_possible(tensordict: TensorDictBase) -> TensorDictBase:
+        """Materialize lazy inputs unless their tensor leaves are ragged."""
+        try:
+            return tensordict.contiguous()
+        except RuntimeError as err:
+            if "Failed to stack tensors within a tensordict" not in str(err):
+                raise
+            return tensordict
+
+    @staticmethod
+    def _cat_tensordicts(
+        tensordicts: list[TensorDictBase], dim: int = 0
+    ) -> TensorDictBase:
+        """Concatenate trajectory TensorDicts with a concrete output type.
+
+        ``MCAdvantage`` may receive view/lazy TensorDicts from replay storage and
+        plain TensorDicts from direct collector writes. Queued and returned
+        trajectory groups should nevertheless have a consistent concrete
+        representation, both to avoid backend-specific lazy-stack assumptions
+        and to keep replay-buffer storage writes predictable.
+        """
+        return torch.cat(
+            [MCAdvantage._concrete_if_possible(td) for td in tensordicts], dim
+        )
+
+    def _inv_call(self, tensordict: TensorDictBase) -> TensorDictBase | None:
         if self.verbose:
             torchrl_logger.info(
                 f"Invoking MCAdvantage.\nData size: {tensordict.shape}.\nCurrent queue size: {len(self.queues)}.\nTotal queue content: {sum(len(q) for q in self.queues.values())}"
@@ -1322,7 +1369,7 @@ class MCAdvantage(Transform):
                 tensordicts = tensordict.split(splits.tolist())
                 tensordicts = [self._inv_call(td) for td in tensordicts]
                 tensordicts = [td for td in tensordicts if td is not None]
-                return torch.cat(tensordicts) if tensordicts else None
+                return self._cat_tensordicts(tensordicts) if tensordicts else None
             # Then we have a single trajectory
             with self._state_lock:
                 return self._inv_call_single(tensordict)
@@ -1338,7 +1385,7 @@ class MCAdvantage(Transform):
                 continue
             result.append(td_out)
         if result:
-            return torch.cat(result, 0)
+            return self._cat_tensordicts(result, 0)
         return
 
     def _inv_call_single(self, tensordict: TensorDictBase) -> TensorDictBase | None:
@@ -1354,6 +1401,7 @@ class MCAdvantage(Transform):
             )
         if not tensordict[-1][self.done_key].all():
             raise RuntimeError("Expected the trajectory to be done.")
+        tensordict = self._concrete_if_possible(tensordict)
         group = tensordict[0][self.prompt_key]
         if isinstance(group, torch.Tensor):
             # tensor group identifiers (e.g. an integer group id stamped
@@ -1411,7 +1459,7 @@ class MCAdvantage(Transform):
             self._queue_delete(group)
             self.completed_groups += 1
             # Cat is the most robust way to combine the trajs
-            tds = torch.cat(trajs, -1)
+            tds = self._cat_tensordicts(trajs, -1)
             # Collect rewards
             reward = tds.get(self.rewards_key, as_nested_tensor=True)
             reward_mean = reward.values().mean()
@@ -1493,7 +1541,7 @@ class MCAdvantage(Transform):
             torchrl_logger.info(f"Group returns: {returns=} {advantage=}")
         for traj, reward, adv in zip(trajs, rewards, advantage.unbind(0)):
             traj.set(self.advantage_key, adv.expand(reward.shape).clone())
-        return torch.cat(trajs, -1)
+        return self._cat_tensordicts(trajs, -1)
 
 
 class _MCAdvantageRayActor:

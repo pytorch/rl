@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -74,7 +75,8 @@ class UniformActionTokenizer(ActionTokenizerBase):
         >>> tokens = tok.encode(torch.tensor([-1.0, 0.0, 1.0]))
         >>> tokens
         tensor([  0, 128, 255])
-        >>> torch.allclose(tok.decode(tokens), torch.tensor([-0.998, 0.002, 0.998]), atol=1e-2)
+        >>> expected = torch.tensor([-0.998, 0.002, 0.998])
+        >>> torch.allclose(tok.decode(tokens), expected, atol=1e-2)
         True
         >>> tok.vocab_size
         256
@@ -139,7 +141,7 @@ class UniformActionTokenizer(ActionTokenizerBase):
     def from_metadata(
         cls, metadata: RobotDatasetMetadata, num_bins: int
     ) -> UniformActionTokenizer:
-        """Build from the ``action_low``/``action_high`` of a :class:`~torchrl.data.vla.RobotDatasetMetadata`."""
+        """Build from the action bounds of a dataset metadata object."""
         if metadata.action_low is None or metadata.action_high is None:
             raise ValueError(
                 f"metadata {metadata.dataset_id!r} has no action bounds "
@@ -173,9 +175,11 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
     Optionally, dataset statistics (the ``norm_stats`` shipped with OpenVLA
     checkpoints) un-normalize decoded actions to the environment's action
     space -- and normalize actions before encoding -- via the affine q01/q99
-    map ``a_env = 0.5 * (a + 1) * (q99 - q01) + q01`` applied to the
+    map ``a_env = 0.5 * (a + 1) * (q99 - q01 + 1e-8) + q01`` applied to the
     dimensions selected by ``mask`` (the gripper dimension is typically
-    excluded). See :meth:`from_norm_stats`.
+    excluded). To reproduce the reference MuJoCo action path exactly, decoding
+    with normalization statistics is performed in NumPy float64 on CPU. See
+    :meth:`from_norm_stats`.
 
     Args:
         num_bins (int): number of bin edges per action dimension (the OpenVLA
@@ -258,8 +262,11 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         self.register_buffer("bins", bins)
         self.register_buffer("bin_centers", (bins[:-1] + bins[1:]) / 2.0)
         if norm_low is not None:
-            norm_low = torch.as_tensor(norm_low, dtype=torch.float32)
-            norm_high = torch.as_tensor(norm_high, dtype=torch.float32)
+            # The reference action path performs this affine in NumPy float64.
+            # Preserve the checkpoint's JSON precision for exact CPU decode;
+            # device-side encode/decode casts these buffers to the action dtype.
+            norm_low = torch.as_tensor(norm_low, dtype=torch.float64)
+            norm_high = torch.as_tensor(norm_high, dtype=torch.float64)
             if norm_mask is None:
                 norm_mask = torch.ones_like(norm_low, dtype=torch.bool)
             else:
@@ -286,8 +293,8 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
 
     def encode(self, actions: torch.Tensor) -> torch.Tensor:
         if self.norm_low is not None:
-            norm_low = self.norm_low.to(actions.device)
-            norm_high = self.norm_high.to(actions.device)
+            norm_low = self.norm_low.to(device=actions.device, dtype=actions.dtype)
+            norm_high = self.norm_high.to(device=actions.device, dtype=actions.dtype)
             norm_mask = self.norm_mask.to(actions.device)
             scale = (norm_high - norm_low).clamp_min(1e-8)
             normalized = 2.0 * (actions - norm_low) / scale - 1.0
@@ -298,6 +305,38 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         return self.num_bins - digitized
 
     def decode(self, tokens: torch.Tensor) -> torch.Tensor:
+        if self.norm_low is not None:
+            # LIBERO executes CPU actions. Reproduce SimpleVLA's NumPy float64
+            # de-tokenization before handing those values to MuJoCo; float32
+            # stats or a missing range epsilon make fragile closed-loop
+            # rollouts diverge after several chunks.
+            tokens_np = tokens.detach().cpu().numpy()
+            if self.full_vocab_size is not None:
+                digitized = self.full_vocab_size - tokens_np
+            else:
+                digitized = self.num_bins - tokens_np
+            bins = np.linspace(-1.0, 1.0, self.num_bins)
+            bin_centers = (bins[:-1] + bins[1:]) / 2.0
+            index = np.clip(digitized - 1, a_min=0, a_max=bin_centers.shape[0] - 1)
+            actions = bin_centers[index]
+            norm_low = self.norm_low.detach().numpy()
+            norm_high = self.norm_high.detach().numpy()
+            norm_mask = self.norm_mask.detach().numpy().astype(bool)
+            unnormalized = (
+                0.5 * (actions + 1.0) * (norm_high - norm_low + 1e-8) + norm_low
+            )
+            actions = np.where(norm_mask, unnormalized, actions)
+            if self.gripper_binarize or self.gripper_invert:
+                gripper = ~norm_mask
+                if self.gripper_binarize:
+                    binary = (actions > self.gripper_binarize_threshold).astype(
+                        actions.dtype
+                    ) * 2.0 - 1.0
+                    actions = np.where(gripper, binary, actions)
+                if self.gripper_invert:
+                    actions = np.where(gripper, -actions, actions)
+            return torch.from_numpy(np.ascontiguousarray(actions))
+
         # operate on the tokens' device (policy and env may differ): move the
         # small lookup/normalization buffers there so the output rides the
         # input device
@@ -309,8 +348,8 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         index = (digitized - 1).clamp(0, bin_centers.shape[0] - 1)
         actions = bin_centers[index]
         if self.norm_low is not None:
-            norm_low = self.norm_low.to(tokens.device)
-            norm_high = self.norm_high.to(tokens.device)
+            norm_low = self.norm_low.to(device=tokens.device, dtype=actions.dtype)
+            norm_high = self.norm_high.to(device=tokens.device, dtype=actions.dtype)
             norm_mask = self.norm_mask.to(tokens.device)
             unnormalized = 0.5 * (actions + 1.0) * (norm_high - norm_low) + norm_low
             actions = torch.where(norm_mask, unnormalized, actions)
@@ -371,8 +410,8 @@ class VocabTailActionTokenizer(ActionTokenizerBase):
         return cls(
             num_bins,
             full_vocab_size=full_vocab_size,
-            norm_low=torch.as_tensor(stats["q01"], dtype=torch.float32),
-            norm_high=torch.as_tensor(stats["q99"], dtype=torch.float32),
+            norm_low=torch.as_tensor(stats["q01"], dtype=torch.float64),
+            norm_high=torch.as_tensor(stats["q99"], dtype=torch.float64),
             norm_mask=torch.as_tensor(mask, dtype=torch.bool)
             if mask is not None
             else None,
