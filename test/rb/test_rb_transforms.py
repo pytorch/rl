@@ -541,10 +541,15 @@ class TestPolicyAgeFilter:
         assert len(rb) == 4
         assert rb.sample(4).batch_size[0] == 4
         # The policy moved on: version-2 data became stale since insertion.
+        # The random sampler draws with replacement, so the batch size is
+        # not deterministic; the invariant is that no stale element passes.
         current["version"] = 4
         sample = rb.sample(4)
-        assert sample.batch_size[0] < 4
         assert (sample["policy_version"] == 3).all()
+        # Once everything is stale the batch is deterministically empty.
+        current["version"] = 10
+        sample = rb.sample(4)
+        assert sample.batch_size[0] == 0
 
     def test_nested_version_key(self):
         rb = ReplayBuffer(
