@@ -20,6 +20,7 @@ from torchrl.modules.inference_server import (
     InferenceDeviceConfig,
     InferenceServer,
     InferenceServerConfig,
+    PolicyClientModule,
     ProcessInferenceServer,
     ThreadingTransport,
 )
@@ -432,7 +433,10 @@ class AsyncBatchedCollector(BaseCollector):
         # Create clients before a process server starts so response queues are
         # inherited by the child process.
         if self._clients is None:
-            self._clients = [self._transport.client() for _ in range(self._num_envs)]
+            self._clients = [
+                PolicyClientModule(self._transport.client())
+                for _ in range(self._num_envs)
+            ]
 
         # Start inference server
         if not self._server.is_alive:

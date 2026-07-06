@@ -7,6 +7,7 @@ from __future__ import annotations
 import concurrent.futures
 import importlib.util
 import multiprocessing as mp
+import pickle
 import threading
 import time
 
@@ -25,6 +26,7 @@ from torchrl.modules.inference_server import (
     InferenceServerConfig,
     InferenceTransport,
     MPTransport,
+    PolicyClientModule,
     ProcessInferenceServer,
     RayTransport,
     SlotTransport,
@@ -405,6 +407,83 @@ class TestInferenceClient:
             assert isinstance(fut, concurrent.futures.Future)
             result = fut.result(timeout=5.0)
             assert "action" in result.keys()
+
+
+def _echo_client(td):
+    """Picklable stand-in client for pickling tests."""
+    return td
+
+
+class TestPolicyClientModule:
+    def test_forward_as_tensordict_module(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(
+                transport,
+                in_keys=["observation"],
+                out_keys=["action"],
+            )
+            td = TensorDict({"observation": torch.randn(4)})
+            result = remote_policy(td)
+        assert result["action"].shape == (2,)
+        assert remote_policy.in_keys == ["observation"]
+        assert remote_policy.out_keys == ["action"]
+
+    def test_submit(self):
+        transport = ThreadingTransport()
+        policy = _make_policy()
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(transport)
+            future = remote_policy.submit(TensorDict({"observation": torch.randn(4)}))
+            result = future.result(timeout=5.0)
+        assert "action" in result.keys()
+
+    def test_nested_keys(self):
+        """in_keys/out_keys accept nested keys end to end."""
+        transport = ThreadingTransport()
+        policy = TensorDictModule(
+            nn.Linear(4, 2),
+            in_keys=[("agents", "observation")],
+            out_keys=[("agents", "action")],
+        )
+        with InferenceServer(policy, transport, max_batch_size=4):
+            remote_policy = PolicyClientModule(
+                transport,
+                in_keys=[("agents", "observation")],
+                out_keys=[("agents", "action")],
+            )
+            td = TensorDict({("agents", "observation"): torch.randn(4)})
+            result = remote_policy(td)
+        assert result["agents", "action"].shape == (2,)
+        assert remote_policy.in_keys == [("agents", "observation")]
+        assert remote_policy.out_keys == [("agents", "action")]
+
+    def test_client_contract_picklable_no_lifecycle(self):
+        """Clients pickle cleanly and expose no lifecycle methods."""
+        remote_policy = PolicyClientModule(
+            _echo_client, in_keys=["observation"], out_keys=["observation"]
+        )
+        restored = pickle.loads(pickle.dumps(remote_policy))
+        td = TensorDict({"observation": torch.randn(4)})
+        result = restored(td)
+        assert "observation" in result.keys()
+        assert restored.in_keys == ["observation"]
+        # Clients carry no lifecycle rights over the service
+        for lifecycle in ("start", "shutdown", "close", "flush"):
+            assert not hasattr(restored, lifecycle)
+
+    def test_plain_callable_client_defers_errors(self):
+        """A plain-callable client defers exceptions to result()."""
+
+        def failing_client(td):
+            raise ValueError("local policy failure")
+
+        remote_policy = PolicyClientModule(failing_client)
+        future = remote_policy.submit(TensorDict({}))
+        assert future.done()
+        with pytest.raises(ValueError, match="local policy failure"):
+            future.result()
 
 
 # =============================================================================
